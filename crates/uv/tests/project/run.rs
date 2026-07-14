@@ -3,11 +3,17 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
-use indoc::indoc;
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
+use futures::executor::block_on;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::path::Path;
+#[cfg(feature = "test-git")]
+use std::process::Command;
 use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
@@ -117,7 +123,7 @@ fn run_with_python_version() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
-    Prepared 1 package in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.6.0
      + foo==1.0.0 (from file://[TEMP_DIR]/)
@@ -1598,8 +1604,3107 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
     Ok(())
 }
 
-/// Test that an ephemeral environment writes the path of its parent environment to the `extends-environment` key
-/// of its `pyvenv.cfg` file. This feature makes it easier for static-analysis tools like ty to resolve which import
+/// A satisfied `--with` request must not skip the ephemeral environment when an installed target
+/// has acquired a `match-runtime` build dependency. Rebuild the stale target and its nested source
+/// wheel using the now-selected runtime version, then verify the cached result can run offline.
+#[test]
+fn run_with_match_runtime_rebuilds_cached_nested_source_distribution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (primer, child) = uv_test::match_runtime_nested_sources(context.temp_dir.path())?;
+    let links = context.workspace_root.join("test/links");
+    let ok_1 = links.join("ok-1.0.0-py3-none-any.whl");
+    let ok_2 = links.join("ok-2.0.0-py3-none-any.whl");
+    let uv_toml = context.temp_dir.child("uv.toml");
+
+    uv_toml.write_str(indoc! {r#"
+        extra-build-dependencies = { child = ["ok==1.0.0"] }
+    "#})?;
+    context
+        .pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .arg(&primer)
+        .arg(&child)
+        .arg(&ok_1)
+        .assert()
+        .success();
+
+    context.pip_install().arg(&ok_2).assert().success();
+    uv_toml.write_str(indoc! {r#"
+        extra-build-dependencies = { child = [{ requirement = "ok", match-runtime = true }] }
+    "#})?;
+
+    let output = context
+        .run()
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .arg("--with")
+        .arg(&primer)
+        .arg("--with")
+        .arg(&child)
+        .arg("--with")
+        .arg(&ok_2)
+        .arg("python")
+        .arg("-c")
+        .arg("import child; print(child.RUNTIME_VERSION, child.BUILDER_BUILD_NUMBER)")
+        .assert()
+        .success();
+    assert_snapshot!(std::str::from_utf8(&output.get_output().stdout)?.trim(), @"2.0.0 3");
+
+    let output = context
+        .run()
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .arg("--offline")
+        .arg("--with")
+        .arg(&primer)
+        .arg("--with")
+        .arg(&child)
+        .arg("--with")
+        .arg(&ok_2)
+        .arg("python")
+        .arg("-c")
+        .arg("import child; print(child.RUNTIME_VERSION, child.BUILDER_BUILD_NUMBER)")
+        .assert()
+        .success();
+    assert_snapshot!(std::str::from_utf8(&output.get_output().stdout)?.trim(), @"2.0.0 3");
+
+    Ok(())
+}
+
+/// A source distribution installed into a cached `--with` environment must be rebuilt when its
+/// build settings change, even when the project does not lock build dependencies.
+#[test]
+fn run_with_invalidates_cached_build_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        })?;
+
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    value = config_settings.get("value", "missing")
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", f"VALUE = {value!r}\n")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    ))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("--config-settings-package")
+        .arg("dep:value=first")
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.VALUE)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    first
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep-0.1.0.zip)
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("--config-settings-package")
+        .arg("dep:value=second")
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.VALUE)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    second
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep-0.1.0.zip)
+    ");
+
+    Ok(())
+}
+
+/// Explicit refresh must rebuild a cached source wheel before reusing a cached `--with` overlay.
+#[test]
+fn run_with_refresh_rebuilds_cached_source_overlay() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let value_file = context.temp_dir.child("value.txt");
+    value_file.write_str("first")?;
+
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    let backend = format!(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    value = Path({:?}).read_text().strip()
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", f"VALUE = {{value!r}}\n")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+        value_file.path().to_string_lossy(),
+    );
+    block_on(zip.write_entry_whole(entry, backend.as_bytes()))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    let run = |refresh: &[&str]| -> Result<String> {
+        let output = context
+            .run()
+            .arg("--no-project")
+            .arg("--no-index")
+            .args(refresh)
+            .arg("--with")
+            .arg(source_dist.path())
+            .arg("python")
+            .arg("-c")
+            .arg("import dep; print(dep.VALUE)")
+            .assert()
+            .success();
+        Ok(std::str::from_utf8(&output.get_output().stdout)?
+            .trim()
+            .to_string())
+    };
+
+    assert_snapshot!(run(&[])?, @"first");
+
+    value_file.write_str("second")?;
+    assert_snapshot!(run(&["--refresh-package", "dep"])?, @"second");
+
+    value_file.write_str("third")?;
+    assert_snapshot!(run(&["--refresh"])?, @"third");
+
+    Ok(())
+}
+
+/// Refreshing a transitive build requirement must rebuild the cached source wheel and overlay.
+#[test]
+fn run_with_refresh_rebuilds_cached_nested_source_overlay() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let value_file = context.temp_dir.child("value.txt");
+    value_file.write_str("1.0.0")?;
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+
+    for version in ["1.0.0", "2.0.0"] {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("ok.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, format!("VALUE = {version:?}\n").as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            format!("ok-{version}.dist-info/METADATA").into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            format!("Metadata-Version: 2.3\nName: ok\nVersion: {version}\n").as_bytes(),
+        ))?;
+        let entry = ZipEntryBuilder::new(
+            format!("ok-{version}.dist-info/WHEEL").into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry = ZipEntryBuilder::new(
+            format!("ok-{version}.dist-info/RECORD").into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(
+            links.child(format!("ok-{version}-py3-none-any.whl")).path(),
+            block_on(zip.close())?,
+        )?;
+    }
+
+    for (name, version, requires, dynamic, value, target) in [
+        (
+            "helper",
+            "1.0.0",
+            "[]",
+            "",
+            format!(
+                "Path({:?}).read_text().strip()",
+                value_file.path().to_string_lossy()
+            ),
+            links.child("helper-1.0.0.zip"),
+        ),
+        (
+            "dep",
+            "0.1.0",
+            "[\"helper==1.0.0\"]",
+            "dynamic = [\"dependencies\"]",
+            "__import__(\"helper\").VALUE".to_string(),
+            context.temp_dir.child("dep-0.1.0.zip"),
+        ),
+    ] {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new(
+            format!("{name}-{version}/pyproject.toml").into(),
+            Compression::Stored,
+        );
+        let pyproject = format!(
+            r#"
+            [project]
+            name = "{name}"
+            version = "{version}"
+            requires-python = ">=3.12"
+            {dynamic}
+
+            [build-system]
+            requires = {requires}
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#
+        );
+        block_on(zip.write_entry_whole(entry, pyproject.as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            format!("{name}-{version}/build_backend.py").into(),
+            Compression::Stored,
+        );
+        let requires_dist = if name == "dep" {
+            r#"f"Requires-Dist: ok=={value}\n""#
+        } else {
+            "\"\""
+        };
+        let backend = format!(
+            r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def metadata():
+    value = {value}
+    return "Metadata-Version: 2.3\nName: {name}\nVersion: {version}\n" + {requires_dist}
+
+def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+    dist_info = Path(metadata_directory) / "{name}-{version}.dist-info"
+    dist_info.mkdir()
+    dist_info.joinpath("METADATA").write_text(metadata())
+    return dist_info.name
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    value = {value}
+    filename = "{name}-{version}-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("{name}.py", f"VALUE = {{value!r}}\n")
+        wheel.writestr("{name}-{version}.dist-info/METADATA", metadata())
+        wheel.writestr("{name}-{version}.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+        wheel.writestr("{name}-{version}.dist-info/RECORD", "")
+    return filename
+"#
+        );
+        block_on(zip.write_entry_whole(entry, backend.as_bytes()))?;
+        fs_err::write(target.path(), block_on(zip.close())?)?;
+    }
+
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    let run = |refresh: &[&str]| -> Result<String> {
+        let output = context
+            .run()
+            .arg("--no-project")
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(links.path())
+            .args(refresh)
+            .arg("--with")
+            .arg(source_dist.path())
+            .arg("python")
+            .arg("-c")
+            .arg("import dep, ok; print(dep.VALUE, ok.VALUE)")
+            .assert()
+            .success();
+        Ok(std::str::from_utf8(&output.get_output().stdout)?
+            .trim()
+            .to_string())
+    };
+
+    assert_snapshot!(run(&[])?, @"1.0.0 1.0.0");
+    value_file.write_str("2.0.0")?;
+    assert_snapshot!(run(&["--refresh-package", "helper"])?, @"2.0.0 2.0.0");
+    value_file.write_str("1.0.0")?;
+    assert_snapshot!(run(&["--refresh"])?, @"1.0.0 1.0.0");
+
+    Ok(())
+}
+
+/// Refreshing a transitive build requirement must bypass legacy cached source wheels.
+#[test]
+fn run_with_refresh_rebuilds_default_nested_source_overlay() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let value_file = context.temp_dir.child("value.txt");
+    value_file.write_str("first")?;
+
+    let helper = context.temp_dir.child("helper-1.0.0.zip");
+    let helper_url = url::Url::from_file_path(helper.path())
+        .map_err(|()| anyhow::anyhow!("Failed to create helper URL"))?;
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+
+    for (name, version, requires, value, target) in [
+        (
+            "helper",
+            "1.0.0",
+            "[]".to_string(),
+            format!(
+                "Path({:?}).read_text().strip()",
+                value_file.path().to_string_lossy()
+            ),
+            &helper,
+        ),
+        (
+            "dep",
+            "0.1.0",
+            format!(r#"["helper @ {helper_url}"]"#),
+            "__import__(\"helper\").VALUE".to_string(),
+            &source_dist,
+        ),
+    ] {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new(
+            format!("{name}-{version}/pyproject.toml").into(),
+            Compression::Stored,
+        );
+        let pyproject = format!(
+            r#"
+            [project]
+            name = "{name}"
+            version = "{version}"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = {requires}
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#
+        );
+        block_on(zip.write_entry_whole(entry, pyproject.as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            format!("{name}-{version}/build_backend.py").into(),
+            Compression::Stored,
+        );
+        let backend = format!(
+            r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    value = {value}
+    filename = "{name}-{version}-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("{name}.py", f"VALUE = {{value!r}}\n")
+        wheel.writestr(
+            "{name}-{version}.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: {name}\nVersion: {version}\n",
+        )
+        wheel.writestr(
+            "{name}-{version}.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("{name}-{version}.dist-info/RECORD", "")
+    return filename
+"#
+        );
+        block_on(zip.write_entry_whole(entry, backend.as_bytes()))?;
+        fs_err::write(target.path(), block_on(zip.close())?)?;
+    }
+
+    let run = |refresh: &[&str]| -> Result<String> {
+        let output = context
+            .run()
+            .env_remove(EnvVars::UV_DEFAULT_INDEX)
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+            .arg("--no-config")
+            .arg("--no-project")
+            .args(refresh)
+            .arg("--with")
+            .arg(source_dist.path())
+            .arg("python")
+            .arg("-c")
+            .arg("import dep; print(dep.VALUE)")
+            .assert()
+            .success();
+        Ok(std::str::from_utf8(&output.get_output().stdout)?
+            .trim()
+            .to_string())
+    };
+
+    assert_snapshot!(run(&[])?, @"first");
+    assert_snapshot!(run(&[])?, @"first");
+    value_file.write_str("second")?;
+    assert_snapshot!(run(&["--refresh-package", "helper"])?, @"second");
+    value_file.write_str("third")?;
+    assert_snapshot!(run(&["--refresh"])?, @"third");
+
+    Ok(())
+}
+
+fn write_unlocked_helper_wheel(path: &ChildPath, version: &str) -> Result<()> {
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    let entry = ZipEntryBuilder::new(
+        format!("helper-{version}.dist-info/METADATA").into(),
+        Compression::Stored,
+    );
+    block_on(zip.write_entry_whole(
+        entry,
+        format!("Metadata-Version: 2.3\nName: helper\nVersion: {version}\n").as_bytes(),
+    ))?;
+    let entry = ZipEntryBuilder::new(
+        format!("helper-{version}.dist-info/WHEEL").into(),
+        Compression::Stored,
+    );
+    block_on(zip.write_entry_whole(
+        entry,
+        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+    ))?;
+    let entry = ZipEntryBuilder::new(
+        format!("helper-{version}.dist-info/RECORD").into(),
+        Compression::Stored,
+    );
+    block_on(zip.write_entry_whole(entry, b""))?;
+    fs_err::write(path.path(), block_on(zip.close())?)?;
+
+    Ok(())
+}
+
+fn write_unlocked_helper_source(path: &ChildPath) -> Result<()> {
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", f"HELPER = {version('helper')!r}\n")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    ))?;
+    fs_err::write(path.path(), block_on(zip.close())?)?;
+
+    Ok(())
+}
+
+fn write_unlocked_build_requirement_source(path: &ChildPath) -> Result<()> {
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("helper-2.0.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "helper"
+        version = "2.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("helper-2.0.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "helper-2.0.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("helper.py", "")
+        wheel.writestr(
+            "helper-2.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: helper\nVersion: 2.0.0\n",
+        )
+        wheel.writestr(
+            "helper-2.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("helper-2.0.0.dist-info/RECORD", "")
+    return filename
+"#,
+    ))?;
+    fs_err::write(path.path(), block_on(zip.close())?)?;
+
+    Ok(())
+}
+
+/// Changing a build constraint must invalidate both the cached overlay and its previously built
+/// source wheel.
+#[test]
+fn run_with_invalidates_cached_build_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    write_unlocked_helper_wheel(&links.child("helper-1.0.0-py3-none-any.whl"), "1.0.0")?;
+    write_unlocked_helper_wheel(&links.child("helper-2.0.0-py3-none-any.whl"), "2.0.0")?;
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    write_unlocked_helper_source(&source_dist)?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        build-constraint-dependencies = ["helper==1.0.0"]
+        "#
+    })?;
+
+    let first = context
+        .run()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.HELPER)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"1.0.0");
+
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        build-constraint-dependencies = ["helper==2.0.0"]
+        "#
+    })?;
+
+    let second = context
+        .run()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.HELPER)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"2.0.0");
+
+    Ok(())
+}
+
+/// Replacing a direct-path wheel used as a build constraint must invalidate both the cached
+/// overlay and the source wheel built against the previous artifact.
+#[test]
+fn run_with_invalidates_cached_build_replaced_direct_wheel_constraint() -> Result<()> {
+    fn write_helper(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-1.0.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let helper = context.temp_dir.child("helper-1.0.0-py3-none-any.whl");
+    write_helper(&helper, "before")?;
+    let helper_url = url::Url::from_file_path(helper.path())
+        .map_err(|()| anyhow::anyhow!("Failed to create helper URL"))?;
+
+    let dep = context.temp_dir.child("dep");
+    dep.create_dir_all()?;
+    dep.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#,
+    })?;
+    dep.child("build_backend.py").write_str(indoc! { r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            from helper import VALUE
+
+            filename = "dep-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#,
+    })?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        build-constraint-dependencies = ["helper @ {helper_url}"]
+    "#,
+        })?;
+
+    let run = || -> Result<String> {
+        let output = context
+            .run()
+            .arg("--no-index")
+            .arg("--with")
+            .arg(dep.path())
+            .arg("python")
+            .arg("-B")
+            .arg("-c")
+            .arg("import dep; print(dep.HELPER)")
+            .assert()
+            .success();
+        Ok(String::from_utf8_lossy(&output.get_output().stdout)
+            .trim()
+            .to_string())
+    };
+
+    assert_snapshot!(run()?, @"before");
+    write_helper(&helper, "after-in-place-replacement")?;
+    assert_snapshot!(run()?, @"after-in-place-replacement");
+
+    Ok(())
+}
+
+/// Changing a remote build constraint artifact must invalidate the cached overlay and source
+/// wheel, both when its hash changes and when an unhashed URL returns `Cache-Control: no-store`.
+#[tokio::test]
+async fn run_with_invalidates_cached_remote_build_constraint_hash() -> Result<()> {
+    fn write_helper(path: &ChildPath, value: &str) -> Result<Vec<u8>> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-1.0.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        let wheel = block_on(zip.close())?;
+        fs_err::write(path.path(), &wheel)?;
+        Ok(wheel)
+    }
+
+    async fn mount_helper(server: &MockServer, wheel: Vec<u8>) {
+        Mock::given(method("GET"))
+            .and(path("/helper-1.0.0-py3-none-any.whl"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Cache-Control", "no-store")
+                    .set_body_bytes(wheel),
+            )
+            .mount(server)
+            .await;
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    let first = write_helper(&artifacts.child("first.whl"), "before")?;
+    let second = write_helper(&artifacts.child("second.whl"), "after")?;
+    let first_hash = format!("{:x}", Sha256::digest(&first));
+    let second_hash = format!("{:x}", Sha256::digest(&second));
+    assert_ne!(first_hash, second_hash);
+
+    let server = MockServer::start().await;
+    mount_helper(&server, first.clone()).await;
+    let helper_url = format!("{}/helper-1.0.0-py3-none-any.whl", server.uri());
+
+    let dep = context.temp_dir.child("dep");
+    dep.create_dir_all()?;
+    dep.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#,
+    })?;
+    dep.child("build_backend.py").write_str(indoc! { r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            from helper import VALUE
+
+            filename = "dep-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#,
+    })?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let write_project = |hash: Option<&str>| {
+        let hash = hash.map_or_else(String::new, |hash| format!("#sha256={hash}"));
+        pyproject_toml.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [tool.uv]
+            build-constraint-dependencies = ["helper @ {helper_url}{hash}"]
+        "#,
+        })
+    };
+    let run = || -> Result<String> {
+        let output = context
+            .run()
+            .env_remove(EnvVars::UV_DEFAULT_INDEX)
+            .arg("--no-index")
+            .arg("--with")
+            .arg(dep.path())
+            .arg("python")
+            .arg("-B")
+            .arg("-c")
+            .arg("import dep; print(dep.HELPER)")
+            .assert()
+            .success();
+        Ok(String::from_utf8_lossy(&output.get_output().stdout)
+            .trim()
+            .to_string())
+    };
+
+    write_project(Some(&first_hash))?;
+    assert_snapshot!(run()?, @"before");
+
+    server.reset().await;
+    mount_helper(&server, second.clone()).await;
+    write_project(Some(&second_hash))?;
+    assert_snapshot!(run()?, @"after");
+
+    server.reset().await;
+    mount_helper(&server, first).await;
+    write_project(None)?;
+    assert_snapshot!(run()?, @"before");
+
+    server.reset().await;
+    mount_helper(&server, second).await;
+    assert_snapshot!(run()?, @"after");
+
+    Ok(())
+}
+
+/// Moving a floating Git build constraint must invalidate the source wheel that was built
+/// against the previous commit, while keeping the outer source cache warm.
+#[test]
+#[cfg(feature = "test-git")]
+fn run_with_invalidates_cached_floating_git_build_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let helper_source = context.temp_dir.child("helper-source");
+    helper_source.create_dir_all()?;
+    helper_source.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "helper"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    helper_source
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "helper-1.0.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("helper.py", Path("helper.py").read_text())
+                wheel.writestr(
+                    "helper-1.0.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+                )
+                wheel.writestr(
+                    "helper-1.0.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("helper-1.0.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+    helper_source
+        .child("helper.py")
+        .write_str("VALUE = 'before'\n")?;
+
+    Command::new("git")
+        .args([
+            "init",
+            "--quiet",
+            "--initial-branch",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ])
+        .arg(helper_source.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(helper_source.path())
+        .args(["config", "user.name", "uv-test"])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(helper_source.path())
+        .args(["config", "user.email", "uv-test@example.com"])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(helper_source.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(helper_source.path())
+        .args(["commit", "--quiet", "-m", "before"])
+        .assert()
+        .success();
+
+    let helper_bare = context.temp_dir.child("helper.git");
+    Command::new("git")
+        .args(["clone", "--quiet", "--bare"])
+        .arg(helper_source.path())
+        .arg(helper_bare.path())
+        .assert()
+        .success();
+    let helper_url = url::Url::from_directory_path(helper_bare.path())
+        .map_err(|()| anyhow::anyhow!("failed to create helper Git URL"))?;
+    let helper_url = helper_url.as_str().trim_end_matches('/');
+
+    let dep = context.temp_dir.child("dep");
+    dep.create_dir_all()?;
+    dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    dep.child("build_backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            from helper import VALUE
+
+            filename = "dep-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [tool.uv]
+            build-constraint-dependencies = ["helper @ git+{helper_url}@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+        "#})?;
+
+    let run = || -> Result<String> {
+        let output = context
+            .run()
+            .env_remove(EnvVars::UV_DEFAULT_INDEX)
+            .env("GIT_ALLOW_PROTOCOL", "file")
+            .arg("--no-index")
+            .arg("--with")
+            .arg(dep.path())
+            .arg("python")
+            .arg("-B")
+            .arg("-c")
+            .arg("import dep; print(dep.HELPER)")
+            .assert()
+            .success();
+        Ok(String::from_utf8_lossy(&output.get_output().stdout)
+            .trim()
+            .to_string())
+    };
+
+    assert_snapshot!(run()?, @"before");
+    helper_source
+        .child("helper.py")
+        .write_str("VALUE = 'after'\n")?;
+    Command::new("git")
+        .arg("-C")
+        .arg(helper_source.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(helper_source.path())
+        .args(["commit", "--quiet", "-m", "after"])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(helper_source.path())
+        .arg("push")
+        .arg("--quiet")
+        .arg(helper_bare.path())
+        .arg("HEAD:refs/heads/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        .assert()
+        .success();
+    assert_snapshot!(run()?, @"after");
+
+    Ok(())
+}
+
+/// Changing the flat index used for build dependencies must invalidate both the cached overlay and
+/// its previously built source wheel.
+#[test]
+fn run_with_invalidates_cached_build_find_links() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let first_links = context.temp_dir.child("first-links");
+    first_links.create_dir_all()?;
+    write_unlocked_helper_wheel(&first_links.child("helper-1.0.0-py3-none-any.whl"), "1.0.0")?;
+    let second_links = context.temp_dir.child("second-links");
+    second_links.create_dir_all()?;
+    write_unlocked_helper_wheel(
+        &second_links.child("helper-2.0.0-py3-none-any.whl"),
+        "2.0.0",
+    )?;
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    write_unlocked_helper_source(&source_dist)?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        })?;
+
+    let first = context
+        .run()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(first_links.path())
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.HELPER)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"1.0.0");
+
+    let second = context
+        .run()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(second_links.path())
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.HELPER)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"2.0.0");
+
+    Ok(())
+}
+
+/// Changing the upload-time cutoff used for build dependencies must invalidate both the cached
+/// overlay and its previously built source wheel.
+#[tokio::test]
+async fn run_with_invalidates_cached_build_exclude_newer() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    let older = artifacts.child("helper-1.0.0-py3-none-any.whl");
+    write_unlocked_helper_wheel(&older, "1.0.0")?;
+    let newer = artifacts.child("helper-2.0.0-py3-none-any.whl");
+    write_unlocked_helper_wheel(&newer, "2.0.0")?;
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    write_unlocked_helper_source(&source_dist)?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/helper/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"
+                <a href="{}/files/helper-1.0.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">helper-1.0.0-py3-none-any.whl</a>
+                <a href="{}/files/helper-2.0.0-py3-none-any.whl" data-upload-time="2024-04-01T00:00:00Z">helper-2.0.0-py3-none-any.whl</a>
+                "#,
+                server.uri(),
+                server.uri(),
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/helper-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(older.path())?))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/helper-2.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(newer.path())?))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        })?;
+
+    let first = context
+        .run()
+        .arg("--default-index")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--exclude-newer")
+        .arg("2024-03-15T00:00:00Z")
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.HELPER)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"1.0.0");
+
+    let second = context
+        .run()
+        .arg("--default-index")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--exclude-newer")
+        .arg("2024-04-15T00:00:00Z")
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.HELPER)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"2.0.0");
+
+    let third = context
+        .run()
+        .arg("--default-index")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--exclude-newer")
+        .arg("2024-04-15T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("helper=2024-03-15T00:00:00Z")
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.HELPER)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&third.get_output().stdout), @"1.0.0");
+
+    Ok(())
+}
+
+/// A relative upload-time cutoff changes meaning between invocations, so it must invalidate a
+/// cached source build whether it is configured globally, per package, or on the index.
+#[tokio::test]
+async fn run_with_invalidates_cached_build_relative_exclude_newer() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    let older = artifacts.child("helper-1.0.0-py3-none-any.whl");
+    write_unlocked_helper_wheel(&older, "1.0.0")?;
+    let newer = artifacts.child("helper-2.0.0-py3-none-any.whl");
+    write_unlocked_helper_wheel(&newer, "2.0.0")?;
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    write_unlocked_helper_source(&source_dist)?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/helper/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"
+                <a href="{}/files/helper-1.0.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">helper-1.0.0-py3-none-any.whl</a>
+                <a href="{}/files/helper-2.0.0-py3-none-any.whl" data-upload-time="2024-04-01T00:00:00Z">helper-2.0.0-py3-none-any.whl</a>
+                "#,
+                server.uri(),
+                server.uri(),
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/helper-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(older.path())?))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/helper-2.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(newer.path())?))
+        .mount(&server)
+        .await;
+
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+    })?;
+
+    for (scope, args) in [
+        ("global", vec!["--exclude-newer", "P30D"]),
+        ("package", vec!["--exclude-newer-package", "helper=P30D"]),
+    ] {
+        for (current_time, expected) in [
+            ("2024-04-10T00:00:00Z", "1.0.0"),
+            ("2024-05-10T00:00:00Z", "2.0.0"),
+        ] {
+            let output = context
+                .run()
+                .arg("--default-index")
+                .arg(format!("{}/simple", server.uri()))
+                .args(&args)
+                .arg("--with")
+                .arg(source_dist.path())
+                .arg("python")
+                .arg("-c")
+                .arg("import dep; print(dep.HELPER)")
+                .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+                .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_time)
+                .assert()
+                .success();
+            assert_eq!(
+                String::from_utf8_lossy(&output.get_output().stdout).trim(),
+                expected,
+                "{scope} relative cutoff at {current_time}",
+            );
+        }
+    }
+
+    pyproject.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "relative"
+        url = "{}/simple"
+        default = true
+        exclude-newer = "P30D"
+        "#,
+        server.uri(),
+    ))?;
+
+    for (current_time, expected) in [
+        ("2024-04-10T00:00:00Z", "1.0.0"),
+        ("2024-05-10T00:00:00Z", "2.0.0"),
+    ] {
+        let output = context
+            .run()
+            .arg("--with")
+            .arg(source_dist.path())
+            .arg("python")
+            .arg("-c")
+            .arg("import dep; print(dep.HELPER)")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_time)
+            .assert()
+            .success();
+        assert_eq!(
+            String::from_utf8_lossy(&output.get_output().stdout).trim(),
+            expected,
+            "index relative cutoff at {current_time}",
+        );
+    }
+
+    Ok(())
+}
+
+/// An unlocked PEP 723 script must constrain `match-runtime` build requirements after resolution
+/// and preserve the selected runtime version on a repeated invocation.
+#[test]
+fn run_script_extra_match_runtime_repeat() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let selected_links = context.temp_dir.child("selected-links");
+    let unrelated_links = context.temp_dir.child("unrelated-links");
+    selected_links.create_dir_all()?;
+    unrelated_links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        selected_links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("ok.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    let entry = ZipEntryBuilder::new("ok-1.0.0.dist-info/METADATA".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b"Metadata-Version: 2.3\nName: ok\nVersion: 1.0.0\n"))?;
+    let entry = ZipEntryBuilder::new("ok-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: cp312-none-any\n",
+    ))?;
+    let entry = ZipEntryBuilder::new("ok-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    fs_err::write(
+        unrelated_links.child("ok-1.0.0-cp312-none-any.whl"),
+        block_on(zip.close())?,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    child.child("build_backend.py").write_str(indoc! {r#"
+        from importlib.metadata import version
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def get_requires_for_build_wheel(config_settings=None):
+            return []
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = Path(metadata_directory) / "child-0.1.0.dist-info"
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n"
+            )
+            return dist_info.name
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            helper_version = version("ok")
+            if helper_version != "1.0.0":
+                raise RuntimeError(f"Expected ok==1.0.0, found ok=={helper_version}")
+
+            count = Path(__file__).with_name("build-count")
+            count.write_text(str(int(count.read_text() if count.exists() else "0") + 1))
+
+            filename = "child-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("child.py", f'BUILD_OK = "{helper_version}"\n')
+                wheel.writestr(
+                    "child-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "child-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    let selected_links = url::Url::from_directory_path(selected_links.path())
+        .map_err(|()| anyhow::anyhow!("Failed to create selected-links URL"))?;
+    let unrelated_links = url::Url::from_directory_path(unrelated_links.path())
+        .map_err(|()| anyhow::anyhow!("Failed to create unrelated-links URL"))?;
+    context
+        .temp_dir
+        .child("script.py")
+        .write_str(&formatdoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child", "ok==1.0.0"]
+        #
+        # [[tool.uv.index]]
+        # name = "selected"
+        # url = "{selected_links}"
+        # format = "flat"
+        # explicit = true
+        #
+        # [[tool.uv.index]]
+        # name = "unrelated"
+        # url = "{unrelated_links}"
+        # format = "flat"
+        # default = true
+        #
+        # [tool.uv.sources]
+        # child = {{ path = "child" }}
+        # ok = {{ index = "selected" }}
+        #
+        # [tool.uv.extra-build-dependencies]
+        # child = [{{ requirement = "ok", match-runtime = true }}]
+        # ///
+
+        import child
+
+        print(child.BUILD_OK)
+    "#})?;
+
+    for _ in 0..2 {
+        let output = context
+            .run()
+            .arg("--no-project")
+            .arg("script.py")
+            .assert()
+            .success();
+        let stdout = std::str::from_utf8(&output.get_output().stdout)?.trim();
+        insta::allow_duplicates! {
+            assert_snapshot!(stdout, @"1.0.0");
+        }
+    }
+    Ok(())
+}
+
+/// An unlocked PEP 723 environment must re-resolve and rebuild an installed registry source when
+/// package-specific build isolation is disabled, since its output can depend on mutable state.
+#[test]
+fn run_script_shared_package_rebuilds_installed_registry_source_distribution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let value_file = context.temp_dir.child("value.txt");
+    value_file.write_str("first")?;
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+
+    let source_dist = links.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    let backend = format!(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    value = Path({:?}).read_text().strip()
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", f"VALUE = {{value!r}}\n")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+        value_file.path().to_string_lossy(),
+    );
+    block_on(zip.write_entry_whole(entry, backend.as_bytes()))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["dep==0.1.0"]
+        # ///
+
+        import dep
+
+        print(dep.VALUE)
+    "#})?;
+
+    let run = || -> Result<String> {
+        let output = context
+            .run()
+            .arg("--no-project")
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(links.path())
+            .arg("--no-build-isolation-package")
+            .arg("dep")
+            .arg("script.py")
+            .assert()
+            .success();
+        Ok(std::str::from_utf8(&output.get_output().stdout)?
+            .trim()
+            .to_string())
+    };
+
+    assert_snapshot!(run()?, @"first");
+    value_file.write_str("second")?;
+    assert_snapshot!(run()?, @"second");
+
+    Ok(())
+}
+
+/// An irrelevant `match-runtime` target must not prevent an unchanged script environment from
+/// running offline without re-resolution.
+#[test]
+fn run_script_irrelevant_match_runtime_offline_repeat() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.workspace_root.join("test/links");
+
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["ok==1.0.0"]
+        #
+        # [tool.uv.extra-build-dependencies]
+        # unused = [{ requirement = "ok", match-runtime = true }]
+        # ///
+
+        from importlib.metadata import version
+
+        print(version("ok"))
+    "#})?;
+
+    context
+        .run()
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .arg("script.py")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--offline")
+        .arg("script.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1.0.0
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// A cached `--with` environment must not reuse a nested source wheel primed while resolving a
+/// dynamic dependency when a static target has a runtime-matched build requirement.
+#[test]
+fn run_with_match_runtime_rebuilds_nested_source_distribution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (primer, child) = uv_test::match_runtime_nested_sources(context.temp_dir.path())?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    let ok = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        extra-build-dependencies = { child = [{ requirement = "ok", match-runtime = true }] }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .arg("--no-cache")
+        .arg("--with")
+        .arg(&primer)
+        .arg("--with")
+        .arg(&child)
+        .arg("--with")
+        .arg(&ok)
+        .arg("python")
+        .arg("-c")
+        .arg("import child; print(child.RUNTIME_VERSION, child.BUILDER_BUILD_NUMBER)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1.0.0 2
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+     + primer==0.1.0 (from file://[TEMP_DIR]/primer)
+    ");
+
+    Ok(())
+}
+
+/// An unlocked PEP 723 environment must rebuild a nested source wheel that was primed while
+/// resolving dynamic metadata before applying its static `match-runtime` build requirement.
+#[test]
+fn run_script_match_runtime_rebuilds_nested_source_distribution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (primer, child) = uv_test::match_runtime_nested_sources(context.temp_dir.path())?;
+    let primer_url = url::Url::from_directory_path(&primer)
+        .map_err(|()| anyhow::anyhow!("Failed to create primer URL"))?;
+    let child_url = url::Url::from_directory_path(&child)
+        .map_err(|()| anyhow::anyhow!("Failed to create child URL"))?;
+    let ok = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let ok_url =
+        url::Url::from_file_path(&ok).map_err(|()| anyhow::anyhow!("Failed to create ok URL"))?;
+    context.temp_dir.child("script.py").write_str(&format!(
+        indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["primer @ {primer_url}", "child @ {child_url}", "ok @ {ok_url}"]
+        #
+        # [tool.uv.extra-build-dependencies]
+        # child = [{{ requirement = "ok", match-runtime = true }}]
+        # ///
+
+        import child
+
+        print(child.RUNTIME_VERSION, child.BUILDER_BUILD_NUMBER)
+    "#},
+        primer_url = primer_url,
+        child_url = child_url,
+        ok_url = ok_url,
+    ))?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .arg("--no-cache")
+        .arg("script.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1.0.0 2
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+     + primer==0.1.0 (from file://[TEMP_DIR]/primer)
+    ");
+
+    Ok(())
+}
+
+/// Changing whether a build dependency may be built from source must invalidate both the cached
+/// overlay and its previously built source wheel.
+#[test]
+fn run_with_invalidates_cached_build_options() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    write_unlocked_helper_wheel(&links.child("helper-1.0.0-py3-none-any.whl"), "1.0.0")?;
+    write_unlocked_build_requirement_source(&links.child("helper-2.0.0.zip"))?;
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    write_unlocked_helper_source(&source_dist)?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        })?;
+
+    let first = context
+        .run()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.HELPER)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"2.0.0");
+
+    let second = context
+        .run()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--no-build-package")
+        .arg("helper")
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.HELPER)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"1.0.0");
+
+    let third = context
+        .run()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--no-binary-package")
+        .arg("helper")
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.HELPER)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&third.get_output().stdout), @"2.0.0");
+
+    Ok(())
+}
+
+/// Changing supplied metadata for a transitive build dependency must invalidate the previously
+/// built source wheel and cached overlay.
+#[test]
+fn run_with_invalidates_cached_build_dependency_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    write_unlocked_helper_wheel(&links.child("helper-1.0.0-py3-none-any.whl"), "1.0.0")?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl").path(),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        links.child("ok-2.0.0-py3-none-any.whl").path(),
+    )?;
+
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", f"OK = {version('ok')!r}\n")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    ))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dependency-metadata = [
+          { name = "helper", version = "1.0.0", requires-dist = ["ok==1.0.0"] },
+        ]
+        "#
+    })?;
+
+    let first = context
+        .run()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.OK)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"1.0.0");
+
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dependency-metadata = [
+          { name = "helper", version = "1.0.0", requires-dist = ["ok==2.0.0"] },
+        ]
+        "#
+    })?;
+
+    let second = context
+        .run()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--with")
+        .arg(source_dist.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.OK)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"2.0.0");
+
+    Ok(())
+}
+
+/// Changing source lowering for a build requirement must invalidate both the cached overlay and
+/// its previously built source wheel, in either direction and for package-specific disabling.
+#[test]
+fn run_with_invalidates_cached_build_no_sources() -> Result<()> {
+    fn setup(context: &TestContext) -> Result<(ChildPath, ChildPath)> {
+        let links = context.temp_dir.child("links");
+        links.create_dir_all()?;
+        write_unlocked_helper_wheel(&links.child("helper-1.0.0-py3-none-any.whl"), "1.0.0")?;
+        write_unlocked_build_requirement_source(&context.temp_dir.child("helper-2.0.0.zip"))?;
+
+        let dep = context.temp_dir.child("dep");
+        dep.create_dir_all()?;
+        dep.child("pyproject.toml").write_str(indoc! { r#"
+            [project]
+            name = "dep"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["helper"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+
+            [tool.uv.sources]
+            helper = { path = "../helper-2.0.0.zip" }
+            "#,
+        })?;
+        dep.child("build_backend.py").write_str(indoc! { r#"
+            from importlib.metadata import version
+            from pathlib import Path
+            from zipfile import ZipFile
+
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                filename = "dep-0.1.0-py3-none-any.whl"
+                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                    wheel.writestr("dep.py", f"HELPER = {version('helper')!r}\n")
+                    wheel.writestr(
+                        "dep-0.1.0.dist-info/METADATA",
+                        "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+                    )
+                    wheel.writestr(
+                        "dep-0.1.0.dist-info/WHEEL",
+                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                    )
+                    wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+                return filename
+            "#,
+        })?;
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(indoc! { r#"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = []
+                "#,
+            })?;
+
+        Ok((links, dep))
+    }
+
+    fn run(
+        context: &TestContext,
+        links: &ChildPath,
+        dep: &ChildPath,
+        source_args: &[&str],
+    ) -> Result<String> {
+        let output = context
+            .run()
+            .args(source_args)
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(links.path())
+            .arg("--with")
+            .arg(dep.path())
+            .arg("python")
+            .arg("-c")
+            .arg("import dep; print(dep.HELPER)")
+            .assert()
+            .success();
+        Ok(std::str::from_utf8(&output.get_output().stdout)?
+            .trim()
+            .to_string())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let (links, dep) = setup(&context)?;
+    assert_snapshot!(run(&context, &links, &dep, &[])?, @"2.0.0");
+    assert_snapshot!(run(&context, &links, &dep, &["--no-sources"])?, @"1.0.0");
+
+    let context = uv_test::test_context!("3.12");
+    let (links, dep) = setup(&context)?;
+    assert_snapshot!(run(&context, &links, &dep, &["--no-sources"])?, @"1.0.0");
+    assert_snapshot!(run(&context, &links, &dep, &[])?, @"2.0.0");
+
+    let context = uv_test::test_context!("3.12");
+    let (links, dep) = setup(&context)?;
+    assert_snapshot!(run(&context, &links, &dep, &[])?, @"2.0.0");
+    assert_snapshot!(
+        run(&context, &links, &dep, &["--no-sources-package", "helper"])?,
+        @"1.0.0"
+    );
+
+    Ok(())
+}
+
+/// Replacing an existing local flat-index wheel requires an explicit refresh to rebuild a source
+/// wheel built against it.
+#[test]
+fn run_with_refreshes_cached_build_replaced_local_flat_wheel() -> Result<()> {
+    fn write_helper(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-1.0.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    fn run(
+        context: &TestContext,
+        links: &ChildPath,
+        dep: &ChildPath,
+        named_flat: bool,
+        refresh: bool,
+    ) -> Result<String> {
+        let mut command = context.run();
+        if !named_flat {
+            command
+                .arg("--no-index")
+                .arg("--find-links")
+                .arg(links.path());
+        }
+        if refresh {
+            command.arg("--refresh");
+        }
+        let output = command
+            .arg("--with")
+            .arg(dep.path())
+            .arg("python")
+            .arg("-c")
+            .arg("import dep; print(dep.HELPER)")
+            .assert()
+            .success();
+        Ok(std::str::from_utf8(&output.get_output().stdout)?
+            .trim()
+            .to_string())
+    }
+
+    for named_flat in [false, true] {
+        let context = uv_test::test_context!("3.12");
+        let links = context.temp_dir.child("links");
+        links.create_dir_all()?;
+        let helper = links.child("helper-1.0.0-py3-none-any.whl");
+        write_helper(&helper, "before")?;
+
+        let dep = context.temp_dir.child("dep");
+        dep.create_dir_all()?;
+        let named_index = if named_flat {
+            let url = url::Url::from_directory_path(links.path())
+                .map_err(|()| anyhow::anyhow!("Failed to create links URL"))?;
+            format!(
+                r#"
+                [[tool.uv.index]]
+                name = "local"
+                url = "{url}"
+                format = "flat"
+                default = true
+
+                [tool.uv.sources]
+                helper = {{ index = "local" }}
+                "#
+            )
+        } else {
+            String::new()
+        };
+        dep.child("pyproject.toml").write_str(&format!(
+            r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        {named_index}
+        "#
+        ))?;
+        dep.child("build_backend.py").write_str(indoc! { r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            from helper import VALUE
+
+            filename = "dep-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+            return filename
+        "#,
+        })?;
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(indoc! { r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+            "#,
+            })?;
+
+        let before = run(&context, &links, &dep, named_flat, false)?;
+        write_helper(&helper, "after-in-place-replacement")?;
+        let cached = run(&context, &links, &dep, named_flat, false)?;
+        let refreshed = run(&context, &links, &dep, named_flat, true)?;
+        insta::allow_duplicates! {
+            assert_snapshot!(before, @"before");
+            assert_snapshot!(cached, @"before");
+            assert_snapshot!(refreshed, @"after-in-place-replacement");
+        }
+    }
+
+    Ok(())
+}
+
+/// Replacing a local wheel referenced by a remote flat index requires an explicit refresh to
+/// rebuild a source wheel built against it.
+#[tokio::test]
+async fn run_with_refreshes_cached_build_remote_flat_file_wheel() -> Result<()> {
+    fn write_helper(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-1.0.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let helper = links.child("helper-1.0.0-py3-none-any.whl");
+    write_helper(&helper, "before")?;
+    let helper_url = url::Url::from_file_path(helper.path())
+        .map_err(|()| anyhow::anyhow!("Failed to create helper URL"))?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"<a href="{helper_url}" data-upload-time="2024-01-01T00:00:00Z">helper-1.0.0-py3-none-any.whl</a>"#
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+
+    let dep = context.temp_dir.child("dep");
+    dep.create_dir_all()?;
+    dep.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    })?;
+    dep.child("build_backend.py").write_str(indoc! { r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            from helper import VALUE
+
+            filename = "dep-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+            return filename
+        "#
+    })?;
+
+    let run = |refresh: bool| -> Result<String> {
+        let mut command = context.run();
+        command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+        if refresh {
+            command.arg("--refresh");
+        }
+        let output = command
+            .arg("--no-project")
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(server.uri())
+            .arg("--with")
+            .arg(dep.path())
+            .arg("python")
+            .arg("-c")
+            .arg("import dep; print(dep.HELPER)")
+            .assert()
+            .success();
+        Ok(std::str::from_utf8(&output.get_output().stdout)?
+            .trim()
+            .to_string())
+    };
+
+    assert_snapshot!(run(false)?, @"before");
+    write_helper(&helper, "after-in-place-replacement")?;
+    assert_snapshot!(run(false)?, @"before");
+    assert_snapshot!(run(true)?, @"after-in-place-replacement");
+
+    Ok(())
+}
+
+/// Explicit Simple-index cache control must invalidate an outer source wheel when a same-version
+/// build artifact changes between invocations.
+#[tokio::test]
+async fn run_with_invalidates_cached_build_simple_cache_control() -> Result<()> {
+    fn write_helper(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-1.0.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+        Ok(())
+    }
+
+    async fn mount_helper(server: &MockServer, filename: &str, wheel: Vec<u8>) {
+        let url = format!("{}/files/{filename}", server.uri());
+        Mock::given(method("GET"))
+            .and(path("/simple/helper/"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Cache-Control", "max-age=3600, immutable")
+                    .set_body_raw(
+                        format!(
+                            r#"<a href="{url}" data-upload-time="2024-01-01T00:00:00Z">{filename}</a>"#
+                        ),
+                        "text/html",
+                    ),
+            )
+            .mount(server)
+            .await;
+        Mock::given(method("HEAD"))
+            .and(path(format!("/files/{filename}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Cache-Control", "max-age=3600, immutable")
+                    .insert_header("Content-Length", wheel.len().to_string()),
+            )
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(format!("/files/{filename}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Cache-Control", "max-age=3600, immutable")
+                    .set_body_bytes(wheel),
+            )
+            .mount(server)
+            .await;
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    let first = artifacts.child("helper-1.0.0-1-py3-none-any.whl");
+    let second = artifacts.child("helper-1.0.0-2-py3-none-any.whl");
+    write_helper(&first, "first")?;
+    write_helper(&second, "second")?;
+
+    let server = MockServer::start().await;
+    mount_helper(
+        &server,
+        "helper-1.0.0-1-py3-none-any.whl",
+        fs_err::read(first.path())?,
+    )
+    .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [[tool.uv.index]]
+            name = "mutable"
+            url = "{}/simple"
+            default = true
+            cache-control = {{ api = "no-cache", files = "no-store" }}
+            "#,
+            server.uri(),
+        ))?;
+    let dep = context.temp_dir.child("dep");
+    dep.create_dir_all()?;
+    dep.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    })?;
+    dep.child("build_backend.py").write_str(indoc! { r#"
+        import os
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            from helper import VALUE
+            with Path(os.environ["UV_TEST_BUILD_COUNTER"]).open("a") as counter:
+                counter.write("built\n")
+
+            filename = "dep-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "dep-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+            return filename
+        "#
+    })?;
+
+    let build_counter = context.temp_dir.child("build-counter");
+    let run = || -> Result<String> {
+        let output = context
+            .run()
+            .env("UV_TEST_BUILD_COUNTER", build_counter.path())
+            .env_remove(EnvVars::UV_DEFAULT_INDEX)
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+            .arg("--with")
+            .arg(dep.path())
+            .arg("python")
+            .arg("-c")
+            .arg("import dep; print(dep.HELPER)")
+            .assert()
+            .success();
+        Ok(std::str::from_utf8(&output.get_output().stdout)?
+            .trim()
+            .to_string())
+    };
+
+    assert_snapshot!(run()?, @"first");
+    server.reset().await;
+    mount_helper(
+        &server,
+        "helper-1.0.0-2-py3-none-any.whl",
+        fs_err::read(second.path())?,
+    )
+    .await;
+    assert_snapshot!(run()?, @"second");
+
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let configuration = fs_err::read_to_string(pyproject.path())?;
+    pyproject.write_str(&configuration.replace(
+        r#"cache-control = { api = "no-cache", files = "no-store" }"#,
+        r#"cache-control = { api = "max-age=600", files = "max-age=3600, immutable" }"#,
+    ))?;
+    assert_snapshot!(run()?, @"second");
+
+    let builds = fs_err::read_to_string(build_counter.path())?;
+    assert_snapshot!(run()?, @"second");
+    assert_eq!(fs_err::read_to_string(build_counter.path())?, builds);
+
+    Ok(())
+}
+
+/// Changing settings for a nested source build must invalidate the previously built outer wheel.
+#[test]
+fn run_with_invalidates_cached_nested_build_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let helper = context.temp_dir.child("helper");
+    helper.create_dir_all()?;
+    helper.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "helper"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    })?;
+    helper.child("build_backend.py").write_str(indoc! { r#"
+        import os
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        try:
+            import toggle
+        except ImportError:
+            toggle = None
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            value = os.environ.get("HELPER_VALUE")
+            if value is None:
+                value = (config_settings or {}).get("value")
+            if value is None:
+                value = toggle.VALUE if toggle is not None else "missing"
+            filename = "helper-1.0.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("helper.py", f"VALUE = {value!r}\n")
+                wheel.writestr(
+                    "helper-1.0.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+                )
+                wheel.writestr(
+                    "helper-1.0.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("helper-1.0.0.dist-info/RECORD", "")
+            return filename
+        "#
+    })?;
+    let helper_url = url::Url::from_directory_path(helper.path())
+        .map_err(|()| anyhow::anyhow!("Failed to create helper URL"))?;
+
+    let outer = context.temp_dir.child("outer");
+    outer.create_dir_all()?;
+    outer.child("pyproject.toml").write_str(&formatdoc! { r#"
+        [project]
+        name = "outer"
+        version = "1.0.0"
+        dynamic = ["requires-python"]
+
+        [build-system]
+        requires = ["helper @ {helper_url}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    })?;
+    outer.child("build_backend.py").write_str(indoc! { r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        import helper
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = Path(metadata_directory) / "outer-1.0.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.3\nName: outer\nVersion: 1.0.0\nRequires-Python: >=3.12\n"
+            )
+            return dist_info.name
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "outer-1.0.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("outer.py", f"VALUE = {helper.VALUE!r}\n")
+                wheel.writestr(
+                    "outer-1.0.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: outer\nVersion: 1.0.0\nRequires-Python: >=3.12\n",
+                )
+                wheel.writestr(
+                    "outer-1.0.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("outer-1.0.0.dist-info/RECORD", "")
+            return filename
+        "#
+    })?;
+
+    let first = context
+        .run()
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--with")
+        .arg(outer.path())
+        .arg("--config-settings-package")
+        .arg("helper:value=first")
+        .arg("python")
+        .arg("-c")
+        .arg("import outer; print(outer.VALUE)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"first");
+    let second = context
+        .run()
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--with")
+        .arg(outer.path())
+        .arg("--config-settings-package")
+        .arg("helper:value=second")
+        .arg("python")
+        .arg("-c")
+        .arg("import outer; print(outer.VALUE)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"second");
+
+    let first_variables = context.temp_dir.child("variables-first.toml");
+    first_variables
+        .write_str(r#"extra-build-variables = { helper = { HELPER_VALUE = "first" } }"#)?;
+    let second_variables = context.temp_dir.child("variables-second.toml");
+    second_variables
+        .write_str(r#"extra-build-variables = { helper = { HELPER_VALUE = "second" } }"#)?;
+    let first = context
+        .run()
+        .arg("--config-file")
+        .arg(first_variables.path())
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--with")
+        .arg(outer.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import outer; print(outer.VALUE)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"first");
+    let second = context
+        .run()
+        .arg("--config-file")
+        .arg(second_variables.path())
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--with")
+        .arg(outer.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import outer; print(outer.VALUE)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"second");
+
+    let write_toggle = |path: &ChildPath, value: &str| -> Result<()> {
+        path.create_dir_all()?;
+        path.child("pyproject.toml").write_str(indoc! { r#"
+            [project]
+            name = "toggle"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = []
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#
+        })?;
+        path.child("build_backend.py").write_str(&formatdoc! { r#"
+            from pathlib import Path
+            from zipfile import ZipFile
+
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                filename = "toggle-1.0.0-py3-none-any.whl"
+                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                    wheel.writestr("toggle.py", "VALUE = '{value}'\n")
+                    wheel.writestr(
+                        "toggle-1.0.0.dist-info/METADATA",
+                        "Metadata-Version: 2.3\nName: toggle\nVersion: 1.0.0\n",
+                    )
+                    wheel.writestr(
+                        "toggle-1.0.0.dist-info/WHEEL",
+                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                    )
+                    wheel.writestr("toggle-1.0.0.dist-info/RECORD", "")
+                return filename
+            "#
+        })?;
+        Ok(())
+    };
+    let first_toggle = context.temp_dir.child("toggle-first");
+    let second_toggle = context.temp_dir.child("toggle-second");
+    write_toggle(&first_toggle, "first")?;
+    write_toggle(&second_toggle, "second")?;
+    let first_toggle_url = url::Url::from_directory_path(first_toggle.path())
+        .map_err(|()| anyhow::anyhow!("Failed to create toggle URL"))?;
+    let second_toggle_url = url::Url::from_directory_path(second_toggle.path())
+        .map_err(|()| anyhow::anyhow!("Failed to create toggle URL"))?;
+    let first_dependencies = context.temp_dir.child("dependencies-first.toml");
+    first_dependencies.write_str(&format!(
+        r#"extra-build-dependencies = {{ helper = ["toggle @ {first_toggle_url}"] }}"#
+    ))?;
+    let second_dependencies = context.temp_dir.child("dependencies-second.toml");
+    second_dependencies.write_str(&format!(
+        r#"extra-build-dependencies = {{ helper = ["toggle @ {second_toggle_url}"] }}"#
+    ))?;
+    let first = context
+        .run()
+        .arg("--config-file")
+        .arg(first_dependencies.path())
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--with")
+        .arg(outer.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import outer; print(outer.VALUE)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"first");
+    let second = context
+        .run()
+        .arg("--config-file")
+        .arg(second_dependencies.path())
+        .arg("--no-project")
+        .arg("--no-index")
+        .arg("--with")
+        .arg(outer.path())
+        .arg("python")
+        .arg("-c")
+        .arg("import outer; print(outer.VALUE)")
+        .assert()
+        .success();
+    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"second");
+
+    Ok(())
+}
+
+/// Adding a newer local Simple-index wheel or replacing an existing wheel in place must
+/// invalidate a source wheel built against that index.
+#[test]
+fn run_with_invalidates_cached_build_local_simple_index() -> Result<()> {
+    fn write_helper(path: &ChildPath, version: &str, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            format!("helper-{version}.dist-info/METADATA").into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            format!("Metadata-Version: 2.3\nName: helper\nVersion: {version}\n").as_bytes(),
+        ))?;
+        let entry = ZipEntryBuilder::new(
+            format!("helper-{version}.dist-info/WHEEL").into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry = ZipEntryBuilder::new(
+            format!("helper-{version}.dist-info/RECORD").into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    fn setup(context: &TestContext) -> Result<(ChildPath, ChildPath)> {
+        let index = context.temp_dir.child("simple");
+        index.child("helper").create_dir_all()?;
+        let dep = context.temp_dir.child("dep");
+        dep.create_dir_all()?;
+        dep.child("pyproject.toml").write_str(indoc! { r#"
+            [project]
+            name = "dep"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["helper"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#,
+        })?;
+        dep.child("build_backend.py").write_str(indoc! { r#"
+            from pathlib import Path
+            from zipfile import ZipFile
+
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                from helper import VALUE
+
+                filename = "dep-0.1.0-py3-none-any.whl"
+                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                    wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
+                    wheel.writestr(
+                        "dep-0.1.0.dist-info/METADATA",
+                        "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+                    )
+                    wheel.writestr(
+                        "dep-0.1.0.dist-info/WHEEL",
+                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                    )
+                    wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+                return filename
+            "#,
+        })?;
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(indoc! { r#"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = []
+                "#,
+            })?;
+
+        Ok((index, dep))
+    }
+
+    fn write_index(index: &ChildPath, versions: &[&str]) -> Result<()> {
+        let links = versions
+            .iter()
+            .map(|version| {
+                format!(
+                    r#"<a href="helper-{version}-py3-none-any.whl" data-upload-time="2024-01-01T00:00:00Z">helper-{version}-py3-none-any.whl</a>"#
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        index.child("helper/index.html").write_str(&links)?;
+
+        Ok(())
+    }
+
+    fn run(context: &TestContext, index: &ChildPath, dep: &ChildPath) -> Result<String> {
+        let index_url = url::Url::from_directory_path(index.path())
+            .map_err(|()| anyhow::anyhow!("Failed to create local index URL"))?;
+        let output = context
+            .run()
+            .arg("--default-index")
+            .arg(index_url.as_str())
+            .arg("--with")
+            .arg(dep.path())
+            .arg("python")
+            .arg("-c")
+            .arg("import dep; print(dep.HELPER)")
+            .assert()
+            .success();
+        Ok(std::str::from_utf8(&output.get_output().stdout)?
+            .trim()
+            .to_string())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let (index, dep) = setup(&context)?;
+    write_helper(
+        &index.child("helper/helper-1.0.0-py3-none-any.whl"),
+        "1.0.0",
+        "1.0.0",
+    )?;
+    write_index(&index, &["1.0.0"])?;
+    assert_snapshot!(run(&context, &index, &dep)?, @"1.0.0");
+    write_helper(
+        &index.child("helper/helper-2.0.0-py3-none-any.whl"),
+        "2.0.0",
+        "2.0.0",
+    )?;
+    write_index(&index, &["1.0.0", "2.0.0"])?;
+    assert_snapshot!(run(&context, &index, &dep)?, @"2.0.0");
+
+    let context = uv_test::test_context!("3.12");
+    let (index, dep) = setup(&context)?;
+    let helper = index.child("helper/helper-1.0.0-py3-none-any.whl");
+    write_helper(&helper, "1.0.0", "before")?;
+    write_index(&index, &["1.0.0"])?;
+    assert_snapshot!(run(&context, &index, &dep)?, @"before");
+    write_helper(&helper, "1.0.0", "after-in-place-replacement")?;
+    assert_snapshot!(run(&context, &index, &dep)?, @"after-in-place-replacement");
+
+    let context = uv_test::test_context!("3.12");
+    let (index, dep) = setup(&context)?;
+    let linked = context.temp_dir.child("linked");
+    linked.create_dir_all()?;
+    let helper = linked.child("helper-1.0.0-py3-none-any.whl");
+    write_helper(&helper, "1.0.0", "linked-before")?;
+    index.child("helper/index.html").write_str(
+        r#"<a href="../../linked/helper-1.0.0-py3-none-any.whl" data-upload-time="2024-01-01T00:00:00Z">helper-1.0.0-py3-none-any.whl</a>"#,
+    )?;
+    assert_snapshot!(run(&context, &index, &dep)?, @"linked-before");
+    write_helper(&helper, "1.0.0", "linked-after-in-place-replacement")?;
+    assert_snapshot!(
+        run(&context, &index, &dep)?,
+        @"linked-after-in-place-replacement"
+    );
+
+    Ok(())
+}
+
+/// A cached `--with` environment must not mask a nested source built from a shared environment.
+#[test]
+fn run_with_invalidates_cached_non_isolated_nested_build() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let helper = context.temp_dir.child("helper");
+    helper.create_dir_all()?;
+    helper.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "helper"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    })?;
+    helper.child("build_backend.py").write_str(indoc! { r#"
+        import os
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            value = os.environ["UV_TEST_BUILD_VALUE"]
+            filename = "helper-1.0.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("helper.py", f"VALUE = {value!r}\n")
+                wheel.writestr(
+                    "helper-1.0.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+                )
+                wheel.writestr(
+                    "helper-1.0.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("helper-1.0.0.dist-info/RECORD", "")
+            return filename
+        "#
+    })?;
+    let helper_url = url::Url::from_directory_path(helper.path())
+        .map_err(|()| anyhow::anyhow!("Failed to create helper URL"))?;
+
+    let outer = context.temp_dir.child("outer");
+    outer.create_dir_all()?;
+    outer.child("pyproject.toml").write_str(&formatdoc! { r#"
+        [project]
+        name = "outer"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper @ {helper_url}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    })?;
+    outer.child("build_backend.py").write_str(indoc! { r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        import helper
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "outer-1.0.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("outer.py", f"VALUE = {helper.VALUE!r}\n")
+                wheel.writestr(
+                    "outer-1.0.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: outer\nVersion: 1.0.0\n",
+                )
+                wheel.writestr(
+                    "outer-1.0.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("outer-1.0.0.dist-info/RECORD", "")
+            return filename
+        "#
+    })?;
+
+    let run = |value: &str| -> Result<String> {
+        let output = context
+            .run()
+            .env("UV_TEST_BUILD_VALUE", value)
+            .arg("--no-project")
+            .arg("--no-index")
+            .arg("--no-build-isolation-package")
+            .arg("helper")
+            .arg("--with")
+            .arg(outer.path())
+            .arg("python")
+            .arg("-c")
+            .arg("import outer; print(outer.VALUE)")
+            .assert()
+            .success();
+        Ok(std::str::from_utf8(&output.get_output().stdout)?
+            .trim()
+            .to_string())
+    };
+
+    assert_snapshot!(run("before")?, @"before");
+    assert_snapshot!(run("after")?, @"after");
+
+    Ok(())
+}
+
 /// search paths are available in these ephemeral environments.
 #[test]
 fn run_with_pyvenv_cfg_file() -> Result<()> {
@@ -2258,7 +5363,7 @@ fn run_with_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 1 package in [TIME]
+    Prepared 2 packages in [TIME]
     Uninstalled 3 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.3.0

@@ -4,9 +4,13 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
 use fs_err as fs;
+use futures::executor::block_on;
 use indoc::indoc;
 use predicates::Predicate;
+use sha2::{Digest, Sha256};
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -822,6 +826,214 @@ fn install_git_subdirectories() -> Result<()> {
     context.assert_command("import example_pkg").success();
     context.assert_command("import example_pkg.a").success();
     context.assert_command("import example_pkg.b").success();
+
+    Ok(())
+}
+
+/// A dynamic dependency can prime a nested source wheel while resolving metadata. A static
+/// `match-runtime` target must not reuse that wheel when its final build environment is installed.
+#[test]
+fn sync_match_runtime_rebuilds_nested_source_distribution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (primer, child) = uv_test::match_runtime_nested_sources(context.temp_dir.path())?;
+
+    let ok = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!(
+            "primer @ {}\nchild @ {}\nok @ {}\n",
+            primer.simplified_display(),
+            child.simplified_display(),
+            ok.simplified_display(),
+        ))?;
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        extra-build-dependencies = { child = [{ requirement = "ok", match-runtime = true }] }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .arg("--no-cache"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+     + primer==0.1.0 (from file://[TEMP_DIR]/primer)
+    ");
+    context
+        .assert_command(
+            "import child; assert child.RUNTIME_VERSION == '1.0.0'; assert child.BUILDER_BUILD_NUMBER == 2",
+        )
+        .success();
+
+    Ok(())
+}
+
+/// An unrelated `match-runtime` target must not exclude an installed requirement while syncing
+/// offline without an index or populated cache.
+#[test]
+fn sync_irrelevant_match_runtime_offline_repeat() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let ok = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let validation = context
+        .workspace_root
+        .join("test/links/validation-1.0.0-py3-none-any.whl");
+
+    context
+        .pip_install()
+        .arg(&ok)
+        .arg(&validation)
+        .arg("--no-index")
+        .assert()
+        .success();
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("ok==1.0.0\n{}\n", validation.simplified_display()))?;
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        extra-build-dependencies = { unused = [{ requirement = "ok", match-runtime = true }] }
+    "#})?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--offline"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// An isolated build preserves the version of an installed runtime match.
+#[test]
+fn sync_match_runtime_preserves_preinstalled_runtime_version() -> Result<()> {
+    fn write_helper(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-1.0.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs::write(path.path(), block_on(zip.close())?)?;
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let runtime = context.temp_dir.child("runtime");
+    runtime.create_dir_all()?;
+    let runtime_wheel = runtime.child("helper-1.0.0-py3-none-any.whl");
+    write_helper(&runtime_wheel, "runtime")?;
+
+    let build = context.temp_dir.child("build");
+    build.create_dir_all()?;
+    write_helper(
+        &build.child("helper-1.0.0-py3-none-any.whl"),
+        "different-build-artifact",
+    )?;
+
+    context
+        .pip_install()
+        .arg(runtime_wheel.path())
+        .arg("--no-index")
+        .assert()
+        .success();
+    context
+        .assert_command("import helper; assert helper.VALUE == 'runtime'")
+        .success();
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    child.child("build_backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            from importlib.metadata import version
+
+            filename = "child-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("child.py", f"RUNTIME_VERSION = {version('helper')!r}\n")
+                wheel.writestr(
+                    "child-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "child-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        extra-build-dependencies = { child = [{ requirement = "helper", match-runtime = true }] }
+    "#})?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!(
+            "child @ {}\nhelper==1.0.0\n",
+            child.path().simplified_display(),
+        ))?;
+
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--find-links")
+        .arg(build.path())
+        .assert()
+        .success();
+    context
+        .assert_command(
+            "from importlib.metadata import version; import child; assert child.RUNTIME_VERSION == version('helper') == '1.0.0'",
+        )
+        .success();
 
     Ok(())
 }
@@ -5416,6 +5628,65 @@ fn require_hashes_url_unnamed() -> Result<()> {
     Ok(())
 }
 
+/// Include the hash alongside another URL fragment on an unnamed requirement.
+#[test]
+fn require_hashes_url_unnamed_compound_fragment() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#subdirectory=package&sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#subdirectory=package&sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374)
+    "
+    );
+
+    Ok(())
+}
+
+/// Reject an incorrect hash alongside another URL fragment on an unnamed requirement.
+#[test]
+fn require_hashes_url_unnamed_compound_fragment_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374&subdirectory=package")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374&subdirectory=package`
+      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374&subdirectory=package`
+
+          Expected:
+            sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+
+          Computed:
+            sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+    "
+    );
+
+    Ok(())
+}
+
 /// Sync to a `--target` directory with a built distribution.
 #[test]
 fn target_built_distribution() -> Result<()> {
@@ -5762,6 +6033,132 @@ fn preserve_markers() -> Result<()> {
      + anyio==4.3.0
     "
     );
+
+    Ok(())
+}
+
+/// Changing only a build-constraint hash must invalidate an installed registry source wheel
+/// during sync.
+#[test]
+fn invalidates_cached_build_constraint_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    fs::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        links.child("ok-2.0.0-py3-none-any.whl").path(),
+    )?;
+
+    let source_dist = links.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["ok==2.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    ))?;
+    let archive = block_on(zip.close())?;
+    let source_hash = format!("{:x}", Sha256::digest(&archive));
+    fs::write(source_dist.path(), archive)?;
+
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str(&format!("dep==0.1.0 --hash=sha256:{source_hash}"))?;
+    let constraints = context.temp_dir.child("build-constraints.txt");
+    constraints.write_str(
+        "ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697",
+    )?;
+
+    context
+        .pip_sync()
+        .arg(requirements.path())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--require-hashes")
+        .arg("--build-constraint")
+        .arg(constraints.path())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.pip_sync()
+        .arg(requirements.path())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--require-hashes")
+        .arg("--build-constraint")
+        .arg(constraints.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked 1 package in [TIME]
+    ");
+
+    constraints.write_str(
+        "ok==2.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    )?;
+    uv_snapshot!(context.pip_sync()
+        .arg(requirements.path())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--require-hashes")
+        .arg("--build-constraint")
+        .arg(constraints.path()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download and build `dep==0.1.0`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `ok==2.0.0`
+      ╰─▶ Hash mismatch for `ok==2.0.0`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    ");
 
     Ok(())
 }

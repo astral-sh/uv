@@ -7,6 +7,7 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
+use url::Url;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -220,6 +221,95 @@ fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     OK
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// An existing tool can prime a nested source wheel while resolving an upgraded runtime pin. The
+/// environment sync must rebuild that wheel for a static `match-runtime` target.
+#[test]
+fn tool_upgrade_match_runtime_rebuilds_nested_source_distribution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    let (primer, child) = uv_test::match_runtime_nested_sources(context.temp_dir.path())?;
+    let primer_url = Url::from_directory_path(&primer)
+        .map_err(|()| anyhow::anyhow!("Failed to create primer URL"))?;
+    let child_url = Url::from_directory_path(&child)
+        .map_err(|()| anyhow::anyhow!("Failed to create child URL"))?;
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+        extra-build-dependencies = { child = [{ requirement = "ok", match-runtime = true }] }
+    "#})?;
+
+    context
+        .tool_install()
+        .arg(format!("primer @ {primer_url}"))
+        .arg("--with")
+        .arg(format!("child @ {child_url}"))
+        .arg("--with")
+        .arg("ok>=1")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("primer")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1.0.0 2
+    ok==1.0.0 ; sys_platform == 'never'
+
+    ----- stderr -----
+    ");
+
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        links_dir.child("ok-2.0.0-py3-none-any.whl"),
+    )?;
+    // The receipt already contains the build settings; avoid applying the same config twice.
+    fs_err::remove_file(uv_toml.path())?;
+
+    context
+        .tool_upgrade()
+        .arg("primer")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("primer")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    2.0.0 4
+    ok==2.0.0 ; sys_platform == 'never'
 
     ----- stderr -----
     ");

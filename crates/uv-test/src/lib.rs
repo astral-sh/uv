@@ -2366,6 +2366,165 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Create a static `match-runtime` target and a dynamic primer that shares a nested source build.
+pub fn match_runtime_nested_sources(temp_dir: &Path) -> anyhow::Result<(PathBuf, PathBuf)> {
+    let builder = temp_dir.join("builder");
+    fs_err::create_dir_all(&builder)?;
+    fs_err::write(
+        builder.join("pyproject.toml"),
+        indoc! {r#"
+            [project]
+            name = "builder"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["ok"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+        "#},
+    )?;
+    fs_err::write(
+        builder.join("build_backend.py"),
+        indoc! {r#"
+            from pathlib import Path
+            from zipfile import ZipFile
+
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                count = Path(__file__).with_name("build-count")
+                build_number = int(count.read_text() if count.exists() else "0") + 1
+                count.write_text(str(build_number))
+
+                filename = "builder-0.1.0-py3-none-any.whl"
+                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                    wheel.writestr("builder.py", f"BUILD_NUMBER = {build_number}\n")
+                    wheel.writestr(
+                        "builder-0.1.0.dist-info/METADATA",
+                        "Metadata-Version: 2.3\nName: builder\nVersion: 0.1.0\n",
+                    )
+                    wheel.writestr(
+                        "builder-0.1.0.dist-info/WHEEL",
+                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                    )
+                    wheel.writestr("builder-0.1.0.dist-info/RECORD", "")
+                return filename
+        "#},
+    )?;
+
+    let builder_url = url::Url::from_directory_path(&builder)
+        .map_err(|()| anyhow::anyhow!("Failed to create builder URL"))?;
+    let primer = temp_dir.join("primer");
+    fs_err::create_dir_all(&primer)?;
+    fs_err::write(
+        primer.join("pyproject.toml"),
+        formatdoc! {r#"
+            [project]
+            name = "primer"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dynamic = ["dependencies"]
+
+            [project.scripts]
+            primer = "primer:main"
+
+            [build-system]
+            requires = ["builder @ {builder_url}"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+        "#},
+    )?;
+    fs_err::write(
+        primer.join("build_backend.py"),
+        indoc! {r#"
+            from pathlib import Path
+            from zipfile import ZipFile
+
+            def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+                dist_info = Path(metadata_directory) / "primer-0.1.0.dist-info"
+                dist_info.mkdir()
+                (dist_info / "METADATA").write_text(
+                    "Metadata-Version: 2.3\nName: primer\nVersion: 0.1.0\n"
+                )
+                return dist_info.name
+
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                filename = "primer-0.1.0-py3-none-any.whl"
+                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                    wheel.writestr(
+                        "primer.py",
+                        "def main():\n"
+                        "    from importlib.metadata import requires\n"
+                        "    import child\n"
+                        "    print(f'{child.RUNTIME_VERSION} {child.BUILDER_BUILD_NUMBER}')\n"
+                        "    print(requires('child')[0])\n",
+                    )
+                    wheel.writestr(
+                        "primer-0.1.0.dist-info/METADATA",
+                        "Metadata-Version: 2.3\nName: primer\nVersion: 0.1.0\n",
+                    )
+                    wheel.writestr(
+                        "primer-0.1.0.dist-info/WHEEL",
+                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                    )
+                    wheel.writestr(
+                        "primer-0.1.0.dist-info/entry_points.txt",
+                        "[console_scripts]\nprimer = primer:main\n",
+                    )
+                    wheel.writestr("primer-0.1.0.dist-info/RECORD", "")
+                return filename
+        "#},
+    )?;
+
+    let child = temp_dir.join("child");
+    fs_err::create_dir_all(&child)?;
+    fs_err::write(
+        child.join("pyproject.toml"),
+        formatdoc! {r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["builder @ {builder_url}"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+        "#},
+    )?;
+    fs_err::write(
+        child.join("build_backend.py"),
+        indoc! {r#"
+            from importlib.metadata import version
+            from pathlib import Path
+            from zipfile import ZipFile
+            import builder
+
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                runtime_version = version("ok")
+                filename = "child-0.1.0-py3-none-any.whl"
+                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                    wheel.writestr(
+                        "child.py",
+                        f'RUNTIME_VERSION = "{runtime_version}"\n'
+                        f"BUILDER_BUILD_NUMBER = {builder.BUILD_NUMBER}\n",
+                    )
+                    wheel.writestr(
+                        "child-0.1.0.dist-info/METADATA",
+                        f"Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n"
+                        f"Requires-Dist: ok=={runtime_version} ; sys_platform == 'never'\n",
+                    )
+                    wheel.writestr(
+                        "child-0.1.0.dist-info/WHEEL",
+                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                    )
+                    wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+                return filename
+        "#},
+    )?;
+
+    Ok((primer, child))
+}
+
 // This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
 pub const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
     "Z2l0aHViCg==",

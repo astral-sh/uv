@@ -13,9 +13,12 @@ use insta::assert_snapshot;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use url::Url;
+#[cfg(feature = "test-git")]
+use walkdir::WalkDir;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 fn package_section<'a>(lock: &'a str, name: &str) -> &'a str {
@@ -80,6 +83,167 @@ fn write_wheel_with_requires_and_tag(
     let entry = ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), Compression::Stored);
     block_on(zip.write_entry_whole(entry, b""))?;
     fs_err::write(path.path(), block_on(zip.close())?)?;
+
+    Ok(())
+}
+
+fn unsupported_executor_wheel_tag() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "cp312-cp312-macosx_99_0_arm64"
+    } else if cfg!(target_os = "windows") {
+        if cfg!(target_arch = "aarch64") {
+            "cp312-cp312-win_amd64"
+        } else {
+            "cp312-cp312-win_arm64"
+        }
+    } else if cfg!(target_arch = "aarch64") {
+        "cp312-cp312-musllinux_99_0_aarch64"
+    } else {
+        "cp312-cp312-musllinux_99_0_x86_64"
+    }
+}
+
+fn write_build_source(
+    path: &ChildPath,
+    name: &str,
+    version: &str,
+    hook_requirement: Option<(&str, &str)>,
+) -> Result<()> {
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let source = format!("{name}-{version}");
+    let module = name.replace('-', "_");
+    let (hook_requires, hook_import) = hook_requirement.map_or_else(
+        || (String::new(), String::new()),
+        |(requirement, module)| {
+            (
+                format!("\"{requirement}\""),
+                format!("    import {module}\n"),
+            )
+        },
+    );
+    let entry = ZipEntryBuilder::new(
+        format!("{source}/pyproject.toml").into(),
+        Compression::Stored,
+    );
+    block_on(
+        zip.write_entry_whole(
+            entry,
+            format!(
+                r#"
+        [project]
+        name = "{name}"
+        version = "{version}"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+            )
+            .as_bytes(),
+        ),
+    )?;
+    let entry = ZipEntryBuilder::new(
+        format!("{source}/build_backend.py").into(),
+        Compression::Stored,
+    );
+    block_on(
+        zip.write_entry_whole(
+            entry,
+            format!(
+                r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return [{hook_requires}]
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+{hook_import}    filename = "{module}-{version}-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("{module}.py", "")
+        wheel.writestr(
+            "{module}-{version}.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: {name}\nVersion: {version}\n",
+        )
+        wheel.writestr(
+            "{module}-{version}.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("{module}-{version}.dist-info/RECORD", "")
+    return filename
+"#
+            )
+            .as_bytes(),
+        ),
+    )?;
+    fs_err::write(path.path(), block_on(zip.close())?)?;
+
+    Ok(())
+}
+
+fn write_executor_build_project(
+    context: &uv_test::TestContext,
+    requires: &str,
+    expected_wheel: Option<&str>,
+) -> Result<()> {
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = [{requires}]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    ))?;
+    let assertion = expected_wheel.map_or_else(String::new, |name| {
+        format!("    assert 'Tag: py3-none-any' in distribution('{name}').read_text('WHEEL')\n")
+    });
+    dep_dir.child("build_backend.py").write_str(&format!(
+        r#"
+from importlib.metadata import distribution
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+{assertion}    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+{assertion}    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#
+    ))?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
 
     Ok(())
 }
@@ -176,19 +340,10 @@ fn lock_build_dependencies() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "flit-core"
-
-        [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "flit-core"
 
         [[resolution]]
@@ -211,22 +366,10 @@ fn lock_build_dependencies() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "wheel"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
         id = "build:wheel:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -304,6 +447,288 @@ fn lock_build_dependencies() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Verify that build preferences from a newer lock invalidate metadata produced with older build
+/// dependency versions in an existing cache.
+#[tokio::test]
+async fn lock_build_dependencies_invalidate_cached_metadata_for_preferences() -> Result<()> {
+    fn write_backend_wheel(path: &ChildPath, version: &str, runtime: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper_backend.py".into(), Compression::Stored);
+        block_on(
+            zip.write_entry_whole(
+                entry,
+                format!(
+                    r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+RUNTIME = "{runtime}"
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+    dist_info = Path(metadata_directory) / "outer-0.1.0.dist-info"
+    dist_info.mkdir(parents=True, exist_ok=True)
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.3\nName: outer\nVersion: 0.1.0\nRequires-Dist: " + RUNTIME + "\n"
+    )
+    (dist_info / "WHEEL").write_text(
+        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+    )
+    return dist_info.name
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "outer-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("outer.py", "")
+        wheel.writestr(
+            "outer-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: outer\nVersion: 0.1.0\nRequires-Dist: " + RUNTIME + "\n",
+        )
+        wheel.writestr(
+            "outer-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("outer-0.1.0.dist-info/RECORD", "")
+    return filename
+"#
+                )
+                .as_bytes(),
+            ),
+        )?;
+
+        let dist_info = format!("helper_build-{version}.dist-info");
+        let entry =
+            ZipEntryBuilder::new(format!("{dist_info}/METADATA").into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            format!("Metadata-Version: 2.3\nName: helper-build\nVersion: {version}\n").as_bytes(),
+        ))?;
+        let entry = ZipEntryBuilder::new(format!("{dist_info}/WHEEL").into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry = ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+    let helper_one = files.child("helper_build-1.0.0-py3-none-any.whl");
+    let helper_two = files.child("helper_build-2.0.0-py3-none-any.whl");
+    let runtime_one = files.child("runtime_one-1.0.0-py3-none-any.whl");
+    let runtime_two = files.child("runtime_two-1.0.0-py3-none-any.whl");
+    write_backend_wheel(&helper_one, "1.0.0", "runtime-one")?;
+    write_backend_wheel(&helper_two, "2.0.0", "runtime-two")?;
+    write_wheel(&runtime_one, "runtime-one", "1.0.0")?;
+    write_wheel(&runtime_two, "runtime-two", "1.0.0")?;
+
+    let server = MockServer::start().await;
+    let index_url = format!("{}/simple/", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/simple/helper-build/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"<a href="{}/files/helper_build-1.0.0-py3-none-any.whl" data-upload-time="2024-01-01T00:00:00Z">helper-build 1.0.0</a>"#,
+                server.uri()
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    for (route, wheel) in [
+        ("/files/helper_build-1.0.0-py3-none-any.whl", &helper_one),
+        ("/files/runtime_one-1.0.0-py3-none-any.whl", &runtime_one),
+        ("/files/runtime_two-1.0.0-py3-none-any.whl", &runtime_two),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(wheel.path())?))
+            .mount(&server)
+            .await;
+    }
+    for (name, filename) in [
+        ("runtime-one", "runtime_one-1.0.0-py3-none-any.whl"),
+        ("runtime-two", "runtime_two-1.0.0-py3-none-any.whl"),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(format!("/simple/{name}/")))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                format!(
+                    r#"<a href="{}/files/{filename}" data-upload-time="2024-01-01T00:00:00Z">{filename}</a>"#,
+                    server.uri()
+                ),
+                "text/html",
+            ))
+            .mount(&server)
+            .await;
+    }
+
+    let outer = context.temp_dir.child("outer");
+    outer.create_dir_all()?;
+    outer.child("pyproject.toml").write_str(
+        r#"
+        [build-system]
+        requires = ["helper-build>=1"]
+        build-backend = "helper_backend"
+        "#,
+    )?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["outer"]
+
+        [tool.uv.sources]
+        outer = { path = "outer" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(&index_url)
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    let initial = context.read("uv.lock");
+    let outer = package_section(&initial, "outer");
+    assert!(
+        outer.contains(r#"{ name = "helper-build", version = "1.0.0" }"#),
+        "{outer}"
+    );
+    assert!(
+        outer.contains(r#"requires-dist = [{ name = "runtime-one" }]"#),
+        "{outer}"
+    );
+
+    let old_cache = context.temp_dir.child("old-cache");
+    fs_err::rename(context.cache_dir.path(), old_cache.path())?;
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/helper-build/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"<a href="{}/files/helper_build-1.0.0-py3-none-any.whl" data-upload-time="2024-01-01T00:00:00Z">helper-build 1.0.0</a><a href="{}/files/helper_build-2.0.0-py3-none-any.whl" data-upload-time="2024-02-01T00:00:00Z">helper-build 2.0.0</a>"#,
+                server.uri(),
+                server.uri()
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    for (route, wheel) in [
+        ("/files/helper_build-1.0.0-py3-none-any.whl", &helper_one),
+        ("/files/helper_build-2.0.0-py3-none-any.whl", &helper_two),
+        ("/files/runtime_one-1.0.0-py3-none-any.whl", &runtime_one),
+        ("/files/runtime_two-1.0.0-py3-none-any.whl", &runtime_two),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(wheel.path())?))
+            .mount(&server)
+            .await;
+    }
+    for (name, filename) in [
+        ("runtime-one", "runtime_one-1.0.0-py3-none-any.whl"),
+        ("runtime-two", "runtime_two-1.0.0-py3-none-any.whl"),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(format!("/simple/{name}/")))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                format!(
+                    r#"<a href="{}/files/{filename}" data-upload-time="2024-01-01T00:00:00Z">{filename}</a>"#,
+                    server.uri()
+                ),
+                "text/html",
+            ))
+            .mount(&server)
+            .await;
+    }
+
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(&index_url)
+        .arg("--upgrade-package")
+        .arg("helper-build")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    let upgraded = context.read("uv.lock");
+    let outer = package_section(&upgraded, "outer");
+    assert!(
+        outer.contains(r#"{ name = "helper-build", version = "2.0.0" }"#),
+        "{outer}"
+    );
+    assert!(
+        outer.contains(r#"requires-dist = [{ name = "runtime-two" }]"#),
+        "{outer}"
+    );
+
+    let new_cache = context.temp_dir.child("new-cache");
+    fs_err::rename(context.cache_dir.path(), new_cache.path())?;
+    fs_err::rename(old_cache.path(), context.cache_dir.path())?;
+    let target = context.temp_dir.child("target");
+    target.create_dir_all()?;
+    context
+        .pip_install()
+        .arg("helper-build==2.0.0")
+        .arg("--target")
+        .arg(target.path())
+        .arg("--index-url")
+        .arg(&index_url)
+        .arg("--refresh-package")
+        .arg("helper-build")
+        .assert()
+        .success();
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["outer", "runtime-two"]
+
+        [tool.uv.sources]
+        outer = { path = "outer" }
+        "#,
+    )?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(&index_url)
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    let relocked = context.read("uv.lock");
+    let outer = package_section(&relocked, "outer");
+    assert!(
+        outer.contains(r#"{ name = "helper-build", version = "2.0.0" }"#),
+        "{outer}"
+    );
+    assert!(
+        outer.contains(r#"requires-dist = [{ name = "runtime-two" }]"#),
+        "{outer}"
+    );
+    assert!(!outer.contains(r#"{ name = "runtime-one" }"#), "{outer}");
 
     Ok(())
 }
@@ -395,6 +820,11 @@ fn lock_build_dependencies_workspace_root_widens_marker_reachability() -> Result
         "seed",
         "0.1.0",
     )?;
+    write_wheel(
+        &links_dir.child("hook_helper-0.1.0-py3-none-any.whl"),
+        "hook-helper",
+        "0.1.0",
+    )?;
 
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
@@ -439,12 +869,13 @@ from pathlib import Path
 from zipfile import ZipFile
 
 def get_requires_for_build_editable(config_settings=None):
-    return []
+    return ["hook-helper==0.1.0"]
 
 def get_requires_for_build_wheel(config_settings=None):
-    return []
+    return ["hook-helper==0.1.0"]
 
 def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+    import hook_helper
     filename = "b-0.1.0-py3-none-any.whl"
     with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
         wheel.writestr("b/__init__.py", "")
@@ -486,6 +917,15 @@ build_wheel = build_editable
             .all(|resolution| !resolution.contains("\ntarget = ")),
         "{resolutions}"
     );
+    for operation in ["operation = \"editable\"", "operation = \"wheel\""] {
+        assert!(
+            member_b_resolutions
+                .iter()
+                .any(|resolution| resolution.contains(operation)
+                    && resolution.contains("hook-helper")),
+            "{resolutions}"
+        );
+    }
     context
         .sync()
         .arg("--package")
@@ -498,6 +938,281 @@ build_wheel = build_editable
         .arg("lock-build-dependencies")
         .assert()
         .success();
+
+    Ok(())
+}
+
+/// Verify that a host-compatible wheel cannot hide a nested source fallback for a foreign Python
+/// target when locking build dependencies.
+#[test]
+fn lock_build_dependencies_reject_partial_nested_wheel_coverage() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/helper");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    let wheel = "helper-1.0.0-py3-none-any.whl";
+    let source = "helper-1.0.0.zip";
+    write_wheel(&files.child(wheel), "helper", "1.0.0")?;
+
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("helper-1.0.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "helper"
+        version = "1.0.0"
+        requires-python = ">=3.13,<3.14"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("helper-1.0.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+def get_requires_for_build_wheel(config_settings=None):
+    raise RuntimeError("foreign source distribution hook was called")
+"#,
+    ))?;
+    fs_err::write(files.child(source).path(), block_on(zip.close())?)?;
+
+    simple.child("index.html").write_str(&format!(
+        r#"
+        <a href="../../files/{wheel}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,<3.13">{wheel}</a>
+        <a href="../../files/{source}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.13,<3.14">{source}</a>
+        "#
+    ))?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    write_executor_build_project(&context, r#""helper>=1""#, Some("helper"))?;
+    for pyproject in [
+        context.temp_dir.child("pyproject.toml"),
+        context.temp_dir.child("dep/pyproject.toml"),
+    ] {
+        let contents = fs_err::read_to_string(pyproject.path())?;
+        pyproject.write_str(&contents.replace(
+            r#"requires-python = ">=3.12""#,
+            r#"requires-python = ">=3.12,<3.14""#,
+        ))?;
+    }
+
+    let output = context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .output()?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("helper==1.0.0"), "{stderr}");
+    assert!(stderr.contains(">=3.13, <3.14"), "{stderr}");
+    assert!(stderr.contains("Python 3.12"), "{stderr}");
+    assert!(
+        !stderr.contains("foreign source distribution hook was called"),
+        "{stderr}"
+    );
+
+    Ok(())
+}
+
+/// Verify that an executor-ineligible nested source does not block build locking when multiple
+/// retained wheels jointly cover every supported Python target.
+#[test]
+fn lock_build_dependencies_skip_jointly_covered_nested_sdist_hooks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/helper");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    let host_wheel = "helper-1.0.0-2-py3-none-any.whl";
+    let foreign_wheel = "helper-1.0.0-1-py3-none-any.whl";
+    let source = "helper-1.0.0.zip";
+    write_wheel(&files.child(host_wheel), "helper", "1.0.0")?;
+    write_wheel(&files.child(foreign_wheel), "helper", "1.0.0")?;
+
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("helper-1.0.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "helper"
+        version = "1.0.0"
+        requires-python = ">=3.13,<3.14"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("helper-1.0.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+def get_requires_for_build_wheel(config_settings=None):
+    raise RuntimeError("jointly covered source distribution hook was called")
+"#,
+    ))?;
+    fs_err::write(files.child(source).path(), block_on(zip.close())?)?;
+
+    simple.child("index.html").write_str(&format!(
+        r#"
+        <a href="../../files/{host_wheel}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,<3.13">{host_wheel}</a>
+        <a href="../../files/{foreign_wheel}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.13,<3.14">{foreign_wheel}</a>
+        <a href="../../files/{source}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.13,<3.14">{source}</a>
+        "#
+    ))?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    write_executor_build_project(&context, r#""helper>=1""#, Some("helper"))?;
+    for pyproject in [
+        context.temp_dir.child("pyproject.toml"),
+        context.temp_dir.child("dep/pyproject.toml"),
+    ] {
+        let contents = fs_err::read_to_string(pyproject.path())?;
+        pyproject.write_str(&contents.replace(
+            r#"requires-python = ">=3.12""#,
+            r#"requires-python = ">=3.12,<3.14""#,
+        ))?;
+    }
+
+    context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let helper = package_section(&lock, "helper");
+    assert!(helper.contains(host_wheel), "{helper}");
+    assert!(helper.contains(foreign_wheel), "{helper}");
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify that a same-version wheel from a different index cannot make an executor-ineligible
+/// nested source distribution appear covered when that wheel will be omitted from the lock.
+#[tokio::test]
+async fn lock_build_dependencies_reject_cross_index_nested_wheel_coverage() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/helper");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    let host_wheel = "helper-1.0.0-2-py3-none-any.whl";
+    let foreign_wheel = "helper-1.0.0-1-py3-none-any.whl";
+    let source = "helper-1.0.0.zip";
+    write_wheel(&files.child(host_wheel), "helper", "1.0.0")?;
+    write_wheel(&files.child(foreign_wheel), "helper", "1.0.0")?;
+
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("helper-1.0.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "helper"
+        version = "1.0.0"
+        requires-python = ">=3.13,<3.14"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("helper-1.0.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+def get_requires_for_build_wheel(config_settings=None):
+    raise RuntimeError("cross-index source distribution hook was called")
+"#,
+    ))?;
+    fs_err::write(files.child(source).path(), block_on(zip.close())?)?;
+
+    simple.child("index.html").write_str(&format!(
+        r#"
+        <a href="../../files/{host_wheel}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,<3.13">{host_wheel}</a>
+        <a href="../../files/{source}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.13,<3.14">{source}</a>
+        "#
+    ))?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    let server = MockServer::start().await;
+    let foreign_url =
+        Url::from_file_path(files.child(foreign_wheel).path()).expect("valid file URL");
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"<a href="{foreign_url}" data-requires-python=">=3.13,<3.14">{foreign_wheel}</a>"#
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+
+    write_executor_build_project(&context, r#""helper>=1""#, Some("helper"))?;
+    for pyproject in [
+        context.temp_dir.child("pyproject.toml"),
+        context.temp_dir.child("dep/pyproject.toml"),
+    ] {
+        let contents = fs_err::read_to_string(pyproject.path())?;
+        pyproject.write_str(&contents.replace(
+            r#"requires-python = ">=3.12""#,
+            r#"requires-python = ">=3.12,<3.14""#,
+        ))?;
+    }
+
+    let output = context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--find-links")
+        .arg(server.uri())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .output()?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("helper==1.0.0"), "{stderr}");
+    assert!(stderr.contains(">=3.13, <3.14"), "{stderr}");
+    assert!(stderr.contains("Python 3.12"), "{stderr}");
+    assert!(
+        !stderr.contains("cross-index source distribution hook was called"),
+        "{stderr}"
+    );
 
     Ok(())
 }
@@ -920,7 +1635,11 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .split("[[resolution]]")
         .filter(|resolution| resolution.contains("\nname = \"nested-builder\"\n"))
         .collect::<Vec<_>>();
-    assert_eq!(nested_builder_resolutions.len(), 2, "{resolutions}");
+    assert_eq!(nested_builder_resolutions.len(), 1, "{resolutions}");
+    assert!(
+        !nested_builder_resolutions[0].contains("stage = "),
+        "{resolutions}"
+    );
     assert!(
         nested_builder_resolutions
             .iter()
@@ -939,6 +1658,1661 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .arg("lock-build-dependencies")
         .assert()
         .success();
+
+    Ok(())
+}
+
+/// Verify universal build resolution retains foreign branches without selecting an
+/// executor-incompatible wheel when capturing and replaying the active build environment.
+#[test]
+fn lock_build_dependencies_resolve_wheels_against_executor_python() -> Result<()> {
+    let (host_platform, unsupported_platform, foreign_platform, foreign_marker) =
+        if cfg!(target_os = "macos") {
+            (
+                "macosx_10_9_universal2",
+                "macosx_99_0_arm64",
+                "win_amd64",
+                "sys_platform == 'win32'",
+            )
+        } else if cfg!(target_os = "windows") {
+            if cfg!(target_arch = "aarch64") {
+                (
+                    "win_arm64",
+                    "win_amd64",
+                    "manylinux_2_17_aarch64.manylinux2014_aarch64",
+                    "sys_platform == 'linux'",
+                )
+            } else {
+                (
+                    "win_amd64",
+                    "win_arm64",
+                    "manylinux_2_17_x86_64.manylinux2014_x86_64",
+                    "sys_platform == 'linux'",
+                )
+            }
+        } else if cfg!(target_arch = "aarch64") {
+            (
+                "manylinux_2_17_aarch64.manylinux2014_aarch64",
+                "musllinux_99_0_aarch64",
+                "win_arm64",
+                "sys_platform == 'win32'",
+            )
+        } else {
+            (
+                "manylinux_2_17_x86_64.manylinux2014_x86_64",
+                "musllinux_99_0_x86_64",
+                "win_amd64",
+                "sys_platform == 'win32'",
+            )
+        };
+
+    for incompatible_tag in [
+        format!("cp313-cp313-{host_platform}"),
+        format!("cp312-cp312d-{host_platform}"),
+        format!("cp312-cp312-{unsupported_platform}"),
+    ] {
+        let context = uv_test::test_context!("3.12");
+        let links_dir = context.temp_dir.child("links");
+        links_dir.create_dir_all()?;
+        write_wheel(
+            &links_dir.child("helper-1.0.0-py3-none-any.whl"),
+            "helper",
+            "1.0.0",
+        )?;
+        write_wheel_with_requires_and_tag(
+            &links_dir.child(format!("helper-2.0.0-{incompatible_tag}.whl")),
+            "helper",
+            "2.0.0",
+            &[],
+            &incompatible_tag,
+        )?;
+        let foreign_tag = format!("py3-none-{foreign_platform}");
+        write_wheel_with_requires_and_tag(
+            &links_dir.child(format!("foreign_helper-1.0.0-{foreign_tag}.whl")),
+            "foreign-helper",
+            "1.0.0",
+            &[],
+            &foreign_tag,
+        )?;
+        let future_tag = format!("cp313-cp313-{host_platform}");
+        write_wheel_with_requires_and_tag(
+            &links_dir.child(format!("future_helper-1.0.0-{future_tag}.whl")),
+            "future-helper",
+            "1.0.0",
+            &[],
+            &future_tag,
+        )?;
+
+        let dep_dir = context.temp_dir.child("dep");
+        dep_dir.create_dir_all()?;
+        dep_dir.child("pyproject.toml").write_str(&format!(
+            r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper>=1", "foreign-helper==1.0.0 ; {foreign_marker}", "future-helper==1.0.0 ; python_version >= '3.13'"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+        ))?;
+        dep_dir.child("build_backend.py").write_str(
+            r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    import helper
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    import helper
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+        )?;
+
+        context.temp_dir.child("pyproject.toml").write_str(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+        )?;
+
+        context
+            .lock()
+            .arg("--find-links")
+            .arg(links_dir.path())
+            .arg("--no-index")
+            .arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .assert()
+            .success();
+
+        let lock = context.read("uv.lock");
+        let dep = package_section(&lock, "dep");
+        assert!(
+            dep.contains(r#"{ name = "helper", version = "1.0.0""#),
+            "{dep}"
+        );
+        assert!(
+            dep.contains(r#"{ name = "foreign-helper", version = "1.0.0""#),
+            "{dep}"
+        );
+        assert!(
+            dep.contains(r#"{ name = "future-helper", version = "1.0.0""#),
+            "{dep}"
+        );
+        assert!(
+            lock.contains(&format!("helper-2.0.0-{incompatible_tag}.whl")),
+            "{lock}"
+        );
+
+        context
+            .sync()
+            .arg("--find-links")
+            .arg(links_dir.path())
+            .arg("--no-index")
+            .arg("--frozen")
+            .arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .assert()
+            .success();
+    }
+
+    Ok(())
+}
+
+/// Verify inactive patch-level build requirements do not demand a compatible executor artifact.
+#[test]
+fn lock_build_dependencies_ignore_inactive_executor_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    let incompatible_tag = unsupported_executor_wheel_tag();
+    let incompatible_wheel = format!("future_patch_builder-1.0.0-{incompatible_tag}.whl");
+    write_wheel_with_requires_and_tag(
+        &links_dir.child(&incompatible_wheel),
+        "future-patch-builder",
+        "1.0.0",
+        &[],
+        incompatible_tag,
+    )?;
+    write_executor_build_project(
+        &context,
+        r#""future-patch-builder==1.0.0 ; python_full_version > '3.12.99'""#,
+        None,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(&incompatible_wheel), "{lock}");
+    assert!(lock.contains("python_full_version > '3.12.99'"), "{lock}");
+
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify the active build environment selects a compatible wheel when a higher-priority,
+/// same-version wheel only supports another executor.
+#[test]
+fn lock_build_dependencies_select_compatible_executor_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    let incompatible_tag = unsupported_executor_wheel_tag();
+    let compatible_wheel = "helper-1.0.0-1-py3-none-any.whl";
+    let incompatible_wheel = format!("helper-1.0.0-2-{incompatible_tag}.whl");
+    write_wheel_with_requires_and_tag(
+        &links_dir.child(compatible_wheel),
+        "helper",
+        "1.0.0",
+        &[],
+        "py3-none-any",
+    )?;
+    write_wheel_with_requires_and_tag(
+        &links_dir.child(&incompatible_wheel),
+        "helper",
+        "1.0.0",
+        &[],
+        incompatible_tag,
+    )?;
+    write_executor_build_project(&context, r#""helper==1.0.0""#, Some("helper"))?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let helper = package_section(&lock, "helper");
+    assert!(helper.contains(compatible_wheel), "{helper}");
+    assert!(helper.contains(&incompatible_wheel), "{helper}");
+
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify the active build environment falls back to a compatible source distribution when all
+/// same-version wheels only support another executor.
+#[test]
+fn lock_build_dependencies_select_compatible_executor_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    let incompatible_tag = unsupported_executor_wheel_tag();
+    let incompatible_wheel = format!("helper-1.0.0-{incompatible_tag}.whl");
+    write_build_source(
+        &links_dir.child("helper-1.0.0.zip"),
+        "helper",
+        "1.0.0",
+        None,
+    )?;
+    write_wheel_with_requires_and_tag(
+        &links_dir.child(&incompatible_wheel),
+        "helper",
+        "1.0.0",
+        &[],
+        incompatible_tag,
+    )?;
+    write_executor_build_project(&context, r#""helper==1.0.0""#, Some("helper"))?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let helper = package_section(&lock, "helper");
+    assert!(helper.contains("helper-1.0.0.zip"), "{helper}");
+    assert!(helper.contains(&incompatible_wheel), "{helper}");
+
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify that selecting a source fallback for the active executor captures the source
+/// distribution's nested build-hook requirements even when an ABI-none foreign wheel exists.
+#[test]
+fn lock_build_dependencies_capture_nested_executor_sdist_hook() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    let incompatible_tag =
+        unsupported_executor_wheel_tag().replacen("cp312-cp312-", "py3-none-", 1);
+    let incompatible_wheel = format!("helper-1.0.0-{incompatible_tag}.whl");
+    write_wheel(
+        &links_dir.child("nested_helper-1.0.0-py3-none-any.whl"),
+        "nested-helper",
+        "1.0.0",
+    )?;
+    write_build_source(
+        &links_dir.child("helper-1.0.0.zip"),
+        "helper",
+        "1.0.0",
+        Some(("nested-helper==1.0.0", "nested_helper")),
+    )?;
+    write_wheel_with_requires_and_tag(
+        &links_dir.child(&incompatible_wheel),
+        "helper",
+        "1.0.0",
+        &[],
+        &incompatible_tag,
+    )?;
+    write_executor_build_project(&context, r#""helper==1.0.0""#, Some("helper"))?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let helper = package_section(&lock, "helper");
+    assert!(helper.contains("helper-1.0.0.zip"), "{helper}");
+    assert!(helper.contains(&incompatible_wheel), "{helper}");
+    assert!(
+        lock.contains("nested_helper-1.0.0-py3-none-any.whl"),
+        "{lock}"
+    );
+    let resolutions = resolution_sections(&lock);
+    assert!(
+        resolutions.split("[[resolution]]").any(|resolution| {
+            resolution.contains("\nname = \"helper\"\n")
+                && resolution.contains(r#"{ name = "nested-helper", version = "1.0.0" }"#)
+        }),
+        "{resolutions}"
+    );
+
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify that locking on Python 3.12 never executes the hook of a nested source distribution
+/// whose artifact metadata restricts it to Python 3.13.
+#[test]
+fn lock_build_dependencies_reject_foreign_nested_sdist_hook() -> Result<()> {
+    fn write_helper_source(
+        path: &ChildPath,
+        version: &str,
+        requires_python: &str,
+        guard: &str,
+        value: &str,
+    ) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new(
+            format!("helper-{version}/pyproject.toml").into(),
+            Compression::Stored,
+        );
+        block_on(
+            zip.write_entry_whole(
+                entry,
+                format!(
+                    r#"
+        [project]
+        name = "helper"
+        version = "{version}"
+        requires-python = "{requires_python}"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+                )
+                .as_bytes(),
+            ),
+        )?;
+        let entry = ZipEntryBuilder::new(
+            format!("helper-{version}/build_backend.py").into(),
+            Compression::Stored,
+        );
+        block_on(
+            zip.write_entry_whole(
+                entry,
+                format!(
+                    r#"
+import sys
+from pathlib import Path
+from zipfile import ZipFile
+
+assert {guard}, "foreign source distribution hook was called"
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "helper-{version}-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("helper.py", "VALUE = '{value}'\n")
+        wheel.writestr(
+            "helper-{version}.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: helper\nVersion: {version}\nRequires-Python: {requires_python}\n",
+        )
+        wheel.writestr(
+            "helper-{version}.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("helper-{version}.dist-info/RECORD", "")
+    return filename
+"#
+                )
+                .as_bytes(),
+            ),
+        )?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/helper");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+    write_helper_source(
+        &files.child("helper-1.0.0.zip"),
+        "1.0.0",
+        ">=3.12,<3.13",
+        "sys.version_info < (3, 13)",
+        "one",
+    )?;
+    write_helper_source(
+        &files.child("helper-1.1.0.zip"),
+        "1.1.0",
+        ">=3.13,<3.14",
+        "sys.version_info >= (3, 13)",
+        "two",
+    )?;
+    simple.child("index.html").write_str(
+        r#"
+        <a href="../../files/helper-1.0.0.zip" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,<3.13">helper-1.0.0.zip</a>
+        <a href="../../files/helper-1.1.0.zip" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.13,<3.14">helper-1.1.0.zip</a>
+        "#,
+    )?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    let dep = context.temp_dir.child("dep");
+    dep.create_dir_all()?;
+    dep.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.14"
+
+        [build-system]
+        requires = ["helper>=1"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep.child("build_backend.py").write_str(
+        r#"
+from helper import VALUE
+
+assert VALUE == "one", VALUE
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+"#,
+    )?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.14"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    let output = context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .output()?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("helper==1.1.0"), "{stderr}");
+    assert!(stderr.contains(">=3.13, <3.14"), "{stderr}");
+    assert!(stderr.contains("Python 3.12"), "{stderr}");
+    assert!(
+        !stderr.contains("foreign source distribution hook was called"),
+        "{stderr}"
+    );
+
+    Ok(())
+}
+
+/// Verify executor-incompatible direct path and file-URL wheels used as build requirements fail
+/// during lock capture instead of being recorded as usable build artifacts.
+#[test]
+fn lock_build_dependencies_reject_incompatible_direct_executor_wheels() -> Result<()> {
+    for source in ["path", "file-url"] {
+        let context = uv_test::test_context!("3.12");
+        let links_dir = context.temp_dir.child("links");
+        links_dir.create_dir_all()?;
+        let incompatible_tag = unsupported_executor_wheel_tag();
+        let wheel_filename = format!("helper-1.0.0-{incompatible_tag}.whl");
+        let helper_wheel = links_dir.child(&wheel_filename);
+        write_wheel_with_requires_and_tag(&helper_wheel, "helper", "1.0.0", &[], incompatible_tag)?;
+        let requirement = if source == "path" {
+            format!(r"'helper @ {}'", helper_wheel.path().display())
+        } else {
+            let helper_url = Url::from_file_path(helper_wheel.path()).expect("valid file URL");
+            format!(r#""helper @ {helper_url}""#)
+        };
+        write_executor_build_project(&context, &requirement, None)?;
+
+        let output = context
+            .lock()
+            .arg("--no-index")
+            .arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .output()?;
+        assert!(!output.status.success(), "{source}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("Failed to install requirements from `build-system.requires`"),
+            "{source}: {stderr}"
+        );
+        assert!(
+            stderr.contains("dependency is incompatible with the current platform"),
+            "{source}: {stderr}"
+        );
+    }
+
+    Ok(())
+}
+
+/// Verify a higher-build-tag wheel that is ineligible for the executor cannot hide a usable
+/// same-version wheel during universal build resolution or concrete artifact projection.
+#[tokio::test]
+async fn lock_build_dependencies_select_eligible_executor_wheel() -> Result<()> {
+    #[derive(Clone, Copy)]
+    enum IndexKind {
+        Simple,
+        FindLinks,
+        NamedFlat,
+    }
+
+    fn write_helper_wheel(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, value.as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-1.0.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    for (ineligible_metadata, requirement, index_kind, bad_value, expected_value) in [
+        (
+            r#"data-requires-python=">=3.13""#,
+            "helper==1.0.0",
+            IndexKind::Simple,
+            "raise RuntimeError('selected ineligible wheel')\n",
+            "compatible",
+        ),
+        (
+            r#"data-yanked="bad build""#,
+            "helper>=1",
+            IndexKind::Simple,
+            "raise RuntimeError('selected ineligible wheel')\n",
+            "compatible",
+        ),
+        (
+            r#"data-requires-python=">=3.13""#,
+            "helper==1.0.0",
+            IndexKind::FindLinks,
+            "raise RuntimeError('selected ineligible wheel')\n",
+            "compatible",
+        ),
+        (
+            r#"data-requires-python=">=3.13""#,
+            "helper==1.0.0",
+            IndexKind::NamedFlat,
+            "raise RuntimeError('selected ineligible wheel')\n",
+            "compatible",
+        ),
+        (
+            r#"data-yanked="bad build""#,
+            "helper>=1",
+            IndexKind::FindLinks,
+            "raise RuntimeError('selected ineligible wheel')\n",
+            "compatible",
+        ),
+        (
+            r#"data-yanked="bad build""#,
+            "helper>=1",
+            IndexKind::NamedFlat,
+            "raise RuntimeError('selected ineligible wheel')\n",
+            "compatible",
+        ),
+        (
+            r#"data-yanked="allowed exact pin""#,
+            "helper==1.0.0",
+            IndexKind::FindLinks,
+            "VALUE = 'yanked'\n",
+            "yanked",
+        ),
+        (
+            r#"data-yanked="allowed exact pin""#,
+            "helper==1.0.0",
+            IndexKind::NamedFlat,
+            "VALUE = 'yanked'\n",
+            "yanked",
+        ),
+    ] {
+        let context = uv_test::test_context!("3.12");
+        let simple = context.temp_dir.child("simple/helper");
+        simple.create_dir_all()?;
+        let files = context.temp_dir.child("files");
+        files.create_dir_all()?;
+        let good = "helper-1.0.0-1-py3-none-any.whl";
+        let bad = "helper-1.0.0-2-py3-none-any.whl";
+        write_helper_wheel(&files.child(good), "VALUE = 'compatible'\n")?;
+        write_helper_wheel(&files.child(bad), bad_value)?;
+        simple.child("index.html").write_str(&format!(
+            r#"
+            <a href="../../files/{good}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">{good}</a>
+            <a href="../../files/{bad}" data-upload-time="2024-03-01T00:00:00Z" {ineligible_metadata}>{bad}</a>
+            "#
+        ))?;
+        let index = Url::from_directory_path(context.temp_dir.child("simple").path())
+            .expect("valid index URL");
+        let server = MockServer::start().await;
+        if !matches!(index_kind, IndexKind::Simple) {
+            let good_url = Url::from_file_path(files.child(good).path()).expect("valid file URL");
+            let bad_url = Url::from_file_path(files.child(bad).path()).expect("valid file URL");
+            Mock::given(method("GET"))
+                .and(path("/"))
+                .respond_with(ResponseTemplate::new(200).set_body_raw(
+                    format!(
+                        r#"
+                        <a href="{good_url}" data-requires-python=">=3.12">{good}</a>
+                        <a href="{bad_url}" {ineligible_metadata}>{bad}</a>
+                        "#
+                    ),
+                    "text/html",
+                ))
+                .mount(&server)
+                .await;
+        }
+
+        let index_config = if matches!(index_kind, IndexKind::NamedFlat) {
+            let index = server.uri().replacen("://", "://user:secret@", 1);
+            format!(
+                r#"
+                [[tool.uv.index]]
+                name = "local"
+                url = "{index}"
+                format = "flat"
+                explicit = true
+                "#
+            )
+        } else {
+            String::new()
+        };
+        let helper_source = if matches!(index_kind, IndexKind::NamedFlat) {
+            r#"helper = { index = "local" }"#
+        } else {
+            ""
+        };
+
+        let dep = context.temp_dir.child("dep");
+        dep.create_dir_all()?;
+        dep.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "dep"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["{requirement}"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+
+            {index_config}
+
+            [tool.uv.sources]
+            {helper_source}
+            "#
+        ))?;
+        dep.child("build_backend.py").write_str(&format!(
+            r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    from helper import VALUE
+    assert VALUE == "{expected_value}"
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    from helper import VALUE
+    assert VALUE == "{expected_value}"
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+        ))?;
+        let runtime_dependency = if matches!(index_kind, IndexKind::Simple)
+            && ineligible_metadata.contains("requires-python")
+        {
+            r#", "helper==1.0.0; python_full_version >= '3.13'""#
+        } else {
+            ""
+        };
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(&format!(
+                r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["dep"{runtime_dependency}]
+
+            {index_config}
+
+            [tool.uv.sources]
+            dep = {{ path = "dep" }}
+            {helper_source}
+            "#,
+            ))?;
+
+        let mut lock = context.lock();
+        match index_kind {
+            IndexKind::Simple => {
+                lock.arg("--index").arg(index.as_str());
+            }
+            IndexKind::FindLinks => {
+                lock.arg("--no-index").arg("--find-links").arg(server.uri());
+            }
+            IndexKind::NamedFlat => {
+                lock.arg("--default-index")
+                    .arg(format!("{}/simple", server.uri()));
+            }
+        }
+        lock.arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .assert()
+            .success();
+
+        let lock = context.read("uv.lock");
+        if matches!(index_kind, IndexKind::NamedFlat) {
+            assert!(!lock.contains("user:secret@"), "{lock}");
+        }
+        let helper = package_section(&lock, "helper");
+        assert!(helper.contains(good), "{helper}");
+        if ineligible_metadata.contains(r#"data-yanked="bad build""#) {
+            assert!(!helper.contains(bad), "{helper}");
+        } else {
+            assert!(helper.contains(bad), "{helper}");
+        }
+
+        let mut sync = context.sync();
+        match index_kind {
+            IndexKind::Simple => {
+                sync.arg("--index").arg(index.as_str());
+            }
+            IndexKind::FindLinks => {
+                sync.arg("--no-index").arg("--find-links").arg(server.uri());
+            }
+            IndexKind::NamedFlat => {
+                sync.arg("--default-index")
+                    .arg(format!("{}/simple", server.uri()));
+            }
+        }
+        sync.arg("--no-cache")
+            .arg("--frozen")
+            .arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .assert()
+            .success();
+    }
+
+    Ok(())
+}
+
+/// Verify artifact selection remains scoped when one isolated build allows a yanked wheel and
+/// another build of the same version does not.
+#[tokio::test]
+async fn lock_build_dependencies_scope_yanked_executor_wheel() -> Result<()> {
+    fn write_helper_wheel(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, value.as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-1.0.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/helper");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+    let unyanked = "helper-1.0.0-1-py3-none-any.whl";
+    let yanked = "helper-1.0.0-2-py3-none-any.whl";
+    write_helper_wheel(&files.child(unyanked), "VALUE = 'unyanked'\n")?;
+    write_helper_wheel(&files.child(yanked), "VALUE = 'yanked'\n")?;
+    simple.child("index.html").write_str(&format!(
+        r#"
+        <a href="../../files/{unyanked}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">{unyanked}</a>
+        <a href="../../files/{yanked}" data-upload-time="2024-03-01T00:00:00Z" data-yanked="bad build">{yanked}</a>
+        "#
+    ))?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    for (name, requirement, expected) in [
+        ("dep-a", "helper>=1", "unyanked"),
+        ("dep-b", "helper==1.0.0", "yanked"),
+    ] {
+        let dep = context.temp_dir.child(name);
+        dep.create_dir_all()?;
+        dep.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["{requirement}"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#
+        ))?;
+        let module = name.replace('-', "_");
+        dep.child("build_backend.py").write_str(&format!(
+            r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    from helper import VALUE
+    assert VALUE == "{expected}"
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    from helper import VALUE
+    assert VALUE == "{expected}"
+    filename = "{module}-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("{module}.py", "")
+        wheel.writestr(
+            "{module}-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: {name}\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "{module}-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("{module}-0.1.0.dist-info/RECORD", "")
+    return filename
+"#
+        ))?;
+    }
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep-a", "dep-b"]
+
+        [tool.uv.sources]
+        dep-a = { path = "dep-a" }
+        dep-b = { path = "dep-b" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let helper = package_section(&lock, "helper");
+    assert!(helper.contains(unyanked), "{helper}");
+    assert!(helper.contains(yanked), "{helper}");
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify an exact build requirement retains a yanked wheel for another executor even when the
+/// active executor selects an unyanked wheel.
+#[tokio::test]
+async fn lock_build_dependencies_retain_yanked_foreign_executor_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/helper");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    let host_wheel = "helper-1.0.0-2-py3-none-any.whl";
+    let foreign_tag = unsupported_executor_wheel_tag();
+    let foreign_wheel = format!("helper-1.0.0-1-{foreign_tag}.whl");
+    write_wheel(&files.child(host_wheel), "helper", "1.0.0")?;
+    write_wheel_with_requires_and_tag(
+        &files.child(&foreign_wheel),
+        "helper",
+        "1.0.0",
+        &[],
+        foreign_tag,
+    )?;
+    simple.child("index.html").write_str(&format!(
+        r#"
+        <a href="../../files/{host_wheel}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">{host_wheel}</a>
+        <a href="../../files/{foreign_wheel}" data-upload-time="2024-03-01T00:00:00Z" data-yanked="allowed exact pin">{foreign_wheel}</a>
+        "#
+    ))?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    write_executor_build_project(&context, r#""helper==1.0.0""#, Some("helper"))?;
+    context
+        .lock()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let helpers = lock
+        .split("\n[[package]]")
+        .filter(|package| package.contains("\nname = \"helper\""))
+        .collect::<Vec<_>>();
+    assert!(!helpers.is_empty(), "{lock}");
+    for helper in helpers {
+        assert!(helper.contains(host_wheel), "{helper}");
+        assert!(helper.contains(&foreign_wheel), "{helper}");
+    }
+
+    Ok(())
+}
+
+/// Verify a yanked or Python-ineligible source artifact is never executed when frozen replay is
+/// forced to fall back from the captured build wheel.
+#[tokio::test]
+async fn lock_build_dependencies_reject_ineligible_sdist_fallback() -> Result<()> {
+    for (sdist_metadata, requirement) in [
+        (r#"data-yanked="bad source""#, "helper>=1"),
+        (r#"data-requires-python=">=3.13""#, "helper==1.0.0"),
+    ] {
+        let context = uv_test::test_context!("3.12");
+        let simple = context.temp_dir.child("simple/helper");
+        simple.create_dir_all()?;
+        let files = context.temp_dir.child("files");
+        files.create_dir_all()?;
+
+        let wheel = "helper-1.0.0-py3-none-any.whl";
+        let source = "helper-1.0.0.zip";
+        write_wheel(&files.child(wheel), "helper", "1.0.0")?;
+        let source_dist = files.child(source);
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper-1.0.0/pyproject.toml".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            br#"
+            [project]
+            name = "helper"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = []
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#,
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0/build_backend.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            br#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "helper-1.0.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("helper.py", 'raise RuntimeError("selected ineligible source distribution")\n')
+        wheel.writestr(
+            "helper-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        )
+        wheel.writestr(
+            "helper-1.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("helper-1.0.0.dist-info/RECORD", "")
+    return filename
+"#,
+        ))?;
+        fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+        simple.child("index.html").write_str(&format!(
+            r#"
+            <a href="../../files/{wheel}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">{wheel}</a>
+            <a href="../../files/{source}" data-upload-time="2024-03-01T00:00:00Z" {sdist_metadata}>{source}</a>
+            "#
+        ))?;
+        let index = Url::from_directory_path(context.temp_dir.child("simple").path())
+            .expect("valid index URL");
+
+        write_executor_build_project(&context, &format!(r#""{requirement}""#), Some("helper"))?;
+        for pyproject in [
+            context.temp_dir.child("pyproject.toml"),
+            context.temp_dir.child("dep/pyproject.toml"),
+        ] {
+            let contents = fs_err::read_to_string(pyproject.path())?;
+            pyproject.write_str(&contents.replace(
+                r#"requires-python = ">=3.12""#,
+                r#"requires-python = ">=3.12,<4""#,
+            ))?;
+        }
+        context
+            .lock()
+            .arg("--index")
+            .arg(index.as_str())
+            .arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .assert()
+            .success();
+
+        let lock = context.read("uv.lock");
+        let helper = package_section(&lock, "helper");
+        assert!(helper.contains(wheel), "{helper}");
+
+        let output = context
+            .sync()
+            .arg("--index")
+            .arg(index.as_str())
+            .arg("--no-binary-package")
+            .arg("helper")
+            .arg("--no-cache")
+            .arg("--frozen")
+            .arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .output()?;
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("can't be installed because it is marked as `--no-binary` but has no source distribution"),
+            "{stderr}"
+        );
+        assert!(
+            !stderr.contains("selected ineligible source distribution"),
+            "{stderr}"
+        );
+    }
+
+    Ok(())
+}
+
+/// Verify frozen build replay cannot select a wheel excluded when the build was captured from an
+/// eligible source distribution.
+#[tokio::test]
+async fn lock_build_dependencies_replay_ignores_excluded_executor_wheel() -> Result<()> {
+    fn write_raising_helper_wheel(path: &ChildPath) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b"raise RuntimeError('selected excluded wheel')\n"))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-1.0.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/helper");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+    write_build_source(&files.child("helper-1.0.0.zip"), "helper", "1.0.0", None)?;
+    write_raising_helper_wheel(&files.child("helper-1.0.0-2-py3-none-any.whl"))?;
+    simple.child("index.html").write_str(
+        r#"
+        <a href="../../files/helper-1.0.0.zip" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">helper-1.0.0.zip</a>
+        <a href="../../files/helper-1.0.0-2-py3-none-any.whl" data-upload-time="2025-03-01T00:00:00Z" data-requires-python=">=3.12">helper-1.0.0-2-py3-none-any.whl</a>
+        "#,
+    )?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    let dep = context.temp_dir.child("dep");
+    dep.create_dir_all()?;
+    dep.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    import helper
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    import helper
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--exclude-newer")
+        .arg("2024-03-25T00:00:00Z")
+        .arg("--no-binary-package")
+        .arg("helper")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify an unpinned, yanked higher-build-tag runtime wheel is not captured and selected during
+/// cold frozen replay.
+#[test]
+fn lock_build_dependencies_replay_ignores_yanked_runtime_wheel() -> Result<()> {
+    fn write_helper_wheel(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, value.as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-1.0.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/helper");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+    let good = "helper-1.0.0-1-py3-none-any.whl";
+    let yanked = "helper-1.0.0-2-py3-none-any.whl";
+    write_helper_wheel(&files.child(good), "VALUE = 'compatible'\n")?;
+    write_helper_wheel(
+        &files.child(yanked),
+        "raise RuntimeError('selected yanked runtime wheel')\n",
+    )?;
+    simple.child("index.html").write_str(&format!(
+        r#"
+        <a href="../../files/{good}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">{good}</a>
+        <a href="../../files/{yanked}" data-upload-time="2024-03-01T00:00:00Z" data-yanked="bad runtime wheel">{yanked}</a>
+        "#
+    ))?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    write_executor_build_project(&context, "", None)?;
+    let project = context.temp_dir.child("pyproject.toml");
+    let contents = fs_err::read_to_string(project.path())?;
+    project.write_str(&contents.replace(
+        r#"dependencies = ["dep"]"#,
+        r#"dependencies = ["dep", "helper>=1"]"#,
+    ))?;
+
+    context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let helper = package_section(&lock, "helper");
+    assert!(helper.contains(good), "{helper}");
+    assert!(!helper.contains(yanked), "{helper}");
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context
+        .run()
+        .arg("--no-sync")
+        .arg("python")
+        .arg("-c")
+        .arg("import helper; print(helper.VALUE)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    compatible
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Verify a higher-build-tag runtime wheel that is ineligible for the active Python cannot be
+/// selected during cold frozen replay when a same-version compatible wheel is available.
+#[test]
+fn lock_build_dependencies_replay_selects_python_compatible_runtime_wheel() -> Result<()> {
+    fn write_helper_wheel(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, value.as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-1.0.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/helper");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+    let compatible = "helper-1.0.0-1-py3-none-any.whl";
+    let foreign = "helper-1.0.0-2-py3-none-any.whl";
+    write_helper_wheel(&files.child(compatible), "VALUE = 'compatible'\n")?;
+    write_helper_wheel(
+        &files.child(foreign),
+        "raise RuntimeError('selected Python-incompatible runtime wheel')\n",
+    )?;
+    simple.child("index.html").write_str(&format!(
+        r#"
+        <a href="../../files/{compatible}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,<3.14">{compatible}</a>
+        <a href="../../files/{foreign}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,<3.14">{foreign}</a>
+        "#
+    ))?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    write_executor_build_project(&context, "", None)?;
+    for pyproject in [
+        context.temp_dir.child("pyproject.toml"),
+        context.temp_dir.child("dep/pyproject.toml"),
+    ] {
+        let contents = fs_err::read_to_string(pyproject.path())?;
+        let contents = contents.replace(
+            r#"requires-python = ">=3.12""#,
+            r#"requires-python = ">=3.12,<3.14""#,
+        );
+        pyproject.write_str(&contents)?;
+    }
+    let project = context.temp_dir.child("pyproject.toml");
+    let contents = fs_err::read_to_string(project.path())?;
+    project.write_str(&contents.replace(
+        r#"dependencies = ["dep"]"#,
+        r#"dependencies = ["dep", "helper==1.0.0"]"#,
+    ))?;
+
+    context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let original_helper = package_section(&lock, "helper");
+    let helper = original_helper
+        .lines()
+        .map(|line| {
+            if line.contains(compatible) {
+                line.replace(">=3.12, <3.14", ">=3.12, <3.13")
+            } else if line.contains(foreign) {
+                line.replace(">=3.12, <3.14", ">=3.13, <3.14")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let lock = lock.replacen(original_helper, &helper, 1);
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+    let helper = package_section(&lock, "helper");
+    assert!(helper.contains(compatible), "{helper}");
+    assert!(helper.contains(foreign), "{helper}");
+    assert!(helper.contains(">=3.12, <3.13"), "{helper}");
+    assert!(helper.contains(">=3.13, <3.14"), "{helper}");
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context
+        .run()
+        .arg("--no-sync")
+        .arg("python")
+        .arg("-c")
+        .arg("import helper; print(helper.VALUE)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    compatible
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Verify executor-only wheel eligibility does not suppress normal runtime Python forks.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_runtime_requires_python_fork_is_preserved() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/helper");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+    let older = "helper-1.0.0-py3-none-any.whl";
+    let newer = "helper-2.0.0-py3-none-any.whl";
+    write_wheel(&files.child(older), "helper", "1.0.0")?;
+    write_wheel(&files.child(newer), "helper", "2.0.0")?;
+    simple.child("index.html").write_str(&format!(
+        r#"
+        <a href="../../files/{older}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">{older}</a>
+        <a href="../../files/{newer}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.13">{newer}</a>
+        "#
+    ))?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["helper>=1"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index").arg(index.as_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let runtime = lock
+        .lines()
+        .filter(|line| {
+            line.starts_with("resolution-markers = [")
+                || line.trim_start().starts_with("\"python_full_version")
+                || line.starts_with("name = \"helper\"")
+                || line.starts_with("version = \"1.0.0\"")
+                || line.starts_with("version = \"2.0.0\"")
+                || line.contains(older)
+                || line.contains(newer)
+                || line.trim_start().starts_with("{ name = \"helper\"")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(runtime, @r#"
+        resolution-markers = [
+            "python_full_version >= '3.13'",
+            "python_full_version < '3.13'",
+        name = "helper"
+        version = "1.0.0"
+        resolution-markers = [
+            "python_full_version < '3.13'",
+            { path = "[TEMP_DIR]/files/helper-1.0.0-py3-none-any.whl", upload-time = "2024-03-01T00:00:00Z" },
+        name = "helper"
+        version = "2.0.0"
+        resolution-markers = [
+            "python_full_version >= '3.13'",
+            { path = "[TEMP_DIR]/files/helper-2.0.0-py3-none-any.whl", upload-time = "2024-03-01T00:00:00Z" },
+            { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/simple/" }, marker = "python_full_version < '3.13'" },
+            { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/simple/" }, marker = "python_full_version >= '3.13'" },
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index").arg(index.as_str()).arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
 
     Ok(())
 }
@@ -1026,7 +3400,7 @@ def _build(wheel_directory):
     let resolutions = resolution_sections(&lock);
     let project_resolutions = resolutions
         .split("[[resolution]]")
-        .filter(|resolution| resolution.contains("\nname = \"project\"\n"))
+        .filter(|resolution| resolution.contains("\nname = \"project\""))
         .collect::<Vec<_>>();
     assert!(
         project_resolutions.iter().any(|resolution| {
@@ -1048,6 +3422,253 @@ def _build(wheel_directory):
         .sync()
         .arg("--no-editable")
         .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify that an editable source missing one operation is completed when relocking, even when
+/// the remaining operation has the same empty build roots.
+#[test]
+fn lock_build_dependencies_captures_missing_editable_operation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    context.temp_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_editable(config_settings=None):
+    return []
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+    return _build(wheel_directory)
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    return _build(wheel_directory)
+
+def _build(wheel_directory):
+    filename = "project-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("project/__init__.py", "")
+        wheel.writestr(
+            "project-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "project-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context
+        .lock()
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let resolutions = resolution_sections(&lock);
+    let wheel_resolutions = resolutions
+        .split("\n\n")
+        .filter(|resolution| {
+            resolution.contains("\nname = \"project\"")
+                && resolution.contains("operation = \"wheel\"")
+        })
+        .collect::<Vec<_>>();
+    assert!(!wheel_resolutions.is_empty(), "{lock}");
+    let mut incomplete_lock = lock.clone();
+    for wheel_resolution in wheel_resolutions {
+        incomplete_lock = incomplete_lock.replacen(&format!("{wheel_resolution}\n\n"), "", 1);
+    }
+    assert_ne!(incomplete_lock, lock, "{lock}");
+    fs_err::write(context.temp_dir.child("uv.lock"), incomplete_lock)?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let resolutions = resolution_sections(&lock);
+    let project_resolutions = resolutions
+        .split("[[resolution]]")
+        .filter(|resolution| resolution.contains("\nname = \"project\""))
+        .collect::<Vec<_>>();
+    assert!(
+        project_resolutions
+            .iter()
+            .any(|resolution| resolution.contains("operation = \"editable\"")),
+        "{resolutions}"
+    );
+    assert!(
+        project_resolutions
+            .iter()
+            .any(|resolution| resolution.contains("operation = \"wheel\"")),
+        "{resolutions}"
+    );
+
+    context
+        .sync()
+        .arg("--no-editable")
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify that a captured build target that no longer covers an unconditional source is relocked.
+#[test]
+fn lock_build_dependencies_rejects_missing_target_coverage() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let resolutions = resolution_sections(&lock);
+    let dep_resolutions = resolutions
+        .split("\n\n")
+        .filter(|resolution| {
+            resolution.contains("\nname = \"dep\"") && resolution.contains("operation = \"wheel\"")
+        })
+        .collect::<Vec<_>>();
+    assert!(!dep_resolutions.is_empty(), "{lock}");
+    let mut incomplete_lock = lock.clone();
+    for resolution in dep_resolutions {
+        incomplete_lock = incomplete_lock.replacen(
+            resolution,
+            &format!("{resolution}\ntarget = {{ marker = \"sys_platform == 'linux'\" }}"),
+            1,
+        );
+    }
+    assert_ne!(incomplete_lock, lock, "{lock}");
+    fs_err::write(context.temp_dir.child("uv.lock"), incomplete_lock)?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    context
+        .lock()
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
         .arg("--frozen")
         .arg("--preview-features")
         .arg("lock-build-dependencies")
@@ -1148,19 +3769,10 @@ fn lock_build_dependencies_preference() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "flit-core"
-
-        [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "flit-core"
 
         [[resolution]]
@@ -1183,22 +3795,10 @@ fn lock_build_dependencies_preference() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "wheel"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
         id = "build:wheel:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -1222,9 +3822,9 @@ fn lock_build_dependencies_preference() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-only = true
         build-dependencies = []
-        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z", requires-python = ">=3.6" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z", requires-python = ">=3.6" },
         ]
 
         [[package]]
@@ -1246,9 +3846,9 @@ fn lock_build_dependencies_preference() -> Result<()> {
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -1259,9 +3859,9 @@ fn lock_build_dependencies_preference() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z", requires-python = ">=3.8" },
         ]
         "#
         );
@@ -1315,19 +3915,10 @@ fn lock_build_dependencies_preference() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "flit-core"
-
-        [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "flit-core"
 
         [[resolution]]
@@ -1350,22 +3941,10 @@ fn lock_build_dependencies_preference() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "wheel"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
         id = "build:wheel:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -1389,9 +3968,9 @@ fn lock_build_dependencies_preference() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-only = true
         build-dependencies = []
-        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z", requires-python = ">=3.6" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z", requires-python = ">=3.6" },
         ]
 
         [[package]]
@@ -1413,9 +3992,9 @@ fn lock_build_dependencies_preference() -> Result<()> {
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -1426,9 +4005,9 @@ fn lock_build_dependencies_preference() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z", requires-python = ">=3.8" },
         ]
         "#
         );
@@ -1961,19 +4540,10 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "flit-core"
-
-        [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "flit-core"
 
         [[resolution]]
@@ -1996,22 +4566,10 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "wheel"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
         id = "build:wheel:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -2047,9 +4605,9 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-only = true
         build-dependencies = []
-        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z", requires-python = ">=3.6" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z", requires-python = ">=3.6" },
         ]
 
         [[package]]
@@ -2075,9 +4633,9 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -2088,9 +4646,9 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z", requires-python = ">=3.8" },
         ]
         "#
         );
@@ -2199,19 +4757,10 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "flit-core"
-
-        [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "flit-core"
 
         [[resolution]]
@@ -2234,22 +4783,10 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "wheel"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
         id = "build:wheel:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -2273,9 +4810,9 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-only = true
         build-dependencies = []
-        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z", requires-python = ">=3.6" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z", requires-python = ">=3.6" },
         ]
 
         [[package]]
@@ -2297,9 +4834,9 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -2310,9 +4847,9 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z", requires-python = ">=3.8" },
         ]
         "#
         );
@@ -2443,19 +4980,10 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "flit-core"
-
-        [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "flit-core"
 
         [[resolution]]
@@ -2478,22 +5006,10 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "wheel"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
         id = "build:wheel:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -2517,9 +5033,9 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-only = true
         build-dependencies = []
-        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z", requires-python = ">=3.6" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z", requires-python = ">=3.6" },
         ]
 
         [[package]]
@@ -2541,9 +5057,9 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -2554,9 +5070,9 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z", requires-python = ">=3.8" },
         ]
         "#
         );
@@ -2718,6 +5234,606 @@ def get_requires_for_build_wheel(config_settings=None):
     Ok(())
 }
 
+/// Verify a runtime package selected from `--find-links` remains available to a matched build.
+#[test]
+fn lock_build_dependencies_extra_match_runtime_find_links() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("runtime_builder-1.0.0-py3-none-any.whl"),
+        "runtime-builder",
+        "1.0.0",
+    )?;
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    child_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    child_dir.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    assert version("runtime-builder") == "1.0.0"
+    filename = "child-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("child/__init__.py", "")
+        wheel.writestr(
+            "child-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "child-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "runtime-builder==1.0.0"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "runtime-builder", match-runtime = true }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let child = package_section(&lock, "child");
+    assert!(
+        child.contains(r#"{ name = "runtime-builder", version = "1.0.0", match-runtime = true }"#),
+        "{child}"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--frozen")
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + runtime-builder==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// Verify an inactive `match-runtime` build root does not prevent frozen replay when the runtime
+/// package is absent on the current platform.
+#[test]
+fn lock_build_dependencies_extra_match_runtime_inactive_find_links() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links_dir = context.workspace_root.join("test/links");
+    let foreign_marker = if cfg!(target_os = "windows") {
+        "sys_platform == 'linux'"
+    } else {
+        "sys_platform == 'win32'"
+    };
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    child_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    child_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "child-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("child/__init__.py", "")
+        wheel.writestr(
+            "child-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "child-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "validation==1.0.0 ; {foreign_marker}"]
+
+        [tool.uv.sources]
+        child = {{ path = "child" }}
+
+        [tool.uv.extra-build-dependencies]
+        child = [{{ requirement = "validation ; {foreign_marker}", match-runtime = true }}]
+        "#,
+    ))?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(&links_dir)
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let child = package_section(&lock, "child");
+    assert!(child.contains(r#"name = "validation""#), "{child}");
+    assert!(
+        child.contains(&format!(
+            r#"marker = "{foreign_marker}", match-runtime = true"#
+        )),
+        "{child}"
+    );
+
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "validation==1.0.0 ; {foreign_marker}"]
+
+        [tool.uv.sources]
+        child = {{ path = "child" }}
+        "#,
+    ))?;
+
+    context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify a runtime package selected from a named flat index remains available to a matched build.
+#[test]
+fn lock_build_dependencies_extra_match_runtime_named_flat_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("runtime_builder-1.0.0-py3-none-any.whl"),
+        "runtime-builder",
+        "1.0.0",
+    )?;
+    let links_url = Url::from_directory_path(links_dir.path()).expect("valid links URL");
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    child_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    child_dir.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    assert version("runtime-builder") == "1.0.0"
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    assert version("runtime-builder") == "1.0.0"
+    filename = "child-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("child/__init__.py", "")
+        wheel.writestr(
+            "child-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "child-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "runtime-builder==1.0.0"]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "{links_url}"
+        format = "flat"
+        default = true
+
+        [tool.uv.sources]
+        child = {{ path = "child" }}
+        runtime-builder = {{ index = "local" }}
+
+        [tool.uv.extra-build-dependencies]
+        child = [{{ requirement = "runtime-builder", match-runtime = true }}]
+        "#,
+        ))?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let child = package_section(&lock, "child");
+    assert!(
+        child.contains(r#"{ name = "runtime-builder", version = "1.0.0", match-runtime = true }"#),
+        "{child}"
+    );
+
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify frozen matched builds replay named flat indexes whose configured URL is credentialed or
+/// relative, even though the lockfile stores a normalized, credential-free source.
+#[tokio::test]
+async fn lock_build_dependencies_extra_match_runtime_replays_named_index_identity() -> Result<()> {
+    for relative in [false, true] {
+        let context = uv_test::test_context!("3.12");
+
+        let links_dir = context.temp_dir.child("links");
+        links_dir.create_dir_all()?;
+        let wheel = links_dir.child("runtime_builder-1.0.0-py3-none-any.whl");
+        write_wheel(&wheel, "runtime-builder", "1.0.0")?;
+
+        let server = MockServer::start().await;
+        if !relative {
+            let wheel_url = Url::from_file_path(wheel.path()).expect("valid wheel URL");
+            Mock::given(method("GET"))
+                .and(path("/"))
+                .respond_with(ResponseTemplate::new(200).set_body_raw(
+                    format!(r#"<a href="{wheel_url}">runtime_builder-1.0.0-py3-none-any.whl</a>"#),
+                    "text/html",
+                ))
+                .mount(&server)
+                .await;
+        }
+        let index_url = if relative {
+            "./links".to_string()
+        } else {
+            server
+                .uri()
+                .replacen("http://", "http://release-user:release-password@", 1)
+        };
+
+        let child_dir = context.temp_dir.child("child");
+        child_dir.create_dir_all()?;
+        child_dir.child("pyproject.toml").write_str(
+            r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = []
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#,
+        )?;
+        child_dir.child("build_backend.py").write_str(
+            r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    assert version("runtime-builder") == "1.0.0"
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    assert version("runtime-builder") == "1.0.0"
+    filename = "child-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("child/__init__.py", "")
+        wheel.writestr(
+            "child-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "child-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+        )?;
+
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(&format!(
+                r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["child", "runtime-builder==1.0.0"]
+
+            [[tool.uv.index]]
+            name = "local"
+            url = "{index_url}"
+            format = "flat"
+            default = true
+
+            [tool.uv.sources]
+            child = {{ path = "child" }}
+            runtime-builder = {{ index = "local" }}
+
+            [tool.uv.extra-build-dependencies]
+            child = [{{ requirement = "runtime-builder", match-runtime = true }}]
+            "#,
+            ))?;
+
+        context
+            .lock()
+            .arg("--preview-features")
+            .arg("extra-build-dependencies,lock-build-dependencies")
+            .assert()
+            .success();
+
+        let lock = context.read("uv.lock");
+        let child = package_section(&lock, "child");
+        assert!(
+            child.contains(
+                r#"{ name = "runtime-builder", version = "1.0.0", match-runtime = true }"#
+            ),
+            "{child}"
+        );
+        assert!(!lock.contains("release-user"), "{lock}");
+        assert!(!lock.contains("release-password"), "{lock}");
+
+        context
+            .sync()
+            .arg("--frozen")
+            .arg("--no-index")
+            .arg("--no-cache")
+            .arg("--preview-features")
+            .arg("extra-build-dependencies,lock-build-dependencies")
+            .assert()
+            .success();
+    }
+
+    Ok(())
+}
+
+/// Verify a matched `--find-links` build cannot select a same-version wheel from another location.
+#[test]
+fn lock_build_dependencies_extra_match_runtime_find_links_keep_source_pin() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let selected_links = context.temp_dir.child("selected-links");
+    selected_links.create_dir_all()?;
+    write_wheel(
+        &selected_links.child("runtime_builder-1.0.0-py3-none-any.whl"),
+        "runtime-builder",
+        "1.0.0",
+    )?;
+
+    let unrelated_links = context.temp_dir.child("unrelated-links");
+    unrelated_links.create_dir_all()?;
+    write_wheel_with_requires_and_tag(
+        &unrelated_links.child("runtime_builder-1.0.0-cp312-none-any.whl"),
+        "runtime-builder",
+        "1.0.0",
+        &[],
+        "cp312-none-any",
+    )?;
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    child_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    child_dir.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import distribution
+from pathlib import Path
+from zipfile import ZipFile
+
+def check_runtime_builder():
+    wheel = distribution("runtime-builder").read_text("WHEEL")
+    assert "Tag: py3-none-any" in wheel, wheel
+
+def get_requires_for_build_wheel(config_settings=None):
+    check_runtime_builder()
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    check_runtime_builder()
+    filename = "child-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("child/__init__.py", "")
+        wheel.writestr(
+            "child-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "child-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "runtime-builder==1.0.0"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "runtime-builder", match-runtime = true }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(selected_links.path())
+        .arg("--find-links")
+        .arg(unrelated_links.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let runtime_builder = package_section(&lock, "runtime-builder");
+    assert!(
+        runtime_builder.contains("selected-links/runtime_builder-1.0.0-py3-none-any.whl"),
+        "{runtime_builder}"
+    );
+
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// Verify source-matched `match-runtime` requirements replay without resolving mutable metadata.
 #[test]
 fn lock_build_dependencies_extra_match_runtime_source_replay() -> Result<()> {
@@ -2763,7 +5879,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     return filename
 "#,
     )?;
-    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid builder URL");
 
     let child_dir = context.temp_dir.child("child");
     child_dir.create_dir_all()?;
@@ -2831,21 +5947,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .arg("extra-build-dependencies,lock-build-dependencies")
         .assert()
         .success();
-
-    let missing_url = Url::from_directory_path(context.temp_dir.child("missing").path()).unwrap();
-    child_dir.child("pyproject.toml").write_str(&format!(
-        r#"
-        [project]
-        name = "child"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["missing @ {missing_url}"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#
-    ))?;
 
     context
         .temp_dir
@@ -3030,6 +6131,260 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     4.0.0
 
     ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Verify a `match-runtime` build dependency provided by an absolute path wheel is recognized
+/// when replaying a locked source build.
+#[test]
+fn lock_build_dependencies_extra_match_runtime_path_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let helper_wheel = links.child("helper-1.0.0-py3-none-any.whl");
+    write_wheel(&helper_wheel, "helper", "1.0.0")?;
+    let helper_url = Url::from_file_path(helper_wheel.path()).expect("valid file URL");
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    child.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    helper_version = version("helper")
+    filename = "child-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("child.py", f'BUILD_HELPER = "{helper_version}"\n')
+        wheel.writestr(
+            "child-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "child-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "helper @ {helper_url}"]
+
+        [tool.uv.sources]
+        child = {{ path = "child" }}
+
+        [tool.uv.extra-build-dependencies]
+        child = [{{ requirement = "helper", match-runtime = true }}]
+        "#
+        ))?;
+
+    context
+        .lock()
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .run()
+        .arg("--no-sync")
+        .arg("python")
+        .arg("-c")
+        .arg("import child; print(child.BUILD_HELPER)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1.0.0
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Verify that `uv run --with` does not reuse a source build from the locked base environment
+/// when the overlay selects a different `match-runtime` build dependency.
+#[test]
+fn lock_build_dependencies_extra_match_runtime_run_overlay() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let helper_one = context.temp_dir.child("helper-one");
+    let helper_two = context.temp_dir.child("helper-two");
+    for (helper, version) in [(&helper_one, "1.0.0"), (&helper_two, "2.0.0")] {
+        helper.create_dir_all()?;
+        helper.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "helper"
+            version = "{version}"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = []
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#
+        ))?;
+        helper.child("build_backend.py").write_str(&format!(
+            r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "helper-{version}-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("helper.py", 'VERSION = "{version}"\n')
+        wheel.writestr(
+            "helper-{version}.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: helper\nVersion: {version}\n",
+        )
+        wheel.writestr(
+            "helper-{version}.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("helper-{version}.dist-info/RECORD", "")
+    return filename
+"#
+        ))?;
+    }
+    let helper_one_url = Url::from_directory_path(helper_one.path()).expect("valid file URL");
+    let helper_two_url = Url::from_directory_path(helper_two.path()).expect("valid file URL");
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    child.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    helper_version = version("helper")
+    filename = "child-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("child.py", f'BUILD_HELPER = "{helper_version}"\n')
+        wheel.writestr(
+            "child-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "child-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    let child_url = Url::from_directory_path(child.path()).expect("valid file URL");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "helper @ {helper_one_url}"]
+
+        [tool.uv.sources]
+        child = {{ path = "child" }}
+
+        [tool.uv.extra-build-dependencies]
+        child = [{{ requirement = "helper", match-runtime = true }}]
+        "#
+        ))?;
+
+    uv_snapshot!(context.filters(), context
+        .run()
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .arg("--with")
+        .arg(format!("child @ {child_url}"))
+        .arg("--with")
+        .arg(format!("helper @ {helper_two_url}"))
+        .arg("python")
+        .arg("-c")
+        .arg("import child, helper; print(child.BUILD_HELPER); print(helper.VERSION)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    2.0.0
+    2.0.0
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + helper==1.0.0 (from file://[TEMP_DIR]/helper-one)
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + helper==2.0.0 (from file://[TEMP_DIR]/helper-two)
     ");
 
     Ok(())
@@ -3269,7 +6624,8 @@ def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
     ----- stdout -----
 
     ----- stderr -----
-    error: The lockfile does not contain build dependencies for `dep`; run `uv lock --preview-features lock-build-dependencies` without disabling builds for this package
+    error: Failed to parse `uv.lock`
+      Caused by: Invalid resolution record `build:dep:wheel:build:[BUILD-ID]`: staged build resolution is missing a matching bootstrap resolution
     ");
 
     // Removing the initial root must not allow a frozen build to fall back to live resolution.
@@ -3282,6 +6638,43 @@ def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
         .temp_dir
         .child("uv.lock")
         .write_str(&lock.replacen(&bootstrap_root, "", 1))?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `dep @ file://[TEMP_DIR]/dep`
+      ├─▶ Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
+      ╰─▶ The initial build requirements for `dep` do not match the locked bootstrap environment
+
+    hint: `dep` was included because `project` (v0.1.0) depends on `dep`
+    ");
+
+    // A newly configured initial root must not be silently omitted from frozen bootstrap replay.
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+
+        [tool.uv.extra-build-dependencies]
+        dep = ["extra", "missing"]
+        "#,
+    )?;
 
     uv_snapshot!(context.filters(), context
         .sync()
@@ -3463,16 +6856,14 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         !dep_build_resolution.contains(r#"{ name = "seed", version = "2.0.0""#),
         "{dep_build_resolution}"
     );
-    let seed_bootstrap_resolution = resolutions
+    let seed_resolution = resolutions
         .split("\n\n")
-        .find(|resolution| {
-            resolution.contains("stage = \"bootstrap\"")
-                && resolution.contains("\nname = \"seed\"\n")
-        })
-        .expect("locked nested bootstrap resolution");
+        .find(|resolution| resolution.contains("\nname = \"seed\"\n"))
+        .expect("locked nested resolution");
+    assert!(!seed_resolution.contains("stage = "), "{seed_resolution}");
     assert!(
-        seed_bootstrap_resolution.contains(r#"{ name = "tool", version = "1.0.0""#),
-        "{seed_bootstrap_resolution}"
+        seed_resolution.contains(r#"{ name = "tool", version = "1.0.0""#),
+        "{seed_resolution}"
     );
 
     // With no index or find-links configured, a live nested resolution would be unsatisfiable.
@@ -3487,8 +6878,39 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .assert()
         .success();
 
+    let foreign_marker = if cfg!(target_os = "linux") {
+        "sys_platform == 'darwin'"
+    } else {
+        "sys_platform == 'linux'"
+    };
+    let incomplete = lock.replacen(
+        &format!("{seed_resolution}\n\n"),
+        &format!("{seed_resolution}\ntarget = {{ marker = \"{foreign_marker}\" }}\n\n"),
+        1,
+    );
+    context.temp_dir.child("uv.lock").write_str(&incomplete)?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
     context.temp_dir.child("uv.lock").write_str(&lock.replacen(
-        &format!("{seed_bootstrap_resolution}\n\n"),
+        &format!("{seed_resolution}\n\n"),
         "",
         1,
     ))?;
@@ -3505,7 +6927,202 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     ----- stdout -----
 
     ----- stderr -----
-    error: The lockfile does not contain build dependencies for `seed`; run `uv lock --preview-features lock-build-dependencies` without disabling builds for this package
+    error: Failed to parse `uv.lock`
+      Caused by: Invalid resolution record `build:seed:wheel:build:[BUILD-ID]`: package build-dependencies are missing a build resolution
+    ");
+
+    Ok(())
+}
+
+/// Verify changes to a mutable source reachable only from a locked bootstrap environment
+/// invalidate the lock instead of reusing stale nested build metadata.
+#[test]
+fn lock_build_dependencies_stale_bootstrap_only_nested_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("seed-1.0.0-py3-none-any.whl"),
+        "seed",
+        "1.0.0",
+    )?;
+    write_wheel(
+        &links_dir.child("tool-1.0.0-py3-none-any.whl"),
+        "tool",
+        "1.0.0",
+    )?;
+    write_wheel(
+        &links_dir.child("tool-2.0.0-py3-none-any.whl"),
+        "tool",
+        "2.0.0",
+    )?;
+
+    let seed_source = links_dir.child("seed-2.0.0.zip");
+    let write_seed_source = |tool_version: &str| -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let pyproject_toml = format!(
+            r#"
+            [project]
+            name = "seed"
+            version = "2.0.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["tool=={tool_version}"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#,
+        );
+        let entry = ZipEntryBuilder::new("seed-2.0.0/pyproject.toml".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, pyproject_toml.as_bytes()))?;
+        let entry = ZipEntryBuilder::new("seed-2.0.0/build_backend.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            br#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "seed-2.0.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("seed.py", "")
+        wheel.writestr(
+            "seed-2.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: seed\nVersion: 2.0.0\n",
+        )
+        wheel.writestr(
+            "seed-2.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("seed-2.0.0.dist-info/RECORD", "")
+    return filename
+"#,
+        ))?;
+        fs_err::write(seed_source.path(), block_on(zip.close())?)?;
+        Ok(())
+    };
+    write_seed_source("1.0.0")?;
+
+    let dep_source = links_dir.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["seed"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return ["seed<2"]
+
+def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+    dist_info = Path(metadata_directory) / "dep-0.1.0.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n"
+    )
+    return dist_info.name
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    ))?;
+    fs_err::write(dep_source.path(), block_on(zip.close())?)?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let resolutions = resolution_sections(&lock);
+    let dep_bootstrap_resolution = resolutions
+        .split("\n\n")
+        .find(|resolution| {
+            resolution.contains("stage = \"bootstrap\"") && resolution.contains("name = \"dep\"")
+        })
+        .expect("locked bootstrap resolution");
+    let dep_build_resolution = resolutions
+        .split("\n\n")
+        .find(|resolution| {
+            resolution.contains("stage = \"build\"") && resolution.contains("name = \"dep\"")
+        })
+        .expect("locked build resolution");
+    assert!(
+        dep_bootstrap_resolution.contains(r#"{ name = "seed", version = "2.0.0""#),
+        "{dep_bootstrap_resolution}"
+    );
+    assert!(
+        dep_build_resolution.contains(r#"{ name = "seed", version = "1.0.0""#),
+        "{dep_build_resolution}"
+    );
+    assert!(
+        !dep_build_resolution.contains(r#"{ name = "seed", version = "2.0.0""#),
+        "{dep_build_resolution}"
+    );
+
+    write_seed_source("2.0.0")?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -3776,7 +7393,7 @@ def get_requires_for_build_wheel(config_settings=None):
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.12"
+        requires-python = ">=3.12,<4"
         dependencies = ["dep==0.1.0"]
         "#,
     )?;
@@ -3885,8 +7502,32 @@ def get_requires_for_build_wheel(config_settings=None):
 
     let lock = context.read("uv.lock");
     let dep = package_section(&lock, "dep");
-    assert!(!dep.contains(r#"{ name = "helper", version = "0.1.0" }"#));
-    assert!(lock.contains("build-settings = "), "{lock}");
+    assert!(
+        !dep.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{dep}"
+    );
+    assert!(!dep.contains("build-dependencies = "), "{dep}");
+    assert!(!lock.contains("[[resolution]]"), "{lock}");
+    assert!(!lock.contains("build-settings = "), "{lock}");
+    assert!(lock.starts_with("version = 1\nrevision = 3\n"), "{lock}");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--no-build-isolation-package")
+        .arg("dep")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
 
     uv_snapshot!(context.filters(), context
         .lock()
@@ -4231,7 +7872,88 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
-/// Verify that changing a nested source build environment invalidates the outer built wheel.
+/// Verify that metadata built while resolving an unnamed `uv add` requirement cannot leak an
+/// unconstrained build environment into the locked sync.
+#[test]
+fn lock_build_dependencies_add_unnamed_uses_constrained_build_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        build-constraint-dependencies = ["ok==1.0.0"]
+        "#,
+    )?;
+
+    let source = context.temp_dir.child("source");
+    source.create_dir_all()?;
+    source.child("pyproject.toml").write_str(
+        r#"
+        [build-system]
+        requires = ["ok"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    source.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+    dist_info = Path(metadata_directory) / "unnamed_source-1.0.0.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.3\nName: unnamed-source\nVersion: 1.0.0\n"
+    )
+    return dist_info.name
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "unnamed_source-1.0.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("unnamed_source/__init__.py", f"OK = {version('ok')!r}\n")
+        wheel.writestr(
+            "unnamed_source-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: unnamed-source\nVersion: 1.0.0\n",
+        )
+        wheel.writestr(
+            "unnamed_source-1.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("unnamed_source-1.0.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context
+        .add()
+        .arg(source.path())
+        .arg("--no-workspace")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("unnamed_source/__init__.py"))?,
+        "OK = '1.0.0'\n"
+    );
+
+    Ok(())
+}
+
+/// Verify that universal capture does not reuse a nested source wheel warmed by an ordinary
+/// build before executing the parent's dependency hook.
 #[test]
 fn lock_build_dependencies_invalidate_nested_built_wheel_cache() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4319,6 +8041,9 @@ from zipfile import ZipFile
 
 from helper import TOOL, VALUE
 
+def get_requires_for_build_wheel(config_settings=None):
+    return [f"tool=={TOOL}"]
+
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     filename = "dep-0.1.0-py3-none-any.whl"
     with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
@@ -4354,8 +8079,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .arg("--find-links")
         .arg(links_dir.path())
         .arg("--no-index")
-        .arg("--preview-features")
-        .arg("lock-build-dependencies")
         .env("UV_TEST_TOOL_VERSION", "0.1.0")
         .assert()
         .success();
@@ -4365,8 +8088,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .arg(links_dir.path())
         .arg("--no-index")
         .arg("--frozen")
-        .arg("--preview-features")
-        .arg("lock-build-dependencies")
         .env("UV_TEST_TOOL_VERSION", "0.1.0")
         .assert()
         .success();
@@ -4381,7 +8102,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         .arg("--find-links")
         .arg(links_dir.path())
         .arg("--no-index")
-        .arg("--no-cache")
         .arg("--preview-features")
         .arg("lock-build-dependencies")
         .env("UV_TEST_TOOL_VERSION", "0.2.0")
@@ -4390,6 +8110,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     let lock = context.read("uv.lock");
     assert!(
         package_section(&lock, "helper").contains(r#"{ name = "tool", version = "0.2.0" }"#),
+        "{lock}"
+    );
+    assert!(
+        package_section(&lock, "dep").contains(r#"{ name = "tool", version = "0.2.0" }"#),
         "{lock}"
     );
     context
@@ -4434,7 +8158,7 @@ fn lock_build_dependencies_invalidate_mutable_build_wheel_cache() -> Result<()> 
     fn write_helper_wheel(path: &ChildPath, value: &str) -> Result<()> {
         let mut zip = ZipFileWriter::new(Vec::new());
         let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
+        block_on(zip.write_entry_whole(entry, format!("VALUE = '{value}'\n").as_bytes()))?;
         let entry = ZipEntryBuilder::new(
             "helper-0.1.0.dist-info/METADATA".into(),
             Compression::Stored,
@@ -4562,6 +8286,258 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
+/// Verify that a hashless runtime wheel in a local index is reinstalled when the file changes.
+#[test]
+fn lock_build_dependencies_reinstall_mutable_runtime_wheel() -> Result<()> {
+    fn write_runtime_wheel(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("runtime.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, format!("VALUE = '{value}'\n").as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "runtime-0.1.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: runtime\nVersion: 0.1.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("runtime-0.1.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("runtime-0.1.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    let runtime_wheel = links_dir.child("runtime-0.1.0-py3-none-any.whl");
+    write_runtime_wheel(&runtime_wheel, "first")?;
+    filetime::set_file_mtime(
+        runtime_wheel.path(),
+        filetime::FileTime::from_unix_time(1_700_000_000, 0),
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["runtime==0.1.0"]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    let runtime = package_section(&lock, "runtime");
+    assert!(!runtime.contains("hash ="), "{runtime}");
+
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("runtime.py"))?,
+        "VALUE = 'first'\n"
+    );
+
+    write_runtime_wheel(&runtime_wheel, "second")?;
+    filetime::set_file_mtime(
+        runtime_wheel.path(),
+        filetime::FileTime::from_unix_time(1_700_000_001, 0),
+    )?;
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("runtime.py"))?,
+        "VALUE = 'second'\n"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Verify that a hashless runtime source archive in a local index is rebuilt when it changes.
+#[test]
+fn lock_build_dependencies_reinstall_mutable_runtime_sdist() -> Result<()> {
+    fn write_runtime_sdist(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry =
+            ZipEntryBuilder::new("runtime-0.1.0/pyproject.toml".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            br#"
+        [project]
+        name = "runtime"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("runtime-0.1.0/build_backend.py".into(), Compression::Stored);
+        let backend = format!(
+            r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "runtime-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("runtime.py", "VALUE = '{value}'\n")
+        wheel.writestr(
+            "runtime-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: runtime\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "runtime-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("runtime-0.1.0.dist-info/RECORD", "")
+    return filename
+"#
+        );
+        block_on(zip.write_entry_whole(entry, backend.as_bytes()))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    let runtime_sdist = links_dir.child("runtime-0.1.0.zip");
+    write_runtime_sdist(&runtime_sdist, "first")?;
+    filetime::set_file_mtime(
+        runtime_sdist.path(),
+        filetime::FileTime::from_unix_time(1_700_000_000, 0),
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["runtime==0.1.0"]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    let runtime = package_section(&lock, "runtime");
+    assert!(!runtime.contains("hash ="), "{runtime}");
+
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("runtime.py"))?,
+        "VALUE = 'first'\n"
+    );
+
+    write_runtime_sdist(&runtime_sdist, "second")?;
+    filetime::set_file_mtime(
+        runtime_sdist.path(),
+        filetime::FileTime::from_unix_time(1_700_000_001, 0),
+    )?;
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("runtime.py"))?,
+        "VALUE = 'second'\n"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Verify that a cold-cache local source archive used as a build requirement is hashed in the
 /// captured build lock and can be replayed without resolving it again.
 #[test]
@@ -4609,7 +8585,8 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
 "#,
     ))?;
     let helper_archive = block_on(zip.close())?;
-    let helper_hash = format!("sha256:{:x}", Sha256::digest(&helper_archive));
+    let helper_digest = format!("{:x}", Sha256::digest(&helper_archive));
+    let helper_hash = format!("sha256:{helper_digest}");
     fs_err::write(helper_source.path(), helper_archive)?;
     let helper_url = Url::from_file_path(helper_source.path()).expect("valid file URL");
 
@@ -4623,7 +8600,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["helper @ {helper_url}"]
+        requires = ["helper @ {helper_url}#sha256={helper_digest}"]
         backend-path = ["."]
         build-backend = "build_backend"
         "#
@@ -4694,6 +8671,26 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         "VALUE = 'locked'\n"
     );
 
+    // A conflicting digest on the unchanged local path must never be ignored during frozen replay.
+    let pyproject = dep_dir.child("pyproject.toml");
+    let contents = fs_err::read_to_string(pyproject.path())?;
+    pyproject.write_str(&contents.replace(&helper_digest, &"0".repeat(64)))?;
+    let output = context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--reinstall")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&output.get_output().stderr);
+    assert!(
+        stderr.contains("Conflicting archive URL hashes"),
+        "{stderr}"
+    );
+
     Ok(())
 }
 
@@ -4725,7 +8722,8 @@ fn lock_build_dependencies_hash_direct_build_wheel() -> Result<()> {
     let entry = ZipEntryBuilder::new("helper-0.1.0.dist-info/RECORD".into(), Compression::Stored);
     block_on(zip.write_entry_whole(entry, b""))?;
     let helper_archive = block_on(zip.close())?;
-    let helper_hash = format!("sha256:{:x}", Sha256::digest(&helper_archive));
+    let helper_digest = format!("{:x}", Sha256::digest(&helper_archive));
+    let helper_hash = format!("sha256:{helper_digest}");
     fs_err::write(helper_wheel.path(), helper_archive)?;
     let server = uv_test::find_links::FindLinksServer::new(links_dir.path());
     let helper_url = format!("{}/helper-0.1.0-py3-none-any.whl", server.url());
@@ -4740,7 +8738,7 @@ fn lock_build_dependencies_hash_direct_build_wheel() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["helper @ {helper_url}"]
+        requires = ["helper @ {helper_url}#sha256={helper_digest}"]
         backend-path = ["."]
         build-backend = "build_backend"
         "#
@@ -4824,6 +8822,26 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     assert_eq!(
         fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
         "VALUE = 'locked'\n"
+    );
+
+    // A conflicting digest on the unchanged URL must never be ignored during frozen replay.
+    let pyproject = dep_dir.child("pyproject.toml");
+    let contents = fs_err::read_to_string(pyproject.path())?;
+    pyproject.write_str(&contents.replace(&helper_digest, &"0".repeat(64)))?;
+    let output = context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--reinstall")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&output.get_output().stderr);
+    assert!(
+        stderr.contains("Conflicting archive URL hashes"),
+        "{stderr}"
     );
 
     Ok(())
@@ -5501,41 +9519,15 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     }, {
         assert_snapshot!(resolution_sections(&lock), @r#"
         [[resolution]]
-        id = "build:builder:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "builder"
-        version = "1.0.0"
-        source = { directory = "[TEMP_DIR]/builder" }
-        roots = [
-            { name = "nested-backend", version = "1.0.0" },
-        ]
-
-        [[resolution]]
         id = "build:builder:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "builder"
         version = "1.0.0"
         source = { directory = "[TEMP_DIR]/builder" }
         roots = [
             { name = "nested-backend", version = "1.0.0" },
-        ]
-
-        [[resolution]]
-        id = "build:dep-a:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "dep-a"
-        roots = [
-            { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" } },
-            { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
         ]
 
         [[resolution]]
@@ -5543,7 +9535,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "dep-a"
         roots = [
             { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" } },
@@ -5551,23 +9542,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         ]
 
         [[resolution]]
-        id = "build:dep-b:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "dep-b"
-        roots = [
-            { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" }, resolution-id = "build:dep-b:wheel:bootstrap:[BUILD-ID]" },
-            { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
-        ]
-
-        [[resolution]]
         id = "build:dep-b:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "dep-b"
         roots = [
             { name = "builder", version = "1.0.0", source = { directory = "[TEMP_DIR]/builder" }, resolution-id = "build:dep-b:wheel:build:[BUILD-ID]" },
@@ -5575,11 +9553,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         ]
         "#);
     });
-    assert_eq!(lock.matches("[[package]]\nname = \"builder\"").count(), 3);
-    assert!(
-        lock.contains(r#"resolution-id = "build:dep-b:wheel:bootstrap:"#),
-        "{lock}"
-    );
+    assert_eq!(lock.matches("[[package]]\nname = \"builder\"").count(), 2);
     assert!(
         lock.contains(r#"resolution-id = "build:dep-b:wheel:build:"#),
         "{lock}"
@@ -5590,7 +9564,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             package.starts_with("\nname = \"builder\"") && package.contains("resolution-id = ")
         })
         .collect::<Vec<_>>();
-    assert_eq!(scoped_builders.len(), 2, "{lock}");
+    assert_eq!(scoped_builders.len(), 1, "{lock}");
     assert!(
         scoped_builders
             .iter()
@@ -5598,24 +9572,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         "{lock}"
     );
     assert!(!lock.contains("build-dependency-packages"), "{lock}");
-
-    let missing_backend_url =
-        Url::from_file_path(context.temp_dir.child("missing-backend.whl").path())
-            .expect("valid file URL");
-    builder_dir.child("pyproject.toml").write_str(&format!(
-        r#"
-        [project]
-        name = "builder"
-        version = "1.0.0"
-        requires-python = ">=3.12"
-        dependencies = ["helper>=1"]
-
-        [build-system]
-        requires = ["missing-backend @ {missing_backend_url}"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#,
-    ))?;
 
     uv_snapshot!(context.filters(), context
         .sync()
@@ -5636,6 +9592,208 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Installed 1 package in [TIME]
      + dep-b==0.1.0 (from file://[TEMP_DIR]/dep-b)
     ");
+
+    Ok(())
+}
+
+/// Verify a shared source is rebuilt for each capture context so hook-added requirements are not
+/// omitted when an in-process build environment already exists.
+#[test]
+fn lock_build_dependencies_do_not_reuse_build_arena_across_contexts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    for (name, version) in [
+        ("nested-backend", "1.0.0"),
+        ("hook-helper", "1.0.0"),
+        ("helper", "1.0.0"),
+        ("helper", "2.0.0"),
+    ] {
+        write_wheel(
+            &links_dir.child(format!(
+                "{}-{version}-py3-none-any.whl",
+                name.replace('-', "_")
+            )),
+            name,
+            version,
+        )?;
+    }
+    let nested_backend_url = Url::from_file_path(
+        links_dir
+            .child("nested_backend-1.0.0-py3-none-any.whl")
+            .path(),
+    )
+    .expect("valid file URL");
+
+    let builder_dir = context.temp_dir.child("builder");
+    builder_dir.create_dir_all()?;
+    builder_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "builder"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["helper>=1"]
+
+        [build-system]
+        requires = ["nested-backend @ {nested_backend_url}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    builder_dir.child("build_backend.py").write_str(
+        r#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return ["hook-helper==1.0.0"]
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    if version("hook-helper") != "1.0.0":
+        raise RuntimeError("hook helper is unavailable")
+    filename = "builder-1.0.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("builder.py", "")
+        wheel.writestr(
+            "builder-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: builder\nVersion: 1.0.0\nRequires-Dist: helper>=1\n",
+        )
+        wheel.writestr(
+            "builder-1.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("builder-1.0.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid file URL");
+
+    for (name, helper_version) in [("dep-a", "1.0.0"), ("dep-b", "2.0.0")] {
+        let module_name = name.replace('-', "_");
+        let dep_dir = context.temp_dir.child(name);
+        dep_dir.create_dir_all()?;
+        dep_dir.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["builder @ {builder_url}", "helper=={helper_version}"]
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#,
+        ))?;
+        dep_dir.child("build_backend.py").write_str(&format!(
+            r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "{module_name}-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("{module_name}.py", "")
+        wheel.writestr(
+            "{module_name}-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: {name}\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "{module_name}-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("{module_name}-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+        ))?;
+    }
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        a = ["dep-a"]
+        b = ["dep-b"]
+
+        [tool.uv.sources]
+        dep-a = { path = "dep-a" }
+        dep-b = { path = "dep-b" }
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let resolutions = resolution_sections(&lock);
+    let builder_resolutions = resolutions
+        .split("[[resolution]]")
+        .filter(|resolution| resolution.contains("\nname = \"builder\"\n"))
+        .collect::<Vec<_>>();
+    let bootstrap_resolutions = builder_resolutions
+        .iter()
+        .filter(|resolution| resolution.contains("stage = \"bootstrap\""))
+        .collect::<Vec<_>>();
+    let build_resolutions = builder_resolutions
+        .iter()
+        .filter(|resolution| resolution.contains("stage = \"build\""))
+        .collect::<Vec<_>>();
+    assert!(!bootstrap_resolutions.is_empty(), "{lock}");
+    assert!(!build_resolutions.is_empty(), "{lock}");
+    assert!(
+        bootstrap_resolutions.iter().all(|resolution| {
+            resolution.contains(r#"{ name = "nested-backend", version = "1.0.0" }"#)
+                && !resolution.contains(r#"{ name = "hook-helper", version = "1.0.0" }"#)
+        }),
+        "{lock}"
+    );
+    assert!(
+        build_resolutions.iter().all(|resolution| {
+            resolution.contains(r#"{ name = "nested-backend", version = "1.0.0" }"#)
+                && resolution.contains(r#"{ name = "hook-helper", version = "1.0.0" }"#)
+        }),
+        "{lock}"
+    );
+
+    for group in ["a", "b"] {
+        if context.venv.exists() {
+            fs_err::remove_dir_all(&context.venv)?;
+        }
+        fs_err::remove_dir_all(&context.cache_dir)?;
+        context
+            .sync()
+            .arg("--find-links")
+            .arg(links_dir.path())
+            .arg("--no-index")
+            .arg("--frozen")
+            .arg("--no-default-groups")
+            .arg("--group")
+            .arg(group)
+            .arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .assert()
+            .success();
+    }
 
     Ok(())
 }
@@ -5732,22 +9890,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     }, {
         assert_snapshot!(resolution_sections(&lock), @r#"
         [[resolution]]
-        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "dep"
-        roots = [
-            { name = "builder", version = "1.0.0" },
-        ]
-
-        [[resolution]]
         id = "build:dep:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "dep"
         roots = [
             { name = "builder", version = "1.0.0" },
@@ -5863,41 +10009,15 @@ def get_requires_for_build_wheel(config_settings=None):
     }, {
         assert_snapshot!(resolution_sections(&lock), @r#"
         [[resolution]]
-        id = "build:dep-a:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "dep-a"
-        target = { marker = "sys_platform == 'linux'" }
-        roots = [
-            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
-            { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
-        ]
-
-        [[resolution]]
         id = "build:dep-a:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "dep-a"
         target = { marker = "sys_platform == 'linux'" }
         roots = [
             { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
             { name = "helper", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
-        ]
-
-        [[resolution]]
-        id = "build:dep-b:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "dep-b"
-        roots = [
-            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep-b:wheel:bootstrap:[BUILD-ID]" },
-            { name = "helper", version = "2.0.0", source = { registry = "[TEMP_DIR]/links" } },
         ]
 
         [[resolution]]
@@ -5905,7 +10025,6 @@ def get_requires_for_build_wheel(config_settings=None):
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "dep-b"
         roots = [
             { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep-b:wheel:build:[BUILD-ID]" },
@@ -6014,23 +10133,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     }, {
         assert_snapshot!(resolution_sections(&lock), @r#"
         [[resolution]]
-        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "dep"
-        roots = [
-            { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep:wheel:bootstrap:[BUILD-ID]" },
-            { name = "leaf", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" } },
-        ]
-
-        [[resolution]]
         id = "build:dep:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "dep"
         roots = [
             { name = "builder", version = "1.0.0", source = { registry = "[TEMP_DIR]/links" }, resolution-id = "build:dep:wheel:build:[BUILD-ID]" },
@@ -6378,6 +10484,194 @@ fn lock_build_dependencies_extra_build_dependencies_invalidate_find_links() -> R
     Ok(())
 }
 
+/// Verify that changing index precedence invalidates a locked build environment.
+#[test]
+fn lock_build_dependencies_index_strategy_invalidates() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let first_index = context.temp_dir.child("first-index");
+    let default_index = context.temp_dir.child("default-index");
+    for (index, version) in [(&first_index, "1.0.0"), (&default_index, "2.0.0")] {
+        let builder = index.child("builder");
+        builder.create_dir_all()?;
+        let wheel = builder.child(format!("builder-{version}-py3-none-any.whl"));
+        write_wheel(&wheel, "builder", version)?;
+        builder.child("index.html").write_str(&format!(
+            r#"<a href="builder-{version}-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">builder-{version}-py3-none-any.whl</a>"#
+        ))?;
+    }
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["builder>=1"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    context.temp_dir.child("build_backend.py").write_str("")?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--index")
+        .arg(first_index.path())
+        .arg("--default-index")
+        .arg(default_index.path())
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains(r#"name = "builder", version = "1.0.0""#),
+        "{lock}"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--index")
+        .arg(first_index.path())
+        .arg("--default-index")
+        .arg(default_index.path())
+        .arg("--index-strategy")
+        .arg("unsafe-best-match")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--index")
+        .arg(first_index.path())
+        .arg("--default-index")
+        .arg(default_index.path())
+        .arg("--index-strategy")
+        .arg("unsafe-best-match")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains(r#"name = "builder", version = "2.0.0""#),
+        "{lock}"
+    );
+
+    Ok(())
+}
+
+/// Verify that adding a higher-version flat index invalidates a locked build environment.
+#[test]
+fn lock_build_dependencies_find_links_invalidates() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let first_links = context.temp_dir.child("first-links");
+    let additional_links = context.temp_dir.child("additional-links");
+    first_links.create_dir_all()?;
+    additional_links.create_dir_all()?;
+    write_wheel(
+        &first_links.child("builder-1.0.0-py3-none-any.whl"),
+        "builder",
+        "1.0.0",
+    )?;
+    write_wheel(
+        &additional_links.child("builder-2.0.0-py3-none-any.whl"),
+        "builder",
+        "2.0.0",
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["builder>=1"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    context.temp_dir.child("build_backend.py").write_str("")?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--find-links")
+        .arg(first_links.path())
+        .arg("--no-index")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains(r#"name = "builder", version = "1.0.0""#),
+        "{lock}"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--find-links")
+        .arg(first_links.path())
+        .arg("--find-links")
+        .arg(additional_links.path())
+        .arg("--no-index")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--find-links")
+        .arg(first_links.path())
+        .arg("--find-links")
+        .arg(additional_links.path())
+        .arg("--no-index")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains(r#"name = "builder", version = "2.0.0""#),
+        "{lock}"
+    );
+
+    Ok(())
+}
+
 /// Verify that universal build dependency locks use the project's Python
 /// range, not just the interpreter used to generate the lock.
 #[test]
@@ -6394,7 +10688,7 @@ fn lock_build_dependencies_use_project_python_range() -> Result<()> {
         requires-python = ">=3.12"
         "#,
     )?;
-    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid builder URL");
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -6467,7 +10761,7 @@ fn lock_build_dependencies_use_conditional_source_python_range() -> Result<()> {
         requires-python = ">=3.12"
         "#,
     )?;
-    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid builder URL");
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -6549,7 +10843,7 @@ fn lock_build_dependencies_do_not_use_runtime_supported_environments_for_executo
         requires-python = ">=3.12"
         "#,
     )?;
-    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid builder URL");
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -6624,11 +10918,11 @@ fn lock_build_dependencies_preserves_pep508_extras() -> Result<()> {
         requires-python = ">=3.12"
         "#,
     )?;
-    let leaf_url = Url::from_directory_path(leaf_dir.path()).unwrap();
+    let leaf_url = Url::from_directory_path(leaf_dir.path()).expect("valid leaf URL");
 
     let carrier_dir = context.temp_dir.child("carrier");
     carrier_dir.create_dir_all()?;
-    let carrier_url = Url::from_directory_path(carrier_dir.path()).unwrap();
+    let carrier_url = Url::from_directory_path(carrier_dir.path()).expect("valid carrier URL");
     carrier_dir.child("pyproject.toml").write_str(&format!(
         r#"
         [project]
@@ -7336,6 +11630,150 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
+/// Verify that a fragment-bearing direct URL source reached through build requirements is captured
+/// and can replay its own locked build requirements during a frozen sync.
+#[tokio::test]
+async fn lock_build_dependencies_replay_fragmented_direct_url_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("helper-1.0.0-py3-none-any.whl"),
+        "helper",
+        "1.0.0",
+    )?;
+
+    let source_dist = context.temp_dir.child("backend-1.0.0.zip");
+    write_build_source(
+        &source_dist,
+        "backend",
+        "1.0.0",
+        Some(("helper==1.0.0", "helper")),
+    )?;
+    let archive = fs_err::read(source_dist.path())?;
+    let archive_hash = format!("{:x}", Sha256::digest(&archive));
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/backend-1.0.0.zip"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(archive))
+        .mount(&server)
+        .await;
+    let authenticated_uri = server.uri().replacen("://", "://user:secret@", 1);
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["backend @ {authenticated_uri}/backend-1.0.0.zip#egg=backend&sha256={archive_hash}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    ))?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let backend = package_section(&lock, "backend");
+    assert!(backend.contains("build-dependencies = ["), "{backend}");
+    assert!(
+        backend.contains(r#"{ name = "helper", version = "1.0.0" }"#),
+        "{backend}"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+    ");
+
+    // A changed digest in a compound fragment must conflict with the captured artifact during
+    // frozen replay, even though the normalized source identity is unchanged.
+    let pyproject = dep_dir.child("pyproject.toml");
+    let contents = fs_err::read_to_string(pyproject.path())?;
+    pyproject.write_str(&contents.replace(&archive_hash, &"0".repeat(64)))?;
+    let output = context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--reinstall")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&output.get_output().stderr);
+    assert!(
+        stderr.contains("Conflicting archive URL hashes"),
+        "{stderr}"
+    );
+
+    Ok(())
+}
+
 /// Verify that an audit relock preserves explicitly requested and existing build locks.
 #[tokio::test]
 async fn lock_build_dependencies_audit_preserves_build_lock() -> Result<()> {
@@ -7631,6 +12069,334 @@ fn lock_build_dependencies_static_git() -> Result<()> {
     Ok(())
 }
 
+/// A direct-URL build requirement with a valid PEP 508 hash fragment must replay from a frozen
+/// build resolution after the lock normalizes the verbatim URL.
+#[tokio::test]
+async fn lock_build_dependencies_replay_direct_url_fragment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let helper = context.temp_dir.child("helper-0.1.0-py3-none-any.whl");
+    write_wheel(&helper, "helper", "0.1.0")?;
+    let bytes = fs_err::read(helper.path())?;
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/helper-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(bytes))
+        .mount(&server)
+        .await;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper @ {}/helper-0.1.0-py3-none-any.whl#sha256={hash}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+        server.uri(),
+    ))?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", "VALUE = 'built'\n")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{dep}"
+    );
+
+    context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--reinstall")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// A credentialed Git source used only as a build dependency must capture its own build graph and
+/// replay the locked precise commit when the original requirement selects the default branch.
+#[tokio::test]
+#[cfg(feature = "test-git")]
+async fn lock_build_dependencies_replay_nested_credentialed_git_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    let nested_dir = context.temp_dir.child("nested-backend");
+    nested_dir.create_dir_all()?;
+    nested_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "nested-backend"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper==0.1.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    nested_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "nested_backend-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("nested_backend.py", "VALUE = 'nested'\n")
+        wheel.writestr(
+            "nested_backend-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: nested-backend\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "nested_backend-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("nested_backend-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    Command::new("git")
+        .arg("init")
+        .arg("--quiet")
+        .arg(nested_dir.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", nested_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["config", "user.name", "uv-test"])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", nested_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["config", "user.email", "uv-test@example.com"])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", nested_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", nested_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["commit", "--quiet", "-m", "initial"])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", nested_dir.path().to_str().expect("UTF-8 temp path")])
+        .arg("update-server-info")
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    let git_dir = nested_dir.child(".git");
+    for entry in WalkDir::new(git_dir.path()).into_iter().flatten() {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let relative = entry.path().strip_prefix(git_dir.path())?;
+        let route = format!(
+            "/nested.git/{}",
+            relative.to_string_lossy().replace('\\', "/")
+        );
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(entry.path())?))
+            .mount(&server)
+            .await;
+    }
+    let nested_url = server.uri().replacen("http://", "http://user:secret@", 1);
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["nested-backend"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv.sources]
+        nested-backend = {{ git = "{nested_url}/nested.git" }}
+        "#,
+    ))?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+import nested_backend
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", f"VALUE = {nested_backend.VALUE!r}\n")
+        wheel.writestr("dep-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n")
+        wheel.writestr("dep-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    let nested = package_section(&lock, "nested-backend");
+    assert!(
+        nested.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{nested}"
+    );
+    assert!(!lock.contains("user:secret"), "{lock}");
+
+    // Move the default branch after locking. Frozen replay must continue to build against the
+    // precise commit captured in the lock, even with an empty cache.
+    let backend = nested_dir.child("build_backend.py");
+    let contents = fs_err::read_to_string(backend.path())?;
+    backend.write_str(&contents.replace("VALUE = 'nested'", "VALUE = 'advanced'"))?;
+    Command::new("git")
+        .args(["-C", nested_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", nested_dir.path().to_str().expect("UTF-8 temp path")])
+        .args(["commit", "--quiet", "-m", "advance"])
+        .assert()
+        .success();
+    Command::new("git")
+        .args(["-C", nested_dir.path().to_str().expect("UTF-8 temp path")])
+        .arg("update-server-info")
+        .assert()
+        .success();
+    server.reset().await;
+    for entry in WalkDir::new(git_dir.path()).into_iter().flatten() {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let relative = entry.path().strip_prefix(git_dir.path())?;
+        let route = format!(
+            "/nested.git/{}",
+            relative.to_string_lossy().replace('\\', "/")
+        );
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(entry.path())?))
+            .mount(&server)
+            .await;
+    }
+
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--reinstall")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .run()
+        .arg("--no-sync")
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; print(dep.VALUE)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    nested
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// Verify that static archives stored in Git capture dependencies returned by
 /// their backend hook before the build resolution is locked.
 #[test]
@@ -7863,38 +12629,17 @@ fn lock_build_dependencies_fork() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "flit-core"
-
-        [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "flit-core"
-
-        [[resolution]]
-        id = "build:hatch-vcs:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "hatch-vcs"
-        roots = [
-            { name = "hatchling", version = "1.22.4" },
-        ]
 
         [[resolution]]
         id = "build:hatch-vcs:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "hatch-vcs"
         roots = [
             { name = "hatchling", version = "1.22.4" },
@@ -7923,38 +12668,14 @@ fn lock_build_dependencies_fork() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "iniconfig"
-        roots = [
-            { name = "hatch-vcs", version = "0.4.0" },
-            { name = "hatchling", version = "1.22.4" },
-        ]
-
-        [[resolution]]
         id = "build:iniconfig:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "iniconfig"
         roots = [
             { name = "hatch-vcs", version = "0.4.0" },
             { name = "hatchling", version = "1.22.4" },
-        ]
-
-        [[resolution]]
-        id = "build:packaging:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "packaging"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
         ]
 
         [[resolution]]
@@ -7962,19 +12683,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "packaging"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
-        id = "build:pathspec:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "pathspec"
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -7984,7 +12693,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "pathspec"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -8085,34 +12793,11 @@ fn lock_build_dependencies_fork() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:typing-extensions:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "typing-extensions"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
         id = "build:typing-extensions:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "typing-extensions"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
-        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -8122,7 +12807,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -8137,9 +12821,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b5/00/96cbed7c019c49ee04b8a08357a981983db7698ae6de402e57097cefc9ad/calver-2022.6.26.tar.gz", hash = "sha256:e05493a3b17517ef1748fbe610da11f10485faa7c416b9d33fd4a52d74894f8b", size = 6670, upload-time = "2022-06-26T23:25:10.382Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b5/00/96cbed7c019c49ee04b8a08357a981983db7698ae6de402e57097cefc9ad/calver-2022.6.26.tar.gz", hash = "sha256:e05493a3b17517ef1748fbe610da11f10485faa7c416b9d33fd4a52d74894f8b", size = 6670, upload-time = "2022-06-26T23:25:10.382Z", requires-python = ">=3.5" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/f7/39/e421c06f42ca00fa9cf8929c2466e58a837e8e97b8ab3ff4f4ff9a15e33e/calver-2022.6.26-py3-none-any.whl", hash = "sha256:a1d7fcdd67797afc52ee36ffb8c8adf6643173864306547bfd1380cbce6310a0", size = 7049, upload-time = "2022-06-26T23:25:07.692Z" },
+            { url = "https://files.pythonhosted.org/packages/f7/39/e421c06f42ca00fa9cf8929c2466e58a837e8e97b8ab3ff4f4ff9a15e33e/calver-2022.6.26-py3-none-any.whl", hash = "sha256:a1d7fcdd67797afc52ee36ffb8c8adf6643173864306547bfd1380cbce6310a0", size = 7049, upload-time = "2022-06-26T23:25:07.692Z", requires-python = ">=3.5" },
         ]
 
         [[package]]
@@ -8160,9 +12844,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-only = true
         build-dependencies = []
-        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z", requires-python = ">=3.6" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z", requires-python = ">=3.6" },
         ]
 
         [[package]]
@@ -8177,9 +12861,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
         build-dependencies = [
             { name = "hatchling", version = "1.22.4" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/82/0f/6cbd9976160bc334add63bc2e7a58b1433a31b34b7cda6c5de6dd983d9a7/hatch_vcs-0.4.0-py3-none-any.whl", hash = "sha256:b8a2b6bee54cf6f9fc93762db73890017ae59c9081d1038a41f16235ceaf8b2c", size = 8412, upload-time = "2023-11-06T06:24:55.389Z" },
+            { url = "https://files.pythonhosted.org/packages/82/0f/6cbd9976160bc334add63bc2e7a58b1433a31b34b7cda6c5de6dd983d9a7/hatch_vcs-0.4.0-py3-none-any.whl", hash = "sha256:b8a2b6bee54cf6f9fc93762db73890017ae59c9081d1038a41f16235ceaf8b2c", size = 8412, upload-time = "2023-11-06T06:24:55.389Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8199,9 +12883,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
             { name = "pluggy", version = "1.4.0" },
             { name = "trove-classifiers", version = "2024.3.3" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4f/2a/c34d71531d1e1c9a5029bb73eb3816285befd0fffd7c63ffa0544253dca8/hatchling-1.22.4.tar.gz", hash = "sha256:8a2dcec96d7fb848382ef5848e5ac43fdae641f35a08a3fab5116bd495f3416e", size = 62758, upload-time = "2024-03-24T02:00:59.122Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4f/2a/c34d71531d1e1c9a5029bb73eb3816285befd0fffd7c63ffa0544253dca8/hatchling-1.22.4.tar.gz", hash = "sha256:8a2dcec96d7fb848382ef5848e5ac43fdae641f35a08a3fab5116bd495f3416e", size = 62758, upload-time = "2024-03-24T02:00:59.122Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/49/63/2d56d6356f9f8b906aa68335cbf5b1b54c69873a2e271eda2ddba319c1ae/hatchling-1.22.4-py3-none-any.whl", hash = "sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc", size = 82032, upload-time = "2024-03-24T02:00:57.534Z" },
+            { url = "https://files.pythonhosted.org/packages/49/63/2d56d6356f9f8b906aa68335cbf5b1b54c69873a2e271eda2ddba319c1ae/hatchling-1.22.4-py3-none-any.whl", hash = "sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc", size = 82032, upload-time = "2024-03-24T02:00:57.534Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8212,9 +12896,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
             { name = "hatch-vcs", version = "0.4.0" },
             { name = "hatchling", version = "1.22.4" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z", requires-python = ">=3.7" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z", requires-python = ">=3.7" },
         ]
 
         [[package]]
@@ -8225,9 +12909,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z", requires-python = ">=3.7" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488, upload-time = "2024-03-10T09:39:25.947Z" },
+            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488, upload-time = "2024-03-10T09:39:25.947Z", requires-python = ">=3.7" },
         ]
 
         [[package]]
@@ -8238,9 +12922,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z" },
+            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8254,9 +12938,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
             { name = "setuptools-scm", version = "8.0.4", extra = ["toml"] },
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/54/c6/43f9d44d92aed815e781ca25ba8c174257e27253a94630d21be8725a2b59/pluggy-1.4.0.tar.gz", hash = "sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be", size = 65812, upload-time = "2024-01-24T13:45:15.875Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/54/c6/43f9d44d92aed815e781ca25ba8c174257e27253a94630d21be8725a2b59/pluggy-1.4.0.tar.gz", hash = "sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be", size = 65812, upload-time = "2024-01-24T13:45:15.875Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/a5/5b/0cc789b59e8cc1bf288b38111d002d8c5917123194d45b29dcdac64723cc/pluggy-1.4.0-py3-none-any.whl", hash = "sha256:7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981", size = 20120, upload-time = "2024-01-24T13:45:14.227Z" },
+            { url = "https://files.pythonhosted.org/packages/a5/5b/0cc789b59e8cc1bf288b38111d002d8c5917123194d45b29dcdac64723cc/pluggy-1.4.0-py3-none-any.whl", hash = "sha256:7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981", size = 20120, upload-time = "2024-01-24T13:45:14.227Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8283,9 +12967,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8302,9 +12986,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8330,9 +13014,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8343,9 +13027,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z", requires-python = ">=3.8" },
         ]
         "#
         );
@@ -8460,64 +13144,29 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "dep"
-        roots = [
-            { name = "iniconfig", version = "2.0.0" },
-            { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
-        ]
-
-        [[resolution]]
         id = "build:dep:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "dep"
         roots = [
             { name = "iniconfig", version = "2.0.0" },
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
-
-        [[resolution]]
-        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "flit-core"
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "flit-core"
-
-        [[resolution]]
-        id = "build:hatch-vcs:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "hatch-vcs"
-        roots = [
-            { name = "hatchling", version = "1.22.4" },
-        ]
 
         [[resolution]]
         id = "build:hatch-vcs:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "hatch-vcs"
         roots = [
             { name = "hatchling", version = "1.22.4" },
@@ -8546,38 +13195,14 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "iniconfig"
-        roots = [
-            { name = "hatch-vcs", version = "0.4.0" },
-            { name = "hatchling", version = "1.22.4" },
-        ]
-
-        [[resolution]]
         id = "build:iniconfig:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "iniconfig"
         roots = [
             { name = "hatch-vcs", version = "0.4.0" },
             { name = "hatchling", version = "1.22.4" },
-        ]
-
-        [[resolution]]
-        id = "build:packaging:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "packaging"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
         ]
 
         [[resolution]]
@@ -8585,19 +13210,7 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "packaging"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
-        id = "build:pathspec:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "pathspec"
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -8607,7 +13220,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "pathspec"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -8708,34 +13320,11 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:typing-extensions:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "typing-extensions"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
         id = "build:typing-extensions:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "typing-extensions"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
-        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
         ]
@@ -8745,7 +13334,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -8760,9 +13348,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b5/00/96cbed7c019c49ee04b8a08357a981983db7698ae6de402e57097cefc9ad/calver-2022.6.26.tar.gz", hash = "sha256:e05493a3b17517ef1748fbe610da11f10485faa7c416b9d33fd4a52d74894f8b", size = 6670, upload-time = "2022-06-26T23:25:10.382Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b5/00/96cbed7c019c49ee04b8a08357a981983db7698ae6de402e57097cefc9ad/calver-2022.6.26.tar.gz", hash = "sha256:e05493a3b17517ef1748fbe610da11f10485faa7c416b9d33fd4a52d74894f8b", size = 6670, upload-time = "2022-06-26T23:25:10.382Z", requires-python = ">=3.5" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/f7/39/e421c06f42ca00fa9cf8929c2466e58a837e8e97b8ab3ff4f4ff9a15e33e/calver-2022.6.26-py3-none-any.whl", hash = "sha256:a1d7fcdd67797afc52ee36ffb8c8adf6643173864306547bfd1380cbce6310a0", size = 7049, upload-time = "2022-06-26T23:25:07.692Z" },
+            { url = "https://files.pythonhosted.org/packages/f7/39/e421c06f42ca00fa9cf8929c2466e58a837e8e97b8ab3ff4f4ff9a15e33e/calver-2022.6.26-py3-none-any.whl", hash = "sha256:a1d7fcdd67797afc52ee36ffb8c8adf6643173864306547bfd1380cbce6310a0", size = 7049, upload-time = "2022-06-26T23:25:07.692Z", requires-python = ">=3.5" },
         ]
 
         [[package]]
@@ -8788,9 +13376,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-only = true
         build-dependencies = []
-        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z", requires-python = ">=3.6" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z", requires-python = ">=3.6" },
         ]
 
         [[package]]
@@ -8805,9 +13393,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         build-dependencies = [
             { name = "hatchling", version = "1.22.4" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/f5/c9/54bb4fa27b4e4a014ef3bb17710cdf692b3aa2cbc7953da885f1bf7e06ea/hatch_vcs-0.4.0.tar.gz", hash = "sha256:093810748fe01db0d451fabcf2c1ac2688caefd232d4ede967090b1c1b07d9f7", size = 10917, upload-time = "2023-11-06T06:24:57.228Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/82/0f/6cbd9976160bc334add63bc2e7a58b1433a31b34b7cda6c5de6dd983d9a7/hatch_vcs-0.4.0-py3-none-any.whl", hash = "sha256:b8a2b6bee54cf6f9fc93762db73890017ae59c9081d1038a41f16235ceaf8b2c", size = 8412, upload-time = "2023-11-06T06:24:55.389Z" },
+            { url = "https://files.pythonhosted.org/packages/82/0f/6cbd9976160bc334add63bc2e7a58b1433a31b34b7cda6c5de6dd983d9a7/hatch_vcs-0.4.0-py3-none-any.whl", hash = "sha256:b8a2b6bee54cf6f9fc93762db73890017ae59c9081d1038a41f16235ceaf8b2c", size = 8412, upload-time = "2023-11-06T06:24:55.389Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8827,9 +13415,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
             { name = "pluggy", version = "1.4.0" },
             { name = "trove-classifiers", version = "2024.3.3" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4f/2a/c34d71531d1e1c9a5029bb73eb3816285befd0fffd7c63ffa0544253dca8/hatchling-1.22.4.tar.gz", hash = "sha256:8a2dcec96d7fb848382ef5848e5ac43fdae641f35a08a3fab5116bd495f3416e", size = 62758, upload-time = "2024-03-24T02:00:59.122Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4f/2a/c34d71531d1e1c9a5029bb73eb3816285befd0fffd7c63ffa0544253dca8/hatchling-1.22.4.tar.gz", hash = "sha256:8a2dcec96d7fb848382ef5848e5ac43fdae641f35a08a3fab5116bd495f3416e", size = 62758, upload-time = "2024-03-24T02:00:59.122Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/49/63/2d56d6356f9f8b906aa68335cbf5b1b54c69873a2e271eda2ddba319c1ae/hatchling-1.22.4-py3-none-any.whl", hash = "sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc", size = 82032, upload-time = "2024-03-24T02:00:57.534Z" },
+            { url = "https://files.pythonhosted.org/packages/49/63/2d56d6356f9f8b906aa68335cbf5b1b54c69873a2e271eda2ddba319c1ae/hatchling-1.22.4-py3-none-any.whl", hash = "sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc", size = 82032, upload-time = "2024-03-24T02:00:57.534Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8840,9 +13428,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
             { name = "hatch-vcs", version = "0.4.0" },
             { name = "hatchling", version = "1.22.4" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z", requires-python = ">=3.7" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z", requires-python = ">=3.7" },
         ]
 
         [[package]]
@@ -8853,9 +13441,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z", requires-python = ">=3.7" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488, upload-time = "2024-03-10T09:39:25.947Z" },
+            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488, upload-time = "2024-03-10T09:39:25.947Z", requires-python = ">=3.7" },
         ]
 
         [[package]]
@@ -8866,9 +13454,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z" },
+            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8882,9 +13470,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
             { name = "setuptools-scm", version = "8.0.4", extra = ["toml"] },
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/54/c6/43f9d44d92aed815e781ca25ba8c174257e27253a94630d21be8725a2b59/pluggy-1.4.0.tar.gz", hash = "sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be", size = 65812, upload-time = "2024-01-24T13:45:15.875Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/54/c6/43f9d44d92aed815e781ca25ba8c174257e27253a94630d21be8725a2b59/pluggy-1.4.0.tar.gz", hash = "sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be", size = 65812, upload-time = "2024-01-24T13:45:15.875Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/a5/5b/0cc789b59e8cc1bf288b38111d002d8c5917123194d45b29dcdac64723cc/pluggy-1.4.0-py3-none-any.whl", hash = "sha256:7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981", size = 20120, upload-time = "2024-01-24T13:45:14.227Z" },
+            { url = "https://files.pythonhosted.org/packages/a5/5b/0cc789b59e8cc1bf288b38111d002d8c5917123194d45b29dcdac64723cc/pluggy-1.4.0-py3-none-any.whl", hash = "sha256:7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981", size = 20120, upload-time = "2024-01-24T13:45:14.227Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8910,9 +13498,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8929,9 +13517,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z" },
+            { url = "https://files.pythonhosted.org/packages/0e/a3/b9a8b0adfe672bf0df5901707aa929d30a97ee390ba651910186776746d2/setuptools_scm-8.0.4-py3-none-any.whl", hash = "sha256:b47844cd2a84b83b3187a5782c71128c28b4c94cad8bfb871da2784a5cb54c4f", size = 42137, upload-time = "2023-10-02T15:14:31.281Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8957,9 +13545,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -8970,9 +13558,9 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z", requires-python = ">=3.8" },
         ]
         "#
         );
@@ -9086,8 +13674,82 @@ fn lock_build_dependencies_virtual_project_skips_build_requirements() -> Result<
 
     let lock = context.read("uv.lock");
     let project = package_section(&lock, "project");
+    assert!(lock.starts_with("version = 1\nrevision = 3\n"), "{lock}");
     assert!(project.contains(r#"source = { virtual = "." }"#));
     assert!(!project.contains("build-dependencies = ["));
+    assert!(!lock.contains("[[resolution]]"), "{lock}");
+    assert!(!lock.contains("build-requires"), "{lock}");
+    assert!(!lock.contains("build-system"), "{lock}");
+    assert!(!lock.contains("build-settings"), "{lock}");
+
+    Ok(())
+}
+
+/// Verify a wheel-only project preserves the default lock schema, even when build settings are set.
+#[test]
+fn lock_build_dependencies_wheel_only_preserves_lock_schema() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("runtime-0.1.0-py3-none-any.whl"),
+        "runtime",
+        "0.1.0",
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["runtime==0.1.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--config-settings")
+        .arg("choice=a"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.starts_with("version = 1\nrevision = 3\n"), "{lock}");
+    assert!(!lock.contains("[[resolution]]"), "{lock}");
+    assert!(!lock.contains("build-dependencies"), "{lock}");
+    assert!(!lock.contains("build-requires"), "{lock}");
+    assert!(!lock.contains("build-system"), "{lock}");
+    assert!(!lock.contains("build-settings"), "{lock}");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--config-settings")
+        .arg("choice=a")
+        .arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
 
     Ok(())
 }
@@ -9298,43 +13960,21 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [[resolution]]
-        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "dep"
-        roots = [
-            { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
-        ]
-
-        [[resolution]]
         id = "build:dep:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "dep"
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
-
-        [[resolution]]
-        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "flit-core"
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "flit-core"
 
         [[resolution]]
@@ -9357,22 +13997,10 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "wheel"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
         id = "build:wheel:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -9399,9 +14027,9 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-only = true
         build-dependencies = []
-        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z", requires-python = ">=3.6" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z", requires-python = ">=3.6" },
         ]
 
         [[package]]
@@ -9423,9 +14051,9 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -9436,9 +14064,9 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z", requires-python = ">=3.8" },
         ]
         "#
         );
@@ -9664,7 +14292,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     return filename
 "#,
     )?;
-    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid builder URL");
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -9908,43 +14536,21 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [[resolution]]
-        id = "build:dep:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "dep"
-        roots = [
-            { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
-        ]
-
-        [[resolution]]
         id = "build:dep:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "dep"
         roots = [
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
-
-        [[resolution]]
-        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "flit-core"
 
         [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "flit-core"
 
         [[resolution]]
@@ -9967,22 +14573,10 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "wheel"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
         id = "build:wheel:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -10009,9 +14603,9 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-only = true
         build-dependencies = []
-        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z", requires-python = ">=3.6" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z", requires-python = ">=3.6" },
         ]
 
         [[package]]
@@ -10033,9 +14627,9 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -10046,9 +14640,9 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z", requires-python = ">=3.8" },
         ]
         "#
         );
@@ -10067,6 +14661,116 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
     Installed 1 package in [TIME]
      + dep==0.1.0 (from file://[TEMP_DIR]/dep)
     ");
+
+    Ok(())
+}
+
+/// Verify that equivalent nested build graphs captured before and after resolving dynamic source
+/// metadata share a single bootstrap and build pair.
+#[test]
+fn lock_build_dependencies_coalesce_dynamic_build_resolution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let helper_dir = context.temp_dir.child("helper");
+    helper_dir.create_dir_all()?;
+    helper_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "helper"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "helper.__version__"}
+        "#,
+    )?;
+    helper_dir.child("helper").create_dir_all()?;
+    helper_dir
+        .child("helper/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+    let helper_url = Url::from_directory_path(helper_dir.path()).expect("valid helper URL");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42", "helper @ {helper_url}"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    ))?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        helper = { path = "helper" }
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let helper_resolutions = resolution_sections(&lock)
+        .split("\n\n")
+        .filter(|resolution| resolution.contains("\nname = \"helper\""))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(helper_resolutions, @r#"
+        [[resolution]]
+        id = "build:helper:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "helper"
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+        ]
+
+        [[resolution]]
+        id = "build:helper:wheel:build:[BUILD-ID]:2"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "helper"
+        roots = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+        "#);
+    });
 
     Ok(())
 }
@@ -10385,7 +15089,7 @@ fn lock_build_dependencies_direct_build_static_sdist() -> Result<()> {
         build-backend = "uv_build"
         "#,
     ))?;
-    let entry = ZipEntryBuilder::new("dep-0.1.0/dep/__init__.py".into(), Compression::Stored);
+    let entry = ZipEntryBuilder::new("dep-0.1.0/src/dep/__init__.py".into(), Compression::Stored);
     block_on(zip.write_entry_whole(entry, b""))?;
     fs_err::write(source_dist.path(), block_on(zip.close())?)?;
 
@@ -10417,7 +15121,26 @@ fn lock_build_dependencies_direct_build_static_sdist() -> Result<()> {
 
     let lock = context.read("uv.lock");
     let dep = package_section(&lock, "dep");
-    assert!(!dep.contains("build-dependencies = ["), "{dep}");
+    assert!(dep.contains("build-dependencies = []"), "{dep}");
+    assert!(
+        dep.contains(r#"{ name = "uv-build", specifier = ">=0.7,<10000" }"#),
+        "{dep}"
+    );
+    assert!(dep.contains(r#"build-backend = "uv_build""#), "{dep}");
+
+    let resolutions = resolution_sections(&lock);
+    let dep_resolutions = resolutions
+        .split("\n\n")
+        .filter(|resolution| resolution.contains(r#"name = "dep""#))
+        .collect::<Vec<_>>();
+    assert_eq!(dep_resolutions.len(), 1, "{lock}");
+    assert!(!resolutions.contains("\nstage = "), "{lock}");
+    assert!(
+        dep_resolutions
+            .iter()
+            .all(|resolution| !resolution.contains("roots =")),
+        "{lock}"
+    );
 
     uv_snapshot!(context.filters(), context
         .lock()
@@ -10432,6 +15155,160 @@ fn lock_build_dependencies_direct_build_static_sdist() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
+    // A compatible direct build replays its captured empty stages without resolving `uv_build`.
+    context
+        .sync()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .assert()
+        .success();
+    assert!(context.site_packages().join("dep").exists());
+
+    Ok(())
+}
+
+/// Verify that a conditional extra build dependency is captured for another supported executor
+/// while the current executor can still use the in-process `uv_build` fast path.
+#[test]
+fn lock_build_dependencies_direct_build_captures_cross_executor_extra_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    write_wheel(
+        &links.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("uv_build.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        b"def get_requires_for_build_wheel(config_settings=None):\n    return []\n\ndef get_requires_for_build_editable(config_settings=None):\n    return []\n",
+    ))?;
+    let entry = ZipEntryBuilder::new(
+        "uv_build-0.10.12.dist-info/METADATA".into(),
+        Compression::Stored,
+    );
+    block_on(zip.write_entry_whole(
+        entry,
+        b"Metadata-Version: 2.3\nName: uv-build\nVersion: 0.10.12\n",
+    ))?;
+    let entry = ZipEntryBuilder::new(
+        "uv_build-0.10.12.dist-info/WHEEL".into(),
+        Compression::Stored,
+    );
+    block_on(zip.write_entry_whole(
+        entry,
+        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+    ))?;
+    let entry = ZipEntryBuilder::new(
+        "uv_build-0.10.12.dist-info/RECORD".into(),
+        Compression::Stored,
+    );
+    block_on(zip.write_entry_whole(entry, b""))?;
+    fs_err::write(
+        links.child("uv_build-0.10.12-py3-none-any.whl").path(),
+        block_on(zip.close())?,
+    )?;
+
+    let dep = context.temp_dir.child("dep");
+    dep.create_dir_all()?;
+    dep.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    let module = dep.child("src").child("dep");
+    module.create_dir_all()?;
+    module.child("__init__.py").touch()?;
+
+    let other_executor_marker = if cfg!(windows) {
+        "sys_platform != 'win32'"
+    } else {
+        "sys_platform == 'win32'"
+    };
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'win32'", "sys_platform != 'win32'"]
+
+        [tool.uv.sources]
+        dep = {{ path = "dep" }}
+
+        [tool.uv.extra-build-dependencies]
+        dep = ["helper==0.1.0; {other_executor_marker}"]
+        "#
+        ))?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--no-index")
+        .arg("--offline")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(&format!(
+            r#"{{ name = "helper", version = "0.1.0", marker = "{other_executor_marker}" }}"#
+        )),
+        "{dep}"
+    );
+    assert!(!lock.contains("\nstage = "), "{lock}");
+    assert!(
+        resolution_sections(&lock).contains(r#"name = "helper""#),
+        "{lock}"
+    );
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--no-index")
+        .arg("--offline")
+        .arg("--locked")
+        .assert()
+        .success();
+    context
+        .sync()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .assert()
+        .success();
+    assert!(context.site_packages().join("dep").exists());
 
     Ok(())
 }
@@ -10657,6 +15534,107 @@ fn lock_build_dependencies_static_sdist_build_requires_invalidate() -> Result<()
     Ok(())
 }
 
+/// Verify that replacing a same-version `--find-links` source archive invalidates its build lock.
+#[test]
+fn lock_build_dependencies_find_links_sdist_build_requires_invalidate() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("helper_a-0.1.0-py3-none-any.whl"),
+        "helper-a",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &links_dir.child("helper_b-0.1.0-py3-none-any.whl"),
+        "helper-b",
+        "0.1.0",
+    )?;
+
+    let source_dist = links_dir.child("dep-0.1.0.zip");
+    let write_source_dist = |helper: &str| -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+        let pyproject_toml = format!(
+            r#"
+                [project]
+                name = "dep"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+
+                [build-system]
+                requires = ["{helper}==0.1.0"]
+                backend-path = ["."]
+                build-backend = "build_backend"
+                "#
+        );
+        block_on(zip.write_entry_whole(entry, pyproject_toml.as_bytes()))?;
+        let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"def get_requires_for_build_wheel(config_settings=None):\n    return []\n",
+        ))?;
+        let entry = ZipEntryBuilder::new("dep-0.1.0/dep/__init__.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+        Ok(())
+    };
+    write_source_dist("helper-a")?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep==0.1.0"]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"build-requires = [{ name = "helper-a", specifier = "==0.1.0" }]"#),
+        "{dep}"
+    );
+
+    write_source_dist("helper-b")?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Verify that changing build requirements in a mutable direct URL source archive invalidates
 /// the locked build environment, while an offline check can still reuse the captured metadata.
 #[tokio::test]
@@ -10769,6 +15747,123 @@ async fn lock_build_dependencies_direct_url_sdist_build_requires_invalidate() ->
         .arg("--find-links")
         .arg(links_dir.path())
         .arg("--locked")
+        .arg("--no-cache"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Verify that changing extra build dependencies invalidates a direct-URL build lock even when
+/// the archive cannot be refreshed in offline mode.
+#[tokio::test]
+async fn lock_direct_url_extra_build_requires_invalidate_offline() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &links_dir.child("extra-0.1.0-py3-none-any.whl"),
+        "extra",
+        "0.1.0",
+    )?;
+
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper==0.1.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/dep/__init__.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    let archive = block_on(zip.close())?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/dep-0.1.0.zip"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(archive))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep @ {}/dep-0.1.0.zip"]
+
+        [tool.uv.extra-build-dependencies]
+        dep = ["extra==0.1.0"]
+        "#,
+        server.uri()
+    ))?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"{ name = "extra", specifier = "==0.1.0" }"#),
+        "{dep}"
+    );
+    assert!(lock.contains("build-settings = "), "{lock}");
+
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep @ {}/dep-0.1.0.zip"]
+        "#,
+        server.uri()
+    ))?;
+    server.reset().await;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--locked")
+        .arg("--offline")
         .arg("--no-cache"), @"
     success: false
     exit_code: 1
@@ -10993,19 +16088,10 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:flit-core:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "flit-core"
-
-        [[resolution]]
         id = "build:flit-core:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "flit-core"
 
         [[resolution]]
@@ -11028,22 +16114,10 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         ]
 
         [[resolution]]
-        id = "build:wheel:wheel:bootstrap:[BUILD-ID]"
-        kind = "build"
-        operation = "wheel"
-        mode = "isolated"
-        stage = "bootstrap"
-        name = "wheel"
-        roots = [
-            { name = "flit-core", version = "3.9.0" },
-        ]
-
-        [[resolution]]
         id = "build:wheel:wheel:build:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
         mode = "isolated"
-        stage = "build"
         name = "wheel"
         roots = [
             { name = "flit-core", version = "3.9.0" },
@@ -11077,9 +16151,9 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         build-only = true
         build-dependencies = []
-        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/e6/c1ac50fe3eebb38a155155711e6e864e254ce4b6e17fe2429b4c4d5b9e80/flit_core-3.9.0.tar.gz", hash = "sha256:72ad266176c4a3fcfab5f2930d76896059851240570ce9a98733b658cb786eba", size = 41917, upload-time = "2023-05-14T14:48:51.809Z", requires-python = ">=3.6" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z" },
+            { url = "https://files.pythonhosted.org/packages/38/45/618e84e49a6c51e5dd15565ec2fcd82ab273434f236b8f108f065ded517a/flit_core-3.9.0-py3-none-any.whl", hash = "sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301", size = 63141, upload-time = "2023-05-14T14:48:49.24Z", requires-python = ">=3.6" },
         ]
 
         [[package]]
@@ -11105,9 +16179,9 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         build-dependencies = [
             { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z", requires-python = ">=3.8" },
         ]
 
         [[package]]
@@ -11118,9 +16192,9 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         build-dependencies = [
             { name = "flit-core", version = "3.9.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z", requires-python = ">=3.8" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z", requires-python = ">=3.8" },
         ]
         "#);
     });
@@ -11492,7 +16566,7 @@ fn sync_filters_locked_build_resolutions_to_selected_packages() -> Result<()> {
     helper_dir
         .child("helper/__init__.py")
         .write_str("__version__ = '0.1.0'")?;
-    let helper_url = Url::from_directory_path(helper_dir.path()).unwrap();
+    let helper_url = Url::from_directory_path(helper_dir.path()).expect("valid helper URL");
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -11828,6 +16902,872 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
+/// Verify that an alternate registry sdist that cannot be selected never runs its backend hook
+/// while a compatible wheel serves the active build executor.
+#[tokio::test]
+async fn lock_build_dependencies_skip_ineligible_alternate_sdist_hooks() -> Result<()> {
+    for (sdist_metadata, requirement) in [
+        (r#"data-yanked="bad source""#, r#""nested>=0.1.0""#),
+        (r#"data-requires-python=">=3.13""#, r#""nested==0.1.0""#),
+    ] {
+        let context = uv_test::test_context!("3.12");
+        let simple = context.temp_dir.child("simple/nested");
+        simple.create_dir_all()?;
+        let files = context.temp_dir.child("files");
+        files.create_dir_all()?;
+
+        write_wheel(
+            &files.child("nested-0.1.0-py3-none-any.whl"),
+            "nested",
+            "0.1.0",
+        )?;
+        let source_dist = files.child("nested-0.1.0.zip");
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("nested-0.1.0/pyproject.toml".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            br#"
+            [project]
+            name = "nested"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = []
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#,
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("nested-0.1.0/build_backend.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            br#"
+def get_requires_for_build_wheel(config_settings=None):
+    raise RuntimeError("ineligible alternate source distribution hook was called")
+"#,
+        ))?;
+        fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+        simple.child("index.html").write_str(&format!(
+            r#"
+            <a href="../../files/nested-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">nested-0.1.0-py3-none-any.whl</a>
+            <a href="../../files/nested-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z" {sdist_metadata}>nested-0.1.0.zip</a>
+            "#,
+        ))?;
+        let index = Url::from_directory_path(context.temp_dir.child("simple").path())
+            .expect("valid index URL");
+
+        write_executor_build_project(&context, requirement, None)?;
+        for pyproject in [
+            context.temp_dir.child("pyproject.toml"),
+            context.temp_dir.child("dep/pyproject.toml"),
+        ] {
+            let contents = fs_err::read_to_string(pyproject.path())?;
+            pyproject.write_str(&contents.replace(
+                r#"requires-python = ">=3.12""#,
+                r#"requires-python = ">=3.12,<4""#,
+            ))?;
+        }
+        context
+            .lock()
+            .arg("--index")
+            .arg(index.as_str())
+            .arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .assert()
+            .success();
+    }
+
+    Ok(())
+}
+
+/// Verify that a source artifact selected for a foreign target fails clearly before its backend
+/// hook is run when the source is ineligible, while a disallowed yanked source is pruned.
+#[tokio::test]
+async fn lock_build_dependencies_reject_ineligible_selected_sdist_hooks() -> Result<()> {
+    for (sdist_metadata, requirement, expected_cause) in [
+        (r#"data-yanked="bad source""#, r#""nested>=0.1.0""#, None),
+        (
+            r#"data-requires-python=">=3.13""#,
+            r#""nested==0.1.0""#,
+            Some("source distribution requires Python `>=3.13`"),
+        ),
+    ] {
+        let context = uv_test::test_context!("3.12");
+        let simple = context.temp_dir.child("simple/nested");
+        simple.create_dir_all()?;
+        let files = context.temp_dir.child("files");
+        files.create_dir_all()?;
+
+        write_wheel(
+            &files.child("nested-0.1.0-py3-none-any.whl"),
+            "nested",
+            "0.1.0",
+        )?;
+        let source_dist = files.child("nested-0.1.0.zip");
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("nested-0.1.0/pyproject.toml".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            br#"
+            [project]
+            name = "nested"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = []
+            backend-path = ["."]
+            build-backend = "build_backend"
+            "#,
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("nested-0.1.0/build_backend.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            br#"
+def get_requires_for_build_wheel(config_settings=None):
+    raise RuntimeError("ineligible selected source distribution hook was called")
+"#,
+        ))?;
+        fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+        simple.child("index.html").write_str(&format!(
+            r#"
+            <a href="../../files/nested-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,!=3.13.*">nested-0.1.0-py3-none-any.whl</a>
+            <a href="../../files/nested-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z" {sdist_metadata}>nested-0.1.0.zip</a>
+            "#,
+        ))?;
+        let index = Url::from_directory_path(context.temp_dir.child("simple").path())
+            .expect("valid index URL");
+
+        write_executor_build_project(&context, requirement, None)?;
+        for pyproject in [
+            context.temp_dir.child("pyproject.toml"),
+            context.temp_dir.child("dep/pyproject.toml"),
+        ] {
+            let contents = fs_err::read_to_string(pyproject.path())?;
+            pyproject.write_str(&contents.replace(
+                r#"requires-python = ">=3.12""#,
+                r#"requires-python = ">=3.12,<3.14""#,
+            ))?;
+        }
+        let output = context
+            .lock()
+            .arg("--index")
+            .arg(index.as_str())
+            .arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .output()?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if let Some(expected_cause) = expected_cause {
+            assert!(!output.status.success(), "{stderr}");
+            assert!(
+                stderr.contains("Cannot lock build dependencies for `nested==0.1.0`"),
+                "{stderr}"
+            );
+            assert!(stderr.contains(expected_cause), "{stderr}");
+        } else {
+            assert!(output.status.success(), "{stderr}");
+        }
+        assert!(
+            !stderr.contains("ineligible selected source distribution hook was called"),
+            "{stderr}"
+        );
+    }
+
+    Ok(())
+}
+
+/// Verify that a same-version yanked runtime source is omitted even when an unyanked wheel
+/// leaves another supported Python target uncovered.
+#[tokio::test]
+async fn lock_build_dependencies_omit_yanked_runtime_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/dep");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    write_wheel(&files.child("dep-0.1.0-py3-none-any.whl"), "dep", "0.1.0")?;
+    let source_dist = files.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+def get_requires_for_build_wheel(config_settings=None):
+    raise RuntimeError("yanked runtime source distribution hook was called")
+"#,
+    ))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    simple.child("index.html").write_str(
+        r#"
+        <a href="../../files/dep-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,!=3.13.*">dep-0.1.0-py3-none-any.whl</a>
+        <a href="../../files/dep-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z" data-yanked="bad source">dep-0.1.0.zip</a>
+        "#,
+    )?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.14"
+        dependencies = ["dep>=0.1.0"]
+        "#,
+    )?;
+    let output = context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .output()?;
+    assert!(output.status.success(), "{output:?}");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains("dep-0.1.0-py3-none-any.whl"), "{dep}");
+    assert!(!dep.contains("dep-0.1.0.zip"), "{dep}");
+
+    let output = context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--no-binary-package")
+        .arg("dep")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .output()?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("can't be installed because it is marked as `--no-binary` but has no source distribution"),
+        "{stderr}"
+    );
+    assert!(
+        !stderr.contains("yanked runtime source distribution hook was called"),
+        "{stderr}"
+    );
+
+    Ok(())
+}
+
+/// Verify frozen runtime selection rejects a Python-ineligible source distribution before its
+/// backend runs when `--no-binary-package` disables the only compatible wheel.
+#[test]
+fn lock_build_dependencies_reject_python_incompatible_runtime_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/helper");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    let wheel = "helper-1.0.0-py3-none-any.whl";
+    let source = "helper-1.0.0.zip";
+    write_wheel(&files.child(wheel), "helper", "1.0.0")?;
+
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("helper-1.0.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "helper"
+        version = "1.0.0"
+        requires-python = ">=3.13,<3.14"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("helper-1.0.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+def get_requires_for_build_wheel(config_settings=None):
+    raise RuntimeError("Python-incompatible runtime source hook was called")
+"#,
+    ))?;
+    fs_err::write(files.child(source).path(), block_on(zip.close())?)?;
+
+    simple.child("index.html").write_str(&format!(
+        r#"
+        <a href="../../files/{wheel}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,<3.13">{wheel}</a>
+        <a href="../../files/{source}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.13,<3.14">{source}</a>
+        "#
+    ))?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    // Keep one local source build so the generated lock uses the build-aware schema while the
+    // runtime helper itself remains fully served by its compatible wheel.
+    write_executor_build_project(&context, "", None)?;
+    for pyproject in [
+        context.temp_dir.child("pyproject.toml"),
+        context.temp_dir.child("dep/pyproject.toml"),
+    ] {
+        let contents = fs_err::read_to_string(pyproject.path())?;
+        let contents = contents.replace(
+            r#"requires-python = ">=3.12""#,
+            r#"requires-python = ">=3.12,<3.13""#,
+        );
+        pyproject.write_str(&contents)?;
+    }
+    let project = context.temp_dir.child("pyproject.toml");
+    let contents = fs_err::read_to_string(project.path())?;
+    project.write_str(&contents.replace(
+        r#"dependencies = ["dep"]"#,
+        r#"dependencies = ["dep", "helper==1.0.0"]"#,
+    ))?;
+
+    context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let helper = package_section(&lock, "helper");
+    assert!(helper.contains(wheel), "{helper}");
+    assert!(helper.contains(source), "{helper}");
+    assert!(helper.contains(">=3.13, <3.14"), "{helper}");
+
+    let output = context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--no-binary-package")
+        .arg("helper")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .output()?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("helper==1.0.0"), "{stderr}");
+    assert!(
+        !stderr.contains("Python-incompatible runtime source hook was called"),
+        "{stderr}"
+    );
+
+    Ok(())
+}
+
+/// Verify that a disallowed yanked wheel for another Python target cannot hide an eligible
+/// runtime source distribution whose backend hook requirements must be locked.
+#[tokio::test]
+async fn lock_build_dependencies_capture_yanked_runtime_sdist_hooks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple");
+    let dep = simple.child("dep");
+    dep.create_dir_all()?;
+    let helper = simple.child("helper");
+    helper.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    write_wheel(&files.child("dep-0.1.0-py3-none-any.whl"), "dep", "0.1.0")?;
+    write_wheel_with_requires_and_tag(
+        &files.child("dep-0.1.0-cp313-none-any.whl"),
+        "dep",
+        "0.1.0",
+        &[],
+        "cp313-none-any",
+    )?;
+    write_build_source(
+        &files.child("dep-0.1.0.zip"),
+        "dep",
+        "0.1.0",
+        Some(("helper==0.1.0", "helper")),
+    )?;
+    write_wheel(
+        &files.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    dep.child("index.html").write_str(
+        r#"
+        <a href="../../files/dep-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,!=3.13.*">dep-0.1.0-py3-none-any.whl</a>
+        <a href="../../files/dep-0.1.0-cp313-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.13,<3.14" data-yanked="bad build">dep-0.1.0-cp313-none-any.whl</a>
+        <a href="../../files/dep-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">dep-0.1.0.zip</a>
+        "#,
+    )?;
+    helper.child("index.html").write_str(
+        r#"<a href="../../files/helper-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">helper-0.1.0-py3-none-any.whl</a>"#,
+    )?;
+    let index = Url::from_directory_path(simple.path()).expect("valid index URL");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.14"
+        dependencies = ["dep>=0.1.0"]
+        "#,
+    )?;
+    context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains("dep-0.1.0-py3-none-any.whl"), "{dep}");
+    assert!(!dep.contains("dep-0.1.0-cp313-none-any.whl"), "{dep}");
+    assert!(dep.contains("dep-0.1.0.zip"), "{dep}");
+    assert!(
+        dep.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{dep}"
+    );
+
+    Ok(())
+}
+
+/// Verify that a yanked foreign-target wheel cannot hide the hook requirements of an eligible
+/// runtime source distribution.
+#[tokio::test]
+async fn lock_build_dependencies_capture_yanked_runtime_wheel_sdist_hooks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let simple = context.temp_dir.child("simple");
+    let dep = simple.child("dep");
+    dep.create_dir_all()?;
+    let helper = simple.child("helper");
+    helper.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    write_wheel(&files.child("dep-0.1.0-1-py3-none-any.whl"), "dep", "0.1.0")?;
+    write_wheel(&files.child("dep-0.1.0-2-py3-none-any.whl"), "dep", "0.1.0")?;
+    write_build_source(
+        &files.child("dep-0.1.0.zip"),
+        "dep",
+        "0.1.0",
+        Some(("helper==0.1.0", "helper")),
+    )?;
+    write_wheel(
+        &files.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    dep.child("index.html").write_str(
+        r#"
+        <a href="../../files/dep-0.1.0-1-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,<3.13">dep-0.1.0-1-py3-none-any.whl</a>
+        <a href="../../files/dep-0.1.0-2-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.13,<3.14" data-yanked="bad build">dep-0.1.0-2-py3-none-any.whl</a>
+        <a href="../../files/dep-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">dep-0.1.0.zip</a>
+        "#,
+    )?;
+    helper.child("index.html").write_str(
+        r#"<a href="../../files/helper-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">helper-0.1.0-py3-none-any.whl</a>"#,
+    )?;
+    let index = Url::from_directory_path(simple.path()).expect("valid index URL");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.14"
+        dependencies = ["dep>=0.1.0"]
+        "#,
+    )?;
+    context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{dep}"
+    );
+
+    Ok(())
+}
+
+/// Verify that a yanked wheel allowed by an exact build requirement cannot leak into the
+/// unscoped runtime package, where the same version is selected by an unpinned requirement.
+#[tokio::test]
+async fn lock_build_dependencies_scope_yanked_build_wheel_from_runtime() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple");
+    let dep = simple.child("dep");
+    dep.create_dir_all()?;
+    let helper = simple.child("helper");
+    helper.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    let runtime_wheel = "dep-0.1.0-1-py3-none-any.whl";
+    let yanked_wheel = "dep-0.1.0-2-py3-none-any.whl";
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b"VALUE = 'runtime'\n"))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0.dist-info/METADATA".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b"Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n"))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0.dist-info/WHEEL".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0.dist-info/RECORD".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    fs_err::write(files.child(runtime_wheel).path(), block_on(zip.close())?)?;
+
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b"VALUE = 'build'\n"))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0.dist-info/METADATA".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b"Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n"))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0.dist-info/WHEEL".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0.dist-info/RECORD".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    fs_err::write(files.child(yanked_wheel).path(), block_on(zip.close())?)?;
+
+    write_build_source(
+        &files.child("dep-0.1.0.zip"),
+        "dep",
+        "0.1.0",
+        Some(("helper==0.1.0", "helper")),
+    )?;
+    write_wheel(
+        &files.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    dep.child("index.html").write_str(&format!(
+        r#"
+        <a href="../../files/{runtime_wheel}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,<3.13">{runtime_wheel}</a>
+        <a href="../../files/{yanked_wheel}" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,<3.14" data-yanked="allowed exact build pin">{yanked_wheel}</a>
+        <a href="../../files/dep-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">dep-0.1.0.zip</a>
+        "#
+    ))?;
+    helper.child("index.html").write_str(
+        r#"<a href="../../files/helper-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">helper-0.1.0-py3-none-any.whl</a>"#,
+    )?;
+    let index = Url::from_directory_path(simple.path()).expect("valid index URL");
+
+    let builder = context.temp_dir.child("builder");
+    builder.create_dir_all()?;
+    builder.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["dep==0.1.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    builder.child("build_backend.py").write_str(
+        r#"
+import dep
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    if dep.VALUE != "build":
+        raise RuntimeError(f"selected runtime wheel for exact build pin: {dep.VALUE}")
+    filename = "builder-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("builder.py", "")
+        wheel.writestr(
+            "builder-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: builder\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "builder-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("builder-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.14"
+        dependencies = ["builder", "dep>=0.1.0"]
+
+        [tool.uv.sources]
+        builder = { path = "builder" }
+        "#,
+    )?;
+    context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep_packages = lock
+        .split("\n[[package]]")
+        .skip(1)
+        .filter(|package| package.contains("\nname = \"dep\""))
+        .collect::<Vec<_>>();
+    let runtime = dep_packages
+        .iter()
+        .find(|package| !package.contains("\nresolution-id = "))
+        .expect("unscoped runtime dep package");
+    assert!(runtime.contains(runtime_wheel), "{runtime}");
+    assert!(!runtime.contains(yanked_wheel), "{runtime}");
+    assert!(runtime.contains("dep-0.1.0.zip"), "{runtime}");
+    assert!(
+        runtime.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{runtime}"
+    );
+    let scoped = dep_packages
+        .iter()
+        .find(|package| package.contains("\nresolution-id = "))
+        .expect("build-scoped dep package");
+    assert!(scoped.contains(yanked_wheel), "{scoped}");
+
+    context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    context
+        .run()
+        .arg("--no-sync")
+        .arg("python")
+        .arg("-c")
+        .arg("import dep; assert dep.VALUE == 'runtime', dep.VALUE")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify that forcing a nested registry source build captures its hook requirements even when a
+/// compatible wheel is available, and that the nested source can be replayed while frozen.
+#[test]
+fn lock_build_dependencies_replay_no_binary_nested_source_hooks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let nested = context.temp_dir.child("simple/nested");
+    nested.create_dir_all()?;
+    let helper = context.temp_dir.child("simple/helper");
+    helper.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    write_wheel(
+        &files.child("nested-0.1.0-py3-none-any.whl"),
+        "nested",
+        "0.1.0",
+    )?;
+    write_build_source(
+        &files.child("nested-0.1.0.zip"),
+        "nested",
+        "0.1.0",
+        Some(("helper==1.0.0", "helper")),
+    )?;
+    write_wheel(
+        &files.child("helper-1.0.0-py3-none-any.whl"),
+        "helper",
+        "1.0.0",
+    )?;
+
+    nested.child("index.html").write_str(
+        r#"
+        <a href="../../files/nested-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">nested-0.1.0-py3-none-any.whl</a>
+        <a href="../../files/nested-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">nested-0.1.0.zip</a>
+        "#,
+    )?;
+    helper.child("index.html").write_str(
+        r#"
+        <a href="../../files/helper-1.0.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">helper-1.0.0-py3-none-any.whl</a>
+        "#,
+    )?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    write_executor_build_project(&context, r#""nested==0.1.0""#, Some("nested"))?;
+    context
+        .lock()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--no-binary-package")
+        .arg("nested")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let nested = package_section(&lock, "nested");
+    assert!(nested.contains("nested-0.1.0.zip"), "{nested}");
+    let resolutions = resolution_sections(&lock);
+    let nested_resolution = resolutions
+        .split("\n\n")
+        .find(|resolution| resolution.contains("\nname = \"nested\"\n"))
+        .expect("locked nested resolution");
+    assert!(
+        nested_resolution.contains(r#"{ name = "helper", version = "1.0.0""#),
+        "{nested_resolution}"
+    );
+
+    context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--no-binary-package")
+        .arg("nested")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify that a retained wheel forbidden by `--no-binary-package` cannot hide a source
+/// distribution that is ineligible for the active build executor.
+#[tokio::test]
+async fn lock_build_dependencies_reject_no_binary_ineligible_sdist_hooks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let simple = context.temp_dir.child("simple/nested");
+    simple.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    write_wheel(
+        &files.child("nested-0.1.0-py3-none-any.whl"),
+        "nested",
+        "0.1.0",
+    )?;
+    let source_dist = files.child("nested-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("nested-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "nested"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("nested-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+def get_requires_for_build_wheel(config_settings=None):
+    raise RuntimeError("ineligible no-binary source distribution hook was called")
+"#,
+    ))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    simple.child("index.html").write_str(
+        r#"
+        <a href="../../files/nested-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,!=3.13.*">nested-0.1.0-py3-none-any.whl</a>
+        <a href="../../files/nested-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.13">nested-0.1.0.zip</a>
+        "#,
+    )?;
+    let index =
+        Url::from_directory_path(context.temp_dir.child("simple").path()).expect("valid index URL");
+
+    write_executor_build_project(&context, r#""nested==0.1.0""#, None)?;
+    let output = context
+        .lock()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--no-binary-package")
+        .arg("nested")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .output()?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("No solution found when resolving: `nested==0.1.0`"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("does not satisfy Python>=3.13"), "{stderr}");
+    assert!(
+        !stderr.contains("ineligible no-binary source distribution hook was called"),
+        "{stderr}"
+    );
+
+    Ok(())
+}
+
 /// Verify that backend hooks are not called for a registry sdist when a
 /// universal wheel makes it unreachable.
 #[tokio::test]
@@ -11942,9 +17882,10 @@ def get_requires_for_build_wheel(config_settings=None):
 #[tokio::test]
 async fn lock_build_dependencies_skip_unreachable_supported_platform_sdist_hooks() -> Result<()> {
     assert_supported_wheel_skips_registry_sdist_hook(
-        "py3-none-macosx_11_0_arm64",
+        "py3-none-win_amd64",
         ">=3.12,<4",
-        "sys_platform == 'darwin' and platform_machine == 'arm64'",
+        "sys_platform == 'win32' and platform_machine == 'AMD64'",
+        true,
     )
     .await
 }
@@ -11957,6 +17898,26 @@ async fn lock_build_dependencies_skip_unreachable_supported_python_sdist_hooks()
         "cp312-none-any",
         ">=3.12,<4",
         "python_full_version == '3.12.*' and platform_python_implementation == 'CPython'",
+        true,
+    )
+    .await
+}
+
+/// Verify that versioned platform wheels do not hide a potentially reachable registry sdist.
+#[tokio::test]
+async fn lock_build_dependencies_capture_versioned_platform_sdist_hooks() -> Result<()> {
+    assert_supported_wheel_skips_registry_sdist_hook(
+        "py3-none-manylinux_2_17_x86_64",
+        ">=3.12,<4",
+        "sys_platform == 'linux' and platform_machine == 'x86_64'",
+        false,
+    )
+    .await?;
+    assert_supported_wheel_skips_registry_sdist_hook(
+        "py3-none-macosx_11_0_arm64",
+        ">=3.12,<4",
+        "sys_platform == 'darwin' and platform_machine == 'arm64'",
+        false,
     )
     .await
 }
@@ -11965,6 +17926,7 @@ async fn assert_supported_wheel_skips_registry_sdist_hook(
     wheel_tag: &str,
     requires_python: &str,
     supported_environment: &str,
+    should_skip: bool,
 ) -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -12057,6 +18019,22 @@ def get_requires_for_build_wheel(config_settings=None):
         environments = ["{supported_environment}"]
         "#
         ))?;
+
+    if !should_skip {
+        let output = context
+            .lock()
+            .arg("--index-url")
+            .arg(index_url)
+            .arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .output()?;
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr)
+                .contains("unreachable source distribution hook was called")
+        );
+        return Ok(());
+    }
 
     let mut filters = context.filters();
     filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
@@ -12270,6 +18248,173 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Installed 1 package in [TIME]
      + parent==0.1.0 (from file://[TEMP_DIR]/parent)
     ");
+
+    Ok(())
+}
+
+/// Verify that nested source-build resolution IDs from a relative local index do not depend on
+/// the absolute workspace path.
+#[test]
+fn lock_build_dependencies_nested_local_registry_resolution_ids_are_portable() -> Result<()> {
+    let first = uv_test::test_context!("3.12");
+    let second = uv_test::test_context!("3.12");
+
+    for context in [&first, &second] {
+        let links = context.temp_dir.child("links");
+        links.create_dir_all()?;
+        write_build_source(
+            &links.child("nested-0.1.0.zip"),
+            "nested",
+            "0.1.0",
+            Some(("helper==0.1.0", "helper")),
+        )?;
+        write_wheel(
+            &links.child("helper-0.1.0-py3-none-any.whl"),
+            "helper",
+            "0.1.0",
+        )?;
+        write_executor_build_project(context, r#""nested==0.1.0""#, None)?;
+
+        context
+            .lock()
+            .arg("--find-links")
+            .arg("links")
+            .arg("--no-index")
+            .arg("--preview-features")
+            .arg("lock-build-dependencies")
+            .assert()
+            .success();
+    }
+
+    let first_resolutions = resolution_sections(&first.read("uv.lock"));
+    let second_resolutions = resolution_sections(&second.read("uv.lock"));
+    assert_eq!(first_resolutions, second_resolutions);
+
+    Ok(())
+}
+
+/// Verify that a Python-restricted universal wheel does not hide the hook requirements of a
+/// fallback source distribution inside a locked build environment.
+#[tokio::test]
+async fn lock_build_dependencies_capture_requires_python_nested_sdist_hooks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let simple = context.temp_dir.child("simple");
+    let nested = simple.child("nested");
+    nested.create_dir_all()?;
+    let helper = simple.child("helper");
+    helper.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    write_wheel(
+        &files.child("nested-0.1.0-py3-none-any.whl"),
+        "nested",
+        "0.1.0",
+    )?;
+    write_build_source(
+        &files.child("nested-0.1.0.zip"),
+        "nested",
+        "0.1.0",
+        Some(("helper==0.1.0", "helper")),
+    )?;
+    write_wheel(
+        &files.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    nested.child("index.html").write_str(
+        r#"
+        <a href="../../files/nested-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12,!=3.13.*">nested-0.1.0-py3-none-any.whl</a>
+        <a href="../../files/nested-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">nested-0.1.0.zip</a>
+        "#,
+    )?;
+    helper.child("index.html").write_str(
+        r#"<a href="../../files/helper-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">helper-0.1.0-py3-none-any.whl</a>"#,
+    )?;
+    let index = Url::from_directory_path(simple.path()).expect("valid index URL");
+
+    write_executor_build_project(&context, r#""nested==0.1.0""#, None)?;
+
+    context
+        .lock()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let nested = package_section(&lock, "nested");
+    assert!(
+        nested.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{nested}"
+    );
+
+    Ok(())
+}
+
+/// Verify that a yanked universal wheel that is not allowed by the build requirement does not
+/// hide the hook requirements of an eligible source distribution in a locked build environment.
+#[tokio::test]
+async fn lock_build_dependencies_capture_yanked_nested_sdist_hooks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let simple = context.temp_dir.child("simple");
+    let nested = simple.child("nested");
+    nested.create_dir_all()?;
+    let helper = simple.child("helper");
+    helper.create_dir_all()?;
+    let files = context.temp_dir.child("files");
+    files.create_dir_all()?;
+
+    write_wheel(
+        &files.child("nested-0.1.0-py3-none-any.whl"),
+        "nested",
+        "0.1.0",
+    )?;
+    write_build_source(
+        &files.child("nested-0.1.0.zip"),
+        "nested",
+        "0.1.0",
+        Some(("helper==0.1.0", "helper")),
+    )?;
+    write_wheel(
+        &files.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    nested.child("index.html").write_str(
+        r#"
+        <a href="../../files/nested-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z" data-yanked="bad build">nested-0.1.0-py3-none-any.whl</a>
+        <a href="../../files/nested-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z" data-requires-python=">=3.12">nested-0.1.0.zip</a>
+        "#,
+    )?;
+    helper.child("index.html").write_str(
+        r#"<a href="../../files/helper-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">helper-0.1.0-py3-none-any.whl</a>"#,
+    )?;
+    let index = Url::from_directory_path(simple.path()).expect("valid index URL");
+
+    write_executor_build_project(&context, r#""nested>=0.1.0""#, None)?;
+
+    context
+        .lock()
+        .arg("--index")
+        .arg(index.as_str())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let nested = package_section(&lock, "nested");
+    assert!(
+        nested.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{nested}"
+    );
 
     Ok(())
 }
@@ -12773,6 +18918,15 @@ fn lock_build_dependencies_build_only_source_package() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
+    context
+        .sync()
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--frozen")
+        .assert()
+        .success();
+
     let missing_url = Url::from_directory_path(context.temp_dir.child("missing").path()).unwrap();
     builder_pyproject.write_str(&format!(
         r#"
@@ -12792,17 +18946,22 @@ fn lock_build_dependencies_build_only_source_package() -> Result<()> {
 
     uv_snapshot!(context.filters(), context
         .sync()
+        .arg("--no-cache")
         .arg("--preview-features")
         .arg("lock-build-dependencies")
         .arg("--frozen"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+      × Failed to build `dep @ file://[TEMP_DIR]/dep`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to build `builder @ file://[TEMP_DIR]/builder`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ╰─▶ The initial build requirements for `builder` do not match the locked bootstrap environment
+
+    hint: `dep` was included because `project` (v0.1.0) depends on `dep`
     ");
 
     builder_pyproject.write_str(

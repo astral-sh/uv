@@ -2100,7 +2100,8 @@ fn sync_build_isolation_package_order() -> Result<()> {
         "#,
     )?;
 
-    // Running `uv sync` should install everything in a single phase, since the build is cached.
+    // Running `uv sync` should install the isolated dependencies first, then rebuild the source
+    // distribution without build isolation.
     uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
@@ -2108,8 +2109,10 @@ fn sync_build_isolation_package_order() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    Installed 5 packages in [TIME]
+    Prepared 1 package without build isolation in [TIME]
     Uninstalled 1 package in [TIME]
-    Installed 6 packages in [TIME]
+    Installed 1 package in [TIME]
      + hatchling==1.22.4
      + packaging==24.0
      + pathspec==0.12.1
@@ -15293,7 +15296,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with a 0.1, without `--reinstall`.
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
-        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.2"), @"
+        .env("EXPECTED_A_VERSION", "0.2"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15313,7 +15316,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
-        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.1"), @"
+        .env("EXPECTED_A_VERSION", "0.1"), @"
     success: true
     exit_code: 0
     ----- stdout -----

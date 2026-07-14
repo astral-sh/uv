@@ -353,3 +353,107 @@ fn check_no_sync_rejects_changed_cached_build_settings() -> Result<()> {
 
     Ok(())
 }
+
+/// A hashless tool wheel from a local index is mutable. Reusing a cached environment after the
+/// wheel changes would silently run stale code during a frozen check.
+#[test]
+fn check_no_sync_invalidates_hashless_local_index_wheel() -> Result<()> {
+    fn write_tool_wheel(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("ty.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            format!("def main():\n    print('All checks passed! ({value})')\n").as_bytes(),
+        ))?;
+        let entry = ZipEntryBuilder::new("ty-1.2.3.dist-info/METADATA".into(), Compression::Stored);
+        block_on(
+            zip.write_entry_whole(entry, b"Metadata-Version: 2.3\nName: ty\nVersion: 1.2.3\n"),
+        )?;
+        let entry = ZipEntryBuilder::new("ty-1.2.3.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry = ZipEntryBuilder::new(
+            "ty-1.2.3.dist-info/entry_points.txt".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(entry, b"[console_scripts]\nty = ty:main\n"))?;
+        let entry = ZipEntryBuilder::new("ty-1.2.3.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let tool_wheel = links.child("ty-1.2.3-py3-none-any.whl");
+    write_tool_wheel(&tool_wheel, "first")?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty==1.2.3"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    assert!(!lock.contains("hash ="), "{lock}");
+
+    uv_snapshot!(context.filters(), context
+        .check()
+        .arg("--no-sync")
+        .arg("--frozen")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--no-index"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed! (first)
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    ");
+
+    write_tool_wheel(&tool_wheel, "second")?;
+
+    uv_snapshot!(context.filters(), context
+        .check()
+        .arg("--no-sync")
+        .arg("--frozen")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--no-index"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed! (second)
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    ");
+
+    Ok(())
+}
