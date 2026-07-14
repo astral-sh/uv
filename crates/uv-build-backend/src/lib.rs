@@ -80,6 +80,8 @@ pub enum Error {
     /// Either an absolute path or a parent path through `..`.
     #[error("The path for the data directory {} must be inside the project: {}", name, path.user_display())]
     InvalidDataRoot { name: String, path: PathBuf },
+    #[error("The path for the data file must be inside the project: {}", _0.user_display())]
+    InvalidDataFile(PathBuf),
     #[error("Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: {}", _0.user_display())]
     VenvInSourceTree(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: {0}")]

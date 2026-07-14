@@ -1251,6 +1251,75 @@ fn wheel_data_symlink_containment() -> Result<()> {
     Ok(())
 }
 
+/// A symlink below a contained wheel data root must not package an external file or bypass an
+/// exclude that applies to its internal target.
+#[test]
+#[cfg(unix)]
+fn wheel_data_nested_symlink_containment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("src/project/__init__.py").touch()?;
+    project.child("assets/public.txt").touch()?;
+    project.child("assets/private.secret").touch()?;
+    context
+        .temp_dir
+        .child("outside/secret.txt")
+        .write_str("not for distribution")?;
+    fs_err::os::unix::fs::symlink(
+        context.temp_dir.child("outside/secret.txt").path(),
+        project.child("assets/external.txt").path(),
+    )?;
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv.build-backend]
+        wheel-exclude = ["assets/private.secret"]
+
+        [tool.uv.build-backend.data]
+        data = "assets"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel").arg("--list"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: The path for the data file must be inside the project: assets/external.txt
+    ");
+
+    fs_err::remove_file(project.child("assets/external.txt"))?;
+    fs_err::os::unix::fs::symlink(
+        project.child("assets/private.secret").path(),
+        project.child("assets/aliased.txt").path(),
+    )?;
+
+    uv_snapshot!(context.build().arg("project").arg("--wheel").arg("--list"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Building project-0.1.0-py3-none-any.whl will include the following files:
+    project/__init__.py (src/project/__init__.py)
+    project-0.1.0.data/data/public.txt (assets/public.txt)
+    project-0.1.0.dist-info/WHEEL (generated)
+    project-0.1.0.dist-info/METADATA (generated)
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// Show an explicit error when there is a venv in source tree.
 #[test]
 fn venv_in_source_tree() {

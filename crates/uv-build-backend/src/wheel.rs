@@ -633,6 +633,27 @@ fn wheel_subdir_from_globs(
             continue;
         }
 
+        if entry.file_type().is_symlink()
+            && let Some((exclude_matcher, source_tree)) = exclude_matcher
+        {
+            let canonical_source_tree = source_tree.simple_canonicalize()?;
+            let canonical_path = entry.path().simple_canonicalize()?;
+            let Ok(canonical_relative) = canonical_path.strip_prefix(&canonical_source_tree) else {
+                return Err(Error::InvalidDataFile(
+                    entry
+                        .path()
+                        .strip_prefix(source_tree)
+                        .unwrap_or(entry.path())
+                        .to_path_buf(),
+                ));
+            };
+
+            if exclude_matcher.is_match(canonical_relative) {
+                trace!("Excluding {}: {}", globs_field, relative.user_display());
+                continue;
+            }
+        }
+
         debug!("Adding for {}: {}", globs_field, relative.user_display());
         write_directory_once(wheel_writer, &mut written_directories, target)?;
         write_file_with_directories(
