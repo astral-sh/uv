@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
+use crate::{HashAlgorithm, Hashes};
+
 /// Metadata for a distribution that was installed via a direct URL.
 ///
 /// See: <https://packaging.python.org/en/latest/specifications/direct-url-data-structure/>
@@ -126,22 +128,15 @@ impl TryFrom<&DirectUrl> for DisplaySafeUrl {
                     .hashes
                     .as_ref()
                     .and_then(|hashes| {
-                        ["sha512", "sha384", "sha256", "blake2b", "md5"]
-                            .into_iter()
-                            .find_map(|algorithm| {
-                                hashes
-                                    .get(algorithm)
-                                    .map(|digest| format!("{algorithm}={digest}"))
-                            })
+                        HashAlgorithm::preferred().find_map(|algorithm| {
+                            hashes
+                                .get(algorithm.as_str())
+                                .map(|digest| format!("{algorithm}={digest}"))
+                        })
                     })
                     .or_else(|| {
                         let hash = archive_info.hash.as_ref()?;
-                        let (algorithm, _) = hash.split_once('=')?;
-                        matches!(
-                            algorithm,
-                            "sha512" | "sha384" | "sha256" | "blake2b" | "md5"
-                        )
-                        .then(|| hash.clone())
+                        Hashes::parse_fragment(hash).is_ok().then(|| hash.clone())
                     })
                 {
                     fragments.push(hash);

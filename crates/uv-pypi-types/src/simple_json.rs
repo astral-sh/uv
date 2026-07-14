@@ -616,6 +616,31 @@ pub enum HashAlgorithm {
     Blake2b,
 }
 
+impl HashAlgorithm {
+    /// Return the supported [`HashAlgorithm`] variants in order of preference.
+    pub fn preferred() -> impl Iterator<Item = Self> {
+        [
+            Self::Sha512,
+            Self::Sha384,
+            Self::Sha256,
+            Self::Blake2b,
+            Self::Md5,
+        ]
+        .into_iter()
+    }
+
+    /// Return the string representation of the [`HashAlgorithm`].
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Md5 => "md5",
+            Self::Sha256 => "sha256",
+            Self::Sha384 => "sha384",
+            Self::Sha512 => "sha512",
+            Self::Blake2b => "blake2b",
+        }
+    }
+}
+
 impl FromStr for HashAlgorithm {
     type Err = HashError;
 
@@ -633,13 +658,7 @@ impl FromStr for HashAlgorithm {
 
 impl std::fmt::Display for HashAlgorithm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Md5 => write!(f, "md5"),
-            Self::Sha256 => write!(f, "sha256"),
-            Self::Sha384 => write!(f, "sha384"),
-            Self::Sha512 => write!(f, "sha512"),
-            Self::Blake2b => write!(f, "blake2b"),
-        }
+        f.write_str(self.as_str())
     }
 }
 
