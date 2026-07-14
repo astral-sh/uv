@@ -13055,6 +13055,81 @@ fn lock_upgrade_group_missing() -> Result<()> {
     "
     );
 
+    uv_snapshot!(
+        context.filters(),
+        context
+            .lock()
+            .arg("--upgrade")
+            .arg("--upgrade-group")
+            .arg("docs"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Group `docs` is not defined in the project's `dependency-groups` table
+    "
+    );
+
+    Ok(())
+}
+
+/// `--frozen` ignores `--upgrade-group` and uses the existing lockfile.
+#[test]
+fn lock_upgrade_group_frozen() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .lock()
+            .arg("--frozen")
+            .arg("--upgrade-group")
+            .arg("dev"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead
+    "
+    );
+
     Ok(())
 }
 

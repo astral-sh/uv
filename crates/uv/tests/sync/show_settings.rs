@@ -4094,12 +4094,10 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     -                        "sniffio",
     -                    ),
     -                },
-    -                {},
-    -            ),
-    +            strategy: All,
+    +            strategy: All(
+                     {},
+                 ),
                  constraints: {},
-             },
-             reinstall: None,
     ...
     "#
     );
@@ -4152,12 +4150,10 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     -                        "sniffio",
     -                    ),
     -                },
-    -                {},
-    -            ),
-    +            strategy: All,
+    +            strategy: All(
+                     {},
+                 ),
                  constraints: {},
-             },
-             reinstall: None,
     ...
     "#
     );
@@ -4296,12 +4292,10 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     -                        "sniffio",
     -                    ),
     -                },
-    -                {},
-    -            ),
-    +            strategy: All,
+    +            strategy: All(
+                     {},
+                 ),
                  constraints: {},
-             },
-         },
     ...
     "#
     );
@@ -4356,12 +4350,10 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     -                        "sniffio",
     -                    ),
     -                },
-    -                {},
-    -            ),
-    +            strategy: All,
+    +            strategy: All(
+                     {},
+                 ),
                  constraints: {},
-             },
-         },
     ...
     "#
     );

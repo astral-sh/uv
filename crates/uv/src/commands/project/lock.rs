@@ -353,7 +353,9 @@ impl<'env> LockOperation<'env> {
 
     /// Perform a [`LockOperation`].
     pub(crate) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
-        target.validate_upgrade_groups(&self.settings.upgrade)?;
+        if !matches!(&self.mode, LockMode::Frozen(_)) {
+            target.validate_upgrade_groups(&self.settings.upgrade)?;
+        }
 
         match self.mode {
             LockMode::Frozen(source) => {
