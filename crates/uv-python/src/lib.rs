@@ -2253,6 +2253,37 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn find_python_does_not_traverse_broken_child_virtualenv() -> Result<()> {
+        let context = TestContext::new()?;
+
+        let parent_venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(&parent_venv, "3.12.0")?;
+        let child_venv = context.workdir.child(".venv");
+        fs_err::os::unix::fs::symlink(context.workdir.child("missing"), &child_venv)?;
+
+        let result = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::OnlyVirtual,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        });
+        assert!(
+            matches!(
+                &result,
+                Err(discovery::Error::VirtualEnv(
+                    crate::virtualenv::Error::MissingPyVenvCfg(path)
+                )) if path == child_venv.path()
+            ),
+            "A broken child `.venv` must not select the parent environment; got {result:?}"
+        );
+
+        Ok(())
+    }
+
     #[test]
     fn find_python_allows_name_in_working_directory() -> Result<()> {
         let context = TestContext::new()?;
