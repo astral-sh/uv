@@ -5493,6 +5493,33 @@ fn pep_751_rejects_duplicate_active_packages() -> Result<()> {
 }
 
 #[test]
+fn pep_751_requires_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Not a valid `pylock.toml` file: pylock.toml
+      Caused by: TOML parse error at line 1, column 1
+          |
+        1 |
+          | ^
+        missing field `packages`
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_require_hashes_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
