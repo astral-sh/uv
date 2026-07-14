@@ -32,7 +32,7 @@ jobs:
           version: "0.11.28"
       - name: "Find recent issues"
         id: issues
-        run: uv run --locked --no-project --script scripts/issue-triage-preview.py collect
+        run: uv run --locked --no-project --script agents/scripts/issue-triage-preview.py collect
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -66,7 +66,7 @@ jobs:
         with:
           version: "0.11.28"
       - name: "Create or update preview comment"
-        run: uv run --locked --no-project --script scripts/issue-triage-preview.py comment --pull-request "$PULL_REQUEST_NUMBER"
+        run: uv run --locked --no-project --script agents/scripts/issue-triage-preview.py comment --pull-request "$PULL_REQUEST_NUMBER"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
