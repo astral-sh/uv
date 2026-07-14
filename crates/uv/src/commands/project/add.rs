@@ -31,7 +31,10 @@ use uv_git::store_credentials;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
-use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_python::{
+    ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonPreference,
+    PythonRequest,
+};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
@@ -103,7 +106,7 @@ pub(crate) async fn add(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -199,7 +202,7 @@ pub(crate) async fn add(
                     false,
                     python_preference,
                     python_downloads,
-                    no_config,
+                    config_discovery,
                     &client_builder,
                     cache,
                     &reporter,
@@ -221,7 +224,7 @@ pub(crate) async fn add(
             python_downloads,
             &install_mirrors,
             false,
-            no_config,
+            config_discovery,
             active,
             cache,
             printer,
@@ -284,7 +287,7 @@ pub(crate) async fn add(
                 Some(project.workspace()),
                 &defaulted_groups,
                 project_dir,
-                no_config,
+                config_discovery,
             )
             .await?;
             let interpreter = ProjectInterpreter::discover(
@@ -315,7 +318,7 @@ pub(crate) async fn add(
                 python_preference,
                 python_downloads,
                 no_sync,
-                no_config,
+                config_discovery,
                 active,
                 cache,
                 DryRun::Disabled,

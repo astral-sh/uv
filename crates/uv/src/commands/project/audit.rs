@@ -32,7 +32,7 @@ use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -57,7 +57,7 @@ pub(crate) async fn audit(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -128,7 +128,7 @@ pub(crate) async fn audit(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
+                config_discovery,
                 Some(false),
                 &cache,
                 printer,
@@ -141,7 +141,7 @@ pub(crate) async fn audit(
                     Some(workspace),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
