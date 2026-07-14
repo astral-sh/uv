@@ -1,0 +1,76 @@
+# Recommend labels for pull requests without modifying them.
+name: "Pull request labels"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: "A pull request number"
+        required: true
+        type: number
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.pull_request || github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  labels:
+    if: github.repository == 'astral-sh/uv' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.labels.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', inputs.pull_request) }}
+          persist-credentials: false
+
+      - name: "Collect pull request context"
+        run: |
+          gh pr view "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author,baseRefName,headRefName,isDraft,labels,files,additions,deletions,changedFiles \
+            > .pull-request-labels-event.json
+          gh label list \
+            --repo "$GITHUB_REPOSITORY" \
+            --limit 1000 \
+            --json name,description \
+            > .pull-request-labels.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request || github.event.pull_request.number }}
+
+      - name: "Determine pull request labels"
+        id: labels
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: "agents/codex"
+          permission-profile: "pull-request-labels"
+          safety-strategy: drop-sudo
+          prompt-file: "agents/prompts/pull-request-labels.md"
+          output-schema-file: "agents/schemas/pull-request-labels.json"
+
+  report:
+    needs: labels
+    if: needs.labels.outputs.result != ''
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: "Write label recommendations"
+        run: printf '%s\n' "$LABEL_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          LABEL_RESULT: ${{ needs.labels.outputs.result }}
