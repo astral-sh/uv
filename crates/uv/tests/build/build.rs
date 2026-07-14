@@ -247,6 +247,117 @@ fn build_sdist_missing_backend_path() -> Result<()> {
     Ok(())
 }
 
+/// An in-tree build backend must not be able to escape the source tree via `backend-path`.
+#[test]
+fn build_backend_path_outside_source_tree() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["../backend"]
+    "#})?;
+    context
+        .temp_dir
+        .child("backend/backend.py")
+        .write_str("raise RuntimeError('outside backend was executed')\n")?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg(project.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: `backend-path` entry `../backend` must be a relative path within the source tree
+    ");
+
+    Ok(())
+}
+
+/// PEP 517 requires `backend-path` entries to be relative, even when they point inside the tree.
+#[cfg(unix)]
+#[test]
+fn build_backend_path_absolute_inside_source_tree() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    let backend = project.child("backend");
+
+    project.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["{}"]
+    "#, backend.path().display()})?;
+    backend
+        .child("backend.py")
+        .write_str("raise RuntimeError('absolute backend was executed')\n")?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg(project.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: `backend-path` entry `[TEMP_DIR]/project/backend` must be a relative path within the source tree
+    ");
+
+    Ok(())
+}
+
+/// Resolving an in-tree backend path must not follow a symlink outside the source tree.
+#[cfg(unix)]
+#[test]
+fn build_backend_path_symlink_outside_source_tree() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["backend"]
+    "#})?;
+    context
+        .temp_dir
+        .child("backend/backend.py")
+        .write_str("raise RuntimeError('outside backend was executed')\n")?;
+    fs_err::os::unix::fs::symlink(context.temp_dir.child("backend"), project.child("backend"))?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg(project.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: `backend-path` entry `backend` must be a relative path within the source tree
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn build_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
