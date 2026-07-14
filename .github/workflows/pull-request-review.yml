@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   review:
-    if: github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    if: github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 20
@@ -47,53 +47,24 @@ jobs:
           version: "0.11.28"
 
       - name: "Install Codex Security plugin"
-        run: |
-          mkdir -p "$RUNNER_TEMP/codex-security"
-          curl --fail --location --silent --show-error \
-            --output "$RUNNER_TEMP/codex.tar.gz" \
-            https://github.com/openai/codex/releases/download/rust-v0.144.4/codex-x86_64-unknown-linux-musl.tar.gz
-          printf '%s  %s\n' \
-            37c985be9d89e8c4f43b3aa0594c1213eac212d30ae2b95221f08fec807515d1 \
-            "$RUNNER_TEMP/codex.tar.gz" | sha256sum --check
-          tar --extract --gzip --file "$RUNNER_TEMP/codex.tar.gz" --directory "$RUNNER_TEMP"
-          codex="$RUNNER_TEMP/codex-x86_64-unknown-linux-musl"
-
-          marketplace=.codex-security-plugin/.agents/plugins/marketplace.json
-          jq '.name = "openai-curated-ci" | .plugins |= map(select(.name == "codex-security"))' \
-            "$marketplace" > "$RUNNER_TEMP/marketplace.json"
-          mv "$RUNNER_TEMP/marketplace.json" "$marketplace"
-
-          CODEX_HOME="$GITHUB_WORKSPACE/agents/codex" "$codex" plugin marketplace add \
-            "$GITHUB_WORKSPACE/.codex-security-plugin"
-          CODEX_HOME="$GITHUB_WORKSPACE/agents/codex" "$codex" plugin add \
-            codex-security@openai-curated-ci
+        run: ./agents/scripts/install-codex-security.sh
 
       - name: "Collect pull request context"
-        id: context
         run: |
           gh pr view "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,isDraft,labels,files,additions,deletions,changedFiles \
             > .pull-request-review-event.json
 
-          if [ "$(jq --raw-output '.headRefOid' .pull-request-review-event.json)" != "$HEAD_SHA" ]; then
-            echo "The pull request head changed; skipping this review."
-            echo "current=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
           gh pr diff "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             > .pull-request-review.diff
-          echo "current=true" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
 
       - name: "Review pull request"
         id: review
-        if: steps.context.outputs.current == 'true'
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
