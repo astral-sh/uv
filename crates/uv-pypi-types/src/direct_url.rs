@@ -115,11 +115,39 @@ impl TryFrom<&DirectUrl> for DisplaySafeUrl {
             DirectUrl::ArchiveUrl {
                 url,
                 subdirectory,
-                archive_info: _,
+                archive_info,
             } => {
                 let mut url = Self::parse(url)?;
+                let mut fragments = Vec::new();
                 if let Some(subdirectory) = subdirectory {
-                    url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+                    fragments.push(format!("subdirectory={}", subdirectory.display()));
+                }
+                if let Some(hash) = archive_info
+                    .hashes
+                    .as_ref()
+                    .and_then(|hashes| {
+                        ["sha512", "sha384", "sha256", "blake2b", "md5"]
+                            .into_iter()
+                            .find_map(|algorithm| {
+                                hashes
+                                    .get(algorithm)
+                                    .map(|digest| format!("{algorithm}={digest}"))
+                            })
+                    })
+                    .or_else(|| {
+                        let hash = archive_info.hash.as_ref()?;
+                        let (algorithm, _) = hash.split_once('=')?;
+                        matches!(
+                            algorithm,
+                            "sha512" | "sha384" | "sha256" | "blake2b" | "md5"
+                        )
+                        .then(|| hash.clone())
+                    })
+                {
+                    fragments.push(hash);
+                }
+                if !fragments.is_empty() {
+                    url.set_fragment(Some(&fragments.join("&")));
                 }
                 Ok(url)
             }

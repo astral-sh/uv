@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
+use url::Url;
 
 use uv_test::uv_snapshot;
 
@@ -118,6 +119,117 @@ fn freeze_url() -> Result<()> {
     warning: The package `anyio` requires `sniffio>=1.1`, but it's not installed
     "
     );
+
+    Ok(())
+}
+
+/// Preserve archive hashes recorded by another installer in `direct_url.json` so that frozen
+/// requirements keep their artifact verification.
+#[test]
+fn freeze_direct_archive_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let site_packages = ChildPath::new(context.site_packages());
+
+    let project = site_packages.child("project-1.0.0.dist-info");
+    project.create_dir_all()?;
+    project
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    project.child("direct_url.json").write_str(
+        r#"{"url":"https://example.com/project-1.0.0.tar.gz","subdirectory":"src","archive_info":{"hashes":{"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}"#,
+    )?;
+
+    let legacy = site_packages.child("legacy-1.0.0.dist-info");
+    legacy.create_dir_all()?;
+    legacy
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: legacy\nVersion: 1.0.0\n")?;
+    legacy.child("direct_url.json").write_str(
+        r#"{"url":"https://example.com/legacy-1.0.0.tar.gz","archive_info":{"hash":"sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}"#,
+    )?;
+
+    uv_snapshot!(context.pip_freeze(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    legacy @ https://example.com/legacy-1.0.0.tar.gz#sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    project @ https://example.com/project-1.0.0.tar.gz#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// A frozen direct URL with both a subdirectory and archive hash must keep enforcing that hash
+/// when it is consumed as a requirement again.
+#[test]
+fn freeze_direct_archive_hash_roundtrip() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let site_packages = ChildPath::new(context.site_packages());
+    let wheel_url = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+    )
+    .map_err(|()| anyhow!("Failed to create wheel URL"))?;
+
+    let ok = site_packages.child("ok-1.0.0.dist-info");
+    ok.create_dir_all()?;
+    ok.child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\n")?;
+    ok.child("direct_url.json").write_str(&format!(
+        r#"{{"url":"{wheel_url}","subdirectory":"src","archive_info":{{"hashes":{{"sha256":"79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f"}}}}}}"#,
+    ))?;
+
+    let frozen = uv_snapshot!(context.filters(), context.pip_freeze(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+
+    ----- stderr -----
+    ");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_binary(&frozen.stdout)?;
+    fs_err::remove_dir_all(ok.path())?;
+
+    context
+        .pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--no-deps")
+        .arg("--require-hashes")
+        .assert()
+        .success();
+
+    requirements_txt.write_str(&String::from_utf8(frozen.stdout)?.replace(
+        "79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--no-deps")
+        .arg("--require-hashes")
+        .arg("--reinstall"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to read `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
+      ╰─▶ Hash mismatch for `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
+
+          Expected:
+            sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+          Computed:
+            sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+    ");
 
     Ok(())
 }
