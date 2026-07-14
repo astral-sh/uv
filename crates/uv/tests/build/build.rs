@@ -3807,6 +3807,162 @@ fn build_clear() -> Result<()> {
     Ok(())
 }
 
+/// Test that `uv build --clear` does not remove the build source.
+#[test]
+fn build_clear_preserves_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let sources = context.temp_dir.child("sources");
+    let project = sources.child("project");
+    context.init().arg(project.path()).assert().success();
+    project.child("marker.txt").write_str("marker")?;
+
+    uv_snapshot!(context.filters(), context.build().arg("sources/project").arg("--clear").arg("--out-dir").arg("sources/project"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/sources/project`
+      cause: Refusing to clear output directory `[TEMP_DIR]/sources/project` because it contains the build source `[TEMP_DIR]/sources/project`
+    ");
+    project
+        .child("pyproject.toml")
+        .assert(predicate::path::is_file());
+    project
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    uv_snapshot!(context.filters(), context.build().arg("sources/project").arg("--clear").arg("--out-dir").arg("sources"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/sources/project`
+      cause: Refusing to clear output directory `[TEMP_DIR]/sources` because it contains the build source `[TEMP_DIR]/sources/project`
+    ");
+    project
+        .child("pyproject.toml")
+        .assert(predicate::path::is_file());
+    project
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Test that `uv build --all --clear` validates every workspace source before clearing.
+#[test]
+fn build_clear_preserves_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    let first = workspace.child("packages/first");
+    first.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "first"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    first.child("src/first/__init__.py").touch()?;
+
+    let second = workspace.child("packages/second");
+    second.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "second"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    second.child("src/second/__init__.py").touch()?;
+    second.child("marker.txt").write_str("marker")?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--all").arg("--clear").arg("--out-dir").arg(second.path()).current_dir(workspace.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `second @ [TEMP_DIR]/workspace/packages/second`
+      cause: Refusing to clear output directory `[TEMP_DIR]/workspace/packages/second` because it contains the build source `[TEMP_DIR]/workspace/packages/second`
+    ");
+    first
+        .child("pyproject.toml")
+        .assert(predicate::path::is_file());
+    second
+        .child("pyproject.toml")
+        .assert(predicate::path::is_file());
+    second
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Test that `uv build --clear` recognizes a source directory behind a symlink.
+#[cfg(unix)]
+#[test]
+fn build_clear_preserves_symlinked_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let sources = context.temp_dir.child("sources");
+    let project = sources.child("project");
+    context.init().arg(project.path()).assert().success();
+    project.child("marker.txt").write_str("marker")?;
+    fs_err::os::unix::fs::symlink(project.path(), context.temp_dir.child("project-link"))?;
+
+    uv_snapshot!(context.filters(), context.build().arg("project-link").arg("--clear").arg("--out-dir").arg("sources"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/project-link`
+      cause: Refusing to clear output directory `[TEMP_DIR]/sources` because it contains the build source `[TEMP_DIR]/project-link`
+    ");
+    project
+        .child("pyproject.toml")
+        .assert(predicate::path::is_file());
+    project
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Test that `uv build --clear` does not remove an input source distribution and its directory.
+#[test]
+fn build_clear_preserves_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    context.init().arg(project.path()).assert().success();
+    context
+        .build()
+        .arg("project")
+        .arg("--sdist")
+        .arg("--out-dir")
+        .arg("artifacts")
+        .assert()
+        .success();
+
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.child("marker.txt").write_str("marker")?;
+    let sdist = artifacts.child("project-0.1.0.tar.gz");
+    sdist.assert(predicate::path::is_file());
+
+    uv_snapshot!(context.filters(), context.build().arg("artifacts/project-0.1.0.tar.gz").arg("--wheel").arg("--clear"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/artifacts/project-0.1.0.tar.gz`
+      cause: Refusing to clear output directory `[TEMP_DIR]/artifacts` because it contains the build source `[TEMP_DIR]/artifacts`
+    ");
+    sdist.assert(predicate::path::is_file());
+    artifacts
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
 /// Test `uv build --no-create-gitignore`.
 #[test]
 fn build_no_gitignore() -> Result<()> {
