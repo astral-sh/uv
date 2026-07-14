@@ -1088,7 +1088,7 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
         }
     }
 
-    fn ensure_identity(&mut self, identity: MetadataNodeId) -> String {
+    fn ensure_node(&mut self, identity: MetadataNodeId) -> String {
         let id = identity.to_flat();
         self.resolution
             .entry(id.clone())
@@ -1132,12 +1132,12 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
     }
 
     fn ensure_workspace(&mut self) -> String {
-        self.ensure_identity(MetadataNodeId::from_workspace(self.workspace_root.clone()))
+        self.ensure_node(MetadataNodeId::from_workspace(self.workspace_root.clone()))
     }
 
     fn ensure_workspace_group(&mut self, group: &GroupName) -> String {
         let workspace = self.ensure_workspace();
-        let group_id = self.ensure_identity(MetadataNodeId::from_workspace_group(
+        let group_id = self.ensure_node(MetadataNodeId::from_workspace_group(
             self.workspace_root.clone(),
             group.clone(),
         ));
@@ -1146,7 +1146,7 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
     }
 
     fn ensure_script(&mut self, path: &Path) -> String {
-        self.ensure_identity(MetadataNodeId::from_script(PortablePathBuf::from(path)))
+        self.ensure_node(MetadataNodeId::from_script(PortablePathBuf::from(path)))
     }
 
     fn dependency_targets(
