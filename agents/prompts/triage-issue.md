@@ -20,8 +20,9 @@ summarize the searches performed in `related.search_scope`.
 Set `type` to exactly one of these repository label names and explain the choice in `type_reason`:
 
 - `duplicate` when an existing issue or pull request tracks the same underlying problem or request
-  closely enough that the new issue adds no materially distinct report. This classification takes
-  precedence over the other types.
+  closely enough that discussion can be centralized there, even if the new issue adds a more
+  specific reproduction or triggering condition. This classification takes precedence over the other
+  types.
 - `bug` when existing behavior does not work as intended.
 - `enhancement` when the issue requests new functionality or an improvement to existing behavior.
 - `question` when the issue primarily asks for clarification or support.
