@@ -6,7 +6,7 @@ use reqsign::aws::DefaultSigner as AwsDefaultSigner;
 use reqsign::azure::DefaultSigner as AzureDefaultSigner;
 use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use tracing::debug;
-use url::Url;
+use url::{ParseError, Url};
 
 use uv_preview::{Preview, PreviewFeature};
 use uv_static::EnvVars;
@@ -62,10 +62,18 @@ impl HuggingFaceProvider {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct S3EndpointProvider;
 
+/// The parsed S3 endpoint, if configured.
+static S3_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
+    LazyLock::new(|| endpoint_url(EnvVars::UV_S3_ENDPOINT_URL));
+
 impl S3EndpointProvider {
     /// Returns `true` if the URL matches the configured S3 endpoint.
     pub(crate) fn is_s3_endpoint(url: &Url, preview: Preview) -> Result<bool> {
-        if let Some(s3_endpoint_url) = endpoint_url(EnvVars::UV_S3_ENDPOINT_URL)? {
+        if let Some(s3_endpoint_url) = S3_ENDPOINT_URL
+            .as_ref()
+            .map_err(|error| *error)
+            .with_context(|| format!("Invalid `{}`", EnvVars::UV_S3_ENDPOINT_URL))?
+        {
             if !preview.is_enabled(PreviewFeature::S3Endpoint) {
                 warn_user_once!(
                     "The `s3-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
@@ -75,7 +83,7 @@ impl S3EndpointProvider {
 
             // Treat any URL under the endpoint path on the same domain or subdomain as available
             // for S3 signing.
-            if is_endpoint_url(url, &s3_endpoint_url) {
+            if is_endpoint_url(url, s3_endpoint_url) {
                 return Ok(true);
             }
         }
@@ -104,10 +112,18 @@ impl S3EndpointProvider {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GcsEndpointProvider;
 
+/// The parsed GCS endpoint, if configured.
+static GCS_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
+    LazyLock::new(|| endpoint_url(EnvVars::UV_GCS_ENDPOINT_URL));
+
 impl GcsEndpointProvider {
     /// Returns `true` if the URL matches the configured GCS endpoint.
     pub(crate) fn is_gcs_endpoint(url: &Url, preview: Preview) -> Result<bool> {
-        if let Some(gcs_endpoint_url) = endpoint_url(EnvVars::UV_GCS_ENDPOINT_URL)? {
+        if let Some(gcs_endpoint_url) = GCS_ENDPOINT_URL
+            .as_ref()
+            .map_err(|error| *error)
+            .with_context(|| format!("Invalid `{}`", EnvVars::UV_GCS_ENDPOINT_URL))?
+        {
             if !preview.is_enabled(PreviewFeature::GcsEndpoint) {
                 warn_user_once!(
                     "The `gcs-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
@@ -117,7 +133,7 @@ impl GcsEndpointProvider {
 
             // Treat any URL under the endpoint path on the same domain or subdomain as available
             // for GCS signing.
-            if is_endpoint_url(url, &gcs_endpoint_url) {
+            if is_endpoint_url(url, gcs_endpoint_url) {
                 return Ok(true);
             }
         }
@@ -134,23 +150,29 @@ impl GcsEndpointProvider {
 }
 
 /// Returns the configured endpoint [`Url`], if set and valid.
-fn endpoint_url(env_var: &str) -> Result<Option<Url>> {
+fn endpoint_url(env_var: &str) -> Result<Option<Url>, ParseError> {
     let Some(endpoint_url) = std::env::var(env_var).ok() else {
         return Ok(None);
     };
-    Url::parse(&endpoint_url)
-        .map(Some)
-        .with_context(|| format!("Invalid `{env_var}`"))
+    Url::parse(&endpoint_url).map(Some)
 }
 
 /// A provider for authentication credentials for Azure endpoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AzureEndpointProvider;
 
+/// The parsed Azure endpoint, if configured.
+static AZURE_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
+    LazyLock::new(|| endpoint_url(EnvVars::UV_AZURE_ENDPOINT_URL));
+
 impl AzureEndpointProvider {
     /// Returns `true` if the URL matches the configured Azure endpoint.
     pub(crate) fn is_azure_endpoint(url: &Url, preview: Preview) -> Result<bool> {
-        if let Some(azure_endpoint_url) = endpoint_url(EnvVars::UV_AZURE_ENDPOINT_URL)? {
+        if let Some(azure_endpoint_url) = AZURE_ENDPOINT_URL
+            .as_ref()
+            .map_err(|error| *error)
+            .with_context(|| format!("Invalid `{}`", EnvVars::UV_AZURE_ENDPOINT_URL))?
+        {
             if !preview.is_enabled(PreviewFeature::AzureEndpoint) {
                 warn_user_once!(
                     "The `azure-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
@@ -160,7 +182,7 @@ impl AzureEndpointProvider {
 
             // Treat any URL under the endpoint path on the same domain or subdomain as available
             // for Azure signing.
-            if is_endpoint_url(url, &azure_endpoint_url) {
+            if is_endpoint_url(url, azure_endpoint_url) {
                 return Ok(true);
             }
         }
