@@ -1,5 +1,6 @@
 use std::process::Command;
 
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use url::Url;
 use uv_static::EnvVars;
@@ -25,6 +26,138 @@ fn add_shared_args(mut command: Command) -> Command {
         command.env(EnvVars::LC_ALL, "C");
     }
     command
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn show_settings_returns_before_running_commands() {
+    let context = uv_test::test_context!("3.12");
+
+    let baseline = capture_uv_snapshot!(context.filters(), add_shared_args(context.command())
+        .args(["cache", "dir", "--show-settings"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            custom_certificates: [CERTIFICATES],
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+            cache_reads: 2,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    "#);
+
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.cache_size())
+        .arg("--show-settings"), @"
+    ...
+             \"[CACHE_DIR]/\",
+         ),
+     }
+    +SizeArgs {
+    +    output_format: Auto,
+    +    human: false,
+    +}
+    ...
+    ");
+
+    add_shared_args(context.pip_tree())
+        .arg("--python")
+        .arg("does-not-exist")
+        .arg("--show-settings")
+        .assert()
+        .success();
+
+    add_shared_args(context.python_find())
+        .arg("does-not-exist")
+        .arg("--show-settings")
+        .assert()
+        .success();
+
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.python_pin())
+        .arg("--no-project")
+        .arg("--show-settings")
+        .arg("3.12"), @r#"
+    ...
+             "[CACHE_DIR]/",
+         ),
+     }
+    +PythonPinSettings {
+    +    request: Some(
+    +        "3.12",
+    +    ),
+    +    resolved: false,
+    +    no_project: true,
+    +    global: false,
+    +    rm: false,
+    +    install_mirrors: PythonInstallMirrors {
+    +        python_install_mirror: None,
+    +        pypy_install_mirror: None,
+    +        python_downloads_json_url: None,
+    +    },
+    +}
+    ...
+    "#);
+
+    assert!(!context.temp_dir.child(".python-version").exists());
+
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.workspace_dir())
+        .arg("--show-settings"), @"
+    ...
+             \"[CACHE_DIR]/\",
+         ),
+     }
+    +WorkspaceDirArgs {
+    +    package: None,
+    +}
+    ...
+    ");
+
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.workspace_list())
+        .arg("--show-settings"), @"
+    ...
+             \"[CACHE_DIR]/\",
+         ),
+     }
+    +WorkspaceListArgs {
+    +    paths: false,
+    +    scripts: false,
+    +}
+    ...
+    ");
 }
 
 #[test]
