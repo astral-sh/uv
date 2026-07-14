@@ -728,16 +728,50 @@ pub(crate) fn format_tool_suffix_arg(suffix: &str) -> String {
 
 fn format_tool_suffix_arg_for_shell(suffix: &str, shell: Option<Shell>) -> String {
     let argument = format!("--suffix={suffix}");
+    if shell == Some(Shell::Cmd) {
+        return escape_cmd_argument(&argument);
+    }
+
     let posix = shlex_posix(&argument);
     if posix == argument {
         return argument;
     }
 
     match shell {
-        Some(Shell::Cmd) => format!(r#""{argument}""#),
         Some(Shell::Powershell) => format!("'{}'", argument.replace('\'', "''")),
         _ => posix,
     }
+}
+
+fn escape_cmd_argument(argument: &str) -> String {
+    let mut escaped = String::with_capacity(argument.len());
+    let mut in_variable = false;
+    for (index, character) in argument.char_indices() {
+        if character == '%' {
+            if in_variable {
+                escaped.push('%');
+                in_variable = false;
+            } else if argument[index + character.len_utf8()..].contains('%') {
+                // Command Prompt does not provide a direct escape for percent expansion in
+                // interactive commands. Include a caret in the variable name to prevent a match;
+                // the caret is removed by later command-line processing.
+                escaped.push_str("%^");
+                in_variable = true;
+            } else {
+                escaped.push('%');
+            }
+            continue;
+        }
+
+        if matches!(
+            character,
+            ' ' | '\t' | '&' | '|' | '<' | '>' | '(' | ')' | '^'
+        ) {
+            escaped.push('^');
+        }
+        escaped.push(character);
+    }
+    escaped
 }
 
 /// Finalizes a tool installation, after creation of an environment.
@@ -1046,7 +1080,15 @@ mod tests {
         );
         assert_eq!(
             format_tool_suffix_arg_for_shell(" old&echo unsafe", Some(Shell::Cmd)),
-            r#""--suffix= old&echo unsafe""#
+            "--suffix=^ old^&echo^ unsafe"
+        );
+        assert_eq!(
+            format_tool_suffix_arg_for_shell("%TEMP%", Some(Shell::Cmd)),
+            "--suffix=%^TEMP%"
+        );
+        assert_eq!(
+            format_tool_suffix_arg_for_shell("%TEMP%%USERNAME%", Some(Shell::Cmd)),
+            "--suffix=%^TEMP%%^USERNAME%"
         );
     }
 }
