@@ -5157,7 +5157,7 @@ conflicts = [
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    error: Extra `x2` is not defined in the project's `optional-dependencies` table
+    error: Extra `x2` is not defined in the `optional-dependencies` table for `project`
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"

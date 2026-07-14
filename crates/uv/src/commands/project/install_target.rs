@@ -356,9 +356,10 @@ impl<'lock> InstallTarget<'lock> {
                 for extra in extras.explicit_names() {
                     if !known_extras.contains(extra) {
                         return match self {
-                            Self::Project { .. } => {
-                                Err(ProjectError::MissingExtraProject(extra.clone()))
-                            }
+                            Self::Project { name, .. } => Err(ProjectError::MissingExtraProject(
+                                extra.clone(),
+                                name.clone(),
+                            )),
                             Self::Projects { .. } => {
                                 Err(ProjectError::MissingExtraProjects(extra.clone()))
                             }
