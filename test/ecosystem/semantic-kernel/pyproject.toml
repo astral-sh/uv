@@ -173,7 +173,7 @@ dev = [
 ]
 
 [tool.uv]
-prerelease = "if-necessary-or-explicit"
+prerelease = "if-necessary"
 environments = [
     "sys_platform == 'darwin'",
     "sys_platform == 'linux'",

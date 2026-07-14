@@ -1,0 +1,18 @@
+name = "prerelease-multiple-redundant-stable-preference"
+description = "A pre-release requirement retains the stable preference alongside multiple plain requirements in the same root dependency batch."
+
+[root]
+requires = ["c>=1.0", "c<3.0", "c>=0.5a1"]
+
+[expected]
+satisfiable = true
+explanation = "The broader pre-release requirement does not override the stable preference, so `c==1.5.0` is selected even when that requirement appears last."
+
+[expected.packages]
+c = "1.5.0"
+
+[packages.c.versions."1.5.0"]
+
+[packages.c.versions."2.0.0a1"]
+
+[packages.c.versions."3.0.0"]
