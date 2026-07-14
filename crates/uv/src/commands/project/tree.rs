@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::path::Path;
 
 use anstream::print;
@@ -5,16 +6,18 @@ use anyhow::{Error, Result};
 use futures::StreamExt;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
+use uv_cli::TreeFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, DependencyGroups, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
 use uv_normalize::DefaultGroups;
 use uv_normalize::PackageName;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
-use uv_resolver::{PackageMap, TreeDisplay};
+use uv_resolver::{PackageMap, TreeDisplay, TreeJsonTarget};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::latest::LatestClient;
@@ -41,6 +44,7 @@ pub(crate) async fn tree(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     universal: bool,
+    format: TreeFormat,
     depth: u8,
     prune: Vec<PackageName>,
     package: Vec<PackageName>,
@@ -64,6 +68,13 @@ pub(crate) async fn tree(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if matches!(format, TreeFormat::Json) && !preview.is_enabled(PreviewFeature::JsonOutput) {
+        warn_user!(
+            "The `--format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
+        );
+    }
+
     // Find the project requirements.
     let virtual_project;
     let target = if let Some(script) = script.as_ref() {
@@ -302,7 +313,19 @@ pub(crate) async fn tree(
         show_sizes,
     );
 
-    print!("{tree}");
+    match format {
+        TreeFormat::Text => print!("{tree}"),
+        TreeFormat::Json => writeln!(
+            printer.stdout_important(),
+            "{}",
+            tree.to_json(match target {
+                LockTarget::Workspace(workspace) => {
+                    TreeJsonTarget::Workspace(workspace.install_path())
+                }
+                LockTarget::Script(script) => TreeJsonTarget::Script(&script.path),
+            })?
+        )?,
+    }
 
     Ok(ExitStatus::Success)
 }
