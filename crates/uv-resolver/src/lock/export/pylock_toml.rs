@@ -9,6 +9,7 @@ use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
 use petgraph::graph::NodeIndex;
 use serde::Deserialize;
+use serde::ser::SerializeSeq;
 use toml_edit::{Array, ArrayOfTables, Item, Table, value};
 use url::Url;
 
@@ -44,6 +45,8 @@ use crate::{Installable, LockError, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
+    #[error("The current environment does not match any of the lock's `environments`")]
+    IncompatibleEnvironment,
     #[error("Package `{0}` requires Python {2}, but the target Python version is {1}")]
     IncompatibleRequiresPython(PackageName, Version, RequiresPython),
     #[error(
@@ -198,6 +201,12 @@ pub struct PylockToml {
     created_by: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requires_python: Option<RequiresPython>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_marker_trees",
+        default
+    )]
+    environments: Option<Vec<MarkerTree>>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub extras: Vec<ExtraName>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -208,6 +217,25 @@ pub struct PylockToml {
     pub packages: Vec<PylockTomlPackage>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     attestation_identities: Vec<PylockTomlAttestationIdentity>,
+}
+
+#[expect(clippy::ref_option)]
+fn serialize_marker_trees<S>(
+    markers: &Option<Vec<MarkerTree>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let markers = markers.as_deref().unwrap_or_default();
+    let mut sequence = serializer.serialize_seq(Some(markers.len()))?;
+    for marker in markers {
+        let marker = marker.try_to_string().ok_or_else(|| {
+            <S::Error as serde::ser::Error>::custom("environment markers cannot be empty")
+        })?;
+        sequence.serialize_element(&marker)?;
+    }
+    sequence.end()
 }
 
 fn deserialize_lock_version<'de, D>(deserializer: D) -> Result<Version, D::Error>
@@ -598,6 +626,7 @@ impl<'lock> PylockToml {
             lock_version,
             created_by,
             requires_python: Some(requires_python),
+            environments: None,
             extras,
             dependency_groups,
             default_groups,
@@ -958,6 +987,7 @@ impl<'lock> PylockToml {
             lock_version,
             created_by,
             requires_python: Some(requires_python),
+            environments: None,
             extras,
             dependency_groups,
             default_groups,
@@ -976,6 +1006,16 @@ impl<'lock> PylockToml {
         doc.insert("created-by", value(self.created_by.as_str()));
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
+        }
+        if let Some(environments) = self.environments.as_ref() {
+            doc.insert(
+                "environments",
+                value(each_element_on_its_line_array(
+                    environments
+                        .iter()
+                        .filter_map(|marker| marker.try_to_string()),
+                )),
+            );
         }
         if !self.extras.is_empty() {
             doc.insert(
@@ -1045,6 +1085,14 @@ impl<'lock> PylockToml {
         tags: &Tags,
         build_options: &BuildOptions,
     ) -> Result<Resolution, PylockTomlError> {
+        if self.environments.as_ref().is_some_and(|environments| {
+            !environments
+                .iter()
+                .any(|marker| marker.evaluate_pep751(markers, extras, groups))
+        }) {
+            return Err(PylockTomlErrorKind::IncompatibleEnvironment.into());
+        }
+
         // Convert the extras and dependency groups specifications to a concrete environment.
         let mut graph =
             petgraph::graph::DiGraph::with_capacity(self.packages.len(), self.packages.len());
