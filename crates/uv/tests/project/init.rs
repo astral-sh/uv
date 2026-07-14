@@ -825,6 +825,67 @@ fn init_script_python_version() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn init_script_python_version_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]);
+    let scripts = context.temp_dir.child("scripts");
+    scripts.create_dir_all()?;
+    scripts.child(".python-version").write_str("3.11")?;
+
+    let outside = context.temp_dir.child("outside");
+    outside.create_dir_all()?;
+    outside.child(".python-version").write_str("3.12")?;
+
+    context
+        .init()
+        .current_dir(&outside)
+        .arg("--script")
+        .arg(scripts.join("pinned.py"))
+        .assert()
+        .success();
+    let pinned = fs_err::read_to_string(scripts.join("pinned.py"))?;
+    assert_snapshot!(pinned, @r#"
+    # /// script
+    # requires-python = ">=3.11"
+    # dependencies = []
+    # ///
+
+
+    def main() -> None:
+        print("Hello from pinned.py!")
+
+
+    if __name__ == "__main__":
+        main()
+    "#);
+
+    context
+        .init()
+        .current_dir(&outside)
+        .arg("--script")
+        .arg("--no-pin-python")
+        .arg(scripts.join("unpinned.py"))
+        .assert()
+        .success();
+    let unpinned = fs_err::read_to_string(scripts.join("unpinned.py"))?;
+    assert_snapshot!(unpinned, @r#"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+
+    def main() -> None:
+        print("Hello from unpinned.py!")
+
+
+    if __name__ == "__main__":
+        main()
+    "#);
+
+    Ok(())
+}
+
 // Init script should create parent directories if they don't exist
 #[test]
 fn init_script_create_directory() -> Result<()> {
