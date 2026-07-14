@@ -817,160 +817,53 @@ roots = [{ name = "runtime-helper", version = "2.0.0" }]
 The target context is part of the resolution identity because it determines the resolved
 `match-runtime` binding.
 
-## Implementation Evidence
+## Relationship To The Build-Lock Implementation
 
-The implementation exercises this shape against representative regression cases:
+This RFC describes the generalized edge-selector alternative, not the build-lock implementation.
+The implementation takes the narrower approach in `RFC.md` and `RFC-BUILD-RESOLUTION-ID.md`:
 
-- two source packages sharing `builder==1` while requiring different transitive `helper` versions;
-- a package present in both the runtime graph and an isolated build graph, with different transitive
-  dependency selections;
-- a non-conflicting build graph whose transitive build edges still need a named resolution context
-  for faithful replay;
-- a build resolution for a source package selected only in one target marker region;
-- a universal runtime fork lock that previously serialized `resolution-markers` as fake-extra marker
-  strings;
-- a correlated marker/conflict case where flattening activation predicates would produce an
-  incorrect lock.
+- build-resolution records identify the direct final requirements;
+- ordinary dependency edges describe each selected closure;
+- an optional `resolution-id` extends package identity only when two closures need different edges
+  for the same package artifact.
 
-It serializes runtime forks as typed runtime resolution records:
-
-```toml
-[[resolution]]
-id = "runtime:project:linux:<digest>"
-kind = "runtime"
-target = { marker = "sys_platform == 'linux'" }
-
-[[resolution]]
-id = "runtime:project:windows:<digest>"
-kind = "runtime"
-target = { marker = "sys_platform == 'win32'" }
-```
-
-It records every captured build graph as a top-level build resolution record, including graphs whose
-dependency edges do not conflict with another runtime or build graph:
-
-```toml
-[[resolution]]
-id = "build:dep-a:wheel:<digest>"
-kind = "build"
-operation = "wheel"
-mode = "isolated"
-name = "dep-a"
-target = { marker = "sys_platform == 'linux'" }
-roots = [
-    { name = "builder", version = "1.0.0" },
-    { name = "helper", version = "1.0.0" },
-]
-```
-
-For build resolutions, the implementation derives the target selector from the source package's
-reachability in the shared runtime graph. That keeps the build record tied to the same target
-predicate that made the source package selected in the first place.
-
-It then records build-specific transitive edges on ordinary package records with
-`selector = { resolution = ... }`:
+For example, if the runtime graph and a build graph select different transitive dependencies for
+`builder==1`, the build graph receives a scoped package node instead of adding selectors to the
+shared node's edges:
 
 ```toml
 [[package]]
 name = "builder"
 version = "1.0.0"
-dependencies = [
-    { name = "helper", version = "1.0.0", selector = { resolution = "build:dep-a:wheel:<digest>" } },
-    { name = "helper", version = "2.0.0", selector = { resolution = "build:dep-b:wheel:<digest>" } },
-]
-```
+dependencies = [{ name = "leaf", version = "2.0.0" }]
 
-For a package shared by runtime and build, the runtime edge has no resolution selector and the build
-edge is separate:
-
-```toml
 [[package]]
 name = "builder"
 version = "1.0.0"
-dependencies = [
-    { name = "leaf", version = "2.0.0" },
-    { name = "leaf", version = "1.0.0", selector = { resolution = "build:dep:wheel:<digest>" } },
-]
+resolution-id = "build:dep:wheel:build:<digest>"
+dependencies = [{ name = "leaf", version = "1.0.0" }]
 ```
 
-That result supports the implicit runtime rule. Encoding runtime as a named resolution selector
-creates a fake mutual-exclusion problem: every ordinary runtime edge then needs a serialized runtime
-selector, and an edge shared by runtime and build needs both selectors. Leaving runtime implicit
-keeps the existing lockfile graph as the default while still replacing the current universal marker
-wire format with typed target selectors.
+The build resolution references the scoped node from its roots. Replay then follows ordinary
+dependency edges, with no second edge-activation authority and no serialized executor context.
+Compatible nodes remain shared; only conflicting closures are split.
 
-The implementation also shows that `[[resolution]].roots` are not enough. Replay needs both:
-
-- roots, to represent direct build requirements;
-- selector-tagged package dependency edges, to represent the selected transitive closure.
-
-This preserves the lockfile's existing dependency-edge traversal model. A build replay starts from
-`[[resolution]].roots`; it does not install a member list. It follows ordinary package edges whose
-resolution selector includes the selected resolution.
-
-The earlier package-local `build-dependency-packages` map was therefore a transitional
-representation. It contained the missing dimension: "these edges are active for this parent build."
-The multi-resolution graph moves that dimension from a parent-package side table into dependency
-edge selectors, so a build graph does not need to be "special enough" to receive a named context.
-
-The implementation converts [`UniversalMarker`] values to typed target selectors for runtime
-records, dependency edges, and package membership by normalizing the marker tree to DNF, decoding
-uv's encoded conflict extras into typed activation terms, and verifying that the resulting selector
-is equivalent to the original marker. Simple conjunctions use the flat shorthand. Correlated fork
-cases use `any-of` / `all-of` expressions. The legacy marker string fallback remains as a safety
-valve for expressions that cannot be proven equivalent.
-
-The implementation emits stage-qualified, digest-qualified build resolution IDs such as
-`build:dep-a:wheel:bootstrap:<digest>` and `build:dep-a:wheel:build:<digest>`. The digest covers the
-build operation, normalized package name, version, source kind and source value, target selector,
-build inputs, and requirement-discovery stage. This validates the RFC requirement that source,
-target, inputs, and stage are part of build resolution identity. The integration snapshots filter
-the digest as `[BUILD-ID]`; the lockfile itself contains the concrete digest.
-
-The implementation accepts repeated build records for the same source package when the records have
-distinct resolution IDs. This validates that build replay is keyed by the named resolution context,
-not by the source package alone. A focused parser test covers two records for the same source
-package whose selector-tagged transitive edges choose different package versions.
-
-It also uses each build resolution's `roots` when validating membership. A focused parser test
-covers a build resolution whose roots differ from the source package's package-level
-`build-dependencies`, and verifies that membership follows `[[resolution]].roots`.
-
-It also validates partial coverage. In a revision-4 lockfile, every package with captured
-`build-dependencies` must have a matching build resolution record. This keeps package-local captured
-build graphs from silently surviving without a named resolution context.
-
-The capture store can retain context-qualified, stage-qualified graphs for the same source package.
-Lock-time build resolution assigns the lock-layer context IDs before metadata extraction or backend
-hook resolution, so `BuildDispatch` stores captured graphs under `BuildResolutionGraphKey::context`
-with a `bootstrap` or `build` stage. Lock emission consumes `snapshot_contexts`, coalesces repeated
-records with the same resolution ID, and serializes both stages when their roots must be replayed
-separately. The legacy package-keyed snapshot remains available for callers that have not moved to
-named resolution contexts. Focused `uv-types` tests cover contextual retention, stage-qualified
-lookup, exact lookup, and legacy snapshot behavior.
-
-The lock-time scheduler now keys seen work and universal build marker restriction by build
-resolution context. A shared source package reached from two different marker regions therefore
-records two build resolution records rather than reusing the first package-level graph or widening
-into one opaque combined graph. The graph key carries the target marker used for scheduling so the
-emitted build record can serialize the same target selector that contributed to the context ID.
-
-Concrete frozen replay chooses the build record for the selected marker environment before
-reconstructing a locked build resolution. This keeps the sync-time reconstruction path aligned with
-the named context used in the lockfile graph.
+The generalized selector model remains useful for exploring future independent resolution contexts,
+but it should not be confused with the current build-lock wire format or replay contract.
 
 ## Validation
 
-The lockfile validates both graph structure and resolution coverage.
+An implementation of the generalized selector model would need to validate both graph structure and
+resolution coverage.
 
-Structural validation rejects:
+Structural validation would reject:
 
 - dangling package references;
 - ambiguous package references;
 - missing source artifacts;
 - missing hashes for artifacts that require hashes;
 - duplicate resolution IDs;
-- unknown fields in typed resolution records or selector records;
+- incompatible selector or resolution-record shapes;
 - runtime resolution records declaring build-only fields such as operation, replay mode, source
   package, or roots;
 - build resolution records missing an operation, replay mode, or source package;
@@ -985,14 +878,14 @@ Structural validation rejects:
 - resolution selectors that refer to incompatible package artifacts;
 - cycles in required nested build resolutions.
 
-Coverage validation rejects:
+Coverage validation would reject:
 
 - a requested runtime branch with no matching runtime resolution record;
 - a requested build operation with no matching build resolution;
 - a build resolution whose graph traversal reaches a source artifact without a matching nested build
   resolution.
 
-Freshness validation compares resolution inputs against current inputs:
+Freshness validation would compare resolution inputs against current inputs:
 
 - source artifact identity;
 - build backend identity;
