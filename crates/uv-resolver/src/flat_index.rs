@@ -13,9 +13,12 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::{TagCompatibility, Tags};
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
+
+use crate::yanks::AllowedYanks;
 
 /// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
 /// and [`Version`].
@@ -89,6 +92,24 @@ impl FlatDistributions {
         self.0.iter()
     }
 
+    /// Prefer artifacts that can be installed in the active build environment.
+    pub(crate) fn prioritize_executor_artifacts(
+        mut self,
+        package_name: &PackageName,
+        tags: &Tags,
+        markers: &MarkerEnvironment,
+        allowed_yanks: &AllowedYanks,
+    ) -> Self {
+        for (version, prioritized_dist) in &mut self.0 {
+            prioritized_dist.prioritize_executor_artifacts(
+                tags,
+                markers,
+                allowed_yanks.contains(package_name, version),
+            );
+        }
+        self
+    }
+
     /// Add the given [`File`] to the [`FlatDistributions`] for the given package.
     fn add_file(
         &mut self,
@@ -99,8 +120,9 @@ impl FlatDistributions {
         build_options: &BuildOptions,
         index: IndexUrl,
     ) {
-        // No `requires-python` here: for source distributions, we don't have that information;
-        // for wheels, we read it lazily only when selected.
+        // Local flat-index entries may not include `requires-python`; wheel metadata is read
+        // lazily when selected. Universal build resolution reprioritizes entries that do include
+        // the metadata once its executor context is available.
         match filename {
             DistFilename::WheelFilename(filename) => {
                 let version = filename.version.clone();

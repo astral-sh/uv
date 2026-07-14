@@ -40,7 +40,9 @@ use uv_resolver::{
 };
 use uv_settings::PythonInstallMirrors;
 use uv_torch::{AmdGpuArchitecture, TorchMode, TorchSource, TorchStrategy};
-use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{
+    HashStrategy, SourceTreeEditablePolicy, UnlockedBuildInputs, unlocked_build_cache_key,
+};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -321,6 +323,48 @@ pub(crate) async fn pip_install(
     } else {
         Some(SitePackages::from_environment(&environment)?)
     };
+    // Exclude installed distributions for non-isolated builds, since any source can depend
+    // transitively on the shared environment.
+    let resolution_reinstall = if matches!(&build_isolation, BuildIsolation::Isolate) {
+        reinstall.clone()
+    } else {
+        Reinstall::All
+    };
+
+    // Incorporate the build inputs from requirement files before validating an installed source.
+    let index_locations = index_locations.combine(
+        extra_index_urls
+            .into_iter()
+            .map(Index::from_extra_index_url)
+            .chain(index_url.map(Index::from_index_url))
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        find_links
+            .into_iter()
+            .map(Index::from_find_links)
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        no_index,
+    );
+    let build_options = build_options.combine(no_binary, no_build);
+    // Enforce (but never require) build-constraint hashes, matching the build dispatch.
+    let build_hasher = if hash_checking.is_some() {
+        HashStrategy::from_requirements(
+            std::iter::empty(),
+            build_constraints
+                .iter()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            Some(&marker_env),
+            HashCheckingMode::Verify,
+        )?
+    } else {
+        HashStrategy::None
+    };
+    let build_constraints = Constraints::from_requirements(
+        build_constraints
+            .iter()
+            .map(|constraint| constraint.requirement.clone()),
+    );
 
     // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
@@ -331,8 +375,36 @@ pub(crate) async fn pip_install(
         && groups.is_empty()
         && pylock.is_none()
         && matches!(modifications, Modifications::Sufficient)
+        && matches!(&build_isolation, BuildIsolation::Isolate)
         && let Some(site_packages) = &site_packages
+        && !extra_build_requires.iter().any(|(name, requirements)| {
+            site_packages
+                .get_packages(name)
+                .iter()
+                .any(|distribution| distribution.build_info().is_some())
+                && requirements
+                    .iter()
+                    .any(|requirement| requirement.match_runtime)
+        })
     {
+        let unlocked_build_cache_key = unlocked_build_cache_key(UnlockedBuildInputs {
+            build_constraints: &build_constraints,
+            index_locations: &index_locations,
+            index_strategy,
+            build_options: &build_options,
+            dependency_metadata: &dependency_metadata,
+            config_settings,
+            config_settings_package,
+            extra_build_requires: &extra_build_requires,
+            extra_build_variables,
+            build_hasher: &build_hasher,
+            exclude_newer_global: exclude_newer.global.as_ref(),
+            exclude_newer_package: (&exclude_newer.package).into_iter().collect(),
+            sources: &sources,
+            source_tree_editable_policy: SourceTreeEditablePolicy::Project,
+            non_isolated: false,
+            invocation_timestamp: cache.timestamp(),
+        });
         match site_packages.satisfies_spec(
             &requirements,
             &constraints,
@@ -346,6 +418,7 @@ pub(crate) async fn pip_install(
             config_settings_package,
             &extra_build_requires,
             extra_build_variables,
+            unlocked_build_cache_key.as_deref(),
         )? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
@@ -394,22 +467,6 @@ pub(crate) async fn pip_install(
         HashStrategy::None
     };
 
-    // Incorporate any index locations from the provided sources.
-    let index_locations = index_locations.combine(
-        extra_index_urls
-            .into_iter()
-            .map(Index::from_extra_index_url)
-            .chain(index_url.map(Index::from_index_url))
-            .map(|index| index.with_origin(Origin::RequirementsTxt))
-            .collect(),
-        find_links
-            .into_iter()
-            .map(Index::from_find_links)
-            .map(|index| index.with_origin(Origin::RequirementsTxt))
-            .collect(),
-        no_index,
-    );
-
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
@@ -443,9 +500,6 @@ pub(crate) async fn pip_install(
         .platform(interpreter.platform())
         .build()?;
 
-    // Combine the `--no-binary` and `--no-build` flags from the requirements files.
-    let build_options = build_options.combine(no_binary, no_build);
-
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
@@ -463,26 +517,6 @@ pub(crate) async fn pip_install(
             uv_types::BuildIsolation::SharedPackage(&environment, packages)
         }
     };
-
-    // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
-    // is provided. _Requiring_ hashes would be too strict, and would break with pip.
-    let build_hasher = if hash_checking.is_some() {
-        HashStrategy::from_requirements(
-            std::iter::empty(),
-            build_constraints
-                .iter()
-                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&marker_env),
-            HashCheckingMode::Verify,
-        )?
-    } else {
-        HashStrategy::None
-    };
-    let build_constraints = Constraints::from_requirements(
-        build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
-    );
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -574,7 +608,7 @@ pub(crate) async fn pip_install(
             preferences,
             site_packages.clone(),
             &hasher,
-            &reinstall,
+            &resolution_reinstall,
             &upgrade,
             Some(&tags),
             ResolverEnvironment::specific(marker_env.clone()),
@@ -616,8 +650,13 @@ pub(crate) async fn pip_install(
     };
 
     // Constrain any build requirements marked as `match-runtime = true`.
+    let match_runtime = extra_build_requires.has_match_runtime_source(&resolution);
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
-
+    let install_state = if match_runtime {
+        state.fork()
+    } else {
+        state.clone()
+    };
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -627,7 +666,7 @@ pub(crate) async fn pip_install(
         &index_locations,
         &flat_index,
         &dependency_metadata,
-        state.clone(),
+        install_state.clone(),
         index_strategy,
         config_settings,
         config_settings_package,
@@ -658,7 +697,7 @@ pub(crate) async fn pip_install(
         &hasher,
         &tags,
         &client,
-        state.in_flight(),
+        install_state.in_flight(),
         &concurrency,
         &build_dispatch,
         &cache,

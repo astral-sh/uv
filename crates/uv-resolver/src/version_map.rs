@@ -17,6 +17,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{HashDigest, ResolutionMetadata, Yanked};
 use uv_types::HashStrategy;
@@ -49,6 +50,7 @@ impl VersionMap {
         index: IndexUrl,
         tags: Option<Tags>,
         requires_python: RequiresPython,
+        artifact_context: Option<(Tags, MarkerEnvironment)>,
         allowed_yanks: AllowedYanks,
         hasher: HashStrategy,
         included_version_cutoff: Option<Timestamp>,
@@ -90,6 +92,16 @@ impl VersionMap {
         // already sorted flat entries with the archive-ordered simple vector.
         if let Some(flat_index) = flat_index {
             stable |= flat_index.iter().any(|(version, _)| version.is_stable());
+            let flat_index = if let Some((tags, markers)) = &artifact_context {
+                flat_index.prioritize_executor_artifacts(
+                    package_name,
+                    tags,
+                    markers,
+                    &allowed_yanks,
+                )
+            } else {
+                flat_index
+            };
             map = map.merge_flat(flat_index);
         }
         Self {
@@ -105,6 +117,7 @@ impl VersionMap {
                 allowed_yanks,
                 hasher,
                 requires_python,
+                artifact_context,
                 included_version_cutoff,
                 available_version_cutoff,
             }),
@@ -114,7 +127,10 @@ impl VersionMap {
     #[instrument(skip_all, fields(package_name))]
     pub(crate) fn from_flat_metadata(
         flat_metadata: Vec<FlatIndexEntry>,
+        package_name: &PackageName,
         tags: Option<&Tags>,
+        artifact_context: Option<&(Tags, MarkerEnvironment)>,
+        allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
@@ -122,9 +138,16 @@ impl VersionMap {
         let mut local = false;
         let mut map = BTreeMap::new();
 
-        for (version, prioritized_dist) in
+        for (version, mut prioritized_dist) in
             FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options)
         {
+            if let Some((tags, markers)) = artifact_context {
+                prioritized_dist.prioritize_executor_artifacts(
+                    tags,
+                    markers,
+                    allowed_yanks.contains(package_name, &version),
+                );
+            }
             stable |= version.is_stable();
             local |= version.is_local();
             map.insert(version, prioritized_dist);
@@ -291,8 +314,18 @@ impl VersionMap {
     }
 }
 
-impl From<FlatDistributions> for VersionMap {
-    fn from(flat_index: FlatDistributions) -> Self {
+impl VersionMap {
+    pub(crate) fn from_flat_distributions(
+        flat_index: FlatDistributions,
+        package_name: &PackageName,
+        artifact_context: Option<&(Tags, MarkerEnvironment)>,
+        allowed_yanks: &AllowedYanks,
+    ) -> Self {
+        let flat_index = if let Some((tags, markers)) = artifact_context {
+            flat_index.prioritize_executor_artifacts(package_name, tags, markers, allowed_yanks)
+        } else {
+            flat_index
+        };
         let stable = flat_index.iter().any(|(version, _)| version.is_stable());
         let local = flat_index.iter().any(|(version, _)| version.is_local());
         let map = flat_index.into();
@@ -495,6 +528,8 @@ struct VersionMapLazy {
     hasher: HashStrategy,
     /// The `requires-python` constraint for the resolution.
     requires_python: RequiresPython,
+    /// The concrete artifact context for a universal build resolution, if present.
+    artifact_context: Option<(Tags, MarkerEnvironment)>,
 }
 
 impl VersionMapLazy {
@@ -678,6 +713,9 @@ impl VersionMapLazy {
                     }
                 }
             }
+            if let Some((tags, markers)) = &self.artifact_context {
+                priority_dist.prioritize_executor_artifacts(tags, markers, true);
+            }
             if priority_dist.is_empty() {
                 None
             } else {
@@ -696,11 +734,6 @@ impl VersionMapLazy {
         excluded: bool,
         upload_time: Option<i64>,
     ) -> SourceDistCompatibility {
-        // Check if builds are disabled
-        if self.no_build {
-            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
-        }
-
         // Check if after upload time cutoff
         if excluded {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::ExcludeNewer(
@@ -715,6 +748,11 @@ impl VersionMapLazy {
                     yanked.clone(),
                 ));
             }
+        }
+
+        // Check if builds are disabled.
+        if self.no_build {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
@@ -745,11 +783,6 @@ impl VersionMapLazy {
         excluded: bool,
         upload_time: Option<i64>,
     ) -> WheelCompatibility {
-        // Check if binaries are disabled
-        if self.no_binary {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
-        }
-
         // Check if after upload time cutoff
         if excluded {
             return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
@@ -760,6 +793,11 @@ impl VersionMapLazy {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
                 return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
             }
+        }
+
+        // Check if binaries are disabled.
+        if self.no_binary {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
         }
 
         // Determine a compatibility for the wheel based on tags.

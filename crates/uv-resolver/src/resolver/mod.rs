@@ -123,6 +123,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     // The environment of the current Python interpreter.
     current_environment: MarkerEnvironment,
     tags: Option<Tags>,
+    artifact_tags: Option<Tags>,
     python_requirement: PythonRequirement,
     conflicts: Conflicts,
     workspace_members: BTreeSet<PackageName>,
@@ -249,6 +250,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             env,
             current_environment: current_environment.clone(),
             tags,
+            artifact_tags: None,
             python_requirement: python_requirement.clone(),
             conflicts,
             installed_packages,
@@ -272,6 +274,16 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
                 .provider
                 .with_reporter(reporter.into_distribution_reporter()),
         }
+    }
+
+    /// Require a compatible artifact for the environments that request artifact coverage.
+    #[must_use]
+    pub fn with_artifact_tags(mut self, tags: Tags) -> Self {
+        self.provider = self
+            .provider
+            .with_artifact_context(tags.clone(), self.state.current_environment.clone());
+        self.state.artifact_tags = Some(tags);
+        self
     }
 
     /// Resolve a set of requirements into a set of pinned versions.
@@ -1556,7 +1568,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // If the package is already compatible with all environments (as is the case for
         // packages that include a source distribution), we don't need to fork.
-        if dist.implied_markers().is_true() {
+        if dist.implied_markers().is_true()
+            && self.artifact_tags.as_ref().is_none_or(|tags| {
+                dist.prioritized().is_none_or(|distribution| {
+                    distribution.has_compatible_artifact(tags, &self.current_environment)
+                })
+            })
+        {
             return Ok(None);
         }
 
@@ -1566,8 +1584,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // If the platform is part of the current environment...
             if env.included_by_marker(marker) {
                 // But isn't supported by the distribution...
-                if dist.implied_markers().is_disjoint(marker)
-                    && !find_environments(id, pubgrub).is_disjoint(marker)
+                if (dist.implied_markers().is_disjoint(marker)
+                    || self.artifact_tags.as_ref().is_some_and(|tags| {
+                        dist.prioritized().is_some_and(|distribution| {
+                            !distribution.has_compatible_artifact(tags, &self.current_environment)
+                        })
+                    }))
+                    && if self.artifact_tags.is_some() {
+                        find_environments(id, pubgrub).evaluate(&self.current_environment, &[])
+                    } else {
+                        !find_environments(id, pubgrub).is_disjoint(marker)
+                    }
                 {
                     // Then we need to fork.
                     let Some((left, right)) = fork_version_by_marker(env, marker) else {

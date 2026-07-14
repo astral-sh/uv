@@ -5,6 +5,7 @@ use uv_distribution_types::Resolution;
 use uv_normalize::{GroupName, PackageName};
 use uv_python::Interpreter;
 use uv_resolver::{Lock, SelectedDependency};
+use uv_types::LockedBuildResolutions;
 use uv_workspace::VirtualProject;
 
 use crate::commands::pip::{resolution_markers, resolution_tags};
@@ -58,17 +59,18 @@ pub(crate) fn find_locked_tool<'lock>(
     }))
 }
 
-/// Materialize the exact dependency subgraph for a locked tool selection.
+/// Materialize the exact dependency subgraph and locked build resolutions for a tool selection.
 pub(crate) fn resolution_from_lock(
     project: &VirtualProject,
     lock: &Lock,
     tool: &LockedTool<'_>,
     interpreter: &Interpreter,
     build_options: &BuildOptions,
-) -> Result<Resolution> {
+    require_locked_build_resolutions: bool,
+) -> Result<(Resolution, LockedBuildResolutions)> {
     let marker_environment = resolution_markers(None, None, interpreter);
     let tags = resolution_tags(None, None, interpreter)?;
-    Ok(lock.to_resolution_from_dependency(
+    let resolution = lock.to_resolution_from_dependency(
         project.workspace().install_path(),
         tool.dependency(),
         project.project_name(),
@@ -76,5 +78,18 @@ pub(crate) fn resolution_from_lock(
         &tags,
         build_options,
         &InstallOptions::default(),
-    )?)
+    )?;
+    let locked_build_resolutions = lock.all_build_resolutions(
+        &resolution,
+        project.workspace().install_path(),
+        tags.as_ref(),
+        build_options,
+        marker_environment.markers(),
+        interpreter.markers(),
+        require_locked_build_resolutions,
+    )?;
+    Ok((
+        resolution,
+        LockedBuildResolutions::new(locked_build_resolutions),
+    ))
 }

@@ -1,10 +1,10 @@
 ---
 source: crates/uv-resolver/src/lock/mod.rs
-expression: result
+expression: expr
 ---
 Ok(
     Lock {
-        version: 1,
+        version: 2,
         revision: 0,
         fork_markers: [],
         conflicts: Conflicts(
@@ -53,6 +53,7 @@ Ok(
                     source: Editable(
                         "path/to/a",
                     ),
+                    resolution_id: None,
                 },
                 sdist: None,
                 wheels: [],
@@ -81,6 +82,7 @@ Ok(
                             ),
                         ),
                     ),
+                    resolution_id: None,
                 },
                 sdist: Some(
                     Url {
@@ -129,6 +131,7 @@ Ok(
                             ),
                         ),
                     ),
+                    resolution_id: None,
                 },
                 sdist: Some(
                     Url {
@@ -163,6 +166,7 @@ Ok(
                             source: Editable(
                                 "path/to/a",
                             ),
+                            resolution_id: None,
                         },
                         extra: {},
                         simplified_marker: SimplifiedMarkerTree(
@@ -185,15 +189,6 @@ Ok(
                 name: PackageName(
                     "a",
                 ),
-                version: None,
-                source: Editable(
-                    "path/to/a",
-                ),
-            }: 0,
-            PackageId {
-                name: PackageName(
-                    "a",
-                ),
                 version: Some(
                     "0.1.1",
                 ),
@@ -204,7 +199,18 @@ Ok(
                         ),
                     ),
                 ),
+                resolution_id: None,
             }: 1,
+            PackageId {
+                name: PackageName(
+                    "a",
+                ),
+                version: None,
+                source: Editable(
+                    "path/to/a",
+                ),
+                resolution_id: None,
+            }: 0,
             PackageId {
                 name: PackageName(
                     "b",
@@ -219,6 +225,7 @@ Ok(
                         ),
                     ),
                 ),
+                resolution_id: None,
             }: 2,
         },
         manifest: ResolverManifest {

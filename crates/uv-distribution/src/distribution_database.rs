@@ -20,7 +20,7 @@ use uv_client::{
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashPolicy, Hashed, IndexUrl,
-    InstalledDist, Name, SourceDist, ToUrlError,
+    InstalledDist, Name, Requirement, SourceDist, ToUrlError,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -39,6 +39,17 @@ use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
+
+/// Statically known fields from a source distribution's `[build-system]` table.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StaticBuildSystem {
+    /// Lowered PEP 508 dependencies required to execute the build system.
+    pub requires: Vec<Requirement>,
+    /// The effective PEP 517 backend.
+    pub build_backend: String,
+    /// The ordered in-tree backend paths.
+    pub backend_path: Vec<String>,
+}
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -171,6 +182,36 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
             }
         }
+    }
+
+    /// Return the static build system from a source distribution, if available.
+    #[instrument(skip_all, fields(%source))]
+    pub async fn get_static_build_system(
+        &self,
+        source: &SourceDist,
+        hashes: HashPolicy<'_>,
+    ) -> Result<Option<StaticBuildSystem>, Error> {
+        self.builder
+            .download_build_system(&BuildableSource::Dist(source), hashes, &self.client)
+            .await
+    }
+
+    /// Return whether a source distribution can be built using the in-process uv backend.
+    #[instrument(skip_all, fields(%source))]
+    pub async fn is_direct_build(
+        &self,
+        source: &SourceDist,
+        hashes: HashPolicy<'_>,
+        uv_version: &str,
+    ) -> Result<bool, Error> {
+        self.builder
+            .download_direct_build(
+                &BuildableSource::Dist(source),
+                hashes,
+                &self.client,
+                uv_version,
+            )
+            .await
     }
 
     /// Fetch a wheel from the cache or download it from the index.
@@ -519,21 +560,33 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
-        // If the wheel was unzipped previously, respect it. Source distributions are
-        // cached under a unique revision ID, so unzipped directories are never stale.
-        match self.build_context.cache().resolve_link(&built_wheel.target) {
-            Ok(archive) => {
-                return Ok(LocalWheel {
-                    dist: Dist::Source(dist.clone()),
-                    archive: archive.into_boxed_path(),
-                    filename: built_wheel.filename,
-                    hashes: built_wheel.hashes,
-                    cache: built_wheel.cache_info,
-                    build: Some(built_wheel.build_info),
-                });
+        // Reuse an unzipped wheel only when it is fresh. An explicitly refreshed build
+        // dependency can otherwise reinstall an archive produced by an older built wheel.
+        if self
+            .build_context
+            .cache()
+            .freshness(
+                &CacheEntry::from_path(built_wheel.target.as_ref()),
+                Some(dist.name()),
+                BuildableSource::Dist(dist).source_tree(),
+            )
+            .map_err(Error::CacheRead)?
+            .is_fresh()
+        {
+            match self.build_context.cache().resolve_link(&built_wheel.target) {
+                Ok(archive) => {
+                    return Ok(LocalWheel {
+                        dist: Dist::Source(dist.clone()),
+                        archive: archive.into_boxed_path(),
+                        filename: built_wheel.filename,
+                        hashes: built_wheel.hashes,
+                        cache: built_wheel.cache_info,
+                        build: Some(built_wheel.build_info),
+                    });
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(err) => return Err(Error::CacheRead(err)),
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-            Err(err) => return Err(Error::CacheRead(err)),
         }
 
         // Otherwise, unzip the wheel.
@@ -670,11 +723,26 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let metadata = self
             .builder
-            .download_and_build_metadata(source, hashes, &self.client)
+            .download_and_build_metadata(source, hashes, &self.client, false)
             .boxed_local()
             .await?;
 
         Ok(metadata)
+    }
+
+    /// Resolve PEP 517 hook build requirements for source distributions with static metadata.
+    #[instrument(skip_all, fields(%source))]
+    pub async fn resolve_static_build_requirements(
+        &self,
+        source: &SourceDist,
+        hashes: HashPolicy<'_>,
+    ) -> Result<(), Error> {
+        self.builder
+            .download_and_build_metadata(&BuildableSource::Dist(source), hashes, &self.client, true)
+            .boxed_local()
+            .await?;
+
+        Ok(())
     }
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.

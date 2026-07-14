@@ -175,7 +175,7 @@ pub(crate) async fn upgrade(
     };
 
     let mut resolved_versions = BTreeSet::new();
-    for resolved_package in result.lock().packages() {
+    for resolved_package in result.lock().runtime_packages() {
         // A universal lock can contain versions from disjoint forks, so only collect versions
         // from forks where the selected requirement applies.
         if resolved_package.name() == &package

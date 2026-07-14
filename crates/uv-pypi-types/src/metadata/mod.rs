@@ -16,7 +16,7 @@ use uv_pep508::Pep508Error;
 
 use crate::VerbatimParsedUrl;
 
-pub use build_requires::BuildRequires;
+pub use build_requires::{BackendPath, BuildRequires, BuildSystem};
 pub use metadata_resolver::ResolutionMetadata;
 pub use metadata10::Metadata10;
 pub use metadata23::{Keywords, Metadata23, ProjectUrls};

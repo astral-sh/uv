@@ -512,8 +512,7 @@ async fn print_frozen_version(
 
     // Try to find the package of interest in the lock
     let Some(package) = lock
-        .packages()
-        .iter()
+        .runtime_packages()
         .find(|package| package.name() == name)
     else {
         return Err(anyhow!(

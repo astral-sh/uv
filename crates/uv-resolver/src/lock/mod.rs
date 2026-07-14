@@ -13,27 +13,28 @@ use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use serde::Serializer;
+use serde::{Deserialize, Serializer};
 use toml_edit::{Array, ArrayOfTables, InlineTable, Item, Table, Value, value};
 use tracing::{debug, instrument, trace};
 use url::Url;
 
-use uv_cache_key::RepositoryUrl;
+use uv_cache_key::{RepositoryUrl, hash_digest};
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
     ExtrasSpecificationWithDefaults, InstallTarget, Override, PackageOverride,
 };
-use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist, StaticBuildSystem};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist, Identifier,
-    IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement,
-    RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
-    ToUrlError, UrlString,
+    Dist, ExtraBuildRequires, FileLocation, GitDirectorySourceDist, GitPathBuiltDist,
+    GitPathSourceDist, HashGeneration, HashPolicy, Identifier, IndexLocations, IndexMetadata,
+    IndexUrl, Name, Node, PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
+    RequiresPython, Resolution, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError,
+    UrlString, implied_markers,
 };
 use uv_fs::{
     PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
@@ -41,20 +42,25 @@ use uv_fs::{
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion, Scheme,
+    VerbatimUrl, VerbatimUrlError, split_scheme,
 };
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
-    ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ConflictItem, ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml, Yanked,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
-use uv_types::{BuildContext, HashStrategy};
+use uv_types::{
+    BuildContext, BuildPackageKey, BuildPackageSource, BuildResolutionGraphKey,
+    BuildResolutionGraphMap, BuildResolutionOperation, BuildResolutionStage, HashStrategy,
+    LockedBuildDependency, LockedBuildResolution, build_keys_match,
+};
 use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
@@ -79,10 +85,16 @@ mod map;
 mod tree;
 
 /// The current version of the lockfile format.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
+
+/// The version used for lockfiles that do not contain build dependencies.
+const DEFAULT_VERSION: u32 = 1;
 
 /// The current revision of the lockfile format.
 const REVISION: u32 = 3;
+
+/// The revision used when `build-dependencies` are included in the lockfile.
+const BUILD_DEPENDENCIES_REVISION: u32 = 4;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -254,17 +266,325 @@ pub(crate) struct HashedDist {
     hashes: HashDigests,
 }
 
+/// Map from (package name, optional version) to a list of transitive build dependency
+/// (name, version) pairs. Used as resolver preferences during re-lock.
+pub(crate) type BuildDependencyPreferences = BTreeMap<BuildPackageKey, Vec<(PackageName, Version)>>;
+
+type UnambiguousPackageIds = FxHashMap<(PackageName, Option<String>), PackageId>;
+
+fn build_key_from_package_id(package_id: &PackageId) -> BuildPackageKey {
+    let source = match &package_id.source {
+        Source::Registry(RegistrySource::Url(url)) => {
+            Some(BuildPackageSource::Registry(url.as_ref().to_string()))
+        }
+        Source::Registry(RegistrySource::Path(path)) => Some(BuildPackageSource::Registry(
+            PortablePath::from(path).to_string(),
+        )),
+        Source::Git(url, _) => Some(BuildPackageSource::Git(url.as_ref().to_string())),
+        Source::Direct(url, _) => Some(BuildPackageSource::DirectUrl(url.as_ref().to_string())),
+        Source::Path(path) => Some(BuildPackageSource::Path(
+            PortablePath::from(path).to_string(),
+        )),
+        Source::Directory(path) => Some(BuildPackageSource::Directory(
+            PortablePath::from(path).to_string(),
+        )),
+        Source::Editable(path) => Some(BuildPackageSource::Editable(
+            PortablePath::from(path).to_string(),
+        )),
+        Source::Virtual(path) => Some(BuildPackageSource::Virtual(
+            PortablePath::from(path).to_string(),
+        )),
+    };
+
+    BuildPackageKey::with_source(package_id.name.clone(), package_id.version.clone(), source)
+}
+
+fn build_key_for_package(package: &Package, root: &Path) -> BuildPackageKey {
+    let source_dist = package.to_source_dist(root).ok().flatten();
+    if let Some(source_dist) = source_dist.as_ref() {
+        BuildPackageKey::from_source_dist(
+            package.id.name.clone(),
+            package.id.version.clone(),
+            Some(source_dist),
+        )
+    } else {
+        build_key_from_package_id(&package.id)
+    }
+}
+
+fn runtime_requirement_matches_package(requirement: &Requirement, package: &Package) -> bool {
+    if requirement.name != package.id.name {
+        return false;
+    }
+
+    match (&requirement.source, &package.id.source) {
+        (
+            RequirementSource::Registry {
+                specifier, index, ..
+            },
+            Source::Registry(source),
+        ) => {
+            let index_matches = index
+                .as_ref()
+                .is_none_or(|index| match (&index.url, source) {
+                    (IndexUrl::Pypi(_) | IndexUrl::Url(_), RegistrySource::Url(source)) => {
+                        index.url.without_credentials().as_str() == source.as_ref()
+                    }
+                    (IndexUrl::Path(index), RegistrySource::Path(source)) => index
+                        .to_file_path()
+                        .is_ok_and(|path| path.ends_with(source)),
+                    _ => false,
+                });
+            index_matches
+                && package
+                    .id
+                    .version
+                    .as_ref()
+                    .is_some_and(|version| specifier.contains(version))
+        }
+        (
+            RequirementSource::Url {
+                location,
+                subdirectory,
+                ..
+            },
+            Source::Direct(url, source),
+        ) => url.as_ref() == location.as_str() && source.subdirectory == *subdirectory,
+        (
+            RequirementSource::GitDirectory {
+                git, subdirectory, ..
+            },
+            Source::Git(url, source),
+        ) => {
+            source.path.is_none()
+                && source.subdirectory == *subdirectory
+                && git
+                    .precise()
+                    .is_none_or(|precise| precise == source.precise)
+                && url.to_url().is_ok_and(|url| {
+                    RepositoryUrl::new(url) == *git.repository()
+                        && source.kind == GitSourceKind::from(git.reference().clone())
+                })
+        }
+        (
+            RequirementSource::GitPath {
+                git, install_path, ..
+            },
+            Source::Git(url, source),
+        ) => {
+            source.path.as_ref() == Some(install_path)
+                && git
+                    .precise()
+                    .is_none_or(|precise| precise == source.precise)
+                && url.to_url().is_ok_and(|url| {
+                    RepositoryUrl::new(url) == *git.repository()
+                        && source.kind == GitSourceKind::from(git.reference().clone())
+                })
+        }
+        (RequirementSource::Path { install_path, .. }, Source::Path(path)) => {
+            install_path.ends_with(path)
+        }
+        (
+            RequirementSource::Directory {
+                install_path,
+                editable,
+                r#virtual,
+                ..
+            },
+            source,
+        ) => {
+            let path = match source {
+                Source::Virtual(path) if r#virtual.unwrap_or(false) => path,
+                Source::Editable(path) if editable.unwrap_or(false) => path,
+                Source::Directory(path) if !editable.unwrap_or(false) => path,
+                _ => return false,
+            };
+            install_path.ends_with(path)
+        }
+        _ => false,
+    }
+}
+
+fn build_operation_for_key(key: &BuildPackageKey) -> BuildResolutionOperation {
+    if matches!(key.source, Some(BuildPackageSource::Editable(_))) {
+        BuildResolutionOperation::Editable
+    } else {
+        BuildResolutionOperation::Wheel
+    }
+}
+
+fn build_key_from_resolved_source_dist(resolved_dist: &ResolvedDist) -> Option<BuildPackageKey> {
+    let ResolvedDist::Installable { dist, version } = resolved_dist else {
+        return None;
+    };
+    let Dist::Source(source_dist) = dist.as_ref() else {
+        return None;
+    };
+    Some(BuildPackageKey::from_source_dist(
+        resolved_dist.name().clone(),
+        version.clone(),
+        Some(source_dist),
+    ))
+}
+
+fn build_resolution_context_id_for_package(
+    package: &Package,
+    operation: BuildResolutionOperation,
+    stage: BuildResolutionStage,
+    target: Option<&TargetSelector>,
+) -> String {
+    build_resolution_context_id_with_context(
+        &build_key_from_package_id(&package.id),
+        operation,
+        stage,
+        target,
+    )
+}
+
+fn build_resolution_context_id(package: &BuildPackageKey) -> String {
+    build_resolution_context_id_with_context(
+        package,
+        BuildResolutionOperation::Wheel,
+        BuildResolutionStage::Build,
+        None,
+    )
+}
+
+fn build_resolution_context_id_with_context(
+    package: &BuildPackageKey,
+    operation: BuildResolutionOperation,
+    stage: BuildResolutionStage,
+    target: Option<&TargetSelector>,
+) -> String {
+    let digest = hash_digest(&build_resolution_context_identity(
+        package, operation, stage, target,
+    ));
+    format!(
+        "build:{}:{}:{}:{digest}",
+        package.name,
+        operation.as_str(),
+        stage.as_str()
+    )
+}
+
+fn build_resolution_context_identity(
+    package: &BuildPackageKey,
+    operation: BuildResolutionOperation,
+    stage: BuildResolutionStage,
+    target: Option<&TargetSelector>,
+) -> String {
+    let mut identity = format!("operation={};name={}", operation.as_str(), package.name);
+    identity.push_str(";stage=");
+    identity.push_str(stage.as_str());
+    if let Some(version) = package.version.as_ref() {
+        identity.push_str(";version=");
+        identity.push_str(&version.to_string());
+    }
+    if let Some(source) = package.source.as_ref() {
+        let (kind, value) = build_package_source_identity(source);
+        identity.push_str(";source=");
+        identity.push_str(kind);
+        identity.push('=');
+        identity.push_str(value);
+    }
+    if let Some(target) = target {
+        identity.push_str(";target=");
+        identity.push_str(&target.to_toml().to_string());
+    }
+    identity
+}
+
+fn build_package_source_identity(source: &BuildPackageSource) -> (&'static str, &str) {
+    match source {
+        BuildPackageSource::Registry(value) => ("registry", value),
+        BuildPackageSource::DirectUrl(value) => ("direct-url", value),
+        BuildPackageSource::Git(value) => ("git", value),
+        BuildPackageSource::Path(value) => ("path", value),
+        BuildPackageSource::Directory(value) => ("directory", value),
+        BuildPackageSource::Editable(value) => ("editable", value),
+        BuildPackageSource::Virtual(value) => ("virtual", value),
+    }
+}
+
+fn package_id_from_resolved_dist(
+    resolved_dist: &ResolvedDist,
+    root: &Path,
+) -> Result<PackageId, LockError> {
+    let source = Source::from_resolved_dist(resolved_dist, root)?;
+    Ok(PackageId {
+        name: resolved_dist.name().clone(),
+        version: resolved_dist_lock_version(resolved_dist, &source, root),
+        source,
+        resolution_id: None,
+    })
+}
+
+/// Resolved build dependency dists carry their concrete metadata version, but
+/// dynamic source trees must remain versionless in the lockfile.
+fn resolved_dist_lock_version(
+    resolved_dist: &ResolvedDist,
+    source: &Source,
+    root: &Path,
+) -> Option<Version> {
+    if let Some(source_tree) = source.as_source_tree() {
+        let path = root.join(source_tree).join("pyproject.toml");
+        if let Ok(contents) = fs_err::read_to_string(&path)
+            && let Ok(pyproject_toml) = PyProjectToml::from_toml(&contents, path.user_display())
+            && pyproject_toml
+                .project
+                .as_ref()
+                .is_some_and(|project| project.version.is_none())
+        {
+            return None;
+        }
+    }
+
+    resolved_dist.version().cloned()
+}
+
+fn lookup_build_key_value<'a, T>(
+    map: &'a BTreeMap<BuildPackageKey, T>,
+    package: &Package,
+    root: &Path,
+) -> Option<&'a T> {
+    let key = build_key_for_package(package, root);
+    if let Some(value) = map.get(&key) {
+        return Some(value);
+    }
+
+    let mut matches = map
+        .iter()
+        .filter(|(candidate, _)| build_keys_match(candidate, &key))
+        .map(|(_, value)| value);
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
+}
+
+fn build_resolution_target(
+    build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
+    package: &Package,
+    root: &Path,
+    requires_python: &RequiresPython,
+) -> Option<TargetSelector> {
+    lookup_build_key_value(build_markers, package, root).and_then(|marker| {
+        let marker = UniversalMarker::new(
+            requires_python.complexify_markers(marker.pep508()),
+            marker.conflict(),
+        );
+        (!marker.is_true())
+            .then(|| TargetSelector::from_universal_marker(marker, requires_python))
+            .flatten()
+            .filter(|target| !target.is_empty())
+    })
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
     /// The (major) version of the lockfile format.
     ///
-    /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
-    /// lockfile format. A given uv version only supports a single major version of the lockfile
-    /// format.
-    ///
-    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
-    /// able to read lockfiles generated under version 1 or 3.
+    /// Changes to the major version fence older readers from lockfile features they cannot safely
+    /// ignore. Newer readers may continue to support earlier schema versions.
     version: u32,
     /// The revision of the lockfile format.
     ///
@@ -287,6 +607,8 @@ pub struct Lock {
     options: ResolverOptions,
     /// The actual locked version and their metadata.
     packages: Vec<Package>,
+    /// Independently replayable resolution contexts represented in the package graph.
+    resolutions: Vec<ResolutionRecord>,
     /// A map from package ID to index in `packages`.
     ///
     /// This can be used to quickly lookup the full package for any ID
@@ -406,7 +728,23 @@ impl Lock {
         root: &Path,
         supported_environments: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
+        Self::from_resolution_with_build_markers(resolution, root, supported_environments).map(
+            |(mut lock, _)| {
+                lock.normalize_legacy_artifact_eligibility();
+                lock
+            },
+        )
+    }
+
+    /// Initialize a [`Lock`] and retain source-package reachability for build resolution.
+    pub fn from_resolution_with_build_markers(
+        resolution: &ResolverOutput,
+        root: &Path,
+        supported_environments: Vec<MarkerTree>,
+    ) -> Result<(Self, BTreeMap<BuildPackageKey, UniversalMarker>), LockError> {
         let mut packages = BTreeMap::new();
+        let mut build_markers = BTreeMap::new();
+        let mut selected_source_package_keys = FxHashMap::default();
         let requires_python = resolution.requires_python.clone();
         let supported_environments = supported_environments
             .into_iter()
@@ -449,12 +787,21 @@ impl Lock {
                     .filter(|fork_markers| !fork_markers.is_disjoint(dist.marker))
                     .copied()
                     .collect::<Vec<_>>();
-                canonicalize_universal_markers(&fork_markers, &requires_python)
+                canonicalize_universal_markers(&fork_markers, &requires_python, false)
             } else {
                 vec![]
             };
 
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
+            if matches!(
+                &dist.dist,
+                ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Source(_))
+            ) && !matches!(package.id.source, Source::Virtual(_))
+                && package.to_source_dist(root)?.is_some()
+            {
+                selected_source_package_keys
+                    .insert(package.id.clone(), build_key_for_package(&package, root));
+            }
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
                 wheel_marker.and(supported_environments_marker);
@@ -560,6 +907,13 @@ impl Lock {
             }
         }
 
+        for (_, dist) in resolution.base_dists() {
+            let id = PackageId::from_annotated_dist(dist, root)?;
+            if let Some(key) = selected_source_package_keys.get(&id) {
+                build_markers.insert(key.clone(), dist.marker);
+            }
+        }
+
         let packages = packages.into_values().collect();
 
         let options = ResolverOptions {
@@ -573,9 +927,9 @@ impl Lock {
         // nothing at the top level, and `uv lock --check` should compare against
         // that canonical form rather than the raw resolver output.
         let fork_markers =
-            canonicalize_universal_markers(&resolution.fork_markers, &requires_python);
+            canonicalize_universal_markers(&resolution.fork_markers, &requires_python, false);
         let lock = Self::new(
-            VERSION,
+            DEFAULT_VERSION,
             REVISION,
             packages,
             requires_python,
@@ -586,7 +940,7 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
-        Ok(lock)
+        Ok((lock, build_markers))
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -645,6 +999,10 @@ impl Lock {
                     }
                 }
             }
+
+            // Sort build dependencies.
+            package.build_dependencies.sort();
+            package.build_dependencies.dedup();
         }
         packages.sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));
 
@@ -655,6 +1013,75 @@ impl Lock {
             if by_id.insert(dist.id.clone(), i).is_some() {
                 return Err(LockErrorKind::DuplicatePackage {
                     id: dist.id.clone(),
+                }
+                .into());
+            }
+        }
+
+        // Runtime dependency edges must never select a package that is only present for an
+        // isolated build. Otherwise, runtime consumers can silently install a different closure
+        // depending on whether they traverse edges or enumerate runtime packages.
+        for dist in packages
+            .iter()
+            .filter(|dist| !dist.build_only && dist.id.resolution_id.is_none())
+        {
+            for dependency in dist
+                .dependencies
+                .iter()
+                .chain(dist.optional_dependencies.values().flatten())
+                .chain(dist.dependency_groups.values().flatten())
+            {
+                if by_id
+                    .get(&dependency.package_id)
+                    .and_then(|index| packages.get(*index))
+                    .is_some_and(|target| target.build_only || target.id.resolution_id.is_some())
+                {
+                    return Err(LockErrorKind::BuildOnlyRuntimeDependency {
+                        id: dist.id.clone(),
+                        dependency: dependency.clone(),
+                    }
+                    .into());
+                }
+            }
+        }
+
+        // Project-less workspaces and scripts store their roots in the lock manifest instead of
+        // on a package edge. Validate those roots separately so a corrupted `build-only` flag
+        // cannot cause a runtime requirement to select an incompatible build package.
+        let mut runtime_environment = fork_markers_union(&fork_markers, &requires_python);
+        if !supported_environments.is_empty() {
+            let mut supported_environment = MarkerTree::FALSE;
+            for environment in &supported_environments {
+                supported_environment.or(*environment);
+            }
+            runtime_environment.and(supported_environment);
+        }
+        for requirement in manifest
+            .requirements
+            .iter()
+            .chain(manifest.dependency_groups.values().flatten())
+            .filter(|requirement| !requirement.marker.is_disjoint(runtime_environment))
+        {
+            let mut requirement_environment = runtime_environment;
+            requirement_environment.and(requirement.marker);
+            let candidates = packages
+                .iter()
+                .filter(|package| runtime_requirement_matches_package(requirement, package));
+            let mut has_candidate = false;
+            let mut has_runtime_candidate = false;
+            for candidate in candidates {
+                has_candidate = true;
+                has_runtime_candidate |= !candidate.build_only
+                    && candidate.id.resolution_id.is_none()
+                    && (candidate.fork_markers.is_empty()
+                        || candidate
+                            .fork_markers
+                            .iter()
+                            .any(|marker| !marker.pep508().is_disjoint(requirement_environment)));
+            }
+            if has_candidate && !has_runtime_candidate {
+                return Err(LockErrorKind::BuildOnlyRuntimeRequirement {
+                    name: requirement.name.clone(),
                 }
                 .into());
             }
@@ -701,6 +1128,16 @@ impl Lock {
                 }
             }
 
+            for dependency in &dist.build_dependencies {
+                if !by_id.contains_key(&dependency.package_id) {
+                    return Err(LockErrorKind::UnrecognizedBuildDependency {
+                        id: dist.id.clone(),
+                        dependency: dependency.clone(),
+                    }
+                    .into());
+                }
+            }
+
             // Perform the same validation for optional dependencies.
             for dependencies in dist.optional_dependencies.values() {
                 for dep in dependencies {
@@ -730,6 +1167,16 @@ impl Lock {
             // Also check that our sources are consistent with whether we have
             // hashes or not.
             if let Some(requires_hash) = dist.id.source.requires_hash() {
+                if let Some(sdist) = &dist.sdist
+                    && requires_hash != sdist.hash().is_some()
+                {
+                    return Err(LockErrorKind::Hash {
+                        id: dist.id.clone(),
+                        artifact_type: "source distribution",
+                        expected: requires_hash,
+                    }
+                    .into());
+                }
                 for wheel in &dist.wheels {
                     if requires_hash != wheel.hash.is_some() {
                         return Err(LockErrorKind::Hash {
@@ -752,6 +1199,7 @@ impl Lock {
             requires_python,
             options,
             packages,
+            resolutions: Vec::new(),
             by_id,
             manifest,
         };
@@ -763,6 +1211,1721 @@ impl Lock {
     pub fn with_manifest(mut self, manifest: ResolverManifest) -> Self {
         self.manifest = manifest;
         self
+    }
+
+    /// Return the statically known build system after lowering local source configuration.
+    async fn lowered_build_system<Context: BuildContext>(
+        &self,
+        package: &Package,
+        root: &Path,
+        database: &DistributionDatabase<'_, Context>,
+        build_hasher: &HashStrategy,
+    ) -> Result<Option<StaticBuildSystem>, LockError> {
+        if !matches!(
+            package.id.source,
+            Source::Path(_)
+                | Source::Directory(_)
+                | Source::Editable(_)
+                | Source::Virtual(_)
+                | Source::Direct(..)
+                | Source::Registry(RegistrySource::Path(_))
+        ) {
+            return Ok(None);
+        }
+        let Some(source_dist) = package.to_source_dist(root)? else {
+            return Ok(None);
+        };
+        let dist = Dist::Source(source_dist.clone());
+        database
+            .get_static_build_system(&source_dist, build_hasher.get(&dist))
+            .await
+            .map_err(|err| {
+                LockErrorKind::Resolution {
+                    id: package.id.clone(),
+                    err,
+                }
+                .into()
+            })
+    }
+
+    /// Return the context ID for a captured build resolution graph.
+    pub fn build_resolution_context_id_for(
+        &self,
+        key: &BuildPackageKey,
+        operation: BuildResolutionOperation,
+        stage: BuildResolutionStage,
+        build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
+        root: &Path,
+    ) -> Result<String, LockError> {
+        let package = self
+            .packages
+            .iter()
+            .find(|package| build_keys_match(&build_key_for_package(package, root), key));
+        let target = package.and_then(|package| {
+            build_resolution_target(build_markers, package, root, &self.requires_python)
+        });
+        Ok(package.map_or_else(
+            || build_resolution_context_id_with_context(key, operation, stage, target.as_ref()),
+            |package| {
+                build_resolution_context_id_for_package(package, operation, stage, target.as_ref())
+            },
+        ))
+    }
+
+    /// Return the context ID for a captured build resolution graph with an explicit target marker.
+    pub fn build_resolution_context_id_for_marker(
+        &self,
+        key: &BuildPackageKey,
+        operation: BuildResolutionOperation,
+        stage: BuildResolutionStage,
+        target_marker: Option<MarkerTree>,
+        root: &Path,
+    ) -> Result<String, LockError> {
+        let package = self
+            .packages
+            .iter()
+            .find(|package| build_keys_match(&build_key_for_package(package, root), key));
+        let target = target_marker
+            .map(|marker| {
+                UniversalMarker::from_combined(self.requires_python.complexify_markers(marker))
+            })
+            .and_then(|marker| TargetSelector::from_universal_marker(marker, &self.requires_python))
+            .filter(|target| !target.is_empty());
+        Ok(package.map_or_else(
+            || build_resolution_context_id_with_context(key, operation, stage, target.as_ref()),
+            |package| {
+                build_resolution_context_id_for_package(package, operation, stage, target.as_ref())
+            },
+        ))
+    }
+
+    /// Populate build dependencies from captured build resolutions.
+    ///
+    /// Only **direct** build requirements are stored in `build-dependencies`,
+    /// consistent with how regular `dependencies` work. Transitive build
+    /// dependency edges are normally shared with package dependencies, but
+    /// are recorded on resolution-scoped package nodes when separate isolated builds
+    /// select incompatible closures for the same package.
+    pub async fn with_build_resolutions<Context: BuildContext>(
+        mut self,
+        build_resolutions: &BuildResolutionGraphMap,
+        extra_build_requires: &ExtraBuildRequires,
+        build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
+        root: &Path,
+        database: &DistributionDatabase<'_, Context>,
+        build_hasher: &HashStrategy,
+    ) -> Result<Self, LockError> {
+        if build_resolutions.is_empty() {
+            self.manifest.build_settings = None;
+            return Ok(self);
+        }
+
+        // Bump the version and revision to indicate the lockfile contains build dependencies.
+        self.version = VERSION;
+        self.revision = BUILD_DEPENDENCIES_REVISION;
+
+        // Preserve the packages selected by the runtime resolution so isolated build edges
+        // are not appended to their application dependency graph.
+        let runtime_packages: FxHashSet<PackageId> =
+            self.packages.iter().map(|p| p.id.clone()).collect();
+        let mut existing_packages = runtime_packages.clone();
+
+        // Collect direct build dep refs per parent, and new packages to add.
+        let mut build_dep_refs: BTreeMap<BuildPackageKey, Vec<BuildDependency>> = BTreeMap::new();
+        let mut build_resolution_dep_refs: BTreeMap<BuildResolutionGraphKey, Vec<BuildDependency>> =
+            BTreeMap::new();
+        let mut build_dependency_artifacts: BTreeMap<
+            BuildResolutionGraphKey,
+            BTreeMap<PackageId, BuildDependencyArtifacts>,
+        > = BTreeMap::new();
+        let mut build_requires_map: BTreeMap<BuildPackageKey, BTreeSet<Requirement>> =
+            BTreeMap::new();
+        let mut build_system_map: BTreeMap<BuildPackageKey, PackageBuildSystem> = BTreeMap::new();
+        let mut new_packages: Vec<Package> = Vec::new();
+        let contextual_build_packages = build_resolutions
+            .keys()
+            .filter(|key| key.context.is_some())
+            .map(|key| key.package.clone())
+            .collect::<BTreeSet<_>>();
+        let build_resolution_graphs = build_resolutions
+            .iter()
+            .filter(|(key, _)| {
+                if key.context.is_some() {
+                    return true;
+                }
+                if contextual_build_packages.contains(&key.package) {
+                    return false;
+                }
+                if key.package.source.is_some() {
+                    return true;
+                }
+                !contextual_build_packages.iter().any(|contextual| {
+                    contextual.name == key.package.name && contextual.version == key.package.version
+                })
+            })
+            .collect_vec();
+
+        // First pass: create all new Package entries (without dependencies) and
+        // collect direct build requirements per parent.
+        for &(graph_key, info) in &build_resolution_graphs {
+            let parent_key = &graph_key.package;
+            // Create Package entries for any packages not already in the lock.
+            for entry in &info.packages {
+                let resolved_dist = &entry.dist;
+                let Ok(package_id) = package_id_from_resolved_dist(resolved_dist, root) else {
+                    continue;
+                };
+
+                let generated_hashes;
+                let hashes = if entry.hashes.is_empty()
+                    && let ResolvedDist::Installable { dist, .. } = resolved_dist
+                    && matches!(
+                        dist.as_ref(),
+                        Dist::Built(BuiltDist::Path(_) | BuiltDist::DirectUrl(_))
+                            | Dist::Source(
+                                uv_distribution_types::SourceDist::DirectUrl(_)
+                                    | uv_distribution_types::SourceDist::Path(_)
+                            )
+                    ) {
+                    generated_hashes = database
+                        .get_or_build_wheel_metadata(
+                            dist,
+                            HashPolicy::Generate(HashGeneration::Url),
+                        )
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package_id.clone(),
+                            err,
+                        })?
+                        .hashes;
+                    generated_hashes.as_slice()
+                } else {
+                    entry.hashes.as_slice()
+                };
+
+                let mut package = Package::from_resolved_dist(resolved_dist, hashes, root)?;
+
+                build_dependency_artifacts
+                    .entry(graph_key.clone())
+                    .or_default()
+                    .insert(
+                        package_id.clone(),
+                        BuildDependencyArtifacts::from_resolved_dist(
+                            &package,
+                            resolved_dist,
+                            entry.allows_yanked,
+                        ),
+                    );
+
+                if !existing_packages.insert(package_id.clone()) {
+                    // Runtime artifacts are authoritative; keep build-only artifacts scoped.
+                    if !runtime_packages.contains(&package_id)
+                        && let Some(existing_package) = new_packages
+                            .iter_mut()
+                            .find(|existing_package| existing_package.id == package_id)
+                    {
+                        existing_package.add_artifacts(package);
+                    }
+                    continue;
+                }
+
+                if !package.id.source.is_immutable() {
+                    let ResolvedDist::Installable { dist, .. } = resolved_dist else {
+                        return Err(LockErrorKind::InstalledBuildDep.into());
+                    };
+                    let archive = database
+                        .get_or_build_wheel_metadata(dist, build_hasher.get(dist.as_ref()))
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package_id,
+                            err,
+                        })?;
+                    package.metadata =
+                        PackageMetadata::from_distribution_metadata(&archive.metadata, root)?;
+                }
+                new_packages.push(package);
+            }
+
+            // Collect only the direct build requirements as build-dependencies.
+            let mut deps = Vec::new();
+            for root_dep in &info.direct_dependencies {
+                let resolved_dist = &root_dep.dist;
+                let Ok(package_id) = package_id_from_resolved_dist(resolved_dist, root) else {
+                    continue;
+                };
+
+                let mut match_runtime_marker = MarkerTree::FALSE;
+                let mut match_runtime = false;
+                if let Some(requirements) = extra_build_requires.get(&parent_key.name) {
+                    for requirement in requirements {
+                        if requirement.match_runtime
+                            && requirement.requirement.name == *resolved_dist.name()
+                        {
+                            match_runtime = true;
+                            match_runtime_marker.or(requirement.requirement.marker);
+                        }
+                    }
+                }
+                let marker = if match_runtime {
+                    match_runtime_marker
+                } else {
+                    root_dep.marker
+                };
+                let simplified = SimplifiedMarkerTree::new(&self.requires_python, marker);
+                let marker_opt = simplified
+                    .try_to_string()
+                    .map(|_| simplified.as_simplified_marker_tree());
+
+                deps.push(BuildDependency::new(
+                    package_id,
+                    root_dep.extras.clone(),
+                    marker_opt,
+                    match_runtime,
+                ));
+            }
+            if graph_key.stage.unwrap_or(BuildResolutionStage::Build) == BuildResolutionStage::Build
+            {
+                build_dep_refs
+                    .entry(parent_key.clone())
+                    .or_default()
+                    .extend(deps.iter().cloned());
+            }
+            build_resolution_dep_refs.insert(graph_key.clone(), deps);
+        }
+
+        // Add new packages to the lock before extracting build requirement metadata so
+        // source packages that are only reachable through build graphs are validated too.
+        self.packages.extend(new_packages);
+
+        // Extract the lowered build system to store in metadata for satisfies() checks.
+        for package in &self.packages {
+            let key = build_key_for_package(package, root);
+
+            let static_build_system = self
+                .lowered_build_system(package, root, database, build_hasher)
+                .await?;
+            let has_explicit_build_requires = static_build_system.is_some();
+            let mut build_requires = BTreeSet::new();
+            if let Some(static_build_system) = static_build_system.as_ref() {
+                build_system_map.insert(key.clone(), PackageBuildSystem::from(static_build_system));
+            }
+            for requirement in static_build_system
+                .into_iter()
+                .flat_map(|build_system| build_system.requires)
+            {
+                let requirement = match requirement.relative_to(root) {
+                    Ok(requirement) => requirement,
+                    Err(err) => {
+                        return Err(LockErrorKind::RequirementRelativePath(err).into());
+                    }
+                };
+                build_requires.insert(requirement);
+            }
+            let extra_build_requires = extra_build_requires
+                .get(&package.id.name)
+                .filter(|requires| !requires.is_empty());
+            for req in extra_build_requires
+                .into_iter()
+                .flatten()
+                .cloned()
+                .map(Requirement::from)
+            {
+                let requirement = match req.relative_to(root) {
+                    Ok(requirement) => requirement,
+                    Err(err) => {
+                        return Err(LockErrorKind::RequirementRelativePath(err).into());
+                    }
+                };
+                build_requires.insert(requirement);
+            }
+            if has_explicit_build_requires || extra_build_requires.is_some() {
+                build_requires_map.insert(key, build_requires);
+            }
+        }
+
+        // Build a source-aware PackageId set for resolving dependency edges.
+        let package_ids: FxHashSet<PackageId> =
+            self.packages.iter().map(|p| p.id.clone()).collect();
+
+        // Second pass: collect graph-specific ordinary and optional dependency
+        // edges. The edges are keyed by the unscoped package ID selected by the
+        // build solve; resolution-id scoping is applied after we know which
+        // package nodes can safely be shared.
+        let mut build_dependency_packages: BTreeMap<
+            BuildResolutionGraphKey,
+            BTreeMap<PackageId, BuildDependencyEdges>,
+        > = BTreeMap::new();
+        let mut build_resolution_contexts = BTreeMap::new();
+        let mut context_counts = BTreeMap::new();
+        for &(graph_key, _) in &build_resolution_graphs {
+            let parent_key = &graph_key.package;
+            let stage = graph_key.stage.unwrap_or(BuildResolutionStage::Build);
+            let package = self.packages.iter().find(|package| {
+                build_keys_match(&build_key_for_package(package, root), parent_key)
+            });
+            let operation = graph_key.operation;
+            let target = graph_key
+                .target_marker
+                .map(|marker| {
+                    UniversalMarker::from_combined(self.requires_python.complexify_markers(marker))
+                })
+                .and_then(|marker| {
+                    TargetSelector::from_universal_marker(marker, &self.requires_python)
+                })
+                .filter(|target| !target.is_empty())
+                .or_else(|| {
+                    package.and_then(|package| {
+                        build_resolution_target(build_markers, package, root, &self.requires_python)
+                    })
+                });
+            // Contexts assigned during discovery can contain absolute local-source paths for
+            // packages that were not yet in the lock. Derive persisted IDs from the now-portable
+            // lock package identity while retaining a deterministic suffix for distinct captures.
+            let base = package.map_or_else(
+                || {
+                    build_resolution_context_id_with_context(
+                        parent_key,
+                        operation,
+                        stage,
+                        target.as_ref(),
+                    )
+                },
+                |package| {
+                    build_resolution_context_id_for_package(
+                        package,
+                        operation,
+                        stage,
+                        target.as_ref(),
+                    )
+                },
+            );
+            let count = context_counts.entry(base.clone()).or_insert(0usize);
+            let id = if *count == 0 {
+                base
+            } else {
+                format!("{base}:{}", *count + 1)
+            };
+            *count += 1;
+            build_resolution_contexts.insert(graph_key.clone(), id);
+        }
+
+        for &(graph_key, info) in &build_resolution_graphs {
+            for entry in &info.packages {
+                let resolved_dist = &entry.dist;
+                let Ok(key) = package_id_from_resolved_dist(resolved_dist, root) else {
+                    continue;
+                };
+
+                let scoped_edges = build_dependency_packages
+                    .entry(graph_key.clone())
+                    .or_default()
+                    .entry(key)
+                    .or_default();
+                for dep_edge in &entry.dependencies {
+                    let Ok(dep_id) = package_id_from_resolved_dist(&dep_edge.dist, root) else {
+                        continue;
+                    };
+                    if !package_ids.contains(&dep_id) {
+                        continue;
+                    }
+                    let simplified =
+                        SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
+                    let complexified = simplified.into_marker(&self.requires_python);
+                    scoped_edges.dependencies.push(Dependency {
+                        package_id: dep_id,
+                        extra: dep_edge.extras.clone(),
+                        simplified_marker: simplified,
+                        complexified_marker: UniversalMarker::from_combined(complexified),
+                    });
+                }
+
+                for (extra, dependencies) in &entry.optional_dependencies {
+                    let scoped_deps = scoped_edges
+                        .optional_dependencies
+                        .entry(extra.clone())
+                        .or_default();
+                    for dep_edge in dependencies {
+                        let Ok(dep_id) = package_id_from_resolved_dist(&dep_edge.dist, root) else {
+                            continue;
+                        };
+                        if !package_ids.contains(&dep_id) {
+                            continue;
+                        }
+                        let simplified =
+                            SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
+                        let complexified = simplified.into_marker(&self.requires_python);
+                        scoped_deps.push(Dependency {
+                            package_id: dep_id,
+                            extra: dep_edge.extras.clone(),
+                            simplified_marker: simplified,
+                            complexified_marker: UniversalMarker::from_combined(complexified),
+                        });
+                    }
+                }
+            }
+        }
+
+        let normalize_edges = |mut edges: BuildDependencyEdges| {
+            edges.dependencies.sort();
+            edges.dependencies.dedup();
+            for dependencies in edges.optional_dependencies.values_mut() {
+                dependencies.sort();
+                dependencies.dedup();
+            }
+            edges
+        };
+
+        for graph in build_dependency_packages.values_mut() {
+            for edges in graph.values_mut() {
+                edges.dependencies.sort();
+                edges.dependencies.dedup();
+                for dependencies in edges.optional_dependencies.values_mut() {
+                    dependencies.sort();
+                    dependencies.dedup();
+                }
+            }
+        }
+        for dependencies in build_resolution_dep_refs.values_mut() {
+            dependencies.sort();
+            dependencies.dedup();
+        }
+
+        // Dynamic source metadata can capture the same build graph once with its unresolved
+        // package identity and again with its resolved identity. Reuse the resolution context
+        // only when the replay selectors, direct requirements, and complete closure agree, so
+        // equivalent graphs also share any resolution-scoped package nodes.
+        let mut equivalent_contexts: Vec<(_, String)> = Vec::new();
+        for &(graph_key, _) in build_resolution_graphs.iter().rev() {
+            let Some(context) = build_resolution_contexts.get(graph_key).cloned() else {
+                continue;
+            };
+            let Some(package) = self.packages.iter().find(|package| {
+                build_keys_match(&build_key_for_package(package, root), &graph_key.package)
+            }) else {
+                continue;
+            };
+            let dependencies = build_resolution_dep_refs
+                .get(graph_key)
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            let signature = (
+                package.id.clone(),
+                graph_key.operation,
+                graph_key.target_marker,
+                dependencies,
+                build_dependency_packages.get(graph_key),
+                build_dependency_artifacts.get(graph_key),
+            );
+
+            if let Some((_, context)) = equivalent_contexts
+                .iter()
+                .find(|(candidate, _)| candidate == &signature)
+            {
+                build_resolution_contexts.insert(graph_key.clone(), context.clone());
+            } else {
+                equivalent_contexts.push((signature, context));
+            }
+        }
+
+        let map_dependency =
+            |dependency: &Dependency,
+             graph_key: &BuildResolutionGraphKey,
+             scoped_build_packages: &BTreeSet<(BuildResolutionGraphKey, PackageId)>| {
+                let mut dependency = dependency.clone();
+                let package_id = dependency.package_id.unscoped();
+                dependency.package_id =
+                    if scoped_build_packages.contains(&(graph_key.clone(), package_id.clone())) {
+                        let context = build_resolution_contexts
+                            .get(graph_key)
+                            .expect("build resolution context exists");
+                        package_id.scoped(context.clone())
+                    } else {
+                        package_id
+                    };
+                dependency
+            };
+        let map_edges =
+            |graph_key: &BuildResolutionGraphKey,
+             edges: &BuildDependencyEdges,
+             scoped_build_packages: &BTreeSet<(BuildResolutionGraphKey, PackageId)>| {
+                normalize_edges(BuildDependencyEdges {
+                    dependencies: edges
+                        .dependencies
+                        .iter()
+                        .map(|dependency| {
+                            map_dependency(dependency, graph_key, scoped_build_packages)
+                        })
+                        .collect(),
+                    optional_dependencies: edges
+                        .optional_dependencies
+                        .iter()
+                        .map(|(extra, dependencies)| {
+                            (
+                                extra.clone(),
+                                dependencies
+                                    .iter()
+                                    .map(|dependency| {
+                                        map_dependency(dependency, graph_key, scoped_build_packages)
+                                    })
+                                    .collect(),
+                            )
+                        })
+                        .collect(),
+                })
+            };
+        let package_edges = |package: &Package| {
+            normalize_edges(BuildDependencyEdges {
+                dependencies: package.dependencies.clone(),
+                optional_dependencies: package
+                    .optional_dependencies
+                    .iter()
+                    .map(|(extra, dependencies)| (extra.clone(), dependencies.clone()))
+                    .collect(),
+            })
+        };
+
+        let mut scoped_build_packages: BTreeSet<(BuildResolutionGraphKey, PackageId)> =
+            BTreeSet::new();
+        let canonical_artifacts = self
+            .packages
+            .iter()
+            .filter(|package| package.id.resolution_id.is_none())
+            .map(|package| {
+                (
+                    package.id.clone(),
+                    BuildDependencyArtifacts::from_package(package),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        loop {
+            let mut next_scoped_build_packages = scoped_build_packages.clone();
+            let mut canonical_edges: BTreeMap<PackageId, BuildDependencyEdges> = BTreeMap::new();
+            for package in &self.packages {
+                if runtime_packages.contains(&package.id) {
+                    canonical_edges.insert(package.id.clone(), package_edges(package));
+                }
+            }
+
+            for (graph_key, graph) in &build_dependency_packages {
+                for (package_id, edges) in graph {
+                    if scoped_build_packages.contains(&(graph_key.clone(), package_id.clone())) {
+                        continue;
+                    }
+                    let desired_edges = map_edges(graph_key, edges, &scoped_build_packages);
+                    let artifacts_match = build_dependency_artifacts
+                        .get(graph_key)
+                        .and_then(|artifacts| artifacts.get(package_id))
+                        .zip(canonical_artifacts.get(package_id))
+                        .is_none_or(|(desired, canonical)| desired == canonical);
+                    if let Some(canonical_edges) = canonical_edges.get(package_id) {
+                        if canonical_edges != &desired_edges || !artifacts_match {
+                            next_scoped_build_packages
+                                .insert((graph_key.clone(), package_id.clone()));
+                        }
+                    } else {
+                        if artifacts_match {
+                            canonical_edges.insert(package_id.clone(), desired_edges);
+                        } else {
+                            next_scoped_build_packages
+                                .insert((graph_key.clone(), package_id.clone()));
+                        }
+                    }
+                }
+            }
+
+            if next_scoped_build_packages == scoped_build_packages {
+                break;
+            }
+            scoped_build_packages = next_scoped_build_packages;
+        }
+
+        let mut unscoped_build_edges: BTreeMap<PackageId, BuildDependencyEdges> = BTreeMap::new();
+        for (graph_key, graph) in &build_dependency_packages {
+            for (package_id, edges) in graph {
+                if runtime_packages.contains(package_id)
+                    || scoped_build_packages.contains(&(graph_key.clone(), package_id.clone()))
+                {
+                    continue;
+                }
+                unscoped_build_edges
+                    .entry(package_id.clone())
+                    .or_insert_with(|| map_edges(graph_key, edges, &scoped_build_packages));
+            }
+        }
+
+        for package in &mut self.packages {
+            if let Some(edges) = unscoped_build_edges.get(&package.id) {
+                package.dependencies.clone_from(&edges.dependencies);
+                package
+                    .optional_dependencies
+                    .clone_from(&edges.optional_dependencies);
+            }
+        }
+
+        let mut scoped_packages = Vec::new();
+        for (graph_key, package_id) in &scoped_build_packages {
+            let Some(edges) = build_dependency_packages
+                .get(graph_key)
+                .and_then(|graph| graph.get(package_id))
+            else {
+                continue;
+            };
+            let context = build_resolution_contexts
+                .get(graph_key)
+                .expect("build resolution context exists");
+            let scoped_id = package_id.scoped(context.clone());
+            if self.packages.iter().any(|package| package.id == scoped_id)
+                || scoped_packages
+                    .iter()
+                    .any(|package: &Package| package.id == scoped_id)
+            {
+                continue;
+            }
+            let Some(base_package) = self
+                .packages
+                .iter()
+                .find(|package| package.id == *package_id && package.id.resolution_id.is_none())
+            else {
+                continue;
+            };
+            let mut package = base_package.clone();
+            package.id = scoped_id;
+            package.fork_markers.clear();
+            let edges = map_edges(graph_key, edges, &scoped_build_packages);
+            package.dependencies = edges.dependencies;
+            package.optional_dependencies = edges.optional_dependencies;
+            if let Some(artifacts) = build_dependency_artifacts
+                .get(graph_key)
+                .and_then(|artifacts| artifacts.get(package_id))
+            {
+                package.sdist.clone_from(&artifacts.sdist);
+                package.wheels.clone_from(&artifacts.wheels);
+            }
+            package.dependency_groups.clear();
+            scoped_packages.push(package);
+        }
+        self.packages.extend(scoped_packages);
+
+        let mut mapped_build_resolution_dep_refs = BTreeMap::new();
+        let mut mapped_build_dep_refs: BTreeMap<BuildPackageKey, Vec<BuildDependency>> =
+            BTreeMap::new();
+        for (graph_key, deps) in &build_resolution_dep_refs {
+            let mut mapped_deps = deps
+                .iter()
+                .cloned()
+                .map(|mut dependency| {
+                    let package_id = dependency.package_id.unscoped();
+                    dependency.package_id = if scoped_build_packages
+                        .contains(&(graph_key.clone(), package_id.clone()))
+                    {
+                        let context = build_resolution_contexts
+                            .get(graph_key)
+                            .expect("build resolution context exists");
+                        package_id.scoped(context.clone())
+                    } else {
+                        package_id
+                    };
+                    dependency
+                })
+                .collect::<Vec<_>>();
+            mapped_deps.sort();
+            mapped_deps.dedup();
+            if graph_key.stage.unwrap_or(BuildResolutionStage::Build) == BuildResolutionStage::Build
+            {
+                mapped_build_dep_refs
+                    .entry(graph_key.package.clone())
+                    .or_default()
+                    .extend(mapped_deps.iter().cloned());
+            }
+            mapped_build_resolution_dep_refs.insert(graph_key.clone(), mapped_deps);
+        }
+        for deps in mapped_build_dep_refs.values_mut() {
+            deps.sort();
+            deps.dedup();
+        }
+        build_dep_refs = mapped_build_dep_refs;
+        build_resolution_dep_refs = mapped_build_resolution_dep_refs;
+
+        let mut resolutions_by_id: BTreeMap<String, ResolutionRecord> = BTreeMap::new();
+        for (graph_key, context) in &build_resolution_contexts {
+            let Some(record) = (|| {
+                let parent_key = &graph_key.package;
+                let package = self.packages.iter().find(|package| {
+                    build_keys_match(&build_key_for_package(package, root), parent_key)
+                })?;
+                let package_id = package.id.clone();
+                let mut dependencies = build_resolution_dep_refs.get(graph_key)?.clone();
+                dependencies.sort();
+                dependencies.dedup();
+                let target = graph_key
+                    .target_marker
+                    .map(|marker| {
+                        UniversalMarker::from_combined(
+                            self.requires_python.complexify_markers(marker),
+                        )
+                    })
+                    .and_then(|marker| {
+                        TargetSelector::from_universal_marker(marker, &self.requires_python)
+                    })
+                    .filter(|target| !target.is_empty())
+                    .or_else(|| {
+                        build_resolution_target(build_markers, package, root, &self.requires_python)
+                    });
+                Some(ResolutionRecord {
+                    id: context.clone(),
+                    kind: ResolutionKind::Build,
+                    operation: Some(graph_key.operation.into()),
+                    mode: Some(ResolutionModeRecord::Isolated),
+                    stage: graph_key.stage.or(Some(BuildResolutionStage::Build)),
+                    package_id: Some(package_id),
+                    target,
+                    dependencies,
+                })
+            })() else {
+                continue;
+            };
+
+            if let Some(existing) = resolutions_by_id.get_mut(&record.id) {
+                if existing.stage != record.stage {
+                    existing.stage = None;
+                }
+                existing.dependencies.extend(record.dependencies);
+                existing.dependencies.sort();
+                existing.dependencies.dedup();
+            } else {
+                resolutions_by_id.insert(record.id.clone(), record);
+            }
+        }
+        self.resolutions = resolutions_by_id.into_values().collect();
+
+        // Set build-dependencies references and build-requires metadata on source packages.
+        for package in &mut self.packages {
+            if let Some(deps) = lookup_build_key_value(&build_dep_refs, package, root) {
+                package.build_dependencies.clone_from(deps);
+                package.build_dependencies_resolved = true;
+            }
+
+            // Store the original build-system.requires in metadata for satisfies() checks.
+            if let Some(build_requires) = lookup_build_key_value(&build_requires_map, package, root)
+            {
+                package.metadata.build_requires = Some(build_requires.clone());
+            }
+            if let Some(build_system) = lookup_build_key_value(&build_system_map, package, root) {
+                package.metadata.build_system = Some(build_system.clone());
+            }
+
+            // Ensure build dependencies are sorted and deduplicated.
+            package.build_dependencies.sort();
+            package.build_dependencies.dedup();
+        }
+
+        self.packages
+            .sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));
+        self.by_id = self
+            .packages
+            .iter()
+            .enumerate()
+            .map(|(index, package)| (package.id.clone(), index))
+            .collect();
+
+        Ok(self)
+    }
+
+    /// Return all lock packages that can be represented as source distributions.
+    pub fn source_distributions_for_build(
+        &self,
+        workspace_root: &Path,
+    ) -> Result<Vec<(BuildPackageKey, uv_distribution_types::SourceDist)>, LockError> {
+        let mut sources = Vec::new();
+        for package in &self.packages {
+            if package.id.resolution_id.is_some() || matches!(package.id.source, Source::Virtual(_))
+            {
+                continue;
+            }
+            if let Some(source_dist) = package.to_source_dist(workspace_root)? {
+                let key = build_key_for_package(package, workspace_root);
+                sources.push((key, source_dist));
+            }
+        }
+        Ok(sources)
+    }
+
+    /// Return source distributions whose locked build dependencies are missing.
+    pub fn source_distributions_missing_build_dependencies(
+        &self,
+        workspace_root: &Path,
+        build_options: &BuildOptions,
+        extra_build_requires: &ExtraBuildRequires,
+    ) -> Result<Vec<(BuildPackageKey, uv_distribution_types::SourceDist)>, LockError> {
+        let mut sources = Vec::new();
+        let source_reachability = self.source_reachability(build_options, extra_build_requires)?;
+        for package in &self.packages {
+            if package.id.resolution_id.is_some() || matches!(package.id.source, Source::Virtual(_))
+            {
+                continue;
+            }
+            if build_options.no_build_package(&package.id.name) {
+                continue;
+            }
+            if !package.build_dependencies_resolved
+                && matches!(package.id.source, Source::Registry(_))
+                && package.metadata.build_requires.is_none()
+                && extra_build_requires
+                    .get(&package.id.name)
+                    .is_none_or(Vec::is_empty)
+                && source_reachability
+                    .get(&package.id.unscoped())
+                    .is_none_or(|targets| targets.is_false())
+            {
+                continue;
+            }
+            let Some(source_dist) = package.to_source_dist(workspace_root)? else {
+                continue;
+            };
+            if package.build_dependencies_resolved {
+                let package_id = package.id.unscoped();
+                let mut editable = false;
+                let mut wheel = false;
+                let mut editable_targets = MarkerTree::FALSE;
+                let mut wheel_targets = MarkerTree::FALSE;
+                for resolution in self.resolutions.iter().filter(|resolution| {
+                    resolution.kind == ResolutionKind::Build
+                        && resolution.package_id.as_ref() == Some(&package_id)
+                        && resolution.stage.unwrap_or(BuildResolutionStage::Build)
+                            == BuildResolutionStage::Build
+                }) {
+                    let target =
+                        resolution
+                            .target
+                            .as_ref()
+                            .map_or(Ok(MarkerTree::TRUE), |target| {
+                                target
+                                    .to_universal_marker(&self.requires_python, &resolution.id)
+                                    .map(UniversalMarker::combined)
+                            })?;
+                    match resolution.operation.unwrap_or(ResolutionOperation::Wheel) {
+                        ResolutionOperation::Editable => {
+                            editable = true;
+                            editable_targets.or(target);
+                        }
+                        ResolutionOperation::Wheel => {
+                            wheel = true;
+                            wheel_targets.or(target);
+                        }
+                    }
+                }
+
+                let source_targets = source_reachability
+                    .get(&package_id)
+                    .copied()
+                    .unwrap_or(MarkerTree::FALSE);
+
+                let mut missing_wheel_targets = source_targets;
+                missing_wheel_targets.and(wheel_targets.negate());
+                let mut missing_editable_targets = source_targets;
+                missing_editable_targets.and(editable_targets.negate());
+                if wheel
+                    && (!source_dist.is_editable() || editable)
+                    && missing_wheel_targets.is_false()
+                    && (!source_dist.is_editable() || missing_editable_targets.is_false())
+                {
+                    continue;
+                }
+            }
+            let key = build_key_for_package(package, workspace_root);
+            sources.push((key, source_dist));
+        }
+        Ok(sources)
+    }
+
+    fn source_targets_for_package(
+        &self,
+        package: &Package,
+        mut targets: MarkerTree,
+        build_options: &BuildOptions,
+    ) -> MarkerTree {
+        if matches!(package.id.source, Source::Registry(_))
+            && !build_options.no_binary_package(&package.id.name)
+        {
+            let mut compatible_wheels = MarkerTree::FALSE;
+            for wheel in &package.wheels {
+                if wheel.filename.abi_tags().contains(&AbiTag::None)
+                    && self.requires_python.matches_wheel_tag(&wheel.filename)
+                    && wheel.filename.platform_tags().iter().all(|platform| {
+                        matches!(
+                            platform,
+                            PlatformTag::Any
+                                | PlatformTag::Linux { .. }
+                                | PlatformTag::Win32
+                                | PlatformTag::WinAmd64
+                                | PlatformTag::WinArm64
+                        )
+                    })
+                {
+                    let mut wheel_targets = implied_markers(&wheel.filename);
+                    if let Some(requires_python) = &wheel.requires_python {
+                        for specifier in requires_python.iter() {
+                            wheel_targets.and(MarkerTree::expression(MarkerExpression::Version {
+                                key: MarkerValueVersion::PythonFullVersion,
+                                specifier: specifier.clone(),
+                            }));
+                        }
+                    }
+                    compatible_wheels.or(wheel_targets);
+                }
+            }
+            targets.and(compatible_wheels.negate());
+        }
+        targets
+    }
+
+    /// Return the marker space in which each source package can require a build from a lock root.
+    ///
+    /// This follows every optional dependency and dependency group and removes wheel-served
+    /// targets using the artifacts from the exact build scope that reaches the source. Build
+    /// locking must remain replayable for every runtime selection represented by the lockfile,
+    /// not only the extras and groups enabled on the machine that last ran `uv lock`.
+    fn source_reachability(
+        &self,
+        build_options: &BuildOptions,
+        extra_build_requires: &ExtraBuildRequires,
+    ) -> Result<FxHashMap<PackageId, MarkerTree>, LockError> {
+        fn enqueue<'lock>(
+            package: &'lock Package,
+            mut marker: MarkerTree,
+            reachability: &mut FxHashMap<PackageId, MarkerTree>,
+            queue: &mut VecDeque<(&'lock Package, MarkerTree)>,
+        ) {
+            if !package.fork_markers.is_empty() {
+                let mut fork_markers = MarkerTree::FALSE;
+                for fork_marker in &package.fork_markers {
+                    fork_markers.or(fork_marker.combined());
+                }
+                marker.and(fork_markers);
+            }
+            if marker.is_false() {
+                return;
+            }
+
+            let entry = reachability
+                .entry(package.id.unscoped())
+                .or_insert(MarkerTree::FALSE);
+            let mut combined = *entry;
+            combined.or(marker);
+            if combined == *entry {
+                return;
+            }
+            *entry = combined;
+            queue.push_back((package, combined));
+        }
+
+        let mut environment = self.fork_markers_union();
+        for specifier in self.requires_python.specifiers().iter() {
+            environment.and(MarkerTree::expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonFullVersion,
+                specifier: specifier.clone(),
+            }));
+        }
+        if !self.supported_environments.is_empty() {
+            let mut supported = MarkerTree::FALSE;
+            for marker in &self.supported_environments {
+                supported.or(*marker);
+            }
+            environment.and(supported);
+        }
+
+        let root = self.root().map(|package| &package.id);
+        let mut reachability = FxHashMap::default();
+        let mut queue = VecDeque::new();
+        for package in self.runtime_packages().filter(|package| {
+            self.manifest.members.contains(&package.id.name) || root == Some(&package.id)
+        }) {
+            enqueue(package, environment, &mut reachability, &mut queue);
+        }
+
+        for requirement in self
+            .manifest
+            .requirements
+            .iter()
+            .chain(self.manifest.dependency_groups.values().flatten())
+        {
+            let mut marker = environment;
+            marker.and(requirement.marker);
+            for package in self
+                .runtime_packages()
+                .filter(|package| runtime_requirement_matches_package(requirement, package))
+            {
+                enqueue(package, marker, &mut reachability, &mut queue);
+            }
+        }
+
+        while let Some((package, marker)) = queue.pop_front() {
+            for dependency in package
+                .dependencies
+                .iter()
+                .chain(package.optional_dependencies.values().flatten())
+                .chain(package.dependency_groups.values().flatten())
+            {
+                let mut dependency_marker = marker;
+                dependency_marker.and(dependency.complexified_marker.combined());
+                let dependency_package = self.find_by_id(&dependency.package_id);
+                enqueue(
+                    dependency_package,
+                    dependency_marker,
+                    &mut reachability,
+                    &mut queue,
+                );
+            }
+        }
+
+        let package_by_id = self.package_by_id();
+        let members = build_resolution_members(self, &self.resolutions);
+        let mut scoped_reachability = reachability;
+        let mut source_targets = FxHashMap::default();
+        let mut queue = scoped_reachability
+            .iter()
+            .filter_map(|(package_id, targets)| {
+                package_by_id
+                    .get(package_id)
+                    .copied()
+                    .map(|package| (package, *targets))
+            })
+            .collect::<VecDeque<_>>();
+        while let Some((package, reachable_targets)) = queue.pop_front() {
+            if build_options.no_build_package(&package.id.name) {
+                continue;
+            }
+
+            let package_id = package.id.unscoped();
+            let targets =
+                self.source_targets_for_package(package, reachable_targets, build_options);
+            if targets.is_false() {
+                continue;
+            }
+            source_targets
+                .entry(package_id)
+                .and_modify(|existing: &mut MarkerTree| existing.or(targets))
+                .or_insert(targets);
+
+            if !package.build_dependencies_resolved
+                && matches!(package.id.source, Source::Registry(_))
+                && package.metadata.build_requires.is_none()
+                && extra_build_requires
+                    .get(&package.id.name)
+                    .is_none_or(Vec::is_empty)
+            {
+                continue;
+            }
+
+            // Build roots and their transitive edges are evaluated against the executor. Union
+            // every member of both stages and constrain it only by the source target selected by
+            // the parent resolution.
+            for resolution in self.build_resolution_records_for_package(package) {
+                let mut target =
+                    resolution
+                        .target
+                        .as_ref()
+                        .map_or(Ok(MarkerTree::TRUE), |target| {
+                            target
+                                .to_universal_marker(&self.requires_python, &resolution.id)
+                                .map(UniversalMarker::combined)
+                        })?;
+                target.and(targets);
+                if target.is_false() {
+                    continue;
+                }
+
+                for member_id in members.get(&resolution.id).into_iter().flatten() {
+                    let Some(member) = package_by_id.get(member_id).copied() else {
+                        continue;
+                    };
+                    let entry = scoped_reachability
+                        .entry(member_id.clone())
+                        .or_insert(MarkerTree::FALSE);
+                    let mut combined = *entry;
+                    combined.or(target);
+                    if combined == *entry {
+                        continue;
+                    }
+                    *entry = combined;
+                    queue.push_back((member, combined));
+                }
+            }
+        }
+
+        Ok(source_targets)
+    }
+
+    fn package_by_id(&self) -> FxHashMap<PackageId, &Package> {
+        self.packages
+            .iter()
+            .map(|package| (package.id.clone(), package))
+            .collect()
+    }
+
+    fn build_resolution_records_for_package(
+        &self,
+        package: &Package,
+    ) -> impl Iterator<Item = &ResolutionRecord> {
+        let package_id = package.id.unscoped();
+        self.resolutions.iter().filter(move |resolution| {
+            resolution.kind == ResolutionKind::Build
+                && resolution.package_id.as_ref() == Some(&package_id)
+        })
+    }
+
+    fn build_resolution_record_for_package_in_markers(
+        &self,
+        package: &Package,
+        operation: BuildResolutionOperation,
+        target_markers: &MarkerEnvironment,
+        executor_markers: &MarkerEnvironment,
+        runtime_package_ids: &FxHashSet<PackageId>,
+        stage: BuildResolutionStage,
+    ) -> Result<Option<&ResolutionRecord>, LockError> {
+        // Build records can vary by runtime target for `match-runtime`, but not by executor.
+        // Executor-dependent branches representable by PEP 508 environment markers remain on the
+        // locked roots and edges, where replay evaluates them against the current build
+        // interpreter.
+        let mut target_candidate = None;
+        let mut fallback_candidate = None;
+        let mut has_records = false;
+        let package_id = package.id.unscoped();
+        let is_active_match_runtime = |dependency: &BuildDependency| {
+            dependency.match_runtime()
+                && dependency.marker().is_none_or(|marker| {
+                    let complexified = self.requires_python.complexify_markers(*marker);
+                    UniversalMarker::from_combined(complexified)
+                        .evaluate_no_extras(executor_markers)
+                })
+        };
+
+        for resolution in self.resolutions.iter().filter(|resolution| {
+            resolution.kind == ResolutionKind::Build
+                && resolution.package_id.as_ref() == Some(&package_id)
+                && resolution.stage.unwrap_or(BuildResolutionStage::Build) == stage
+        }) {
+            if resolution.operation.unwrap_or(ResolutionOperation::Wheel) != operation.into() {
+                continue;
+            }
+            has_records = true;
+            if resolution.dependencies.iter().any(|dependency| {
+                is_active_match_runtime(dependency)
+                    && !runtime_package_ids.contains(&dependency.package_id.unscoped())
+            }) {
+                continue;
+            }
+
+            let matches_target = if let Some(target) = resolution.target.as_ref() {
+                target
+                    .to_universal_marker(&self.requires_python, &resolution.id)?
+                    .pep508()
+                    .evaluate(target_markers, &[])
+            } else {
+                true
+            };
+            if !matches_target {
+                continue;
+            }
+
+            let match_runtime_count = resolution
+                .dependencies
+                .iter()
+                .filter(|dependency| is_active_match_runtime(dependency))
+                .map(|dependency| dependency.package_id.unscoped())
+                .collect::<BTreeSet<_>>()
+                .len();
+            let candidate = if resolution.target.is_some() {
+                &mut target_candidate
+            } else {
+                &mut fallback_candidate
+            };
+            if candidate
+                .as_ref()
+                .is_none_or(|(count, _)| match_runtime_count > *count)
+            {
+                *candidate = Some((match_runtime_count, resolution));
+            }
+        }
+
+        if let Some(resolution) = target_candidate
+            .or(fallback_candidate)
+            .map(|(_, resolution)| resolution)
+        {
+            Ok(Some(resolution))
+        } else if has_records {
+            Err(LockErrorKind::MissingBuildResolution {
+                id: package.id.clone(),
+            }
+            .into())
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Walk the build dependency graph for a package, optionally filtering
+    /// marker-controlled edges for a concrete environment.
+    fn build_dependency_package_ids(
+        &self,
+        package: &Package,
+        package_by_id: &FxHashMap<PackageId, &Package>,
+        markers: Option<&MarkerEnvironment>,
+        runtime_package_ids: Option<&FxHashSet<PackageId>>,
+    ) -> Option<Vec<PackageId>> {
+        self.build_dependency_package_ids_from(
+            package,
+            &package.build_dependencies,
+            package_by_id,
+            markers,
+            runtime_package_ids,
+        )
+    }
+
+    /// Walk the build dependency graph starting from the given direct dependencies.
+    fn build_dependency_package_ids_from(
+        &self,
+        package: &Package,
+        build_dependencies: &[BuildDependency],
+        package_by_id: &FxHashMap<PackageId, &Package>,
+        markers: Option<&MarkerEnvironment>,
+        runtime_package_ids: Option<&FxHashSet<PackageId>>,
+    ) -> Option<Vec<PackageId>> {
+        let mut dependency_ids = Vec::new();
+        let mut emitted: FxHashSet<PackageId> = FxHashSet::default();
+        let mut seen: FxHashSet<(PackageId, Option<ExtraName>)> = FxHashSet::default();
+        let mut queue: VecDeque<(PackageId, Option<ExtraName>)> = VecDeque::new();
+
+        for build_dep in build_dependencies {
+            if build_dep.match_runtime()
+                && runtime_package_ids.is_some_and(|package_ids| {
+                    !package_ids.contains(&build_dep.package_id.unscoped())
+                })
+            {
+                continue;
+            }
+            if let Some(markers) = markers
+                && let Some(marker) = build_dep.marker()
+            {
+                let complexified = self.requires_python.complexify_markers(*marker);
+                if !UniversalMarker::from_combined(complexified).evaluate_no_extras(markers) {
+                    continue;
+                }
+            }
+
+            if seen.insert((build_dep.package_id.clone(), None)) {
+                queue.push_back((build_dep.package_id.clone(), None));
+            }
+            for extra in build_dep.extras() {
+                if seen.insert((build_dep.package_id.clone(), Some(extra.clone()))) {
+                    queue.push_back((build_dep.package_id.clone(), Some(extra.clone())));
+                }
+            }
+        }
+
+        while let Some((dep_id, extra)) = queue.pop_front() {
+            if emitted.insert(dep_id.clone()) {
+                dependency_ids.push(dep_id.clone());
+            }
+
+            let Some(dep_package) = package_by_id.get(&dep_id) else {
+                if markers.is_some() {
+                    debug!(
+                        "Build dependency `{dep_id}` not found in lock for `{}`",
+                        package.id.name
+                    );
+                    return None;
+                }
+                continue;
+            };
+
+            let dependencies = if let Some(extra) = extra.as_ref() {
+                dep_package
+                    .optional_dependencies
+                    .get(extra)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default()
+            } else {
+                dep_package.dependencies.as_slice()
+            };
+            for dep in dependencies {
+                if let Some(markers) = markers
+                    && !dep.complexified_marker.evaluate_no_extras(markers)
+                {
+                    continue;
+                }
+                if seen.insert((dep.package_id.clone(), None)) {
+                    queue.push_back((dep.package_id.clone(), None));
+                }
+                for extra in dep.extra() {
+                    if seen.insert((dep.package_id.clone(), Some(extra.clone()))) {
+                        queue.push_back((dep.package_id.clone(), Some(extra.clone())));
+                    }
+                }
+            }
+        }
+
+        Some(dependency_ids)
+    }
+
+    /// Construct all build resolutions for packages that have build dependencies.
+    ///
+    /// Walks the dependency graph (BFS) from each package's `build-dependencies`
+    /// through the `dependencies` of each transitive build dep, evaluating markers
+    /// at each edge. Executor tags and markers choose compatible artifacts and
+    /// evaluate locked branches; they do not select a different build record. This
+    /// is consistent with how `to_resolution()` handles regular dependencies. When
+    /// `require_locked_build_resolutions` is enabled, selected source builds without a matching
+    /// build record are rejected instead of being resolved during installation.
+    pub fn all_build_resolutions(
+        &self,
+        resolution: &Resolution,
+        workspace_root: &Path,
+        executor_tags: &Tags,
+        build_options: &BuildOptions,
+        target_markers: &MarkerEnvironment,
+        executor_markers: &MarkerEnvironment,
+        require_locked_build_resolutions: bool,
+    ) -> Result<BTreeMap<BuildPackageKey, LockedBuildResolution>, LockError> {
+        let package_by_id = self.package_by_id();
+        let package_for_resolved_dist = |resolved_dist: &ResolvedDist| {
+            let package_id = package_id_from_resolved_dist(resolved_dist, workspace_root).ok()?;
+            package_by_id.get(&package_id).copied().or_else(|| {
+                let key = build_key_from_resolved_source_dist(resolved_dist)?;
+                self.packages.iter().find(|package| {
+                    package.id.resolution_id.is_none()
+                        && build_keys_match(&key, &build_key_for_package(package, workspace_root))
+                })
+            })
+        };
+        let runtime_package_ids: FxHashSet<PackageId> = resolution
+            .distributions()
+            .filter_map(&package_for_resolved_dist)
+            .map(|package| package.id.unscoped())
+            .collect();
+        let selected_builds: Vec<(PackageId, BuildPackageKey)> = resolution
+            .distributions()
+            .filter_map(|resolved_dist| {
+                let key = build_key_from_resolved_source_dist(resolved_dist)?;
+                let package = package_for_resolved_dist(resolved_dist)?;
+                Some((package.id.clone(), key))
+            })
+            .collect();
+        let mut build_resolution_roots: FxHashSet<(PackageId, BuildPackageKey)> =
+            FxHashSet::default();
+        let mut build_resolution_edges: BTreeMap<BuildPackageKey, BTreeSet<BuildPackageKey>> =
+            BTreeMap::default();
+        let mut queue: VecDeque<(PackageId, BuildPackageKey)> = selected_builds.into();
+        let tag_policy = TagPolicy::Build(executor_tags);
+
+        while let Some((package_id, key)) = queue.pop_front() {
+            let Some(package) = package_by_id.get(&package_id) else {
+                continue;
+            };
+            if !build_resolution_roots.insert((package.id.clone(), key.clone())) {
+                continue;
+            }
+
+            let build_resolution_record = self.build_resolution_record_for_package_in_markers(
+                package,
+                build_operation_for_key(&key),
+                target_markers,
+                executor_markers,
+                &runtime_package_ids,
+                BuildResolutionStage::Build,
+            )?;
+            let bootstrap_resolution_record = self.build_resolution_record_for_package_in_markers(
+                package,
+                build_operation_for_key(&key),
+                target_markers,
+                executor_markers,
+                &runtime_package_ids,
+                BuildResolutionStage::Bootstrap,
+            )?;
+            if require_locked_build_resolutions
+                && !build_options.no_build_package(&key.name)
+                && (build_resolution_record.is_none()
+                    || build_resolution_record.is_some_and(|resolution| resolution.stage.is_some())
+                        && bootstrap_resolution_record.is_none())
+            {
+                return Err(LockErrorKind::UncapturedBuildResolution {
+                    name: key.name.clone(),
+                }
+                .into());
+            }
+            let build_dependencies = build_resolution_record
+                .map_or(package.build_dependencies.as_slice(), |resolution| {
+                    resolution.dependencies.as_slice()
+                });
+            let bootstrap_dependencies = bootstrap_resolution_record
+                .map(|resolution| resolution.dependencies.as_slice())
+                .unwrap_or_default();
+            for dependencies in [build_dependencies, bootstrap_dependencies] {
+                let Some(dependency_ids) = self.build_dependency_package_ids_from(
+                    package,
+                    dependencies,
+                    &package_by_id,
+                    Some(executor_markers),
+                    Some(&runtime_package_ids),
+                ) else {
+                    continue;
+                };
+                for dependency_id in dependency_ids {
+                    let Some(dependency_package) = package_by_id.get(&dependency_id) else {
+                        continue;
+                    };
+                    let HashedDist { dist, .. } = dependency_package.to_dist(
+                        workspace_root,
+                        tag_policy,
+                        build_options,
+                        executor_markers,
+                    )?;
+                    let Dist::Source(source_dist) = dist else {
+                        continue;
+                    };
+                    let dependency_key = BuildPackageKey::from_source_dist(
+                        dependency_package.id.name.clone(),
+                        dependency_package.id.version.clone(),
+                        Some(&source_dist),
+                    );
+                    build_resolution_edges
+                        .entry(key.clone())
+                        .or_default()
+                        .insert(dependency_key.clone());
+                    if !build_resolution_roots
+                        .contains(&(dependency_package.id.clone(), dependency_key.clone()))
+                    {
+                        queue.push_back((dependency_package.id.clone(), dependency_key));
+                    }
+                }
+            }
+        }
+
+        validate_acyclic_build_resolutions(&build_resolution_edges)?;
+
+        let mut resolutions = BTreeMap::new();
+
+        for (package_id, key) in build_resolution_roots {
+            let Some(package) = package_by_id.get(&package_id) else {
+                continue;
+            };
+            let operation = build_operation_for_key(&key);
+            let build_resolution_record = self.build_resolution_record_for_package_in_markers(
+                package,
+                operation,
+                target_markers,
+                executor_markers,
+                &runtime_package_ids,
+                BuildResolutionStage::Build,
+            )?;
+            let build_dependencies = build_resolution_record
+                .map_or(package.build_dependencies.as_slice(), |resolution| {
+                    resolution.dependencies.as_slice()
+                });
+            if build_resolution_record.is_none() && build_dependencies.is_empty() {
+                continue;
+            }
+
+            let mut graph = petgraph::graph::DiGraph::new();
+            let Some(dependency_ids) = self.build_dependency_package_ids_from(
+                package,
+                build_dependencies,
+                &package_by_id,
+                Some(executor_markers),
+                Some(&runtime_package_ids),
+            ) else {
+                continue;
+            };
+
+            for dep_id in dependency_ids {
+                let Some(dep_package) = package_by_id.get(&dep_id) else {
+                    continue;
+                };
+
+                // Add this package to the resolution graph.
+                let HashedDist { dist, hashes } = dep_package.to_dist(
+                    workspace_root,
+                    tag_policy,
+                    build_options,
+                    executor_markers,
+                )?;
+                let version = dep_package.version().cloned();
+                let resolved_dist = ResolvedDist::Installable {
+                    dist: std::sync::Arc::new(dist),
+                    version,
+                };
+                graph.add_node(Node::Dist {
+                    dist: resolved_dist,
+                    hashes,
+                    install: true,
+                });
+            }
+
+            let locked_direct_dependencies =
+                |build_dependencies: &[BuildDependency]|
+                 -> Result<Vec<LockedBuildDependency>, LockError> {
+                    let mut direct_dependencies = Vec::new();
+                    for build_dependency in build_dependencies {
+                        if build_dependency.match_runtime()
+                            && !runtime_package_ids
+                                .contains(&build_dependency.package_id.unscoped())
+                        {
+                            continue;
+                        }
+                        if let Some(marker) = build_dependency.marker() {
+                            let complexified = self.requires_python.complexify_markers(*marker);
+                            if !UniversalMarker::from_combined(complexified)
+                                .evaluate_no_extras(executor_markers)
+                            {
+                                continue;
+                            }
+                        }
+
+                        let Some(dependency_package) =
+                            package_by_id.get(&build_dependency.package_id)
+                        else {
+                            continue;
+                        };
+                        let HashedDist { dist, .. } = dependency_package.to_dist(
+                            workspace_root,
+                            tag_policy,
+                            build_options,
+                            executor_markers,
+                        )?;
+                        let mut dependency_graph = petgraph::graph::DiGraph::new();
+                        let Some(dependency_ids) = self.build_dependency_package_ids_from(
+                            package,
+                            std::slice::from_ref(build_dependency),
+                            &package_by_id,
+                            Some(executor_markers),
+                            Some(&runtime_package_ids),
+                        ) else {
+                            continue;
+                        };
+                        for dependency_id in dependency_ids {
+                            let Some(dependency_package) = package_by_id.get(&dependency_id) else {
+                                continue;
+                            };
+                            let HashedDist { dist, hashes } = dependency_package.to_dist(
+                                workspace_root,
+                                tag_policy,
+                                build_options,
+                                executor_markers,
+                            )?;
+                            dependency_graph.add_node(Node::Dist {
+                                dist: ResolvedDist::Installable {
+                                    dist: Arc::new(dist),
+                                    version: dependency_package.version().cloned(),
+                                },
+                                hashes,
+                                install: true,
+                            });
+                        }
+                        direct_dependencies.push(LockedBuildDependency::new(
+                            ResolvedDist::Installable {
+                                dist: Arc::new(dist),
+                                version: dependency_package.version().cloned(),
+                            },
+                            build_dependency.extras().clone(),
+                            uv_distribution_types::Resolution::new(dependency_graph),
+                        ));
+                    }
+                    Ok(direct_dependencies)
+                };
+
+            let direct_dependencies = locked_direct_dependencies(build_dependencies)?;
+
+            let bootstrap_resolution_record = self.build_resolution_record_for_package_in_markers(
+                package,
+                operation,
+                target_markers,
+                executor_markers,
+                &runtime_package_ids,
+                BuildResolutionStage::Bootstrap,
+            )?;
+            let bootstrap_direct_dependencies =
+                if let Some(bootstrap_resolution_record) = bootstrap_resolution_record {
+                    locked_direct_dependencies(bootstrap_resolution_record.dependencies.as_slice())?
+                } else {
+                    Vec::new()
+                };
+
+            let mut locked_resolution = LockedBuildResolution::new(
+                uv_distribution_types::Resolution::new(graph),
+                direct_dependencies,
+                package
+                    .metadata
+                    .build_requires
+                    .as_ref()
+                    .map(|requirements| requirements.iter().cloned().collect()),
+            );
+            if bootstrap_resolution_record.is_some() {
+                locked_resolution = locked_resolution
+                    .with_bootstrap_direct_dependencies(bootstrap_direct_dependencies);
+            }
+            resolutions.insert(key, locked_resolution);
+        }
+
+        Ok(resolutions)
+    }
+
+    /// Extract all build dependency `(name, version)` pairs for each package,
+    /// walking every captured build resolution through transitive `dependencies` edges. Used as
+    /// resolver preferences during re-lock so that transitive build dependencies keep their
+    /// previously resolved versions.
+    pub fn build_dependency_preferences(
+        &self,
+        workspace_root: &Path,
+    ) -> BuildDependencyPreferences {
+        let package_by_id = self.package_by_id();
+
+        let mut result = BTreeMap::new();
+
+        for package in self
+            .packages
+            .iter()
+            .filter(|package| package.id.resolution_id.is_none())
+        {
+            let mut dependency_ids = Vec::new();
+            let mut has_resolution = false;
+            for resolution in self.build_resolution_records_for_package(package) {
+                has_resolution = true;
+                dependency_ids.extend(
+                    self.build_dependency_package_ids_from(
+                        package,
+                        &resolution.dependencies,
+                        &package_by_id,
+                        None,
+                        None,
+                    )
+                    .unwrap_or_default(),
+                );
+            }
+
+            if !has_resolution && !package.build_dependencies.is_empty() {
+                dependency_ids.extend(
+                    self.build_dependency_package_ids(package, &package_by_id, None, None)
+                        .unwrap_or_default(),
+                );
+            }
+
+            let mut deps = Vec::new();
+            for dep_id in dependency_ids {
+                // Version preferences can only seed the resolver when a
+                // concrete package version is known.
+                if let Some(dep_version) = dep_id.version.as_ref() {
+                    deps.push((dep_id.name.clone(), dep_version.clone()));
+                }
+            }
+            deps.sort();
+            deps.dedup();
+
+            if !deps.is_empty() {
+                let key = build_key_for_package(package, workspace_root);
+                result.insert(key, deps);
+            }
+        }
+
+        result
     }
 
     /// Record the conflicting groups that were used to generate this lock.
@@ -788,6 +2951,31 @@ impl Lock {
         (self.version(), self.revision()) >= (1, 1)
     }
 
+    /// Returns whether the lockfile can contain build dependencies.
+    pub fn supports_build_dependencies(&self) -> bool {
+        (self.version(), self.revision()) >= (VERSION, BUILD_DEPENDENCIES_REVISION)
+    }
+
+    /// Remove artifact eligibility metadata that is not serialized by legacy lockfile schemas.
+    pub fn normalize_legacy_artifact_eligibility(&mut self) {
+        if self.supports_build_dependencies() {
+            return;
+        }
+
+        for package in &mut self.packages {
+            if let Some(sdist) = &mut package.sdist {
+                match sdist {
+                    SourceDist::Metadata { metadata }
+                    | SourceDist::Url { metadata, .. }
+                    | SourceDist::Path { metadata, .. } => metadata.requires_python = None,
+                }
+            }
+            for wheel in &mut package.wheels {
+                wheel.requires_python = None;
+            }
+        }
+    }
+
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
     fn includes_empty_groups(&self) -> bool {
         // Empty dependency groups are included as of https://github.com/astral-sh/uv/pull/8598,
@@ -806,7 +2994,7 @@ impl Lock {
     }
 
     /// Returns the number of packages in the lockfile.
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.packages.len()
     }
 
@@ -818,6 +3006,16 @@ impl Lock {
     /// Returns the [`Package`] entries in this lock.
     pub fn packages(&self) -> &[Package] {
         &self.packages
+    }
+
+    /// Returns the [`Package`] entries reachable from the runtime dependency graph.
+    ///
+    /// This includes packages reachable through any optional dependency or dependency group, but
+    /// excludes packages that are only reachable through build dependencies.
+    pub fn runtime_packages(&self) -> impl Iterator<Item = &Package> {
+        self.packages
+            .iter()
+            .filter(|package| package.id.resolution_id.is_none() && !package.build_only)
     }
 
     /// Returns the supported Python version range for the lockfile, if present.
@@ -1172,8 +3370,7 @@ impl Lock {
         let workspace_member_ids: FxHashSet<&PackageId> = if self.members().is_empty() {
             self.root().into_iter().map(|package| &package.id).collect()
         } else {
-            self.packages
-                .iter()
+            self.runtime_packages()
                 .filter(|package| self.members().contains(&package.id.name))
                 .map(|package| &package.id)
                 .collect()
@@ -1186,9 +3383,8 @@ impl Lock {
         // Seed from workspace members. Always queue with `None` so that we can traverse
         // their dependency groups; only queue extras when prod mode is active.
         for package in self
-            .packages
-            .iter()
-            .filter(|p| workspace_member_ids.contains(&p.id))
+            .runtime_packages()
+            .filter(|package| workspace_member_ids.contains(&package.id))
         {
             if seen.insert((&package.id, None)) {
                 queue.push_back((package, None));
@@ -1205,9 +3401,8 @@ impl Lock {
         // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
         for requirement in self.requirements() {
             for package in self
-                .packages
-                .iter()
-                .filter(|p| p.id.name == requirement.name)
+                .runtime_packages()
+                .filter(|package| package.id.name == requirement.name)
             {
                 if seen.insert((&package.id, None)) {
                     queue.push_back((package, None));
@@ -1228,9 +3423,8 @@ impl Lock {
             }
             for requirement in requirements {
                 for package in self
-                    .packages
-                    .iter()
-                    .filter(|p| p.id.name == requirement.name)
+                    .runtime_packages()
+                    .filter(|package| package.id.name == requirement.name)
                 {
                     if seen.insert((&package.id, None)) {
                         queue.push_back((package, None));
@@ -1292,7 +3486,7 @@ impl Lock {
 
     /// Return the workspace root used to generate this lock.
     pub fn root(&self) -> Option<&Package> {
-        self.packages.iter().find(|package| {
+        self.runtime_packages().find(|package| {
             let (Source::Editable(path) | Source::Virtual(path)) = &package.id.source else {
                 return false;
             };
@@ -1716,6 +3910,10 @@ impl Lock {
                 manifest_table.insert("dependency-metadata", Item::ArrayOfTables(tables));
             }
 
+            if let Some(build_settings) = &self.manifest.build_settings {
+                manifest_table.insert("build-settings", value(build_settings));
+            }
+
             if !manifest_table.is_empty() {
                 doc.insert("manifest", Item::Table(manifest_table));
             }
@@ -1730,12 +3928,21 @@ impl Lock {
             *dist_count_by_name.entry(dist.id.name.clone()).or_default() += 1;
         }
 
+        if !self.resolutions.is_empty() {
+            let mut resolutions = ArrayOfTables::new();
+            for resolution in &self.resolutions {
+                resolutions.push(resolution.to_toml(&dist_count_by_name));
+            }
+            doc.insert("resolution", Item::ArrayOfTables(resolutions));
+        }
+
         let mut packages = ArrayOfTables::new();
         for dist in &self.packages {
             packages.push(dist.to_toml(
                 &self.requires_python,
                 simplified_environment,
                 &dist_count_by_name,
+                self.supports_build_dependencies(),
             )?);
         }
 
@@ -1743,12 +3950,12 @@ impl Lock {
         Ok(doc.to_string())
     }
 
-    /// Returns the package with the given name. If there are multiple
-    /// matching packages, then an error is returned. If there are no
-    /// matching packages, then `Ok(None)` is returned.
+    /// Returns the runtime package with the given name. If there are multiple
+    /// matching packages, then an error is returned. If there are no matching
+    /// packages, then `Ok(None)` is returned.
     pub fn find_by_name(&self, name: &PackageName) -> Result<Option<&Package>, String> {
         let mut found_dist = None;
-        for dist in &self.packages {
+        for dist in self.runtime_packages() {
             if &dist.id.name == name {
                 if found_dist.is_some() {
                     return Err(format!("found multiple packages matching `{name}`"));
@@ -1759,7 +3966,7 @@ impl Lock {
         Ok(found_dist)
     }
 
-    /// Returns the package with the given name.
+    /// Returns the runtime package with the given name.
     ///
     /// If there are multiple matching packages, returns the package that
     /// corresponds to the given marker tree.
@@ -1774,7 +3981,7 @@ impl Lock {
         marker_env: &MarkerEnvironment,
     ) -> Result<Option<&Package>, String> {
         let mut found_dist = None;
-        for dist in &self.packages {
+        for dist in self.runtime_packages() {
             if &dist.id.name == name {
                 if dist.fork_markers.is_empty()
                     || dist
@@ -1913,6 +4120,49 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
+    /// Check whether the current build system still matches what's stored in the lock's
+    /// `[package.metadata]`.
+    fn satisfies_build_system<'lock>(
+        &self,
+        current_requires: Option<BTreeSet<Requirement>>,
+        current_build_system: Option<&PackageBuildSystem>,
+        package: &'lock Package,
+        root: &Path,
+    ) -> Result<SatisfiesResult<'lock>, LockError> {
+        let current_build_requires: Option<BTreeSet<Requirement>> = current_requires
+            .map(|requires| {
+                requires
+                    .into_iter()
+                    .map(|req| normalize_requirement(req, root, &self.requires_python))
+                    .collect::<Result<BTreeSet<_>, _>>()
+            })
+            .transpose()?;
+
+        let stored_build_requires: Option<BTreeSet<Requirement>> = package
+            .metadata
+            .build_requires
+            .as_ref()
+            .map(|requires| {
+                requires
+                    .iter()
+                    .cloned()
+                    .map(|req| normalize_requirement(req, root, &self.requires_python))
+                    .collect::<Result<_, _>>()
+            })
+            .transpose()?;
+
+        if current_build_requires != stored_build_requires
+            || current_build_system != package.metadata.build_system.as_ref()
+        {
+            return Ok(SatisfiesResult::MismatchedBuildSystem(
+                &package.id.name,
+                package.id.version.as_ref(),
+            ));
+        }
+
+        Ok(SatisfiesResult::Satisfied)
+    }
+
     /// Check whether the lock matches the project structure, requirements and configuration.
     #[instrument(skip_all)]
     pub async fn satisfies<Context: BuildContext>(
@@ -1926,6 +4176,8 @@ impl Lock {
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
         build_constraints: &[Requirement],
+        extra_build_requires: &ExtraBuildRequires,
+        build_settings: Option<&str>,
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
@@ -2146,6 +4398,12 @@ impl Lock {
             }
         }
 
+        if self.supports_build_dependencies()
+            && self.manifest.build_settings.as_deref() != build_settings
+        {
+            return Ok(SatisfiesResult::MismatchedBuildSettings);
+        }
+
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let mut remotes = indexes.map(|locations| {
             locations
@@ -2232,7 +4490,7 @@ impl Lock {
                 .map(|requirement| &requirement.name)
                 .collect::<FxHashSet<_>>();
 
-            let by_name: FxHashMap<_, Vec<_>> = self.packages.iter().fold(
+            let by_name: FxHashMap<_, Vec<_>> = self.runtime_packages().fold(
                 FxHashMap::with_capacity_and_hasher(self.packages.len(), FxBuildHasher),
                 |mut by_name, package| {
                     if names.contains(&package.id.name) {
@@ -2244,7 +4502,9 @@ impl Lock {
 
             for requirement in root_requirements {
                 for package in by_name.get(&requirement.name).into_iter().flatten() {
-                    if !package.id.source.is_source_tree() {
+                    // Build environments may be captured beneath an immutable runtime root, so
+                    // seed all active roots when build dependencies are locked.
+                    if !package.id.source.is_source_tree() && !self.supports_build_dependencies() {
                         continue;
                     }
 
@@ -2261,7 +4521,7 @@ impl Lock {
                     if marker.is_false() {
                         continue;
                     }
-                    if !marker.evaluate(markers, &[]) {
+                    if !self.supports_build_dependencies() && !marker.evaluate(markers, &[]) {
                         continue;
                     }
 
@@ -2271,6 +4531,8 @@ impl Lock {
                 }
             }
         }
+
+        let package_by_id = self.package_by_id();
 
         while let Some(package) = queue.pop_front() {
             // If the lockfile references an index that was not provided, we can't validate it.
@@ -2304,17 +4566,103 @@ impl Lock {
                 }
             }
 
-            // If the package is immutable, we don't need to validate it (or its dependencies).
+            // Validate mutable build systems and configured extra build requirements
+            // before metadata validation, since a changed build environment can otherwise
+            // fail while trying to extract package metadata instead of reporting the stale lock.
+            let direct_url_offline = matches!(&package.id.source, Source::Direct(..))
+                && database.client().unmanaged.connectivity().is_offline();
+            if !direct_url_offline
+                && (self.supports_build_dependencies()
+                    || package.metadata.build_requires.is_some()
+                    || package.metadata.build_system.is_some())
+            {
+                let build_system = self
+                    .lowered_build_system(package, root, database, hasher)
+                    .await?;
+                let current_build_system = build_system.as_ref().map(PackageBuildSystem::from);
+                let mut build_requires = build_system
+                    .map(|build_system| build_system.requires.into_iter().collect::<BTreeSet<_>>());
+
+                let extra_build_requires = extra_build_requires
+                    .get(&package.id.name)
+                    .filter(|requires| !requires.is_empty());
+
+                if let Some(extra_build_requires) = extra_build_requires {
+                    build_requires
+                        .get_or_insert_with(BTreeSet::new)
+                        .extend(extra_build_requires.iter().cloned().map(Requirement::from));
+                }
+                if build_requires.is_some()
+                    || package.metadata.build_requires.is_some()
+                    || current_build_system.is_some()
+                    || package.metadata.build_system.is_some()
+                {
+                    match self.satisfies_build_system(
+                        build_requires,
+                        current_build_system.as_ref(),
+                        package,
+                        root,
+                    ) {
+                        Ok(SatisfiesResult::Satisfied) => {}
+                        Ok(result) => return Ok(result),
+                        Err(err) => {
+                            debug!("Failed to check `build-system` for `{}`: {err}", package.id);
+                            return Ok(SatisfiesResult::MismatchedBuildSystem(
+                                &package.id.name,
+                                package.id.version.as_ref(),
+                            ));
+                        }
+                    }
+                }
+            }
+
+            // Captured build graphs can contain mutable sources even when their parent is an
+            // immutable registry or Git package. Visit every bootstrap and final context before
+            // skipping the parent's ordinary metadata validation.
+            if self.supports_build_dependencies() {
+                for resolution in self.build_resolution_records_for_package(package) {
+                    if let Some(dependency_ids) = self.build_dependency_package_ids_from(
+                        package,
+                        &resolution.dependencies,
+                        &package_by_id,
+                        None,
+                        None,
+                    ) {
+                        for dependency_id in dependency_ids {
+                            let Some(dependency_package) = package_by_id.get(&dependency_id) else {
+                                continue;
+                            };
+                            if seen.insert(&dependency_package.id) {
+                                queue.push_back(dependency_package);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If the package is immutable, we don't need to validate its artifact metadata or
+            // dependencies after checking configuration-derived build requirements above.
             if package.id.source.is_immutable() {
+                // Its runtime dependencies can still contain captured builds with mutable inputs.
+                if self.supports_build_dependencies() {
+                    for dependency in package
+                        .dependencies
+                        .iter()
+                        .chain(package.optional_dependencies.values().flatten())
+                        .chain(package.dependency_groups.values().flatten())
+                    {
+                        if seen.insert(&dependency.package_id) {
+                            queue.push_back(self.find_by_id(&dependency.package_id));
+                        }
+                    }
+                }
                 continue;
             }
 
             // Validating a direct URL package requires retrieving metadata from the remote
             // artifact. In offline mode, preserve the metadata captured in the lockfile rather
             // than requiring that artifact to already be present in the cache.
-            if matches!(&package.id.source, Source::Direct(..))
-                && database.client().unmanaged.connectivity().is_offline()
-            {
+            if direct_url_offline {
                 trace!(
                     "Skipping metadata validation for `{}` because its direct URL cannot be refreshed while offline",
                     package.id
@@ -2729,8 +5077,10 @@ impl<'lock> Auditable<'lock> {
 
 #[derive(Debug, Copy, Clone)]
 enum TagPolicy<'tags> {
-    /// Exclusively consider wheels that match the specified platform tags.
+    /// Exclusively consider wheels that match the specified platform tags and artifact metadata.
     Required(&'tags Tags),
+    /// Exclusively consider wheels that match the specified build-executor tags and metadata.
+    Build(&'tags Tags),
     /// Prefer wheels that match the specified platform tags, but fall back to incompatible wheels
     /// if necessary.
     Preferred(&'tags Tags),
@@ -2740,7 +5090,7 @@ impl<'tags> TagPolicy<'tags> {
     /// Returns the platform tags to consider.
     fn tags(&self) -> &'tags Tags {
         match self {
-            Self::Required(tags) | Self::Preferred(tags) => tags,
+            Self::Required(tags) | Self::Build(tags) | Self::Preferred(tags) => tags,
         }
     }
 }
@@ -2807,6 +5157,10 @@ pub enum SatisfiesResult<'lock> {
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
+    /// A package in the lockfile contains different `build-system` metadata than expected.
+    MismatchedBuildSystem(&'lock PackageName, Option<&'lock Version>),
+    /// The lockfile was captured with different settings that affect build requirements.
+    MismatchedBuildSettings,
     /// The lockfile is missing a version.
     MissingVersion(&'lock PackageName),
 }
@@ -2840,6 +5194,8 @@ struct ResolverOptionsWire {
     /// The [`ExcludeNewer`] setting used to generate this lock.
     #[serde(flatten)]
     exclude_newer: ExcludeNewerWire,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
 }
 
 #[expect(clippy::struct_field_names)]
@@ -2920,6 +5276,11 @@ pub struct ResolverManifest {
     /// The static metadata provided to the resolver.
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
+    /// A digest of settings and build policies used to capture build requirements.
+    #[serde(default)]
+    build_settings: Option<String>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
 }
 
 impl ResolverManifest {
@@ -2947,7 +5308,16 @@ impl ResolverManifest {
                 .map(|(group, requirements)| (group, requirements.into_iter().collect()))
                 .collect(),
             dependency_metadata: dependency_metadata.into_iter().collect(),
+            build_settings: None,
+            unknown_fields: UnknownResolutionFields::default(),
         }
+    }
+
+    /// Store inputs that can affect captured build requirements.
+    #[must_use]
+    pub fn with_build_settings(mut self, build_settings: Option<String>) -> Self {
+        self.build_settings = build_settings;
+        self
     }
 
     /// Convert the manifest to a relative form using the given workspace.
@@ -3003,6 +5373,8 @@ impl ResolverManifest {
                 })
                 .collect::<Result<BTreeMap<_, _>, _>>()?,
             dependency_metadata: self.dependency_metadata,
+            build_settings: self.build_settings,
+            unknown_fields: self.unknown_fields,
         })
     }
 }
@@ -3028,37 +5400,177 @@ struct LockWire {
     options: ResolverOptionsWire,
     #[serde(default)]
     manifest: ResolverManifest,
+    #[serde(rename = "resolution", default)]
+    resolutions: Vec<ResolutionRecordWire>,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
 }
 
 impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
     fn try_from(wire: LockWire) -> Result<Self, LockError> {
+        let revision = wire.revision.unwrap_or(0);
+        if wire.version == 0 {
+            return Err(LockErrorKind::InvalidLockVersion {
+                version: wire.version,
+            }
+            .into());
+        }
+        if (wire.version, revision) < (VERSION, BUILD_DEPENDENCIES_REVISION)
+            && (wire.manifest.build_settings.is_some()
+                || !wire.resolutions.is_empty()
+                || wire.packages.iter().any(PackageWire::has_build_fields))
+        {
+            return Err(LockErrorKind::UnsupportedBuildDependencySchema {
+                version: wire.version,
+                revision,
+            }
+            .into());
+        }
+        if wire
+            .packages
+            .iter()
+            .any(|package| package.build_dependency_packages.is_some())
+        {
+            return Err(LockErrorKind::UnsupportedLegacyBuildDependencySchema {
+                version: wire.version,
+                revision,
+            }
+            .into());
+        }
+        if wire
+            .packages
+            .iter()
+            .any(PackageWire::has_legacy_dependency_selectors)
+        {
+            return Err(
+                LockErrorKind::UnsupportedLegacyBuildDependencySelectorSchema {
+                    version: wire.version,
+                    revision,
+                }
+                .into(),
+            );
+        }
+        if let Some(resolution) = wire
+            .resolutions
+            .iter()
+            .find(|resolution| resolution.executor.is_some())
+        {
+            return Err(LockErrorKind::UnsupportedExecutorBuildResolution {
+                id: resolution.id.clone(),
+            }
+            .into());
+        }
+        if wire.version == VERSION && revision <= BUILD_DEPENDENCIES_REVISION {
+            validate_resolution_fields(&wire, revision)?;
+        }
+
         // Count the number of sources for each package name. When
         // there's only one source for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
         // version) on dependency edges since it is strictly redundant.
-        let mut unambiguous_package_ids: FxHashMap<PackageName, PackageId> = FxHashMap::default();
+        let mut unambiguous_package_ids = UnambiguousPackageIds::default();
         let mut ambiguous = FxHashSet::default();
         for dist in &wire.packages {
-            if ambiguous.contains(&dist.id.name) {
+            let key = (dist.id.name.clone(), dist.id.resolution_id.clone());
+            if ambiguous.contains(&key) {
                 continue;
             }
-            if let Some(id) = unambiguous_package_ids.remove(&dist.id.name) {
-                ambiguous.insert(id.name);
+            if unambiguous_package_ids.remove(&key).is_some() {
+                ambiguous.insert(key);
                 continue;
             }
-            unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
+            unambiguous_package_ids.insert(key, dist.id.clone());
+        }
+        let package_names = wire
+            .packages
+            .iter()
+            .map(|dist| dist.id.name.clone())
+            .collect::<FxHashSet<_>>();
+
+        let mut resolution_ids = FxHashSet::default();
+        for resolution in &wire.resolutions {
+            if !resolution_ids.insert(resolution.id.clone()) {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: resolution.id.clone(),
+                    message: "duplicate resolution id",
+                }
+                .into());
+            }
+            if resolution.kind == ResolutionKind::Runtime {
+                if resolution.operation.is_some() {
+                    return Err(LockErrorKind::InvalidResolutionRecord {
+                        id: resolution.id.clone(),
+                        message: "runtime resolution cannot declare an operation",
+                    }
+                    .into());
+                }
+                if resolution.mode.is_some() {
+                    return Err(LockErrorKind::InvalidResolutionRecord {
+                        id: resolution.id.clone(),
+                        message: "runtime resolution cannot declare a replay mode",
+                    }
+                    .into());
+                }
+                if resolution.stage.is_some() {
+                    return Err(LockErrorKind::InvalidResolutionRecord {
+                        id: resolution.id.clone(),
+                        message: "runtime resolution cannot declare a build stage",
+                    }
+                    .into());
+                }
+                if resolution.name.is_some()
+                    || resolution.version.is_some()
+                    || resolution.source.is_some()
+                {
+                    return Err(LockErrorKind::InvalidResolutionRecord {
+                        id: resolution.id.clone(),
+                        message: "runtime resolution cannot declare a source package",
+                    }
+                    .into());
+                }
+                if !resolution.dependencies.is_empty() {
+                    return Err(LockErrorKind::InvalidResolutionRecord {
+                        id: resolution.id.clone(),
+                        message: "runtime resolution cannot declare roots",
+                    }
+                    .into());
+                }
+            }
+            if let Some(target) = resolution.target.as_ref() {
+                target.validate_activations(&package_names, &resolution.id)?;
+                if resolution.kind == ResolutionKind::Build {
+                    target.to_universal_marker(&wire.requires_python, &resolution.id)?;
+                }
+            }
         }
 
-        let fork_markers = wire
+        let runtime_markers_by_id = wire
+            .resolutions
+            .iter()
+            .filter_map(|resolution| {
+                if resolution.kind != ResolutionKind::Runtime {
+                    return None;
+                }
+                Some(
+                    resolution
+                        .runtime_marker(&wire.requires_python)
+                        .map(|marker| (resolution.id.clone(), marker)),
+                )
+            })
+            .collect::<Result<FxHashMap<_, _>, _>>()?;
+        let mut fork_markers = wire
             .fork_markers
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .map(UniversalMarker::from_combined)
             .collect::<Vec<_>>();
+        fork_markers.extend(runtime_markers_by_id.values().copied());
+        let fork_markers =
+            canonicalize_universal_markers(&fork_markers, &wire.requires_python, true);
         let environment = SimplifiedMarkerTree::new(
             &wire.requires_python,
             fork_markers_union(&fork_markers, &wire.requires_python),
@@ -3076,6 +5588,8 @@ impl TryFrom<LockWire> for Lock {
                     environment,
                     default,
                     &unambiguous_package_ids,
+                    &runtime_markers_by_id,
+                    &package_names,
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -3089,6 +5603,11 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
+        let resolutions = wire
+            .resolutions
+            .into_iter()
+            .map(|resolution| resolution.unwire(&unambiguous_package_ids))
+            .collect::<Result<Vec<_>, _>>()?;
         let mut options_wire = wire.options;
         if options_wire.exclude_newer.exclude_newer_span.is_some() {
             options_wire.exclude_newer.exclude_newer = None;
@@ -3099,7 +5618,7 @@ impl TryFrom<LockWire> for Lock {
             fork_strategy: options_wire.fork_strategy,
             exclude_newer: options_wire.exclude_newer.into(),
         };
-        let lock = Self::new(
+        let mut lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
@@ -3111,9 +5630,682 @@ impl TryFrom<LockWire> for Lock {
             required_environments,
             fork_markers,
         )?;
+        for resolution in &resolutions {
+            if resolution.kind != ResolutionKind::Build {
+                continue;
+            }
+            if resolution.operation.is_none() {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: resolution.id.clone(),
+                    message: "build resolution is missing an operation",
+                }
+                .into());
+            }
+            if resolution.mode.is_none() {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: resolution.id.clone(),
+                    message: "build resolution is missing a replay mode",
+                }
+                .into());
+            }
+            let Some(package_id) = resolution.package_id.as_ref() else {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: resolution.id.clone(),
+                    message: "build resolution is missing a source package",
+                }
+                .into());
+            };
+            if !lock.by_id.contains_key(package_id) {
+                return Err(LockErrorKind::UnrecognizedBuildDependency {
+                    id: package_id.clone(),
+                    dependency: BuildDependency::new(
+                        package_id.clone(),
+                        BTreeSet::new(),
+                        None,
+                        false,
+                    ),
+                }
+                .into());
+            }
+            if let Some(target) = resolution.target.as_ref() {
+                target.to_universal_marker(&lock.requires_python, &resolution.id)?;
+            }
+            for dependency in &resolution.dependencies {
+                if !lock.by_id.contains_key(&dependency.package_id) {
+                    return Err(LockErrorKind::UnrecognizedBuildDependency {
+                        id: package_id.clone(),
+                        dependency: dependency.clone(),
+                    }
+                    .into());
+                }
+            }
+        }
+        let build_resolution_ids = resolutions
+            .iter()
+            .filter(|resolution| resolution.kind == ResolutionKind::Build)
+            .map(|resolution| resolution.id.clone())
+            .collect::<FxHashSet<_>>();
+        let mut build_resolution_package_ids = FxHashSet::default();
+        for resolution in resolutions
+            .iter()
+            .filter(|resolution| resolution.kind == ResolutionKind::Build)
+        {
+            if let Some(package_id) = resolution.package_id.as_ref() {
+                let package_id = package_id.unscoped();
+                build_resolution_package_ids.insert(package_id);
+            }
+        }
+        let build_resolution_members = build_resolution_members(&lock, &resolutions);
+        validate_build_resolution_scopes(
+            &lock,
+            &resolutions,
+            &build_resolution_ids,
+            &build_resolution_members,
+        )?;
+        validate_build_resolution_variants(&lock, &resolutions, &build_resolution_members)?;
+        validate_build_resolution_stages(&lock, &resolutions)?;
+        validate_build_resolution_roots(&lock, &resolutions)?;
+        for package in &lock.packages {
+            if lock.supports_build_dependencies()
+                && package.build_dependencies_resolved
+                && !build_resolution_package_ids.contains(&package.id.unscoped())
+            {
+                let id = build_resolution_context_id(&build_key_from_package_id(&package.id));
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id,
+                    message: "package build-dependencies are missing a build resolution",
+                }
+                .into());
+            }
+        }
+        lock.resolutions = resolutions;
+        lock.resolutions
+            .retain(|resolution| resolution.kind == ResolutionKind::Build);
 
         Ok(lock)
     }
+}
+
+fn validate_resolution_fields(wire: &LockWire, revision: u32) -> Result<(), LockError> {
+    let validate = |unknown: Option<(&str, &'static str)>| -> Result<(), LockError> {
+        if let Some((field, context)) = unknown {
+            return Err(LockErrorKind::UnknownResolutionField {
+                version: wire.version,
+                revision,
+                context,
+                field: field.to_string(),
+            }
+            .into());
+        }
+        Ok(())
+    };
+
+    for resolution in &wire.resolutions {
+        validate(resolution.unknown_field())?;
+        for dependency in &resolution.dependencies {
+            validate(
+                dependency
+                    .unknown_fields
+                    .first()
+                    .map(|field| (field, "build resolution root")),
+            )?;
+        }
+    }
+    let has_build_fields = revision >= BUILD_DEPENDENCIES_REVISION
+        || wire.manifest.build_settings.is_some()
+        || !wire.resolutions.is_empty()
+        || wire.packages.iter().any(PackageWire::has_build_fields);
+    if has_build_fields {
+        validate(wire.unknown_fields.first().map(|field| (field, "lockfile")))?;
+        validate(
+            wire.options
+                .unknown_fields
+                .first_excluding(&[
+                    "exclude-newer",
+                    "exclude-newer-span",
+                    "exclude-newer-package",
+                ])
+                .map(|field| (field, "resolver options")),
+        )?;
+        validate(
+            wire.manifest
+                .unknown_fields
+                .first()
+                .map(|field| (field, "lock manifest")),
+        )?;
+    }
+    for package in &wire.packages {
+        if has_build_fields {
+            validate(
+                package
+                    .unknown_fields
+                    .first()
+                    .map(|field| (field, "package record")),
+            )?;
+            validate(
+                package
+                    .metadata
+                    .unknown_fields
+                    .first()
+                    .map(|field| (field, "package metadata")),
+            )?;
+            if let Some(build_system) = &package.metadata.build_system {
+                validate(
+                    build_system
+                        .unknown_fields
+                        .first()
+                        .map(|field| (field, "package build system")),
+                )?;
+            }
+            if let Some(sdist) = &package.sdist {
+                validate(
+                    sdist
+                        .unknown_field()
+                        .map(|field| (field, "source artifact")),
+                )?;
+            }
+            for wheel in &package.wheels {
+                validate(
+                    wheel
+                        .unknown_fields
+                        .first()
+                        .map(|field| (field, "wheel artifact")),
+                )?;
+                if let Some(zstd) = &wheel.zstd {
+                    validate(
+                        zstd.unknown_fields
+                            .first()
+                            .map(|field| (field, "compressed wheel metadata")),
+                    )?;
+                }
+            }
+            for dependency in package
+                .dependencies
+                .iter()
+                .chain(package.optional_dependencies.values().flatten())
+                .chain(package.dependency_groups.values().flatten())
+            {
+                validate(
+                    dependency
+                        .unknown_fields
+                        .first()
+                        .map(|field| (field, "package dependency")),
+                )?;
+            }
+        }
+        for selector in &package.selectors {
+            validate(selector.unknown_field())?;
+        }
+        for dependency in package.build_dependencies.iter().flatten() {
+            validate(
+                dependency
+                    .unknown_fields
+                    .first()
+                    .map(|field| (field, "package build dependency")),
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn build_resolution_members(
+    lock: &Lock,
+    resolutions: &[ResolutionRecord],
+) -> FxHashMap<String, FxHashSet<PackageId>> {
+    let package_by_id = lock.package_by_id();
+    resolutions
+        .iter()
+        .filter_map(|resolution| {
+            if resolution.kind != ResolutionKind::Build {
+                return None;
+            }
+            let package_id = resolution.package_id.as_ref()?;
+            let package = package_by_id.get(package_id)?;
+            let members = lock
+                .build_dependency_package_ids_from(
+                    package,
+                    &resolution.dependencies,
+                    &package_by_id,
+                    None,
+                    None,
+                )
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<FxHashSet<_>>();
+            Some((resolution.id.clone(), members))
+        })
+        .collect()
+}
+
+fn validate_build_resolution_scopes(
+    lock: &Lock,
+    resolutions: &[ResolutionRecord],
+    build_resolution_ids: &FxHashSet<String>,
+    build_resolution_members: &FxHashMap<String, FxHashSet<PackageId>>,
+) -> Result<(), LockError> {
+    for resolution in resolutions
+        .iter()
+        .filter(|resolution| resolution.kind == ResolutionKind::Build)
+    {
+        for dependency in &resolution.dependencies {
+            let Some(context) = dependency.package_id.resolution_id.as_ref() else {
+                continue;
+            };
+            if !build_resolution_ids.contains(context) {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: context.clone(),
+                    message: "scoped build root references an unknown build resolution",
+                }
+                .into());
+            }
+            if context != &resolution.id {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: resolution.id.clone(),
+                    message: "scoped build root references a different build resolution",
+                }
+                .into());
+            }
+        }
+    }
+
+    for package in &lock.packages {
+        for dependency in &package.build_dependencies {
+            let Some(context) = dependency.package_id.resolution_id.as_ref() else {
+                continue;
+            };
+            if !build_resolution_ids.contains(context) {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: context.clone(),
+                    message: "scoped package build root references an unknown build resolution",
+                }
+                .into());
+            }
+            if !build_resolution_members
+                .get(context)
+                .is_some_and(|members| members.contains(&dependency.package_id))
+            {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: context.clone(),
+                    message: "scoped package build root is not contained in its owning build resolution",
+                }
+                .into());
+            }
+        }
+
+        let Some(context) = package.id.resolution_id.as_ref() else {
+            continue;
+        };
+        if !build_resolution_ids.contains(context) {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: context.clone(),
+                message: "scoped package references an unknown build resolution",
+            }
+            .into());
+        }
+        if !build_resolution_members
+            .get(context)
+            .is_some_and(|members| members.contains(&package.id))
+        {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: context.clone(),
+                message: "scoped package is not contained in its owning build resolution",
+            }
+            .into());
+        }
+
+        for dependency in package
+            .dependencies
+            .iter()
+            .chain(package.optional_dependencies.values().flatten())
+            .chain(package.dependency_groups.values().flatten())
+        {
+            let Some(dependency_context) = dependency.package_id.resolution_id.as_ref() else {
+                continue;
+            };
+            if dependency_context != context {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: context.clone(),
+                    message: "scoped package dependency references a different build resolution",
+                }
+                .into());
+            }
+        }
+
+        let Some(base_package) = lock
+            .by_id
+            .get(&package.id.unscoped())
+            .and_then(|index| lock.packages.get(*index))
+        else {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: context.clone(),
+                message: "scoped package is missing its unscoped package",
+            }
+            .into());
+        };
+        let invalid_artifacts =
+            if base_package.build_only || !matches!(base_package.id.source, Source::Registry(_)) {
+                package
+                    .sdist
+                    .as_ref()
+                    .is_some_and(|sdist| base_package.sdist.as_ref() != Some(sdist))
+                    || package
+                        .wheels
+                        .iter()
+                        .any(|wheel| !base_package.wheels.contains(wheel))
+            } else {
+                // A build resolution may require artifacts forbidden by the runtime requirement,
+                // but artifacts shared by both contexts must retain the same identity and hashes.
+                package.wheels.iter().enumerate().any(|(index, wheel)| {
+                    package.wheels[..index]
+                        .iter()
+                        .any(|candidate| candidate.filename == wheel.filename)
+                }) || base_package
+                    .wheels
+                    .iter()
+                    .enumerate()
+                    .any(|(index, wheel)| {
+                        base_package.wheels[..index]
+                            .iter()
+                            .any(|candidate| candidate.filename == wheel.filename)
+                    })
+                    || package
+                        .sdist
+                        .as_ref()
+                        .zip(base_package.sdist.as_ref())
+                        .is_some_and(|(sdist, base_sdist)| sdist != base_sdist)
+                    || package.wheels.iter().any(|wheel| {
+                        base_package
+                            .wheels
+                            .iter()
+                            .find(|base_wheel| base_wheel.filename == wheel.filename)
+                            .is_some_and(|base_wheel| base_wheel != wheel)
+                    })
+            };
+        if invalid_artifacts {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: context.clone(),
+                message: "scoped package artifacts are not contained in its unscoped package",
+            }
+            .into());
+        }
+    }
+
+    for resolution in resolutions
+        .iter()
+        .filter(|resolution| resolution.kind == ResolutionKind::Build)
+    {
+        for package_id in build_resolution_members
+            .get(&resolution.id)
+            .into_iter()
+            .flatten()
+        {
+            let Some(context) = package_id.resolution_id.as_ref() else {
+                continue;
+            };
+            if context != &resolution.id {
+                return Err(LockErrorKind::InvalidResolutionRecord {
+                    id: resolution.id.clone(),
+                    message: "build resolution contains a scoped package from a different build resolution",
+                }
+                .into());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_acyclic_build_resolutions(
+    edges: &BTreeMap<BuildPackageKey, BTreeSet<BuildPackageKey>>,
+) -> Result<(), LockError> {
+    let mut visited = BTreeSet::new();
+    for package in edges.keys() {
+        let mut ancestry = BTreeSet::new();
+        let mut stack = vec![(package, false)];
+        while let Some((package, leave)) = stack.pop() {
+            if leave {
+                ancestry.remove(package);
+                visited.insert(package);
+                continue;
+            }
+            if visited.contains(package) {
+                continue;
+            }
+            if !ancestry.insert(package) {
+                return Err(LockErrorKind::CyclicLockedBuildDependency {
+                    name: package.name.clone(),
+                }
+                .into());
+            }
+
+            stack.push((package, true));
+            if let Some(dependencies) = edges.get(package) {
+                stack.extend(
+                    dependencies
+                        .iter()
+                        .rev()
+                        .map(|dependency| (dependency, false)),
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_build_resolution_variants(
+    lock: &Lock,
+    resolutions: &[ResolutionRecord],
+    members: &FxHashMap<String, FxHashSet<PackageId>>,
+) -> Result<(), LockError> {
+    let mut variants = BTreeMap::new();
+    for resolution in resolutions
+        .iter()
+        .filter(|resolution| resolution.kind == ResolutionKind::Build)
+    {
+        let Some(package_id) = resolution.package_id.as_ref() else {
+            continue;
+        };
+        variants
+            .entry((
+                package_id.unscoped(),
+                resolution
+                    .operation
+                    .unwrap_or(ResolutionOperation::Wheel)
+                    .as_str(),
+                resolution
+                    .stage
+                    .unwrap_or(BuildResolutionStage::Build)
+                    .as_str(),
+                resolution.target.is_some(),
+            ))
+            .or_insert_with(Vec::new)
+            .push(resolution);
+    }
+
+    for resolutions in variants.values() {
+        for (left, right) in resolutions.iter().tuple_combinations() {
+            let left_roots = left.dependencies.iter().collect::<BTreeSet<_>>();
+            let right_roots = right.dependencies.iter().collect::<BTreeSet<_>>();
+            if left_roots == right_roots && members.get(&left.id) == members.get(&right.id) {
+                continue;
+            }
+
+            if let (Some(left_target), Some(right_target)) = (&left.target, &right.target) {
+                // Build-record selection only receives the concrete target marker environment;
+                // project extras and groups are not available during frozen replay. Therefore,
+                // variants that are disjoint only through declared conflicts remain ambiguous.
+                let left_target = left_target
+                    .to_universal_marker(&lock.requires_python, &left.id)?
+                    .pep508();
+                let right_target = right_target
+                    .to_universal_marker(&lock.requires_python, &right.id)?
+                    .pep508();
+                if left_target.is_disjoint(right_target) {
+                    continue;
+                }
+            }
+
+            let left_bindings = left
+                .dependencies
+                .iter()
+                .filter(|dependency| dependency.match_runtime())
+                .map(|dependency| dependency.package_id.unscoped())
+                .collect::<BTreeSet<_>>();
+            let right_bindings = right
+                .dependencies
+                .iter()
+                .filter(|dependency| dependency.match_runtime())
+                .map(|dependency| dependency.package_id.unscoped())
+                .collect::<BTreeSet<_>>();
+
+            // A more-specific runtime binding wins during replay. Distinct bindings for the same
+            // runtime package are mutually exclusive, while equally-specific compatible bindings
+            // are ambiguous because either resolution can be selected for the same environment.
+            if left_bindings.len() != right_bindings.len()
+                || left_bindings.iter().any(|left_binding| {
+                    right_bindings.iter().any(|right_binding| {
+                        left_binding.name == right_binding.name && left_binding != right_binding
+                    })
+                })
+            {
+                continue;
+            }
+
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: right.id.clone(),
+                message: "build resolution has overlapping variants for the selected runtime environment",
+            }
+            .into());
+        }
+    }
+    Ok(())
+}
+
+fn validate_build_resolution_stages(
+    lock: &Lock,
+    resolutions: &[ResolutionRecord],
+) -> Result<(), LockError> {
+    for resolution in resolutions
+        .iter()
+        .filter(|resolution| resolution.kind == ResolutionKind::Build && resolution.stage.is_some())
+    {
+        let Some(package_id) = resolution.package_id.as_ref() else {
+            continue;
+        };
+        let stage = resolution.stage.unwrap_or(BuildResolutionStage::Build);
+        let bindings = resolution
+            .dependencies
+            .iter()
+            .filter(|dependency| dependency.match_runtime())
+            .map(|dependency| dependency.package_id.unscoped())
+            .collect::<BTreeSet<_>>();
+        let target = resolution
+            .target
+            .as_ref()
+            .map_or(Ok(MarkerTree::TRUE), |target| {
+                target
+                    .to_universal_marker(&lock.requires_python, &resolution.id)
+                    .map(UniversalMarker::pep508)
+            })?;
+        let mut counterpart_coverage = MarkerTree::FALSE;
+        let mut has_matching_final = false;
+
+        for counterpart in resolutions.iter().filter(|counterpart| {
+            counterpart.kind == ResolutionKind::Build
+                && counterpart.package_id.as_ref() == Some(package_id)
+                && counterpart.operation == resolution.operation
+                && counterpart.stage.unwrap_or(BuildResolutionStage::Build) != stage
+        }) {
+            let counterpart_bindings = counterpart
+                .dependencies
+                .iter()
+                .filter(|dependency| dependency.match_runtime())
+                .map(|dependency| dependency.package_id.unscoped())
+                .collect::<BTreeSet<_>>();
+            let compatible_bindings = match stage {
+                BuildResolutionStage::Bootstrap => bindings.is_subset(&counterpart_bindings),
+                BuildResolutionStage::Build => counterpart_bindings.is_subset(&bindings),
+            };
+            if !compatible_bindings {
+                continue;
+            }
+
+            let counterpart_target =
+                counterpart
+                    .target
+                    .as_ref()
+                    .map_or(Ok(MarkerTree::TRUE), |target| {
+                        target
+                            .to_universal_marker(&lock.requires_python, &counterpart.id)
+                            .map(UniversalMarker::pep508)
+                    })?;
+            if stage == BuildResolutionStage::Bootstrap {
+                has_matching_final |= !target.is_disjoint(counterpart_target);
+            } else {
+                counterpart_coverage.or(counterpart_target);
+            }
+        }
+
+        let mut uncovered = target;
+        uncovered.and(counterpart_coverage.negate());
+        if stage == BuildResolutionStage::Bootstrap && !has_matching_final
+            || stage == BuildResolutionStage::Build && !uncovered.is_false()
+        {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution.id.clone(),
+                message: match stage {
+                    BuildResolutionStage::Bootstrap => {
+                        "bootstrap build resolution is missing a matching final build resolution"
+                    }
+                    BuildResolutionStage::Build => {
+                        "staged build resolution is missing a matching bootstrap resolution"
+                    }
+                },
+            }
+            .into());
+        }
+    }
+    Ok(())
+}
+
+fn validate_build_resolution_roots(
+    lock: &Lock,
+    resolutions: &[ResolutionRecord],
+) -> Result<(), LockError> {
+    let mut resolution_roots: BTreeMap<PackageId, BTreeSet<BuildDependency>> = BTreeMap::new();
+    for resolution in resolutions.iter().filter(|resolution| {
+        resolution.kind == ResolutionKind::Build
+            && resolution.stage.unwrap_or(BuildResolutionStage::Build)
+                == BuildResolutionStage::Build
+    }) {
+        let Some(package_id) = resolution.package_id.as_ref() else {
+            continue;
+        };
+        resolution_roots
+            .entry(package_id.unscoped())
+            .or_default()
+            .extend(resolution.dependencies.iter().cloned());
+    }
+
+    for package in &lock.packages {
+        let Some(roots) = resolution_roots.get(&package.id.unscoped()) else {
+            continue;
+        };
+        if package
+            .build_dependencies
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            != *roots
+        {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: build_resolution_context_id(&build_key_from_package_id(&package.id)),
+                message: "package build-dependencies do not match final build resolution roots",
+            }
+            .into());
+        }
+    }
+    Ok(())
 }
 
 /// Like [`Lock`], but limited to the version field. Used for error reporting: by limiting parsing
@@ -3133,15 +6325,813 @@ impl LockVersion {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+struct ResolutionRecord {
+    id: String,
+    kind: ResolutionKind,
+    operation: Option<ResolutionOperation>,
+    mode: Option<ResolutionModeRecord>,
+    stage: Option<BuildResolutionStage>,
+    package_id: Option<PackageId>,
+    target: Option<TargetSelector>,
+    dependencies: Vec<BuildDependency>,
+}
+
+impl ResolutionRecord {
+    fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> Table {
+        let mut table = Table::new();
+        table.insert("id", value(self.id.clone()));
+        table.insert("kind", value(self.kind.as_str()));
+        if let Some(operation) = self.operation {
+            table.insert("operation", value(operation.as_str()));
+        }
+        if let Some(mode) = self.mode {
+            table.insert("mode", value(mode.as_str()));
+        }
+        if let Some(stage) = self.stage {
+            table.insert("stage", value(stage.as_str()));
+        }
+        if let Some(package_id) = self.package_id.as_ref() {
+            package_id.to_toml(Some(dist_count_by_name), &mut table);
+        }
+        if let Some(target) = self.target.as_ref() {
+            table.insert("target", value(target.to_toml()));
+        }
+        if !self.dependencies.is_empty() {
+            let dependencies = each_element_on_its_line_array(
+                self.dependencies
+                    .iter()
+                    .map(|dependency| dependency.to_toml(dist_count_by_name).into_inline_table()),
+            );
+            table.insert("roots", value(dependencies));
+        }
+
+        table
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum ResolutionKind {
+    Runtime,
+    Build,
+}
+
+impl ResolutionKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Runtime => "runtime",
+            Self::Build => "build",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum ResolutionOperation {
+    Wheel,
+    Editable,
+}
+
+impl ResolutionOperation {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Wheel => "wheel",
+            Self::Editable => "editable",
+        }
+    }
+}
+
+impl From<BuildResolutionOperation> for ResolutionOperation {
+    fn from(operation: BuildResolutionOperation) -> Self {
+        match operation {
+            BuildResolutionOperation::Wheel => Self::Wheel,
+            BuildResolutionOperation::Editable => Self::Editable,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum ResolutionModeRecord {
+    Isolated,
+}
+
+impl ResolutionModeRecord {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Isolated => "isolated",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum ResolutionStageRecord {
+    Bootstrap,
+    Build,
+}
+
+impl From<ResolutionStageRecord> for BuildResolutionStage {
+    fn from(stage: ResolutionStageRecord) -> Self {
+        match stage {
+            ResolutionStageRecord::Bootstrap => Self::Bootstrap,
+            ResolutionStageRecord::Build => Self::Build,
+        }
+    }
+}
+
+/// Unknown fields captured from a resolution record for revision-aware validation.
+#[derive(Clone, Debug, Default)]
+struct UnknownResolutionFields(BTreeSet<String>);
+
+impl UnknownResolutionFields {
+    fn first(&self) -> Option<&str> {
+        self.0.iter().next().map(String::as_str)
+    }
+
+    fn first_excluding(&self, fields: &[&str]) -> Option<&str> {
+        self.0
+            .iter()
+            .find(|field| !fields.contains(&field.as_str()))
+            .map(String::as_str)
+    }
+}
+
+impl PartialEq for UnknownResolutionFields {
+    fn eq(&self, _other: &Self) -> bool {
+        // Unknown fields from newer revisions do not change the selector semantics we can replay.
+        true
+    }
+}
+
+impl Eq for UnknownResolutionFields {}
+
+impl<'de> Deserialize<'de> for UnknownResolutionFields {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let fields = BTreeMap::<String, serde::de::IgnoredAny>::deserialize(deserializer)?;
+        Ok(Self(fields.into_keys().collect()))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct TargetSelector {
+    #[serde(default)]
+    marker: Option<SimplifiedMarkerTree>,
+    #[serde(default)]
+    active: Vec<ResolutionActivation>,
+    #[serde(default)]
+    inactive: Vec<ResolutionActivation>,
+    #[serde(default, rename = "any-of", alias = "dnf")]
+    any_of: Option<Vec<TargetSelectorClause>>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
+}
+
+impl TargetSelector {
+    fn from_universal_marker(
+        marker: UniversalMarker,
+        requires_python: &RequiresPython,
+    ) -> Option<Self> {
+        if let Some(selector) = Self::from_flat_universal_marker(marker, requires_python) {
+            return Some(selector);
+        }
+        Self::from_expression(marker, requires_python)
+    }
+
+    fn from_flat_universal_marker(
+        marker: UniversalMarker,
+        requires_python: &RequiresPython,
+    ) -> Option<Self> {
+        let mut selector = Self::from_conflict_marker(marker.conflict())?;
+        let pep508 = SimplifiedMarkerTree::new(requires_python, marker.pep508());
+        if pep508.try_to_string().is_some() {
+            selector.marker = Some(pep508);
+        }
+        if selector
+            .to_universal_marker(requires_python, "selector")
+            .ok()?
+            != marker
+        {
+            return None;
+        }
+        Some(selector)
+    }
+
+    fn from_conflict_marker(conflict_marker: ConflictMarker) -> Option<Self> {
+        if conflict_marker.is_false() {
+            return None;
+        }
+        let (active, inactive) = conflict_marker.filter_rules().ok()?;
+        let selector = Self {
+            marker: None,
+            active: active
+                .iter()
+                .map(ResolutionActivation::from_conflict_item)
+                .collect(),
+            inactive: inactive
+                .iter()
+                .map(ResolutionActivation::from_conflict_item)
+                .collect(),
+            any_of: None,
+            unknown_fields: UnknownResolutionFields::default(),
+        };
+        if selector.conflict_marker("selector").ok()? != conflict_marker {
+            return None;
+        }
+        Some(selector)
+    }
+
+    fn from_expression(marker: UniversalMarker, requires_python: &RequiresPython) -> Option<Self> {
+        let marker_tree = requires_python.simplify_markers(marker.combined());
+        let any_of = marker_tree
+            .to_dnf()
+            .into_iter()
+            .map(|clause| {
+                let all_of = clause
+                    .iter()
+                    .map(TargetSelectorTerm::from_marker_expression)
+                    .collect::<Vec<_>>();
+                TargetSelectorClause {
+                    all_of,
+                    unknown_fields: UnknownResolutionFields::default(),
+                }
+            })
+            .collect::<Vec<_>>();
+        let selector = Self {
+            marker: None,
+            active: Vec::new(),
+            inactive: Vec::new(),
+            any_of: Some(any_of),
+            unknown_fields: UnknownResolutionFields::default(),
+        };
+        let reconstructed = selector
+            .to_universal_marker(requires_python, "selector")
+            .ok()?;
+        if !universal_markers_equivalent(reconstructed, marker) {
+            return None;
+        }
+        Some(selector)
+    }
+
+    fn to_universal_marker(
+        &self,
+        requires_python: &RequiresPython,
+        resolution_id: &str,
+    ) -> Result<UniversalMarker, LockError> {
+        if self.any_of.is_some() {
+            return Ok(UniversalMarker::from_combined(
+                requires_python.complexify_markers(
+                    self.expression_marker_tree(requires_python, resolution_id)?,
+                ),
+            ));
+        }
+
+        let pep508 = self.marker.unwrap_or_default().into_marker(requires_python);
+        let mut conflict_marker = ConflictMarker::TRUE;
+        for item in &self.inactive {
+            conflict_marker = conflict_marker.and(
+                ConflictMarker::from_conflict_item(&item.to_conflict_item(resolution_id)?).negate(),
+            );
+        }
+        for item in &self.active {
+            conflict_marker = conflict_marker.and(ConflictMarker::from_conflict_item(
+                &item.to_conflict_item(resolution_id)?,
+            ));
+        }
+        Ok(UniversalMarker::new(pep508, conflict_marker))
+    }
+
+    fn unknown_field(&self) -> Option<(&str, &'static str)> {
+        self.unknown_fields
+            .first()
+            .map(|field| (field, "target selector"))
+            .or_else(|| {
+                self.active
+                    .iter()
+                    .chain(&self.inactive)
+                    .find_map(ResolutionActivation::unknown_field)
+            })
+            .or_else(|| {
+                self.any_of
+                    .iter()
+                    .flatten()
+                    .find_map(TargetSelectorClause::unknown_field)
+            })
+    }
+
+    fn conflict_marker(&self, resolution_id: &str) -> Result<ConflictMarker, LockError> {
+        if self.any_of.is_some() {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector expression cannot be reduced to a flat conflict marker",
+            }
+            .into());
+        }
+
+        let mut conflict_marker = ConflictMarker::TRUE;
+        for item in &self.inactive {
+            conflict_marker = conflict_marker.and(
+                ConflictMarker::from_conflict_item(&item.to_conflict_item(resolution_id)?).negate(),
+            );
+        }
+        for item in &self.active {
+            conflict_marker = conflict_marker.and(ConflictMarker::from_conflict_item(
+                &item.to_conflict_item(resolution_id)?,
+            ));
+        }
+        Ok(conflict_marker)
+    }
+
+    #[cfg(test)]
+    fn has_expression(&self) -> bool {
+        self.any_of.is_some()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.marker.is_none()
+            && self.active.is_empty()
+            && self.inactive.is_empty()
+            && self.any_of.is_none()
+    }
+
+    fn expression_marker_tree(
+        &self,
+        requires_python: &RequiresPython,
+        resolution_id: &str,
+    ) -> Result<MarkerTree, LockError> {
+        if self.marker.is_some() || !self.active.is_empty() || !self.inactive.is_empty() {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector expression cannot be combined with marker, active, or inactive",
+            }
+            .into());
+        }
+
+        let Some(any_of) = self.any_of.as_ref() else {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector expression is missing any-of",
+            }
+            .into());
+        };
+        let mut marker = MarkerTree::FALSE;
+        for clause in any_of {
+            let mut clause_marker = MarkerTree::TRUE;
+            for term in &clause.all_of {
+                clause_marker.and(term.to_marker_tree(resolution_id)?);
+            }
+            marker.or(clause_marker);
+        }
+        Ok(requires_python.simplify_markers(marker))
+    }
+
+    fn validate_activations(
+        &self,
+        package_names: &FxHashSet<PackageName>,
+        resolution_id: &str,
+    ) -> Result<(), LockError> {
+        for activation in self.active.iter().chain(&self.inactive) {
+            activation.validate(package_names, resolution_id)?;
+        }
+        if let Some(any_of) = self.any_of.as_ref() {
+            for clause in any_of {
+                clause.validate_activations(package_names, resolution_id)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn to_toml(&self) -> InlineTable {
+        let mut table = InlineTable::new();
+        if let Some(any_of) = self.any_of.as_ref() {
+            table.insert(
+                "any-of",
+                Value::from(each_element_on_its_line_array(
+                    any_of.iter().map(TargetSelectorClause::to_toml),
+                )),
+            );
+            return table;
+        }
+
+        if let Some(marker) = self.marker.and_then(SimplifiedMarkerTree::try_to_string) {
+            table.insert("marker", Value::from(marker));
+        }
+        if !self.active.is_empty() {
+            table.insert(
+                "active",
+                Value::from(each_element_on_its_line_array(
+                    self.active.iter().map(ResolutionActivation::to_toml),
+                )),
+            );
+        }
+        if !self.inactive.is_empty() {
+            table.insert(
+                "inactive",
+                Value::from(each_element_on_its_line_array(
+                    self.inactive.iter().map(ResolutionActivation::to_toml),
+                )),
+            );
+        }
+        table
+    }
+}
+
+fn universal_markers_equivalent(left: UniversalMarker, right: UniversalMarker) -> bool {
+    marker_trees_equivalent(left.combined(), right.combined())
+        && marker_trees_equivalent(left.pep508(), right.pep508())
+}
+
+fn marker_trees_equivalent(left: MarkerTree, right: MarkerTree) -> bool {
+    if left == right || left.try_to_string() == right.try_to_string() {
+        return true;
+    }
+    let mut left_implies_right = left;
+    left_implies_right.implies(right);
+    let mut right_implies_left = right;
+    right_implies_left.implies(left);
+    left_implies_right.is_true() && right_implies_left.is_true()
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct TargetSelectorClause {
+    #[serde(default, rename = "all-of", alias = "all")]
+    all_of: Vec<TargetSelectorTerm>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
+}
+
+impl TargetSelectorClause {
+    fn unknown_field(&self) -> Option<(&str, &'static str)> {
+        self.unknown_fields
+            .first()
+            .map(|field| (field, "target selector clause"))
+            .or_else(|| {
+                self.all_of
+                    .iter()
+                    .find_map(TargetSelectorTerm::unknown_field)
+            })
+    }
+
+    fn validate_activations(
+        &self,
+        package_names: &FxHashSet<PackageName>,
+        resolution_id: &str,
+    ) -> Result<(), LockError> {
+        for term in &self.all_of {
+            term.validate_activations(package_names, resolution_id)?;
+        }
+        Ok(())
+    }
+
+    fn to_toml(&self) -> InlineTable {
+        let mut table = InlineTable::new();
+        table.insert(
+            "all-of",
+            Value::from(each_element_on_its_line_array(
+                self.all_of.iter().map(TargetSelectorTerm::to_toml),
+            )),
+        );
+        table
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct TargetSelectorTerm {
+    #[serde(default)]
+    marker: Option<String>,
+    #[serde(default)]
+    active: Option<ResolutionActivation>,
+    #[serde(default)]
+    inactive: Option<ResolutionActivation>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
+}
+
+impl TargetSelectorTerm {
+    fn from_marker_expression(expression: &MarkerExpression) -> Self {
+        match expression {
+            MarkerExpression::Extra { name, operator } => {
+                let Some(extra) = name.as_extra() else {
+                    return Self {
+                        marker: Some(expression.to_string()),
+                        active: None,
+                        inactive: None,
+                        unknown_fields: UnknownResolutionFields::default(),
+                    };
+                };
+                let Ok(item) = ConflictMarker::decode_extra(extra) else {
+                    return Self {
+                        marker: Some(expression.to_string()),
+                        active: None,
+                        inactive: None,
+                        unknown_fields: UnknownResolutionFields::default(),
+                    };
+                };
+                let activation = ResolutionActivation::from_conflict_item(&item);
+                match operator {
+                    ExtraOperator::Equal => Self {
+                        marker: None,
+                        active: Some(activation),
+                        inactive: None,
+                        unknown_fields: UnknownResolutionFields::default(),
+                    },
+                    ExtraOperator::NotEqual => Self {
+                        marker: None,
+                        active: None,
+                        inactive: Some(activation),
+                        unknown_fields: UnknownResolutionFields::default(),
+                    },
+                }
+            }
+            expression => Self {
+                marker: Some(expression.to_string()),
+                active: None,
+                inactive: None,
+                unknown_fields: UnknownResolutionFields::default(),
+            },
+        }
+    }
+
+    fn to_marker_tree(&self, resolution_id: &str) -> Result<MarkerTree, LockError> {
+        match (&self.marker, &self.active, &self.inactive) {
+            (Some(marker), None, None) => MarkerTree::from_str(marker).map_err(|err| {
+                LockErrorKind::InvalidMarker {
+                    marker: marker.clone(),
+                    err,
+                }
+                .into()
+            }),
+            (None, Some(active), None) => Ok(UniversalMarker::new(
+                MarkerTree::TRUE,
+                ConflictMarker::from_conflict_item(&active.to_conflict_item(resolution_id)?),
+            )
+            .combined()),
+            (None, None, Some(inactive)) => Ok(UniversalMarker::new(
+                MarkerTree::TRUE,
+                ConflictMarker::from_conflict_item(&inactive.to_conflict_item(resolution_id)?)
+                    .negate(),
+            )
+            .combined()),
+            _ => Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector term must specify exactly one of marker, active, or inactive",
+            }
+            .into()),
+        }
+    }
+
+    fn validate_activations(
+        &self,
+        package_names: &FxHashSet<PackageName>,
+        resolution_id: &str,
+    ) -> Result<(), LockError> {
+        if let Some(active) = self.active.as_ref() {
+            active.validate(package_names, resolution_id)?;
+        }
+        if let Some(inactive) = self.inactive.as_ref() {
+            inactive.validate(package_names, resolution_id)?;
+        }
+        Ok(())
+    }
+
+    fn unknown_field(&self) -> Option<(&str, &'static str)> {
+        self.unknown_fields
+            .first()
+            .map(|field| (field, "target selector term"))
+            .or_else(|| {
+                self.active
+                    .iter()
+                    .chain(&self.inactive)
+                    .find_map(ResolutionActivation::unknown_field)
+            })
+    }
+
+    fn to_toml(&self) -> InlineTable {
+        let mut table = InlineTable::new();
+        if let Some(marker) = &self.marker {
+            table.insert("marker", Value::from(marker.as_str()));
+        }
+        if let Some(active) = &self.active {
+            table.insert("active", Value::from(active.to_toml()));
+        }
+        if let Some(inactive) = &self.inactive {
+            table.insert("inactive", Value::from(inactive.to_toml()));
+        }
+        table
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct ResolutionActivation {
+    package: PackageName,
+    #[serde(default)]
+    extra: Option<ExtraName>,
+    #[serde(default)]
+    group: Option<GroupName>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
+}
+
+impl ResolutionActivation {
+    fn from_conflict_item(item: &ConflictItem) -> Self {
+        let package = item.package().clone();
+        match item.kind() {
+            ConflictKind::Project => Self {
+                package,
+                extra: None,
+                group: None,
+                unknown_fields: UnknownResolutionFields::default(),
+            },
+            ConflictKind::Extra(extra) => Self {
+                package,
+                extra: Some(extra.clone()),
+                group: None,
+                unknown_fields: UnknownResolutionFields::default(),
+            },
+            ConflictKind::Group(group) => Self {
+                package,
+                extra: None,
+                group: Some(group.clone()),
+                unknown_fields: UnknownResolutionFields::default(),
+            },
+        }
+    }
+
+    fn to_conflict_item(&self, resolution_id: &str) -> Result<ConflictItem, LockError> {
+        match (&self.extra, &self.group) {
+            (Some(extra), None) => Ok(ConflictItem::from((self.package.clone(), extra.clone()))),
+            (None, Some(group)) => Ok(ConflictItem::from((self.package.clone(), group.clone()))),
+            (None, None) => Ok(ConflictItem::from(self.package.clone())),
+            (Some(_), Some(_)) => Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector entry cannot specify both extra and group",
+            }
+            .into()),
+        }
+    }
+
+    fn validate(
+        &self,
+        package_names: &FxHashSet<PackageName>,
+        resolution_id: &str,
+    ) -> Result<(), LockError> {
+        if package_names.contains(&self.package) {
+            Ok(())
+        } else {
+            Err(LockErrorKind::InvalidResolutionRecord {
+                id: resolution_id.to_string(),
+                message: "selector activation references an unknown package",
+            }
+            .into())
+        }
+    }
+
+    fn unknown_field(&self) -> Option<(&str, &'static str)> {
+        self.unknown_fields
+            .first()
+            .map(|field| (field, "resolution activation"))
+    }
+
+    fn to_toml(&self) -> InlineTable {
+        let mut table = InlineTable::new();
+        table.insert("package", Value::from(self.package.to_string()));
+        if let Some(extra) = &self.extra {
+            table.insert("extra", Value::from(extra.to_string()));
+        }
+        if let Some(group) = &self.group {
+            table.insert("group", Value::from(group.to_string()));
+        }
+        table
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct PackageSelectorWire {
+    target: PackageSelectorTargetWire,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
+}
+
+impl PackageSelectorWire {
+    fn unknown_field(&self) -> Option<(&str, &'static str)> {
+        self.unknown_fields
+            .first()
+            .map(|field| (field, "package selector"))
+            .or_else(|| match &self.target {
+                PackageSelectorTargetWire::Resolution(_) => None,
+                PackageSelectorTargetWire::Target(target) => target.unknown_field(),
+            })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(untagged)]
+enum PackageSelectorTargetWire {
+    Resolution(String),
+    Target(TargetSelector),
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct ResolutionRecordWire {
+    id: String,
+    kind: ResolutionKind,
+    #[serde(default)]
+    operation: Option<ResolutionOperation>,
+    #[serde(default)]
+    mode: Option<ResolutionModeRecord>,
+    #[serde(default)]
+    stage: Option<ResolutionStageRecord>,
+    #[serde(default)]
+    name: Option<PackageName>,
+    #[serde(default)]
+    version: Option<Version>,
+    #[serde(default)]
+    source: Option<Source>,
+    #[serde(default)]
+    target: Option<TargetSelector>,
+    /// Retained only to reject obsolete executor-scoped build resolutions during deserialization.
+    #[serde(default)]
+    executor: Option<serde::de::IgnoredAny>,
+    #[serde(default, rename = "roots")]
+    dependencies: Vec<BuildDependencyWire>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
+}
+
+impl ResolutionRecordWire {
+    fn unknown_field(&self) -> Option<(&str, &'static str)> {
+        self.unknown_fields
+            .first()
+            .map(|field| (field, "resolution record"))
+            .or_else(|| self.target.as_ref().and_then(TargetSelector::unknown_field))
+    }
+
+    fn runtime_marker(
+        &self,
+        requires_python: &RequiresPython,
+    ) -> Result<UniversalMarker, LockError> {
+        let Some(target) = self.target.as_ref() else {
+            return Err(LockErrorKind::InvalidResolutionRecord {
+                id: self.id.clone(),
+                message: "runtime resolution is missing a target selector",
+            }
+            .into());
+        };
+        target.to_universal_marker(requires_python, &self.id)
+    }
+
+    fn unwire(
+        self,
+        unambiguous_package_ids: &UnambiguousPackageIds,
+    ) -> Result<ResolutionRecord, LockError> {
+        let package_id = self
+            .name
+            .map(|name| PackageIdForDependency {
+                name,
+                version: self.version,
+                source: self.source,
+                resolution_id: None,
+            })
+            .map(|package_id| package_id.unwire(unambiguous_package_ids))
+            .transpose()?;
+        Ok(ResolutionRecord {
+            id: self.id,
+            kind: self.kind,
+            operation: self.operation,
+            mode: self.mode,
+            stage: self.stage.map(BuildResolutionStage::from),
+            package_id,
+            target: self.target,
+            dependencies: self
+                .dependencies
+                .into_iter()
+                .map(|dependency| dependency.unwire(unambiguous_package_ids))
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package {
     pub(crate) id: PackageId,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
+    /// Whether this package is only reachable through build dependency graphs.
+    build_only: bool,
     /// If there are multiple versions or sources for the same package name, we add the markers of
     /// the fork(s) that contained this version or source, so we can set the correct preferences in
     /// the next resolution.
     ///
-    /// Named `resolution-markers` in `uv.lock`.
+    /// Serialized as `resolution-markers` for compatibility with earlier lockfile readers.
     fork_markers: Vec<UniversalMarker>,
     /// The resolved dependencies of the package.
     dependencies: Vec<Dependency>,
@@ -3149,6 +7139,11 @@ pub struct Package {
     optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
     /// The resolved PEP 735 dependency groups of the package.
     dependency_groups: BTreeMap<GroupName, Vec<Dependency>>,
+    /// The resolved build dependencies of the package (packages needed to build this
+    /// package from a source distribution).
+    build_dependencies: Vec<BuildDependency>,
+    /// Whether the build dependency resolution was captured, including an empty resolution.
+    build_dependencies_resolved: bool,
     /// The exact requirements from the package metadata.
     metadata: PackageMetadata,
 }
@@ -3166,64 +7161,97 @@ impl Package {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
-        let requires_dist = if id.source.is_immutable() {
-            BTreeSet::default()
+        let metadata = if id.source.is_immutable() {
+            PackageMetadata::default()
         } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .requires_dist
-                .iter()
-                .cloned()
-                .map(|requirement| requirement.relative_to(root))
-                .collect::<Result<_, _>>()
-                .map_err(LockErrorKind::RequirementRelativePath)?
-        };
-        let provides_extra = if id.source.is_immutable() {
-            Box::default()
-        } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .provides_extra
-                .clone()
-        };
-        let dependency_groups = if id.source.is_immutable() {
-            BTreeMap::default()
-        } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .dependency_groups
-                .iter()
-                .map(|(group, requirements)| {
-                    let requirements = requirements
-                        .iter()
-                        .cloned()
-                        .map(|requirement| requirement.relative_to(root))
-                        .collect::<Result<_, _>>()
-                        .map_err(LockErrorKind::RequirementRelativePath)?;
-                    Ok::<_, LockError>((group.clone(), requirements))
-                })
-                .collect::<Result<_, _>>()?
+            PackageMetadata::from_distribution_metadata(
+                annotated_dist
+                    .metadata
+                    .as_ref()
+                    .expect("metadata is present"),
+                root,
+            )?
         };
         Ok(Self {
             id,
             sdist,
             wheels,
+            build_only: false,
             fork_markers,
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
             dependency_groups: BTreeMap::default(),
+            build_dependencies: vec![],
+            build_dependencies_resolved: false,
+            metadata,
+        })
+    }
+
+    /// Create a [`Package`] from a [`ResolvedDist`] and its hashes.
+    ///
+    /// This is used for build dependency packages. Their transitive edges are populated separately
+    /// from the captured build graph.
+    fn from_resolved_dist(
+        resolved_dist: &ResolvedDist,
+        hashes: &[HashDigest],
+        root: &Path,
+    ) -> Result<Self, LockError> {
+        let source = Source::from_resolved_dist(resolved_dist, root)?;
+        let version = resolved_dist_lock_version(resolved_dist, &source, root);
+        let name = resolved_dist.name().clone();
+        let id = PackageId {
+            name,
+            version,
+            source,
+            resolution_id: None,
+        };
+
+        let ResolvedDist::Installable { dist, .. } = resolved_dist else {
+            return Err(LockErrorKind::InstalledBuildDep.into());
+        };
+
+        // Extract the index URL from the distribution.
+        let index = match dist.as_ref() {
+            Dist::Built(BuiltDist::Registry(dist)) => Some(&dist.best_wheel().index),
+            Dist::Source(uv_distribution_types::SourceDist::Registry(dist)) => Some(&dist.index),
+            _ => None,
+        };
+
+        let sdist = SourceDist::from_dist(&id, dist, hashes, index)?;
+        let wheels = Wheel::from_dist(dist, hashes, index)?;
+
+        Ok(Self {
+            id,
+            sdist,
+            wheels,
+            build_only: true,
+            fork_markers: vec![],
+            dependencies: vec![],
+            optional_dependencies: BTreeMap::default(),
+            dependency_groups: BTreeMap::default(),
+            build_dependencies: vec![],
+            build_dependencies_resolved: false,
             metadata: PackageMetadata {
-                requires_dist,
-                provides_extra,
-                dependency_groups,
+                requires_dist: BTreeSet::default(),
+                provides_extra: Box::default(),
+                dependency_groups: BTreeMap::default(),
+                build_requires: None,
+                build_system: None,
+                unknown_fields: UnknownResolutionFields::default(),
             },
         })
+    }
+
+    /// Retain artifacts that were selected in another resolution for the same package.
+    fn add_artifacts(&mut self, package: Self) {
+        if self.sdist.is_none() {
+            self.sdist = package.sdist;
+        }
+        for wheel in package.wheels {
+            if !self.wheels.contains(&wheel) {
+                self.wheels.push(wheel);
+            }
+        }
     }
 
     /// Add the [`AnnotatedDist`] as a dependency of the [`Package`].
@@ -3335,7 +7363,7 @@ impl Package {
         let no_build = build_options.no_build_package(&self.id.name);
 
         if !no_binary {
-            if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
+            if let Some(best_wheel_index) = self.find_best_wheel(tag_policy, markers) {
                 let hashes = {
                     let wheel = &self.wheels[best_wheel_index];
                     HashDigests::from(
@@ -3366,10 +7394,11 @@ impl Package {
                         let filename: WheelFilename =
                             self.wheels[best_wheel_index].filename.clone();
                         let install_path = absolute_path(workspace_root, path)?;
+                        let given = path.to_string_lossy();
                         let path_dist = PathBuiltDist {
                             filename,
-                            url: verbatim_url(&install_path, &self.id)?,
-                            install_path: absolute_path(workspace_root, path)?.into_boxed_path(),
+                            url: verbatim_url(&install_path, &self.id)?.with_given(given),
+                            install_path: install_path.into_boxed_path(),
                         };
                         let built_dist = BuiltDist::Path(path_dist);
                         Dist::Built(built_dist)
@@ -3459,7 +7488,13 @@ impl Package {
             }
         }
 
-        if let Some(sdist) = self.to_source_dist(workspace_root)? {
+        let sdist_is_eligible = matches!(tag_policy, TagPolicy::Preferred(_))
+            || self.sdist.as_ref().is_none_or(|sdist| {
+                sdist.requires_python().is_none_or(|requires_python| {
+                    requires_python.contains(&markers.python_full_version().version)
+                })
+            });
+        if sdist_is_eligible && let Some(sdist) = self.to_source_dist(workspace_root)? {
             // Even with `--no-build`, allow virtual packages. (In the future, we may want to allow
             // any local source tree, or at least editable source trees, which we allow in
             // `uv pip`.)
@@ -3679,7 +7714,7 @@ impl Package {
                 };
                 uv_distribution_types::SourceDist::DirectUrl(direct_dist)
             }
-            Source::Registry(RegistrySource::Url(url)) => {
+            Source::Registry(source @ RegistrySource::Url(url)) => {
                 let Some(ref sdist) = self.sdist else {
                     return Ok(None);
                 };
@@ -3712,7 +7747,7 @@ impl Package {
                     hashes: sdist.hash().map_or(HashDigests::empty(), |hash| {
                         HashDigests::from(hash.0.clone())
                     }),
-                    requires_python: None,
+                    requires_python: sdist.requires_python().cloned(),
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
@@ -3730,11 +7765,15 @@ impl Package {
                     file,
                     ext,
                     index,
-                    wheels: vec![],
+                    wheels: self
+                        .wheels
+                        .iter()
+                        .map(|wheel| wheel.to_registry_wheel(source, workspace_root))
+                        .collect::<Result<_, _>>()?,
                 };
                 uv_distribution_types::SourceDist::Registry(reg_dist)
             }
-            Source::Registry(RegistrySource::Path(path)) => {
+            Source::Registry(source @ RegistrySource::Path(path)) => {
                 let Some(ref sdist) = self.sdist else {
                     return Ok(None);
                 };
@@ -3787,7 +7826,7 @@ impl Package {
                     hashes: sdist.hash().map_or(HashDigests::empty(), |hash| {
                         HashDigests::from(hash.0.clone())
                     }),
-                    requires_python: None,
+                    requires_python: sdist.requires_python().cloned(),
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: file_url,
@@ -3797,7 +7836,8 @@ impl Package {
 
                 let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(workspace_root.join(path))
-                        .map_err(LockErrorKind::RegistryVerbatimUrl)?,
+                        .map_err(LockErrorKind::RegistryVerbatimUrl)?
+                        .with_given(path.to_string_lossy()),
                 );
 
                 let reg_dist = RegistrySourceDist {
@@ -3806,7 +7846,11 @@ impl Package {
                     file,
                     ext,
                     index,
-                    wheels: vec![],
+                    wheels: self
+                        .wheels
+                        .iter()
+                        .map(|wheel| wheel.to_registry_wheel(source, workspace_root))
+                        .collect::<Result<_, _>>()?,
                 };
                 uv_distribution_types::SourceDist::Registry(reg_dist)
             }
@@ -3820,10 +7864,15 @@ impl Package {
         requires_python: &RequiresPython,
         simplified_environment: MarkerTree,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
+        include_build_eligibility: bool,
     ) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
 
         self.id.to_toml(None, &mut table);
+
+        if self.build_only {
+            table.insert("build-only", value(true));
+        }
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
@@ -3833,6 +7882,12 @@ impl Package {
                 table.insert("resolution-markers", value(fork_markers));
             }
         }
+
+        let simplified_environment = if self.build_only || self.id.resolution_id.is_some() {
+            MarkerTree::TRUE
+        } else {
+            simplified_environment
+        };
 
         if !self.dependencies.is_empty() {
             let deps = each_element_on_its_line_array(self.dependencies.iter().map(|dep| {
@@ -3874,15 +7929,28 @@ impl Package {
             }
         }
 
+        if self.build_dependencies_resolved || !self.build_dependencies.is_empty() {
+            let deps = if self.build_dependencies.is_empty() {
+                Array::new()
+            } else {
+                each_element_on_its_line_array(
+                    self.build_dependencies
+                        .iter()
+                        .map(|dep| dep.to_toml(dist_count_by_name).into_inline_table()),
+                )
+            };
+            table.insert("build-dependencies", value(deps));
+        }
+
         if let Some(ref sdist) = self.sdist {
-            table.insert("sdist", value(sdist.to_toml()?));
+            table.insert("sdist", value(sdist.to_toml(include_build_eligibility)?));
         }
 
         if !self.wheels.is_empty() {
             let wheels = each_element_on_its_line_array(
                 self.wheels
                     .iter()
-                    .map(Wheel::to_toml)
+                    .map(|wheel| wheel.to_toml(include_build_eligibility))
                     .collect::<Result<Vec<_>, _>>()?
                     .into_iter(),
             );
@@ -3951,6 +8019,39 @@ impl Package {
                 metadata_table.insert("provides-extras", value(provides_extras));
             }
 
+            if let Some(build_system) = &self.metadata.build_system {
+                let mut build_system_table = InlineTable::new();
+                build_system_table.insert(
+                    "build-backend",
+                    Value::from(build_system.build_backend.clone()),
+                );
+                if !build_system.backend_path.is_empty() {
+                    build_system_table.insert(
+                        "backend-path",
+                        Value::from(build_system.backend_path.iter().cloned().collect::<Array>()),
+                    );
+                }
+                metadata_table.insert("build-system", value(build_system_table));
+            }
+
+            if let Some(build_requires) = &self.metadata.build_requires {
+                let build_requires = build_requires
+                    .iter()
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let build_requires = match build_requires.as_slice() {
+                    [] => Array::new(),
+                    [requirement] => Array::from_iter([requirement]),
+                    build_requires => each_element_on_its_line_array(build_requires.iter()),
+                };
+                metadata_table.insert("build-requires", value(build_requires));
+            }
+
             if !metadata_table.is_empty() {
                 table.insert("metadata", Item::Table(metadata_table));
             }
@@ -3959,11 +8060,25 @@ impl Package {
         Ok(table)
     }
 
-    fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
+    fn find_best_wheel(
+        &self,
+        tag_policy: TagPolicy<'_>,
+        markers: &MarkerEnvironment,
+    ) -> Option<usize> {
         type WheelPriority<'lock> = (TagPriority, Option<&'lock BuildTag>);
 
         let mut best: Option<(WheelPriority, usize)> = None;
         for (i, wheel) in self.wheels.iter().enumerate() {
+            if !matches!(tag_policy, TagPolicy::Preferred(_))
+                && wheel
+                    .requires_python
+                    .as_ref()
+                    .is_some_and(|requires_python| {
+                        !requires_python.contains(&markers.python_full_version().version)
+                    })
+            {
+                continue;
+            }
             let TagCompatibility::Compatible(tag_priority) =
                 wheel.filename.compatibility(tag_policy.tags())
             else {
@@ -3985,7 +8100,7 @@ impl Package {
 
         let best = best.map(|(_, i)| i);
         match tag_policy {
-            TagPolicy::Required(_) => best,
+            TagPolicy::Required(_) | TagPolicy::Build(_) => best,
             TagPolicy::Preferred(_) => best.or_else(|| self.wheels.first().map(|_| 0)),
         }
     }
@@ -4034,7 +8149,8 @@ impl Package {
             Source::Registry(RegistrySource::Path(path)) => {
                 let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(root.join(path))
-                        .map_err(LockErrorKind::RegistryVerbatimUrl)?,
+                        .map_err(LockErrorKind::RegistryVerbatimUrl)?
+                        .with_given(path.to_string_lossy()),
                 );
                 Ok(Some(index))
             }
@@ -4141,6 +8257,8 @@ fn absolute_path(workspace_root: &Path, path: &Path) -> Result<PathBuf, LockErro
 struct PackageWire {
     #[serde(flatten)]
     id: PackageId,
+    #[serde(default, rename = "build-only")]
+    build_only: bool,
     #[serde(default)]
     metadata: PackageMetadata,
     #[serde(default)]
@@ -4150,11 +8268,48 @@ struct PackageWire {
     #[serde(default, rename = "resolution-markers")]
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(default)]
+    selectors: Vec<PackageSelectorWire>,
+    #[serde(default)]
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
     optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
     #[serde(default, rename = "dev-dependencies", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
+    #[serde(default, rename = "build-dependencies")]
+    build_dependencies: Option<Vec<BuildDependencyWire>>,
+    #[serde(default, rename = "build-dependency-packages")]
+    build_dependency_packages: Option<toml::Value>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
+}
+
+impl PackageWire {
+    fn has_legacy_dependency_selectors(&self) -> bool {
+        self.dependencies
+            .iter()
+            .chain(self.optional_dependencies.values().flatten())
+            .chain(self.dependency_groups.values().flatten())
+            .any(DependencyWire::has_build_fields)
+    }
+
+    fn has_build_fields(&self) -> bool {
+        self.build_only
+            || self.id.resolution_id.is_some()
+            || self
+                .wheels
+                .iter()
+                .any(|wheel| wheel.requires_python.is_some())
+            || self
+                .sdist
+                .as_ref()
+                .is_some_and(|sdist| sdist.requires_python().is_some())
+            || !self.selectors.is_empty()
+            || self.build_dependencies.is_some()
+            || self.build_dependency_packages.is_some()
+            || self.metadata.build_requires.is_some()
+            || self.metadata.build_system.is_some()
+            || self.has_legacy_dependency_selectors()
+    }
 }
 
 #[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
@@ -4166,6 +8321,68 @@ struct PackageMetadata {
     provides_extra: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
+    #[serde(default, rename = "build-requires")]
+    build_requires: Option<BTreeSet<Requirement>>,
+    #[serde(default, rename = "build-system")]
+    build_system: Option<PackageBuildSystem>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct PackageBuildSystem {
+    build_backend: String,
+    #[serde(default)]
+    backend_path: Vec<String>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
+}
+
+impl From<&StaticBuildSystem> for PackageBuildSystem {
+    fn from(build_system: &StaticBuildSystem) -> Self {
+        Self {
+            build_backend: build_system.build_backend.clone(),
+            backend_path: build_system.backend_path.clone(),
+            unknown_fields: UnknownResolutionFields::default(),
+        }
+    }
+}
+
+impl PackageMetadata {
+    fn from_distribution_metadata(
+        metadata: &uv_distribution::Metadata,
+        root: &Path,
+    ) -> Result<Self, LockError> {
+        let requires_dist = metadata
+            .requires_dist
+            .iter()
+            .cloned()
+            .map(|requirement| requirement.relative_to(root))
+            .collect::<Result<_, _>>()
+            .map_err(LockErrorKind::RequirementRelativePath)?;
+        let dependency_groups = metadata
+            .dependency_groups
+            .iter()
+            .map(|(group, requirements)| {
+                let requirements = requirements
+                    .iter()
+                    .cloned()
+                    .map(|requirement| requirement.relative_to(root))
+                    .collect::<Result<_, _>>()
+                    .map_err(LockErrorKind::RequirementRelativePath)?;
+                Ok::<_, LockError>((group.clone(), requirements))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            requires_dist,
+            provides_extra: metadata.provides_extra.clone(),
+            dependency_groups,
+            build_requires: None,
+            build_system: None,
+            unknown_fields: UnknownResolutionFields::default(),
+        })
+    }
 }
 
 impl PackageWire {
@@ -4174,7 +8391,9 @@ impl PackageWire {
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_ids: &UnambiguousPackageIds,
+        runtime_markers_by_id: &FxHashMap<String, UniversalMarker>,
+        package_names: &FxHashSet<PackageName>,
     ) -> Result<Package, LockError> {
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
@@ -4204,6 +8423,15 @@ impl PackageWire {
             .into());
         }
 
+        let (environment, default) = if self.build_only || self.id.resolution_id.is_some() {
+            (
+                SimplifiedMarkerTree::new(requires_python, MarkerTree::TRUE),
+                UniversalMarker::TRUE,
+            )
+        } else {
+            (environment, default)
+        };
+
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
                 .map(|dep| {
@@ -4216,18 +8444,48 @@ impl PackageWire {
                 })
                 .collect()
         };
+        let build_dependencies_resolved = self.build_dependencies.is_some();
+        let build_dependencies = self
+            .build_dependencies
+            .unwrap_or_default()
+            .into_iter()
+            .map(|dep| dep.unwire(unambiguous_package_ids))
+            .collect::<Result<_, _>>()?;
+        let mut fork_markers = self
+            .fork_markers
+            .into_iter()
+            .map(|simplified_marker| simplified_marker.into_marker(requires_python))
+            .map(UniversalMarker::from_combined)
+            .collect::<Vec<_>>();
+        for selector in self.selectors {
+            match selector.target {
+                PackageSelectorTargetWire::Resolution(target) => {
+                    let Some(marker) = runtime_markers_by_id.get(&target) else {
+                        return Err(LockErrorKind::InvalidResolutionRecord {
+                            id: target,
+                            message: "package selector references an unknown runtime resolution",
+                        }
+                        .into());
+                    };
+                    fork_markers.push(*marker);
+                }
+                PackageSelectorTargetWire::Target(target) => {
+                    target.validate_activations(package_names, "package selector")?;
+                    fork_markers
+                        .push(target.to_universal_marker(requires_python, "package selector")?);
+                }
+            }
+        }
+        fork_markers.sort();
+        fork_markers.dedup();
 
         Ok(Package {
             id: self.id,
             metadata: self.metadata,
             sdist: self.sdist,
             wheels: self.wheels,
-            fork_markers: self
-                .fork_markers
-                .into_iter()
-                .map(|simplified_marker| simplified_marker.into_marker(requires_python))
-                .map(UniversalMarker::from_combined)
-                .collect(),
+            build_only: self.build_only,
+            fork_markers,
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
                 .optional_dependencies
@@ -4239,6 +8497,8 @@ impl PackageWire {
                 .into_iter()
                 .map(|(group, deps)| Ok((group, unwire_deps(deps)?)))
                 .collect::<Result<_, LockError>>()?,
+            build_dependencies,
+            build_dependencies_resolved,
         })
     }
 }
@@ -4251,6 +8511,8 @@ pub(crate) struct PackageId {
     pub(crate) name: PackageName,
     version: Option<Version>,
     source: Source,
+    #[serde(default, rename = "resolution-id")]
+    resolution_id: Option<String>,
 }
 
 impl PackageId {
@@ -4273,7 +8535,26 @@ impl PackageId {
             name,
             version,
             source,
+            resolution_id: None,
         })
+    }
+
+    fn scoped(&self, resolution_id: String) -> Self {
+        Self {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            source: self.source.clone(),
+            resolution_id: Some(resolution_id),
+        }
+    }
+
+    fn unscoped(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            source: self.source.clone(),
+            resolution_id: None,
+        }
     }
 
     /// Writes this package ID inline into the table given.
@@ -4285,18 +8566,31 @@ impl PackageId {
     fn to_toml(&self, dist_count_by_name: Option<&FxHashMap<PackageName, u64>>, table: &mut Table) {
         let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
         table.insert("name", value(self.name.to_string()));
-        if count.is_none_or(|count| count > 1) {
+        if self.resolution_id.is_some() || count.is_none_or(|count| count > 1) {
             if let Some(version) = &self.version {
                 table.insert("version", value(version.to_string()));
             }
             self.source.to_toml(table);
+        }
+        if let Some(resolution_id) = &self.resolution_id {
+            table.insert("resolution-id", value(resolution_id.clone()));
         }
     }
 }
 
 impl Display for PackageId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(version) = &self.version {
+        if let Some(resolution_id) = &self.resolution_id {
+            if let Some(version) = &self.version {
+                write!(
+                    f,
+                    "{}=={} @ {} ({resolution_id})",
+                    self.name, version, self.source
+                )
+            } else {
+                write!(f, "{} @ {} ({resolution_id})", self.name, self.source)
+            }
+        } else if let Some(version) = &self.version {
             write!(f, "{}=={} @ {}", self.name, version, self.source)
         } else {
             write!(f, "{} @ {}", self.name, self.source)
@@ -4310,14 +8604,17 @@ struct PackageIdForDependency {
     name: PackageName,
     version: Option<Version>,
     source: Option<Source>,
+    #[serde(default, rename = "resolution-id")]
+    resolution_id: Option<String>,
 }
 
 impl PackageIdForDependency {
     fn unwire(
         self,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_ids: &UnambiguousPackageIds,
     ) -> Result<PackageId, LockError> {
-        let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
+        let lookup_key = (self.name.clone(), self.resolution_id.clone());
+        let unambiguous_package_id = unambiguous_package_ids.get(&lookup_key);
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -4349,6 +8646,7 @@ impl PackageIdForDependency {
             name: self.name,
             version,
             source,
+            resolution_id: self.resolution_id,
         })
     }
 }
@@ -4359,6 +8657,7 @@ impl From<PackageId> for PackageIdForDependency {
             name: id.name,
             version: id.version,
             source: Some(id.source),
+            resolution_id: id.resolution_id,
         }
     }
 }
@@ -4985,6 +9284,10 @@ struct SourceDistMetadata {
     /// The upload time of the source distribution.
     #[serde(alias = "upload_time")]
     upload_time: Option<Timestamp>,
+    /// The Python versions for which this source distribution can be built, if restricted.
+    requires_python: Option<Arc<VersionSpecifiers>>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
 }
 
 /// A URL or file path where the source dist that was
@@ -5011,6 +9314,14 @@ enum SourceDist {
 }
 
 impl SourceDist {
+    fn unknown_field(&self) -> Option<&str> {
+        match self {
+            Self::Metadata { metadata }
+            | Self::Url { metadata, .. }
+            | Self::Path { metadata, .. } => metadata.unknown_fields.first(),
+        }
+    }
+
     fn filename(&self) -> Option<Cow<'_, str>> {
         match self {
             Self::Metadata { .. } => None,
@@ -5048,6 +9359,14 @@ impl SourceDist {
             Self::Metadata { metadata } => metadata.upload_time,
             Self::Url { metadata, .. } => metadata.upload_time,
             Self::Path { metadata, .. } => metadata.upload_time,
+        }
+    }
+
+    fn requires_python(&self) -> Option<&Arc<VersionSpecifiers>> {
+        match self {
+            Self::Metadata { metadata }
+            | Self::Url { metadata, .. }
+            | Self::Path { metadata, .. } => metadata.requires_python.as_ref(),
         }
     }
 }
@@ -5134,12 +9453,15 @@ impl SourceDist {
                     .map(Timestamp::from_millisecond)
                     .transpose()
                     .map_err(LockErrorKind::InvalidTimestamp)?;
+                let requires_python = reg_dist.file.requires_python.clone();
                 Ok(Some(Self::Url {
                     url,
                     metadata: SourceDistMetadata {
                         hash,
                         size,
                         upload_time,
+                        requires_python,
+                        unknown_fields: UnknownResolutionFields::default(),
                     },
                 }))
             }
@@ -5169,12 +9491,15 @@ impl SourceDist {
                         .map(Timestamp::from_millisecond)
                         .transpose()
                         .map_err(LockErrorKind::InvalidTimestamp)?;
+                    let requires_python = reg_dist.file.requires_python.clone();
                     Ok(Some(Self::Path {
                         path,
                         metadata: SourceDistMetadata {
                             hash,
                             size,
                             upload_time,
+                            requires_python,
+                            unknown_fields: UnknownResolutionFields::default(),
                         },
                     }))
                 } else {
@@ -5189,12 +9514,15 @@ impl SourceDist {
                         .map(Timestamp::from_millisecond)
                         .transpose()
                         .map_err(LockErrorKind::InvalidTimestamp)?;
+                    let requires_python = reg_dist.file.requires_python.clone();
                     Ok(Some(Self::Url {
                         url,
                         metadata: SourceDistMetadata {
                             hash,
                             size,
                             upload_time,
+                            requires_python,
+                            unknown_fields: UnknownResolutionFields::default(),
                         },
                     }))
                 }
@@ -5216,6 +9544,8 @@ impl SourceDist {
                 hash: Some(hash),
                 size: None,
                 upload_time: None,
+                requires_python: None,
+                unknown_fields: UnknownResolutionFields::default(),
             },
         })
     }
@@ -5234,6 +9564,8 @@ impl SourceDist {
                 hash: Some(hash),
                 size: None,
                 upload_time: None,
+                requires_python: None,
+                unknown_fields: UnknownResolutionFields::default(),
             },
         })
     }
@@ -5252,6 +9584,8 @@ impl SourceDist {
                 hash: Some(hash),
                 size: None,
                 upload_time: None,
+                requires_python: None,
+                unknown_fields: UnknownResolutionFields::default(),
             },
         })
     }
@@ -5278,7 +9612,10 @@ enum SourceDistWire {
 
 impl SourceDist {
     /// Returns the TOML representation of this source distribution.
-    fn to_toml(&self) -> Result<InlineTable, toml_edit::ser::Error> {
+    fn to_toml(
+        &self,
+        include_build_eligibility: bool,
+    ) -> Result<InlineTable, toml_edit::ser::Error> {
         let mut table = InlineTable::new();
         match self {
             Self::Metadata { .. } => {}
@@ -5301,6 +9638,9 @@ impl SourceDist {
         if let Some(upload_time) = self.upload_time() {
             table.insert("upload-time", Value::from(upload_time.to_string()));
         }
+        if include_build_eligibility && let Some(requires_python) = self.requires_python() {
+            table.insert("requires-python", Value::from(requires_python.to_string()));
+        }
         Ok(table)
     }
 }
@@ -5308,11 +9648,17 @@ impl SourceDist {
 impl From<SourceDistWire> for SourceDist {
     fn from(wire: SourceDistWire) -> Self {
         match wire {
-            SourceDistWire::Url { url, metadata } => Self::Url { url, metadata },
-            SourceDistWire::Path { path, metadata } => Self::Path {
-                path: path.into(),
-                metadata,
-            },
+            SourceDistWire::Url { url, mut metadata } => {
+                metadata.unknown_fields.0.remove("url");
+                Self::Url { url, metadata }
+            }
+            SourceDistWire::Path { path, mut metadata } => {
+                metadata.unknown_fields.0.remove("path");
+                Self::Path {
+                    path: path.into(),
+                    metadata,
+                }
+            }
             SourceDistWire::Metadata { metadata } => Self::Metadata { metadata },
         }
     }
@@ -5407,6 +9753,8 @@ fn locked_git_url(
 struct ZstdWheel {
     hash: Option<Hash>,
     size: Option<u64>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
@@ -5432,6 +9780,8 @@ struct Wheel {
     ///
     /// This is only present for wheels that come from registries.
     upload_time: Option<Timestamp>,
+    /// The Python versions for which this wheel can be installed, if restricted.
+    requires_python: Option<Arc<VersionSpecifiers>>,
     /// The filename of the wheel.
     ///
     /// This isn't part of the wire format since it's redundant with the
@@ -5441,6 +9791,8 @@ struct Wheel {
     filename: WheelFilename,
     /// The zstandard-compressed wheel metadata, if any.
     zstd: Option<ZstdWheel>,
+    /// Unknown fields retained for revision-aware validation.
+    unknown_fields: UnknownResolutionFields,
 }
 
 impl Wheel {
@@ -5552,17 +9904,21 @@ impl Wheel {
             .map(Timestamp::from_millisecond)
             .transpose()
             .map_err(LockErrorKind::InvalidTimestamp)?;
+        let requires_python = wheel.file.requires_python.clone();
         let zstd = wheel.file.zstd.as_ref().map(|zstd| ZstdWheel {
             hash: zstd.hashes.iter().max().cloned().map(Hash::from),
             size: zstd.size,
+            unknown_fields: UnknownResolutionFields::default(),
         });
         Ok(Self {
             url,
             hash,
             size,
             upload_time,
+            requires_python,
             filename,
             zstd,
+            unknown_fields: UnknownResolutionFields::default(),
         })
     }
 
@@ -5574,8 +9930,10 @@ impl Wheel {
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
             upload_time: None,
+            requires_python: None,
             filename: direct_dist.filename.clone(),
             zstd: None,
+            unknown_fields: UnknownResolutionFields::default(),
         }
     }
 
@@ -5587,8 +9945,10 @@ impl Wheel {
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
             upload_time: None,
+            requires_python: None,
             filename: path_dist.filename.clone(),
             zstd: None,
+            unknown_fields: UnknownResolutionFields::default(),
         }
     }
 
@@ -5600,8 +9960,10 @@ impl Wheel {
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
             upload_time: None,
+            requires_python: None,
             filename: path_dist.filename.clone(),
             zstd: None,
+            unknown_fields: UnknownResolutionFields::default(),
         }
     }
 
@@ -5630,7 +9992,7 @@ impl Wheel {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename.to_string()),
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
-                    requires_python: None,
+                    requires_python: self.requires_python.clone(),
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
@@ -5680,7 +10042,7 @@ impl Wheel {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename.to_string()),
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
-                    requires_python: None,
+                    requires_python: self.requires_python.clone(),
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
@@ -5696,7 +10058,8 @@ impl Wheel {
                 });
                 let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(root.join(index_path))
-                        .map_err(LockErrorKind::RegistryVerbatimUrl)?,
+                        .map_err(LockErrorKind::RegistryVerbatimUrl)?
+                        .with_given(index_path.to_string_lossy()),
                 );
                 Ok(RegistryBuiltWheel {
                     filename,
@@ -5728,9 +10091,13 @@ struct WheelWire {
     /// This is only present for wheels that come from registries.
     #[serde(alias = "upload_time")]
     upload_time: Option<Timestamp>,
+    #[serde(default)]
+    requires_python: Option<VersionSpecifiers>,
     /// The zstandard-compressed wheel metadata, if any.
     #[serde(alias = "zstd")]
     zstd: Option<ZstdWheel>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -5761,7 +10128,10 @@ enum WheelWireSource {
 
 impl Wheel {
     /// Returns the TOML representation of this wheel.
-    fn to_toml(&self) -> Result<InlineTable, toml_edit::ser::Error> {
+    fn to_toml(
+        &self,
+        include_build_eligibility: bool,
+    ) -> Result<InlineTable, toml_edit::ser::Error> {
         let mut table = InlineTable::new();
         match &self.url {
             WheelWireSource::Url { url } => {
@@ -5785,6 +10155,9 @@ impl Wheel {
         }
         if let Some(upload_time) = self.upload_time {
             table.insert("upload-time", Value::from(upload_time.to_string()));
+        }
+        if include_build_eligibility && let Some(requires_python) = &self.requires_python {
+            table.insert("requires-python", Value::from(requires_python.to_string()));
         }
         if let Some(zstd) = &self.zstd {
             let mut inner = InlineTable::new();
@@ -5828,14 +10201,240 @@ impl TryFrom<WheelWire> for Wheel {
             WheelWireSource::Filename { filename } => filename.clone(),
         };
 
+        let selected_source = match &wire.url {
+            WheelWireSource::Url { .. } => "url",
+            WheelWireSource::Path { .. } => "path",
+            WheelWireSource::Filename { .. } => "filename",
+        };
+        let mut unknown_fields = wire.unknown_fields;
+        unknown_fields.0.remove(selected_source);
+
         Ok(Self {
             url: wire.url,
             hash: wire.hash,
             size: wire.size,
             upload_time: wire.upload_time,
+            requires_python: wire.requires_python.map(Arc::new),
             zstd: wire.zstd,
             filename,
+            unknown_fields,
         })
+    }
+}
+
+/// A resolved build dependency: a package pinned to a specific version, needed
+/// to build a source distribution.
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub struct BuildDependency {
+    package_id: PackageId,
+    extras: BTreeSet<ExtraName>,
+    marker: Option<MarkerTree>,
+    match_runtime: bool,
+}
+
+impl BuildDependency {
+    /// Create a new build dependency.
+    fn new(
+        package_id: PackageId,
+        extras: BTreeSet<ExtraName>,
+        marker: Option<MarkerTree>,
+        match_runtime: bool,
+    ) -> Self {
+        Self {
+            package_id,
+            extras,
+            marker,
+            match_runtime,
+        }
+    }
+
+    /// Returns the marker, if any.
+    fn marker(&self) -> Option<&MarkerTree> {
+        self.marker.as_ref()
+    }
+
+    /// Returns `true` if this dependency should match the selected runtime package.
+    fn match_runtime(&self) -> bool {
+        self.match_runtime
+    }
+
+    /// Returns the extras requested for this build dependency.
+    fn extras(&self) -> &BTreeSet<ExtraName> {
+        &self.extras
+    }
+
+    /// Returns the TOML representation of this build dependency.
+    fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> Table {
+        let mut table = Table::new();
+        table.insert("name", value(self.package_id.name.to_string()));
+        if let Some(version) = &self.package_id.version {
+            table.insert("version", value(version.to_string()));
+        }
+        if self.package_id.resolution_id.is_some()
+            || dist_count_by_name
+                .get(&self.package_id.name)
+                .is_some_and(|count| *count > 1)
+        {
+            self.package_id.source.to_toml(&mut table);
+        }
+        if let Some(resolution_id) = &self.package_id.resolution_id {
+            table.insert("resolution-id", value(resolution_id.clone()));
+        }
+        if !self.extras.is_empty() {
+            let extra_array = self
+                .extras
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Array>();
+            table.insert("extra", value(extra_array));
+        }
+        if let Some(marker) = &self.marker {
+            if let Some(marker_str) = marker.try_to_string() {
+                table.insert("marker", value(marker_str));
+            }
+        }
+        if self.match_runtime {
+            table.insert("match-runtime", value(true));
+        }
+        table
+    }
+}
+
+impl Display for BuildDependency {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match (self.extras.is_empty(), self.package_id.version.as_ref()) {
+            (true, Some(version)) => write!(f, "{}=={}", self.package_id.name, version),
+            (true, None) => write!(f, "{}", self.package_id.name),
+            (false, Some(version)) => write!(
+                f,
+                "{}[{}]=={}",
+                self.package_id.name,
+                self.extras.iter().join(","),
+                version
+            ),
+            (false, None) => write!(
+                f,
+                "{}[{}]",
+                self.package_id.name,
+                self.extras.iter().join(",")
+            ),
+        }
+    }
+}
+
+/// Dependency edges for a package in one isolated build environment.
+#[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
+struct BuildDependencyEdges {
+    dependencies: Vec<Dependency>,
+    optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
+}
+
+/// Artifacts that can be selected for a package in one isolated build environment.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct BuildDependencyArtifacts {
+    sdist: Option<SourceDist>,
+    wheels: Vec<Wheel>,
+}
+
+impl BuildDependencyArtifacts {
+    fn from_package(package: &Package) -> Self {
+        Self {
+            sdist: package.sdist.clone(),
+            wheels: package.wheels.clone(),
+        }
+    }
+
+    fn from_resolved_dist(
+        package: &Package,
+        resolved_dist: &ResolvedDist,
+        allows_yanked: bool,
+    ) -> Self {
+        let mut artifacts = Self::from_package(package);
+        let ResolvedDist::Installable { dist, .. } = resolved_dist else {
+            return artifacts;
+        };
+
+        let (yanked_wheels, yanked_sdist) = match dist.as_ref() {
+            Dist::Built(BuiltDist::Registry(dist)) => (
+                dist.wheels
+                    .iter()
+                    .filter(|wheel| wheel.file.yanked.as_deref().is_some_and(Yanked::is_yanked))
+                    .map(|wheel| wheel.filename.clone())
+                    .collect::<Vec<_>>(),
+                dist.sdist.as_ref().is_some_and(|sdist| {
+                    sdist.file.yanked.as_deref().is_some_and(Yanked::is_yanked)
+                }),
+            ),
+            Dist::Source(uv_distribution_types::SourceDist::Registry(dist)) => (
+                dist.wheels
+                    .iter()
+                    .filter(|wheel| wheel.file.yanked.as_deref().is_some_and(Yanked::is_yanked))
+                    .map(|wheel| wheel.filename.clone())
+                    .collect::<Vec<_>>(),
+                dist.file.yanked.as_deref().is_some_and(Yanked::is_yanked),
+            ),
+            _ => return artifacts,
+        };
+
+        if !allows_yanked {
+            if yanked_sdist {
+                artifacts.sdist = None;
+            }
+            artifacts
+                .wheels
+                .retain(|wheel| !yanked_wheels.contains(&wheel.filename));
+        }
+        artifacts
+    }
+}
+
+/// The wire format for a build dependency.
+#[derive(Clone, Debug, serde::Deserialize)]
+struct BuildDependencyWire {
+    #[serde(flatten)]
+    package_id: PackageIdForDependency,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    extra: BTreeSet<ExtraName>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    marker: Option<String>,
+    #[serde(default, rename = "match-runtime")]
+    match_runtime: bool,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
+}
+
+impl BuildDependencyWire {
+    fn unwire(
+        self,
+        unambiguous_package_ids: &UnambiguousPackageIds,
+    ) -> Result<BuildDependency, LockError> {
+        let marker_str = self.marker;
+        let marker = marker_str
+            .as_ref()
+            .map(|s| s.parse::<MarkerTree>())
+            .transpose()
+            .map_err(|err| LockErrorKind::InvalidMarker {
+                marker: marker_str.clone().unwrap_or_default(),
+                err,
+            })?;
+        Ok(BuildDependency {
+            package_id: self.package_id.unwire(unambiguous_package_ids)?,
+            extras: self.extra,
+            marker,
+            match_runtime: self.match_runtime,
+        })
+    }
+}
+
+impl From<&BuildDependency> for BuildDependencyWire {
+    fn from(dep: &BuildDependency) -> Self {
+        Self {
+            package_id: PackageIdForDependency::from(dep.package_id.clone()),
+            extra: dep.extras.clone(),
+            marker: dep.marker.as_ref().and_then(|m| m.try_to_string()),
+            match_runtime: dep.match_runtime,
+            unknown_fields: UnknownResolutionFields::default(),
+        }
     }
 }
 
@@ -5922,7 +10521,6 @@ impl Dependency {
                 .collect::<Array>();
             table.insert("extra", value(extra_array));
         }
-        // Avoid restating the resolution's environment on every dependency edge.
         if let Some(marker) = self
             .simplified_marker
             .as_simplified_marker_tree()
@@ -5969,7 +10567,7 @@ impl Display for Dependency {
 }
 
 /// A single dependency of a package in a lockfile.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct DependencyWire {
     #[serde(flatten)]
@@ -5977,27 +10575,36 @@ struct DependencyWire {
     #[serde(default)]
     extra: BTreeSet<ExtraName>,
     #[serde(default)]
+    contexts: Option<BTreeSet<String>>,
+    #[serde(default)]
     marker: SimplifiedMarkerTree,
+    #[serde(default)]
+    selector: Option<serde::de::IgnoredAny>,
+    #[serde(flatten)]
+    unknown_fields: UnknownResolutionFields,
 }
 
 impl DependencyWire {
+    fn has_build_fields(&self) -> bool {
+        self.contexts.is_some() || self.selector.is_some()
+    }
+
     fn unwire(
         self,
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_ids: &UnambiguousPackageIds,
     ) -> Result<Dependency, LockError> {
-        let (simplified_marker, complexified_marker) =
-            if self.marker.as_simplified_marker_tree().is_true() {
-                (environment, default)
-            } else {
-                let mut simplified_marker = self.marker;
-                simplified_marker.and(environment);
-                let complexified_marker =
-                    UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
-                (simplified_marker, complexified_marker)
-            };
+        let complexified_marker = if self.marker.as_simplified_marker_tree().is_true() {
+            default
+        } else {
+            let mut marker = self.marker;
+            marker.and(environment);
+            UniversalMarker::from_combined(marker.into_marker(requires_python))
+        };
+        let simplified_marker =
+            SimplifiedMarkerTree::new(requires_python, complexified_marker.combined());
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
@@ -6739,6 +11346,102 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    /// An error that occurs when a lockfile declares an invalid schema version.
+    #[error("Invalid lockfile schema version v{version}; expected at least v1")]
+    InvalidLockVersion {
+        /// The invalid schema version.
+        version: u32,
+    },
+    /// An error that occurs when build-locking fields appear in an unsupported lockfile schema.
+    #[error(
+        "Lockfile schema v{version} revision {revision} cannot contain locked build dependencies; expected at least v2 revision 4"
+    )]
+    UnsupportedBuildDependencySchema {
+        /// The schema version.
+        version: u32,
+        /// The schema revision.
+        revision: u32,
+    },
+    /// An error that occurs when a lockfile contains the unsupported legacy build graph format.
+    #[error(
+        "Lockfile schema v{version} revision {revision} cannot contain `build-dependency-packages`; regenerate the lockfile with `uv lock`"
+    )]
+    UnsupportedLegacyBuildDependencySchema {
+        /// The schema version.
+        version: u32,
+        /// The schema revision.
+        revision: u32,
+    },
+    /// An error that occurs when a lockfile contains the unsupported legacy dependency selector
+    /// format.
+    #[error(
+        "Lockfile schema v{version} revision {revision} cannot contain dependency `contexts` or `selector`; regenerate the lockfile with `uv lock`"
+    )]
+    UnsupportedLegacyBuildDependencySelectorSchema {
+        /// The schema version.
+        version: u32,
+        /// The schema revision.
+        revision: u32,
+    },
+    /// An error that occurs when a known resolution schema contains an unknown field.
+    #[error(
+        "Lockfile schema v{version} revision {revision} contains unknown field `{field}` in {context}"
+    )]
+    UnknownResolutionField {
+        /// The schema version.
+        version: u32,
+        /// The schema revision.
+        revision: u32,
+        /// The record containing the unknown field.
+        context: &'static str,
+        /// The unknown field.
+        field: String,
+    },
+    /// An error that occurs when an obsolete executor-specific build resolution is present.
+    #[error("Lockfile contains an executor-specific build resolution `{id}` from an unsupported preview schema; remove the lockfile and relock with `--preview-features lock-build-dependencies`", id = id.cyan())]
+    UnsupportedExecutorBuildResolution {
+        /// The obsolete resolution ID.
+        id: String,
+    },
+    /// An error that occurs when a runtime dependency selects a build-only package.
+    #[error("For package `{id}`, runtime dependency `{dependency}` selects a build-only package", id = id.cyan(), dependency = dependency.cyan())]
+    BuildOnlyRuntimeDependency {
+        /// The runtime package containing the invalid edge.
+        id: PackageId,
+        /// The invalid runtime dependency.
+        dependency: Dependency,
+    },
+    /// An error that occurs when a project-less runtime requirement only matches build packages.
+    #[error("Runtime requirement `{name}` only matches build-only packages", name = name.cyan())]
+    BuildOnlyRuntimeRequirement {
+        /// The invalid runtime requirement name.
+        name: PackageName,
+    },
+    /// An error that occurs when a build dependency is an installed distribution
+    /// rather than an installable one.
+    #[error("Build dependency is an installed distribution, expected an installable one")]
+    InstalledBuildDep,
+    /// An error that occurs when a marker string cannot be parsed.
+    #[error("Invalid marker `{marker}`: {err}")]
+    InvalidMarker {
+        marker: String,
+        #[source]
+        err: uv_pep508::Pep508Error,
+    },
+    /// An error that occurs when a typed resolution record is malformed.
+    #[error("Invalid resolution record `{id}`: {message}")]
+    InvalidResolutionRecord {
+        /// The ID of the malformed resolution record.
+        id: String,
+        /// The parse error.
+        message: &'static str,
+    },
+    /// An error that occurs when no captured build resolution matches the requested target.
+    #[error("The lockfile does not contain a build resolution for `{id}` compatible with the current target", id = id.cyan())]
+    MissingBuildResolution {
+        /// The package missing a compatible build resolution.
+        id: PackageId,
+    },
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]
@@ -6825,6 +11528,30 @@ enum LockErrorKind {
         /// The ID of the dependency that doesn't have a corresponding package
         /// entry.
         dependency: Dependency,
+    },
+    /// An error that occurs when there's an unrecognized build dependency.
+    ///
+    /// That is, a build dependency for a package that isn't in the lockfile.
+    #[error("For package `{id}`, found build dependency `{dependency}` with no locked package", id = id.cyan(), dependency = dependency.cyan())]
+    UnrecognizedBuildDependency {
+        /// The ID of the package that has an unrecognized build dependency.
+        id: PackageId,
+        /// The build dependency that doesn't have a corresponding package entry.
+        dependency: BuildDependency,
+    },
+    /// A selected source distribution has no captured build environment.
+    #[error(
+        "The lockfile does not contain build dependencies for `{name}`; run `uv lock --preview-features lock-build-dependencies` without disabling builds for this package"
+    )]
+    UncapturedBuildResolution {
+        /// The package that requires a build resolution.
+        name: PackageName,
+    },
+    /// A locked build dependency is already an ancestor of the selected source build.
+    #[error("Cyclic build dependency detected for `{name}`")]
+    CyclicLockedBuildDependency {
+        /// The package that occurs more than once in the build stack.
+        name: PackageName,
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).
@@ -7202,7 +11929,7 @@ fn simplified_universal_markers(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
 ) -> Vec<String> {
-    canonical_marker_trees(markers, requires_python)
+    canonical_marker_trees(markers, requires_python, true)
         .into_iter()
         .filter_map(MarkerTree::try_to_string)
         .collect()
@@ -7213,12 +11940,14 @@ fn simplified_universal_markers(
 /// When the PEP 508 portions of the markers are disjoint, the lockfile stores
 /// only those simplified PEP 508 markers. Otherwise, it stores the simplified
 /// combined markers (including conflict markers). Markers that serialize to
-/// `true` are omitted.
+/// `true` are omitted. `preserve_conflicts` retains conflict-only runtime selectors
+/// when converting a version 2 lock to the legacy representation.
 fn canonicalize_universal_markers(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
+    preserve_conflicts: bool,
 ) -> Vec<UniversalMarker> {
-    canonical_marker_trees(markers, requires_python)
+    canonical_marker_trees(markers, requires_python, preserve_conflicts)
         .into_iter()
         .map(|marker| {
             let simplified = SimplifiedMarkerTree::new(requires_python, marker);
@@ -7231,6 +11960,7 @@ fn canonicalize_universal_markers(
 fn canonical_marker_trees(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
+    preserve_conflicts: bool,
 ) -> Vec<MarkerTree> {
     let mut pep508_only = vec![];
     let mut seen = FxHashSet::default();
@@ -7245,7 +11975,9 @@ fn canonical_marker_trees(
         .iter()
         .tuple_combinations()
         .any(|(&marker1, &marker2)| !marker1.is_disjoint(marker2));
-    let markers = if !any_overlap {
+    let any_conflicts =
+        preserve_conflicts && markers.iter().any(|marker| !marker.conflict().is_true());
+    let markers = if !any_overlap && !any_conflicts {
         pep508_only
     } else {
         markers
@@ -7479,8 +12211,12 @@ pub(crate) fn is_wheel_unreachable(
 
 #[cfg(test)]
 mod tests {
+    use uv_configuration::{ExtrasSpecification, InstallOptions, NoBinary, NoBuild};
+    use uv_normalize::DefaultExtras;
     use uv_pep440::VersionSpecifiers;
     use uv_pep508::MarkerEnvironmentBuilder;
+    use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
+    use uv_pypi_types::ResolverMarkerEnvironment;
     use uv_warnings::anstream;
 
     use super::*;
@@ -7491,6 +12227,40 @@ mod tests {
             let expr = format!("{}", $expr);
             let expr = format!("{}", anstream::adapter::strip_str(&expr));
             insta::assert_snapshot!(expr, @$snapshot);
+        }};
+    }
+
+    /// Assert a debug snapshot while stripping build-locking fields that are
+    /// irrelevant to these lock parsing tests.
+    macro_rules! assert_legacy_lock_debug_snapshot {
+        ($expr:expr) => {{
+            let expr = format!("{:#?}", $expr)
+                .replace("                build_only: false,\n", "")
+                .replace("                build_dependencies: [],\n", "")
+                .replace("                build_dependencies_resolved: false,\n", "")
+                .replace("        resolutions: [],\n", "")
+                .replace("                    build_requires: None,\n", "")
+                .replace("                    build_system: None,\n", "")
+                .replace("                            requires_python: None,\n", "")
+                .replace("                        requires_python: None,\n", "")
+                .replace(
+                    "                            unknown_fields: UnknownResolutionFields(\n                                {},\n                            ),\n",
+                    "",
+                )
+                .replace(
+                    "                        unknown_fields: UnknownResolutionFields(\n                            {},\n                        ),\n",
+                    "",
+                )
+                .replace(
+                    "                    unknown_fields: UnknownResolutionFields(\n                        {},\n                    ),\n",
+                    "",
+                )
+                .replace(
+                    "            unknown_fields: UnknownResolutionFields(\n                {},\n            ),\n",
+                    "",
+                )
+                .replace("            build_settings: None,\n", "");
+            insta::assert_snapshot!(expr);
         }};
     }
 
@@ -7509,6 +12279,392 @@ mod tests {
             sys_platform: "darwin",
         })
         .expect("valid marker environment")
+    }
+
+    #[test]
+    fn lock_rejects_zero_version() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 0
+requires-python = ">=3.12"
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid lockfile schema version v0; expected at least v1"
+        );
+    }
+
+    #[test]
+    fn build_fields_require_supported_lock_schema() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+build-dependencies = []
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v1 revision 3 cannot contain locked build dependencies; expected at least v2 revision 4"
+        );
+
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+dependencies = [{ name = "b", contexts = ["build:a:wheel"] }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 3 cannot contain locked build dependencies; expected at least v2 revision 4"
+        );
+
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+wheels = [{ url = "https://example.com/a-1.0.0-py3-none-any.whl", requires-python = ">=3.13" }]
+sdist = { url = "https://example.com/a-1.0.0.tar.gz", requires-python = ">=3.13" }
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 3 cannot contain locked build dependencies; expected at least v2 revision 4"
+        );
+    }
+
+    #[test]
+    fn runtime_dependency_rejects_build_only_package() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "shared" }]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://example.com/simple" }
+build-only = true
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"For package `project==0.1.0 @ virtual+.`, runtime dependency `shared==2.0.0` selects a build-only package"
+        );
+    }
+
+    #[test]
+    fn runtime_manifest_requirement_rejects_build_only_package() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[manifest.dependency-groups]
+dev = [{ name = "shared", specifier = ">=2" }]
+
+[[package]]
+name = "shared"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://example.com/simple" }
+build-only = true
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Runtime requirement `shared` only matches build-only packages"
+        );
+    }
+
+    #[test]
+    fn runtime_manifest_requirement_rejects_disjoint_runtime_candidate() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+resolution-markers = ["sys_platform == 'darwin'", "sys_platform != 'darwin'"]
+
+[manifest.dependency-groups]
+dev = [{ name = "shared", specifier = ">=2", marker = "sys_platform == 'linux'" }]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://build.example/simple" }
+build-only = true
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://runtime.example/simple" }
+resolution-markers = ["sys_platform == 'darwin'"]
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Runtime requirement `shared` only matches build-only packages"
+        );
+    }
+
+    #[test]
+    fn runtime_manifest_group_ignores_unreachable_build_only_package() {
+        let lock = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+supported-markers = ["sys_platform == 'darwin'"]
+
+[manifest.dependency-groups]
+dev = [{ name = "shared", marker = "sys_platform == 'win32'", specifier = ">=2" }]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://example.com/simple" }
+build-only = true
+"#,
+        );
+        assert!(lock.is_ok(), "{lock:?}");
+    }
+
+    #[test]
+    fn runtime_manifest_requirement_ignores_unreachable_build_only_package() {
+        let lock = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[manifest]
+requirements = [{ name = "shared", marker = "python_full_version < '3.12'", url = "https://build.example/shared-2.0.0.tar.gz" }]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { url = "https://build.example/shared-2.0.0.tar.gz" }
+build-only = true
+sdist = { hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222" }
+"#,
+        );
+        assert!(lock.is_ok(), "{lock:?}");
+    }
+
+    #[test]
+    fn runtime_manifest_registry_requirement_rejects_build_only_package() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[manifest.dependency-groups]
+dev = [{ name = "shared", specifier = "==2.0.0", index = "https://build.example/simple" }]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://runtime.example/simple" }
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://build.example/simple" }
+build-only = true
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Runtime requirement `shared` only matches build-only packages"
+        );
+    }
+
+    #[test]
+    fn runtime_manifest_direct_requirement_rejects_build_only_package() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[manifest]
+requirements = [{ name = "shared", url = "https://build.example/shared-2.0.0.tar.gz" }]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { url = "https://runtime.example/shared-2.0.0.tar.gz" }
+sdist = { hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111" }
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { url = "https://build.example/shared-2.0.0.tar.gz" }
+build-only = true
+sdist = { hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222" }
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Runtime requirement `shared` only matches build-only packages"
+        );
+    }
+
+    #[test]
+    fn runtime_manifest_path_requirement_rejects_build_only_package() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[manifest]
+requirements = [{ name = "shared", path = "build/shared-2.0.0.tar.gz" }]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { path = "runtime/shared-2.0.0.tar.gz" }
+sdist = { hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111" }
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { path = "build/shared-2.0.0.tar.gz" }
+build-only = true
+sdist = { hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222" }
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Runtime requirement `shared` only matches build-only packages"
+        );
+    }
+
+    #[test]
+    fn version_one_runtime_forks_keep_legacy_representation() {
+        let data = r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+resolution-markers = ["sys_platform == 'darwin'", "sys_platform != 'darwin'"]
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "shared", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "shared", version = "2.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform != 'darwin'" },
+]
+
+[[package]]
+name = "shared"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+resolution-markers = ["sys_platform == 'darwin'"]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://example.com/simple" }
+resolution-markers = ["sys_platform != 'darwin'"]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid lock");
+        let serialized = lock.to_toml().expect("valid TOML");
+
+        assert!(serialized.starts_with("version = 1\n"), "{serialized}");
+        assert!(
+            serialized.contains("resolution-markers = ["),
+            "{serialized}"
+        );
+        assert!(!serialized.contains("[[resolution]]"), "{serialized}");
+        assert!(!serialized.contains("selectors = ["), "{serialized}");
+    }
+
+    #[test]
+    fn legacy_artifact_eligibility_does_not_affect_equality() {
+        let data = r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "example"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/example-1.0.0.tar.gz" }
+wheels = [{ url = "https://example.com/example-1.0.0-py3-none-any.whl" }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid legacy lock");
+        let mut fresh = lock.clone();
+        let requires_python = Arc::new(
+            VersionSpecifiers::from_str(">=3.8").expect("valid requires-python specifier"),
+        );
+        let package = fresh.packages.first_mut().expect("package exists");
+        if let Some(sdist) = &mut package.sdist {
+            match sdist {
+                SourceDist::Metadata { metadata }
+                | SourceDist::Url { metadata, .. }
+                | SourceDist::Path { metadata, .. } => {
+                    metadata.requires_python = Some(requires_python.clone());
+                }
+            }
+        }
+        package.wheels[0].requires_python = Some(requires_python);
+
+        assert_ne!(fresh, lock);
+        fresh.normalize_legacy_artifact_eligibility();
+        assert_eq!(fresh, lock);
     }
 
     #[test]
@@ -7655,9 +12811,4565 @@ source = { registry = "https://example.com/simple" }
     }
 
     #[test]
+    fn runtime_resolution_selector_round_trip() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[manifest]
+build-settings = "test"
+
+[[resolution]]
+id = "runtime:linux-foo"
+kind = "runtime"
+target = { active = [{ package = "project", extra = "foo" }] }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+selectors = [{ target = "runtime:linux-foo" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let serialized = lock.to_toml().unwrap();
+
+        assert!(!serialized.contains("[[resolution]]"), "{serialized}");
+        assert!(
+            serialized.contains("resolution-markers = ["),
+            "{serialized}"
+        );
+        assert!(serialized.contains("extra-7-project-foo"), "{serialized}");
+        assert!(!serialized.contains("selectors = ["), "{serialized}");
+    }
+
+    #[test]
+    fn package_selector_target_expression_round_trip() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+selectors = [{ target = { marker = "sys_platform == 'darwin'" } }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let serialized = lock.to_toml().unwrap();
+
+        assert!(
+            serialized.contains("resolution-markers = ["),
+            "{serialized}"
+        );
+        assert!(
+            serialized.contains("sys_platform == 'darwin'"),
+            "{serialized}"
+        );
+        assert!(!serialized.contains("selectors = ["), "{serialized}");
+    }
+
+    #[test]
+    fn runtime_resolution_selector_preserves_active_and_inactive_conflicts() {
+        let package = PackageName::from_str("project").unwrap();
+        let cpu = ExtraName::from_str("cpu").unwrap();
+        let cu124 = ExtraName::from_str("cu124").unwrap();
+        let conflict_marker = ConflictMarker::extra(&package, &cpu)
+            .and(ConflictMarker::extra(&package, &cu124).negate());
+
+        let selector = TargetSelector::from_conflict_marker(conflict_marker).unwrap();
+
+        assert_eq!(
+            selector.conflict_marker("selector").unwrap(),
+            conflict_marker
+        );
+        let target = selector.to_toml().to_string();
+        assert!(target.contains("active = ["), "{target}");
+        assert!(
+            target.contains(r#"{ package = "project", extra = "cpu" }"#),
+            "{target}"
+        );
+        assert!(target.contains("inactive = ["), "{target}");
+        assert!(
+            target.contains(r#"{ package = "project", extra = "cu124" }"#),
+            "{target}"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_selector_falls_back_for_non_conjunctive_conflicts() {
+        let package = PackageName::from_str("project").unwrap();
+        let cpu = ExtraName::from_str("cpu").unwrap();
+        let cu124 = ExtraName::from_str("cu124").unwrap();
+        let conflict_marker =
+            ConflictMarker::extra(&package, &cpu).or(ConflictMarker::extra(&package, &cu124));
+
+        assert!(TargetSelector::from_conflict_marker(conflict_marker).is_none());
+    }
+
+    #[test]
+    fn runtime_resolution_selector_uses_expression_for_non_conjunctive_conflicts() {
+        let requires_python = RequiresPython::greater_than_equal_version(&Version::new([3, 12]));
+        let package = PackageName::from_str("project").unwrap();
+        let cpu = ExtraName::from_str("cpu").unwrap();
+        let cu124 = ExtraName::from_str("cu124").unwrap();
+        let mut conflict_marker = ConflictMarker::extra(&package, &cpu);
+        conflict_marker = conflict_marker.or(ConflictMarker::extra(&package, &cu124));
+        let marker = UniversalMarker::new(
+            requires_python.complexify_markers(MarkerTree::TRUE),
+            conflict_marker,
+        );
+
+        let selector = TargetSelector::from_universal_marker(marker, &requires_python).unwrap();
+        assert!(universal_markers_equivalent(
+            selector
+                .to_universal_marker(&requires_python, "runtime:0")
+                .unwrap(),
+            marker
+        ));
+
+        let target = selector.to_toml().to_string();
+        assert!(target.contains("any-of = ["), "{target}");
+        assert!(
+            target.contains(r#"{ active = { package = "project", extra = "cpu" } }"#),
+            "{target}"
+        );
+        assert!(
+            target.contains(r#"{ active = { package = "project", extra = "cu124" } }"#),
+            "{target}"
+        );
+    }
+
+    #[test]
+    fn target_selector_empty_any_of_is_false() {
+        let requires_python = RequiresPython::greater_than_equal_version(&Version::new([3, 12]));
+        let selector = toml::from_str::<TargetSelector>("any-of = []").unwrap();
+
+        assert!(selector.has_expression());
+        assert!(
+            selector
+                .to_universal_marker(&requires_python, "runtime:0")
+                .unwrap()
+                .is_false()
+        );
+        let target = selector.to_toml().to_string();
+        assert!(target.contains("any-of"), "{target}");
+        assert!(!target.contains("active"), "{target}");
+
+        let selector =
+            toml::from_str::<TargetSelector>("any-of = []\nactive = [{ package = \"project\" }]")
+                .unwrap();
+        assert!(
+            selector
+                .to_universal_marker(&requires_python, "runtime:0")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn legacy_dependency_selectors_are_rejected() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [{ name = "b", selector = { resolution = "build:a:wheel" } }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 cannot contain dependency `contexts` or `selector`; regenerate the lockfile with `uv lock`"
+        );
+
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 5
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [{ name = "b", selector = { resolution = "build:a:wheel" } }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 5 cannot contain dependency `contexts` or `selector`; regenerate the lockfile with `uv lock`"
+        );
+
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [{ name = "b", contexts = [] }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 cannot contain dependency `contexts` or `selector`; regenerate the lockfile with `uv lock`"
+        );
+    }
+
+    #[test]
+    fn legacy_scoped_build_dependencies_are_rejected() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependency-packages = [
+    { name = "b", dependencies = [{ name = "c" }] },
+    { name = "b", dependencies = [{ name = "d" }] },
+]
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 cannot contain `build-dependency-packages`; regenerate the lockfile with `uv lock`"
+        );
+    }
+
+    #[test]
+    fn future_revision_ignores_unknown_resolution_fields() {
+        let data = r#"
+version = 2
+revision = 5
+requires-python = ">=3.12"
+future-lock = true
+
+[options]
+exclude-newer = "2025-01-01T00:00:00Z"
+future-option = true
+
+[manifest]
+build-settings = "test"
+future-manifest = true
+
+[[resolution]]
+id = "runtime:linux-foo"
+kind = "runtime"
+target = { any-of = [{ all-of = [{ marker = "sys_platform == 'linux'", future-term = true }, { active = { package = "project", extra = "foo", future-activation = true }, future-term = true }], future-clause = true }], future-target = true }
+future-resolution = true
+
+[[resolution]]
+id = "runtime:fallback"
+kind = "runtime"
+target = { marker = "sys_platform != 'linux'" }
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", future-root = true }]
+future-resolution = true
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+selectors = [{ target = "runtime:linux-foo", future-package-selector = true }]
+build-dependencies = [{ name = "b", future-build-dependency = true }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0, future-source = true }
+future-package = true
+
+[package.metadata]
+build-system = { build-backend = "backend", backend-path = ["src"], future-build-system = true }
+future-package-metadata = true
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [{ name = "c", future-dependency = true }]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", path = "other/c-1.0.0-py3-none-any.whl", filename = "c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", requires-python = ">=3.12", zstd = { hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", future-zstd = true }, future-wheel = true }]
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("future revision should remain readable");
+        let serialized = lock.to_toml().expect("valid TOML");
+
+        assert!(serialized.contains("revision = 5"), "{serialized}");
+        assert!(!serialized.contains("future-"), "{serialized}");
+        assert!(
+            !serialized.contains("other/c-1.0.0-py3-none-any.whl"),
+            "{serialized}"
+        );
+        assert!(
+            !serialized.contains("filename = \"c-1.0.0-py3-none-any.whl\""),
+            "{serialized}"
+        );
+        assert_eq!(
+            lock,
+            toml::from_str::<Lock>(&serialized).expect("valid round-tripped lock")
+        );
+    }
+
+    #[test]
+    fn current_revision_accepts_artifact_source_fields() {
+        for (package_source, sdist, wheel) in [
+            (
+                r#"{ registry = "https://pypi.org/simple" }"#,
+                Some(
+                    r#"{ url = "https://example.com/a-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", requires-python = ">=3.12" }"#,
+                ),
+                r#"{ url = "https://example.com/a-1.0.0-py3-none-any.whl", hash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", requires-python = ">=3.12" }"#,
+            ),
+            (
+                r#"{ registry = "../index" }"#,
+                Some(
+                    r#"{ path = "a-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", requires-python = ">=3.12" }"#,
+                ),
+                r#"{ path = "a-1.0.0-py3-none-any.whl", hash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", requires-python = ">=3.12" }"#,
+            ),
+            (
+                r#"{ path = "a-1.0.0-py3-none-any.whl" }"#,
+                None,
+                r#"{ filename = "a-1.0.0-py3-none-any.whl", hash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }"#,
+            ),
+        ] {
+            let sdist = sdist.map_or_else(String::new, |sdist| format!("sdist = {sdist}\n"));
+            let data = format!(
+                r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = {package_source}
+build-only = true
+{sdist}wheels = [{wheel}]
+"#
+            );
+            let lock = toml::from_str::<Lock>(&data).expect("valid artifact sources");
+            let serialized = lock.to_toml().expect("valid TOML");
+            assert_eq!(
+                lock,
+                toml::from_str::<Lock>(&serialized).expect("valid round-tripped artifact sources")
+            );
+        }
+    }
+
+    #[test]
+    fn current_revision_rejects_unknown_resolution_fields() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+target = { makrer = "sys_platform == 'linux'" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `makrer` in target selector"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", match-runtiem = true }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `match-runtiem` in build resolution root"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", extrra = ["foo"] }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `extrra` in package build dependency"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", markre = "sys_platform == 'linux'" }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `markre` in package build dependency"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+build-prioritized-wheel = "a-1.0.0-py3-none-any.whl"
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `build-prioritized-wheel` in package record"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+wheels = [{ url = "https://example.com/a-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", runtime-python = ">=3.12" }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `runtime-python` in wheel artifact"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+sdist = { url = "https://example.com/a-1.0.0.tar.gz", hsah = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `hsah` in source artifact"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+sdist = { urll = "https://example.com/a-1.0.0.tar.gz" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `urll` in source artifact"
+        );
+    }
+
+    #[test]
+    fn current_revision_rejects_ambiguous_source_artifacts() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+sdist = { url = "https://example.com/a-1.0.0.tar.gz", path = "other/a-1.0.0.tar.gz" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `path` in source artifact"
+        );
+    }
+
+    #[test]
+    fn current_revision_rejects_ambiguous_wheel_sources() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+wheels = [{ url = "https://example.com/a-1.0.0-py3-none-any.whl", path = "other/a-1.0.0-py3-none-any.whl" }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `path` in wheel artifact"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+wheels = [{ url = "https://example.com/a-1.0.0-py3-none-any.whl", filename = "a-1.0.0-py3-none-any.whl" }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `filename` in wheel artifact"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+wheels = [{ path = "other/a-1.0.0-py3-none-any.whl", filename = "a-1.0.0-py3-none-any.whl" }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `filename` in wheel artifact"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+wheels = [{ url = 42, path = "other/a-1.0.0-py3-none-any.whl" }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `url` in wheel artifact"
+        );
+    }
+
+    #[test]
+    fn current_revision_rejects_unknown_build_metadata_fields() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[manifest]
+build-settings-extra = "test"
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `build-settings-extra` in lock manifest"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+
+[package.metadata]
+build-inputs = ["b"]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `build-inputs` in package metadata"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+
+[package.metadata]
+build-system = { build-backend = "backend", backend-pth = ["src"] }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `backend-pth` in package build system"
+        );
+    }
+
+    #[test]
+    fn current_revision_rejects_unknown_package_dependency_fields() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+dependencies = [{ name = "b", markre = "sys_platform == 'win32'" }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `markre` in package dependency"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+optional-dependencies = { test = [{ name = "b", markre = "sys_platform == 'win32'" }] }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `markre` in package dependency"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+dev-dependencies = { test = [{ name = "b", markre = "sys_platform == 'win32'" }] }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `markre` in package dependency"
+        );
+    }
+
+    #[test]
+    fn current_revision_rejects_unknown_lock_and_option_fields() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+resolution-markres = ["sys_platform == 'win32'"]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `resolution-markres` in lockfile"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[options]
+exclude-newr = "2025-01-01T00:00:00Z"
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `exclude-newr` in resolver options"
+        );
+
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[options]
+exclude-newer = "2025-01-01T00:00:00Z"
+fork-strtegy = "requires-python"
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `fork-strtegy` in resolver options"
+        );
+    }
+
+    #[test]
+    fn current_revision_rejects_unknown_compressed_wheel_metadata_fields() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+wheels = [{ url = "https://example.com/a-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", zstd = { hsah = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3" } }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile schema v2 revision 4 contains unknown field `hsah` in compressed wheel metadata"
+        );
+    }
+
+    #[test]
+    fn build_resolution_rejects_legacy_executor() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:legacy-executor"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+executor = { marker = "sys_platform == 'linux'", python = "3.12" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Lockfile contains an executor-specific build resolution `build:a:wheel:legacy-executor` from an unsupported preview schema; remove the lockfile and relock with `--preview-features lock-build-dependencies`"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_rejects_unknown_activation_package() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+target = { active = [{ package = "missing", extra = "foo" }] }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: selector activation references an unknown package"
+        );
+    }
+
+    #[test]
+    fn duplicate_resolution_ids_are_rejected() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:duplicate"
+kind = "runtime"
+target = { marker = "sys_platform == 'linux'" }
+
+[[resolution]]
+id = "runtime:duplicate"
+kind = "runtime"
+target = { marker = "sys_platform == 'darwin'" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:duplicate`: duplicate resolution id"
+        );
+    }
+
+    #[test]
+    fn build_resolution_context_ids_include_source_identity() {
+        let name = PackageName::from_str("dep").unwrap();
+        let version = Some(Version::from_str("1.0.0").unwrap());
+        let directory = BuildPackageKey::with_source(
+            name.clone(),
+            version.clone(),
+            Some(BuildPackageSource::Directory("dep-a".to_string())),
+        );
+        let path = BuildPackageKey::with_source(
+            name.clone(),
+            version.clone(),
+            Some(BuildPackageSource::Path("dep-a.tar.gz".to_string())),
+        );
+        let registry = BuildPackageKey::with_source(
+            name,
+            version,
+            Some(BuildPackageSource::Registry(PYPI_URL.to_string())),
+        );
+
+        let directory_id = build_resolution_context_id(&directory);
+        let path_id = build_resolution_context_id(&path);
+        let registry_id = build_resolution_context_id(&registry);
+
+        assert!(directory_id.starts_with("build:dep:wheel:"));
+        assert!(path_id.starts_with("build:dep:wheel:"));
+        assert!(registry_id.starts_with("build:dep:wheel:"));
+        assert_ne!(directory_id, path_id);
+        assert_ne!(directory_id, registry_id);
+        assert_ne!(path_id, registry_id);
+    }
+
+    #[test]
+    fn build_resolution_context_ids_include_target_identity() {
+        let requires_python = RequiresPython::greater_than_equal_version(&Version::new([3, 12]));
+        let package = BuildPackageKey::with_source(
+            PackageName::from_str("dep").unwrap(),
+            Some(Version::from_str("1.0.0").unwrap()),
+            Some(BuildPackageSource::Directory("dep".to_string())),
+        );
+        let linux_target = TargetSelector {
+            marker: Some(SimplifiedMarkerTree::new(
+                &requires_python,
+                "sys_platform == 'linux'".parse::<MarkerTree>().unwrap(),
+            )),
+            active: Vec::new(),
+            inactive: Vec::new(),
+            any_of: None,
+            unknown_fields: UnknownResolutionFields::default(),
+        };
+        let darwin_target = TargetSelector {
+            marker: Some(SimplifiedMarkerTree::new(
+                &requires_python,
+                "sys_platform == 'darwin'".parse::<MarkerTree>().unwrap(),
+            )),
+            active: Vec::new(),
+            inactive: Vec::new(),
+            any_of: None,
+            unknown_fields: UnknownResolutionFields::default(),
+        };
+        let source_only_id = build_resolution_context_id(&package);
+        let linux_id = build_resolution_context_id_with_context(
+            &package,
+            BuildResolutionOperation::Wheel,
+            BuildResolutionStage::Build,
+            Some(&linux_target),
+        );
+        let darwin_id = build_resolution_context_id_with_context(
+            &package,
+            BuildResolutionOperation::Wheel,
+            BuildResolutionStage::Build,
+            Some(&darwin_target),
+        );
+        let editable_linux_id = build_resolution_context_id_with_context(
+            &package,
+            BuildResolutionOperation::Editable,
+            BuildResolutionStage::Build,
+            Some(&linux_target),
+        );
+
+        assert!(linux_id.starts_with("build:dep:wheel:"));
+        assert!(editable_linux_id.starts_with("build:dep:editable:"));
+        assert_ne!(source_only_id, linux_id);
+        assert_ne!(linux_id, darwin_id);
+        assert_ne!(linux_id, editable_linux_id);
+    }
+
+    #[test]
+    fn build_resolution_source_packages_can_have_multiple_scoped_closures() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:one"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "b", resolution-id = "build:a:wheel:one" }]
+
+[[resolution]]
+id = "build:a:wheel:two"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform != 'linux'" }
+roots = [{ name = "b", resolution-id = "build:a:wheel:two" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b", resolution-id = "build:a:wheel:one" },
+    { name = "b", resolution-id = "build:a:wheel:two" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel:one"
+dependencies = [{ name = "c", version = "1.0.0", source = { registry = "https://pypi.org/simple" } }]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel:two"
+dependencies = [{ name = "c", version = "2.0.0", source = { registry = "https://pypi.org/simple" } }]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c-1.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c-2.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let members = build_resolution_members(&lock, &lock.resolutions);
+        let context_one_versions = members["build:a:wheel:one"]
+            .iter()
+            .filter(|package_id| package_id.name == PackageName::from_str("c").unwrap())
+            .map(|package_id| package_id.version.as_ref().unwrap().to_string())
+            .collect::<BTreeSet<_>>();
+        let context_two_versions = members["build:a:wheel:two"]
+            .iter()
+            .filter(|package_id| package_id.name == PackageName::from_str("c").unwrap())
+            .map(|package_id| package_id.version.as_ref().unwrap().to_string())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(context_one_versions, BTreeSet::from(["1.0.0".to_string()]));
+        assert_eq!(context_two_versions, BTreeSet::from(["2.0.0".to_string()]));
+    }
+
+    #[test]
+    fn package_resolution_id_scopes_build_dependency_traversal() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:a:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b", resolution-id = "build:a:wheel" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "helper", version = "2.0.0", source = { registry = "https://pypi.org/simple" } },
+]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel"
+dependencies = [
+    { name = "helper", version = "1.0.0", source = { registry = "https://pypi.org/simple" } },
+]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "helper"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/helper-1.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "helper"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/helper-2.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "b" },
+]
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let project_name = PackageName::from_str("project").unwrap();
+        let helper_name = PackageName::from_str("helper").unwrap();
+        let project = lock
+            .packages
+            .iter()
+            .find(|package| package.id.name == project_name)
+            .unwrap();
+        assert!(project.dependencies[0].package_id.resolution_id.is_none());
+
+        let members = build_resolution_members(&lock, &lock.resolutions);
+        let helper_versions = members["build:a:wheel"]
+            .iter()
+            .filter(|package_id| package_id.name == helper_name)
+            .map(|package_id| package_id.version.as_ref().unwrap().to_string())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(helper_versions, BTreeSet::from(["1.0.0".to_string()]));
+
+        let serialized = lock.to_toml().unwrap();
+        assert!(
+            serialized.contains(
+                r#"{ name = "b", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:a:wheel" }"#
+            ),
+            "{serialized}"
+        );
+        assert!(
+            serialized.contains(r#"resolution-id = "build:a:wheel""#),
+            "{serialized}"
+        );
+
+        let reparsed = toml::from_str::<Lock>(&serialized).unwrap();
+        assert_eq!(reparsed, lock);
+    }
+
+    #[test]
+    fn scoped_package_accepts_build_artifact_subset() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:a:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", resolution-id = "build:a:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://example.com/b-1.0.0-1-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 },
+    { url = "https://example.com/b-1.0.0-2-py3-none-any.whl", hash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", size = 0, requires-python = ">=3.13" },
+]
+sdist = { url = "https://example.com/b-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0, requires-python = ">=3.13" }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel"
+wheels = [{ url = "https://example.com/b-1.0.0-1-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+
+        let lock = toml::from_str::<Lock>(data).expect("valid lock");
+        let serialized = lock.to_toml().expect("serializable lock");
+        assert!(serialized.contains(r#"requires-python = ">=3.13""#));
+        assert_eq!(
+            toml::from_str::<Lock>(&serialized).expect("valid serialized lock"),
+            lock
+        );
+    }
+
+    #[test]
+    fn scoped_runtime_package_accepts_additional_build_artifact() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:a:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", resolution-id = "build:a:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-1-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel"
+wheels = [
+    { url = "https://example.com/b-1.0.0-1-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 },
+    { url = "https://example.com/b-1.0.0-2-py3-none-any.whl", hash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", size = 0 },
+]
+sdist = { url = "https://example.com/b-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }, { name = "b" }]
+"#;
+
+        let lock = toml::from_str::<Lock>(data).expect("valid scoped runtime artifacts");
+        let serialized = lock
+            .to_toml()
+            .expect("serializable scoped runtime artifacts");
+        assert!(serialized.contains("b-1.0.0-2-py3-none-any.whl"));
+        assert!(serialized.contains("b-1.0.0.tar.gz"));
+        assert_eq!(
+            toml::from_str::<Lock>(&serialized).expect("valid serialized scoped runtime artifacts"),
+            lock
+        );
+    }
+
+    #[test]
+    fn scoped_build_only_package_rejects_additional_build_artifact() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:a:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", resolution-id = "build:a:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+wheels = [{ url = "https://example.com/b-1.0.0-1-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+resolution-id = "build:a:wheel"
+wheels = [
+    { url = "https://example.com/b-1.0.0-1-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 },
+    { url = "https://example.com/b-1.0.0-2-py3-none-any.whl", hash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", size = 0 },
+]
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }]
+"#;
+
+        let result =
+            toml::from_str::<Lock>(data).expect_err("invalid build-only artifact superset");
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: scoped package artifacts are not contained in its unscoped package"
+        );
+    }
+
+    #[test]
+    fn scoped_package_rejects_mismatched_wheel_artifact() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:a:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", resolution-id = "build:a:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel"
+wheels = [__WHEEL__]
+"#;
+        insta::allow_duplicates! {
+        for wheel in [
+            r#"{ url = "https://mirror.example/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }"#,
+            r#"{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", size = 0 }"#,
+            r#"{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 1 }"#,
+            r#"{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0, requires-python = ">=3.13" }"#,
+            r#"{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }, { url = "https://mirror.example/b-1.0.0-py3-none-any.whl", hash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", size = 0 }"#,
+        ] {
+            let data = data.replace("__WHEEL__", wheel);
+            let result = toml::from_str::<Lock>(&data).unwrap_err();
+            assert_stripped_snapshot!(
+                result,
+                @"Invalid resolution record `build:a:wheel`: scoped package artifacts are not contained in its unscoped package"
+            );
+        }
+        }
+    }
+
+    #[test]
+    fn scoped_non_registry_package_rejects_additional_build_artifact() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:a:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", resolution-id = "build:a:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { path = "file:///foo/bar" }
+wheels = [{ url = "file:///foo/bar/b-1.0.0-1-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3" }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { path = "file:///foo/bar" }
+resolution-id = "build:a:wheel"
+wheels = [
+    { url = "file:///foo/bar/b-1.0.0-1-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3" },
+    { url = "file:///foo/bar/b-1.0.0-2-py3-none-any.whl", hash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+]
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }, { name = "b" }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: scoped package artifacts are not contained in its unscoped package"
+        );
+    }
+
+    #[test]
+    fn scoped_package_rejects_dangling_resolution_id() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:missing:wheel"
+sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:missing:wheel`: scoped package references an unknown build resolution"
+        );
+    }
+
+    #[test]
+    fn scoped_package_rejects_unreachable_resolution_member() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel"
+sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: scoped package is not contained in its owning build resolution"
+        );
+    }
+
+    #[test]
+    fn scoped_build_root_rejects_dangling_resolution_id() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:missing:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", resolution-id = "build:missing:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:missing:wheel"
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:missing:wheel`: scoped build root references an unknown build resolution"
+        );
+    }
+
+    #[test]
+    fn scoped_build_root_rejects_cross_resolution_package() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:x:wheel" }]
+
+[[resolution]]
+id = "build:x:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "x"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:x:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", resolution-id = "build:x:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "x"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", resolution-id = "build:x:wheel" }]
+sdist = { url = "https://example.com/x.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:x:wheel"
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: scoped build root references a different build resolution"
+        );
+    }
+
+    #[test]
+    fn scoped_package_rejects_cross_resolution_dependency_edges() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:a:wheel" }]
+
+[[resolution]]
+id = "build:x:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "x"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "c", resolution-id = "build:x:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", resolution-id = "build:a:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "x"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "c", resolution-id = "build:x:wheel" }]
+sdist = { url = "https://example.com/x.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel"
+__EDGE__
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:x:wheel"
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+
+        insta::allow_duplicates! {
+        for edge in [
+            r#"dependencies = [{ name = "c", resolution-id = "build:x:wheel" }]"#,
+            r#"optional-dependencies = { test = [{ name = "c", resolution-id = "build:x:wheel" }] }"#,
+            r#"dev-dependencies = { test = [{ name = "c", resolution-id = "build:x:wheel" }] }"#,
+        ] {
+            let data = data.replace("__EDGE__", edge);
+            let result = toml::from_str::<Lock>(&data).unwrap_err();
+            assert_stripped_snapshot!(
+                result,
+                @"Invalid resolution record `build:a:wheel`: scoped package dependency references a different build resolution"
+            );
+        }
+        }
+    }
+
+    #[test]
+    fn unscoped_build_only_package_rejects_cross_resolution_dependency_edges() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [__B_ROOT__]
+
+[[resolution]]
+id = "build:x:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "x"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "c", resolution-id = "build:x:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [__B_ROOT__]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "x"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "c", resolution-id = "build:x:wheel" }]
+sdist = { url = "https://example.com/x.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+__EDGE__
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+resolution-id = "build:x:wheel"
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+
+        insta::allow_duplicates! {
+        for (root, edge) in [
+            (
+                r#"{ name = "b" }"#,
+                r#"dependencies = [{ name = "c", resolution-id = "build:x:wheel" }]"#,
+            ),
+            (
+                r#"{ name = "b", extra = ["test"] }"#,
+                r#"optional-dependencies = { test = [{ name = "c", resolution-id = "build:x:wheel" }] }"#,
+            ),
+        ] {
+            let data = data.replace("__B_ROOT__", root).replace("__EDGE__", edge);
+            let result = toml::from_str::<Lock>(&data)
+                .expect_err("a build resolution cannot contain a differently scoped package");
+            assert_stripped_snapshot!(
+                result,
+                @"Invalid resolution record `build:a:wheel`: build resolution contains a scoped package from a different build resolution"
+            );
+        }
+        }
+    }
+
+    #[test]
+    fn scoped_package_rejects_mismatched_sdist_artifact() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", resolution-id = "build:a:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", resolution-id = "build:a:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel"
+sdist = { url = "https://example.com/b-build.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: scoped package artifacts are not contained in its unscoped package"
+        );
+    }
+
+    #[test]
+    fn build_resolution_rejects_invalid_target_selector() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { active = [{ package = "a" }], any-of = [] }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: selector expression cannot be combined with marker, active, or inactive"
+        );
+    }
+
+    #[test]
+    fn build_dependency_preferences_include_bootstrap_only_dependencies() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+supported-markers = ["sys_platform == 'linux' or sys_platform == 'darwin'"]
+
+[[resolution]]
+id = "build:a:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:a:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = []
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = []
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [{ name = "c" }]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "3.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid lock");
+        let package = lock
+            .packages
+            .iter()
+            .find(|package| package.id.name == PackageName::from_str("a").expect("valid name"))
+            .expect("package a exists");
+        let key = build_key_for_package(package, Path::new("."));
+        let preferences = lock.build_dependency_preferences(Path::new("."));
+
+        assert_eq!(
+            preferences.get(&key),
+            Some(&vec![
+                (
+                    PackageName::from_str("b").expect("valid name"),
+                    Version::from_str("2.0.0").expect("valid version")
+                ),
+                (
+                    PackageName::from_str("c").expect("valid name"),
+                    Version::from_str("3.0.0").expect("valid version")
+                )
+            ])
+        );
+    }
+
+    #[test]
+    fn build_resolution_rejects_invalid_any_of_marker() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { any-of = [{ all-of = [{ marker = "sys_platform ==" }] }] }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = []
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @r"
+    Invalid marker `sys_platform ==`: Expected marker value, found end of dependency specification
+    sys_platform ==
+                   ^
+    "
+        );
+    }
+
+    #[test]
+    fn build_resolution_rejects_activation_with_extra_and_group() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { active = [{ package = "a", extra = "feature", group = "dev" }] }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = []
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: selector entry cannot specify both extra and group"
+        );
+    }
+
+    #[test]
+    fn scoped_package_build_root_rejects_unknown_resolution_id() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:z:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "z"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = []
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:missing:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:missing:wheel"
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "z"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = []
+sdist = { url = "https://example.com/z.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:missing:wheel`: scoped package build root references an unknown build resolution"
+        );
+    }
+
+    #[test]
+    fn scoped_package_build_root_rejects_package_outside_resolution() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:z:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "z"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = []
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:z:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:z:wheel"
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "z"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = []
+sdist = { url = "https://example.com/z.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:z:wheel`: scoped package build root is not contained in its owning build resolution"
+        );
+    }
+
+    #[test]
+    fn scoped_package_rejects_missing_unscoped_package() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:a:wheel" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, resolution-id = "build:a:wheel" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel"
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: scoped package is missing its unscoped package"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_requires_target() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: runtime resolution is missing a target selector"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_rejects_operation() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+operation = "wheel"
+target = { marker = "sys_platform == 'linux'" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: runtime resolution cannot declare an operation"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_rejects_mode() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+mode = "isolated"
+target = { marker = "sys_platform == 'linux'" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: runtime resolution cannot declare a replay mode"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_rejects_source_package() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+name = "a"
+target = { marker = "sys_platform == 'linux'" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: runtime resolution cannot declare a source package"
+        );
+    }
+
+    #[test]
+    fn runtime_resolution_rejects_roots() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "a" }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `runtime:0`: runtime resolution cannot declare roots"
+        );
+    }
+
+    #[test]
+    fn build_resolution_requires_operation() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: build resolution is missing an operation"
+        );
+    }
+
+    #[test]
+    fn build_resolution_requires_mode() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: build resolution is missing a replay mode"
+        );
+    }
+
+    #[test]
+    fn build_resolution_requires_source_package() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel`: build resolution is missing a source package"
+        );
+    }
+
+    #[test]
+    fn build_resolution_roots_must_match_package_build_dependencies() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "c" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel:build:60eeaccb2dcdee04`: package build-dependencies do not match final build resolution roots"
+        );
+    }
+
+    #[test]
+    fn build_resolution_rejects_missing_package_build_dependencies() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel:build:60eeaccb2dcdee04`: package build-dependencies do not match final build resolution roots"
+        );
+    }
+
+    #[test]
+    fn overlapping_build_resolution_variants_are_rejected() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:one"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:a:wheel:two"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "c" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }, { name = "c" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel:two`: build resolution has overlapping variants for the selected runtime environment"
+        );
+    }
+
+    #[test]
+    fn overlapping_equivalent_build_resolution_variants_are_allowed() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:one"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:a:wheel:two"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        toml::from_str::<Lock>(data).expect("valid lock");
+    }
+
+    #[test]
+    fn overlapping_scoped_build_resolution_variants_are_rejected() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:one"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "b", resolution-id = "build:a:wheel:one" }]
+
+[[resolution]]
+id = "build:a:wheel:two"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "b", resolution-id = "build:a:wheel:two" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b", resolution-id = "build:a:wheel:one" },
+    { name = "b", resolution-id = "build:a:wheel:two" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel:one"
+dependencies = [{ name = "c" }]
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-id = "build:a:wheel:two"
+dependencies = [{ name = "c" }]
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel:two`: build resolution has overlapping variants for the selected runtime environment"
+        );
+    }
+
+    #[test]
+    fn declared_conflicts_do_not_disambiguate_build_resolution_variants() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+conflicts = [[
+    { package = "project", extra = "cpu" },
+    { package = "project", extra = "gpu" },
+]]
+
+[[resolution]]
+id = "build:a:wheel:cpu"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { active = [{ package = "project", extra = "cpu" }] }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:a:wheel:gpu"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { active = [{ package = "project", extra = "gpu" }] }
+roots = [{ name = "c" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }, { name = "c" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel:gpu`: build resolution has overlapping variants for the selected runtime environment"
+        );
+    }
+
+    #[test]
+    fn targeted_and_fallback_build_resolution_variants_are_allowed() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:a:wheel:fallback"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "c" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }, { name = "c" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        toml::from_str::<Lock>(data).expect("valid lock");
+    }
+
+    #[test]
+    fn disjoint_match_runtime_build_resolution_variants_are_allowed() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:one"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "runtime", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, match-runtime = true }]
+
+[[resolution]]
+id = "build:a:wheel:two"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "runtime", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, match-runtime = true }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "runtime", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, match-runtime = true },
+    { name = "runtime", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, match-runtime = true },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "runtime"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/runtime-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "runtime"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/runtime-2.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        toml::from_str::<Lock>(data).expect("valid lock");
+    }
+
+    #[test]
+    fn duplicate_match_runtime_bindings_do_not_change_build_resolution_specificity() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:one"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [
+    { name = "runtime", match-runtime = true },
+    { name = "runtime", match-runtime = true },
+]
+
+[[resolution]]
+id = "build:a:wheel:two"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [
+    { name = "runtime", match-runtime = true },
+    { name = "other", match-runtime = true },
+]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "runtime", match-runtime = true },
+    { name = "other", match-runtime = true },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "other"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/other-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "runtime"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/runtime-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid lock");
+        let package = lock
+            .packages
+            .iter()
+            .find(|package| package.id.name.as_ref() == "a")
+            .expect("locked source package");
+        let runtime_packages = lock
+            .packages
+            .iter()
+            .filter(|package| matches!(package.id.name.as_ref(), "other" | "runtime"))
+            .map(|package| package.id.clone())
+            .collect::<FxHashSet<_>>();
+        let resolution = lock
+            .build_resolution_record_for_package_in_markers(
+                package,
+                BuildResolutionOperation::Wheel,
+                &marker_environment(),
+                &marker_environment(),
+                &runtime_packages,
+                BuildResolutionStage::Build,
+            )
+            .expect("valid build resolution")
+            .expect("matching build resolution");
+
+        assert_eq!(resolution.id, "build:a:wheel:two");
+    }
+
+    #[test]
+    fn inactive_match_runtime_root_does_not_reject_build_resolution() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "runtime", marker = "sys_platform == 'linux'", match-runtime = true }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "runtime", marker = "sys_platform == 'linux'", match-runtime = true }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "runtime"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/runtime-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid lock");
+        let package = lock
+            .packages
+            .iter()
+            .find(|package| package.id.name.as_ref() == "a")
+            .expect("locked source package");
+        let runtime_packages = FxHashSet::default();
+        let resolution = lock
+            .build_resolution_record_for_package_in_markers(
+                package,
+                BuildResolutionOperation::Wheel,
+                &marker_environment(),
+                &marker_environment(),
+                &runtime_packages,
+                BuildResolutionStage::Build,
+            )
+            .expect("valid build resolution")
+            .expect("matching build resolution");
+
+        assert_eq!(resolution.id, "build:a:wheel");
+    }
+
+    #[test]
+    fn inactive_match_runtime_root_does_not_change_build_resolution_specificity() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:one"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "runtime", match-runtime = true }]
+
+[[resolution]]
+id = "build:a:wheel:two"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [
+    { name = "runtime", match-runtime = true },
+    { name = "inactive", marker = "sys_platform == 'linux'", match-runtime = true },
+]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "runtime", match-runtime = true },
+    { name = "inactive", marker = "sys_platform == 'linux'", match-runtime = true },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "inactive"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/inactive-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "runtime"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/runtime-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid lock");
+        let package = lock
+            .packages
+            .iter()
+            .find(|package| package.id.name.as_ref() == "a")
+            .expect("locked source package");
+        let runtime_packages = lock
+            .packages
+            .iter()
+            .filter(|package| matches!(package.id.name.as_ref(), "inactive" | "runtime"))
+            .map(|package| package.id.clone())
+            .collect::<FxHashSet<_>>();
+        let resolution = lock
+            .build_resolution_record_for_package_in_markers(
+                package,
+                BuildResolutionOperation::Wheel,
+                &marker_environment(),
+                &marker_environment(),
+                &runtime_packages,
+                BuildResolutionStage::Build,
+            )
+            .expect("valid build resolution")
+            .expect("matching build resolution");
+
+        assert_eq!(resolution.id, "build:a:wheel:one");
+    }
+
+    #[test]
+    fn bootstrap_and_build_resolution_pairs_are_allowed() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:a:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "c" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "c" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        toml::from_str::<Lock>(data).expect("valid lock");
+    }
+
+    #[test]
+    fn build_resolution_missing_entire_target_pair_is_incomplete() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:bootstrap:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[resolution]]
+id = "build:a:wheel:build:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+build-dependencies = []
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].0.name.as_ref(), "a");
+
+        let supported = data.replacen(
+            "requires-python = \">=3.12\"",
+            "requires-python = \">=3.12\"\nsupported-markers = [\"sys_platform == 'linux'\"]",
+            1,
+        );
+        let lock = toml::from_str::<Lock>(&supported).expect("valid supported lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert!(missing.is_empty());
+    }
+
+    #[test]
+    fn build_resolution_target_coverage_follows_runtime_roots_and_edges() {
+        let resolution = r#"
+[[resolution]]
+id = "build:a:wheel:bootstrap:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[resolution]]
+id = "build:a:wheel:build:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+target = { marker = "sys_platform == 'linux'" }
+"#;
+        let package = r#"
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+build-dependencies = []
+"#;
+        let root = |edge: &str| {
+            format!(
+                r#"
+[[package]]
+name = "project"
+version = "0.1.0"
+source = {{ virtual = "." }}
+{edge}
+"#
+            )
+        };
+
+        for edge in [
+            r#"dependencies = [{ name = "a", marker = "sys_platform == 'darwin'" }]"#,
+            r#"optional-dependencies = { test = [{ name = "a", marker = "sys_platform == 'darwin'" }] }"#,
+            r#"dependency-groups = { test = [{ name = "a", marker = "sys_platform == 'darwin'" }] }"#,
+        ] {
+            let data = format!(
+                "version = 2\nrevision = 4\nrequires-python = \">=3.12\"\n{resolution}\n{package}\n{}",
+                root(edge)
+            );
+            let lock = toml::from_str::<Lock>(&data).expect("valid runtime edge lock");
+            let missing = lock
+                .source_distributions_missing_build_dependencies(
+                    Path::new(env!("CARGO_MANIFEST_DIR")),
+                    &BuildOptions::default(),
+                    &ExtraBuildRequires::default(),
+                )
+                .expect("valid source distributions");
+            assert_eq!(missing.len(), 1, "{edge}");
+        }
+
+        for manifest in [
+            r#"requirements = [{ name = "a", directory = "a", marker = "sys_platform == 'darwin'" }]"#,
+            r#"dependency-groups = { test = [{ name = "a", directory = "a", marker = "sys_platform == 'darwin'" }] }"#,
+        ] {
+            let data = format!(
+                "version = 2\nrevision = 4\nrequires-python = \">=3.12\"\n\n[manifest]\n{manifest}\n{resolution}\n{package}"
+            );
+            let lock = toml::from_str::<Lock>(&data).expect("valid manifest root lock");
+            let missing = lock
+                .source_distributions_missing_build_dependencies(
+                    Path::new(env!("CARGO_MANIFEST_DIR")),
+                    &BuildOptions::default(),
+                    &ExtraBuildRequires::default(),
+                )
+                .expect("valid source distributions");
+            assert_eq!(missing.len(), 1, "{manifest}");
+        }
+    }
+
+    #[test]
+    fn build_resolution_target_coverage_ignores_wheel_served_targets() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12,<4"
+supported-markers = ["sys_platform == 'linux' or (sys_platform == 'win32' and platform_machine == 'AMD64')"]
+
+[[resolution]]
+id = "build:a:wheel:bootstrap:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[resolution]]
+id = "build:a:wheel:build:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = []
+sdist = { url = "https://example.com/a-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+wheels = [{ url = "https://example.com/a-1.0.0-py3-none-win_amd64.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[package.metadata]
+build-requires = []
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid wheel-served lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert!(missing.is_empty());
+
+        for (wheel_tag, supported_markers, build_target) in [
+            (
+                "py3-none-manylinux_2_17_x86_64",
+                "(sys_platform == 'linux' and platform_machine == 'x86_64') or (sys_platform == 'win32' and platform_machine == 'AMD64')",
+                "sys_platform == 'win32' and platform_machine == 'AMD64'",
+            ),
+            (
+                "py3-none-macosx_11_0_arm64",
+                "sys_platform == 'linux' or (sys_platform == 'darwin' and platform_machine == 'arm64')",
+                "sys_platform == 'linux'",
+            ),
+        ] {
+            let data = data
+                .replace(
+                    r#"supported-markers = ["sys_platform == 'linux' or (sys_platform == 'win32' and platform_machine == 'AMD64')"]"#,
+                    &format!(r#"supported-markers = ["{supported_markers}"]"#),
+                )
+                .replace(
+                    r#"target = { marker = "sys_platform == 'linux'" }"#,
+                    &format!(r#"target = {{ marker = "{build_target}" }}"#),
+                )
+                .replace(
+                    "a-1.0.0-py3-none-win_amd64.whl",
+                    &format!("a-1.0.0-{wheel_tag}.whl"),
+                );
+            let lock = toml::from_str::<Lock>(&data).expect("valid versioned wheel lock");
+            let missing = lock
+                .source_distributions_missing_build_dependencies(
+                    Path::new(env!("CARGO_MANIFEST_DIR")),
+                    &BuildOptions::default(),
+                    &ExtraBuildRequires::default(),
+                )
+                .expect("valid source distributions");
+            assert_eq!(missing.len(), 1, "{wheel_tag}");
+        }
+
+        let build_options = BuildOptions::new(NoBinary::All, NoBuild::None);
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &build_options,
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert_eq!(missing.len(), 1);
+    }
+
+    #[test]
+    fn build_resolution_target_coverage_does_not_trust_platform_wheels() {
+        for (filename, supported, target) in [
+            (
+                "a-1.0.0-py3-none-manylinux_2_28_x86_64.whl",
+                "sys_platform == 'linux' and platform_machine == 'x86_64'",
+                "sys_platform == 'win32'",
+            ),
+            (
+                "a-1.0.0-py3-none-macosx_13_0_arm64.whl",
+                "sys_platform == 'darwin' and platform_machine == 'arm64'",
+                "sys_platform == 'linux'",
+            ),
+        ] {
+            let data = format!(
+                r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+supported-markers = ["{supported}"]
+
+[[resolution]]
+id = "build:a:wheel:bootstrap:foreign"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = {{ registry = "https://pypi.org/simple" }}
+target = {{ marker = "{target}" }}
+
+[[resolution]]
+id = "build:a:wheel:build:foreign"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = {{ registry = "https://pypi.org/simple" }}
+target = {{ marker = "{target}" }}
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = {{ registry = "https://pypi.org/simple" }}
+build-dependencies = []
+sdist = {{ url = "https://example.com/a-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }}
+wheels = [{{ url = "https://example.com/{filename}", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }}]
+
+[package.metadata]
+build-requires = []
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = {{ virtual = "." }}
+dependencies = [{{ name = "a" }}]
+"#
+            );
+            let lock = toml::from_str::<Lock>(&data).expect("valid platform-wheel lock");
+            let missing = lock
+                .source_distributions_missing_build_dependencies(
+                    Path::new(env!("CARGO_MANIFEST_DIR")),
+                    &BuildOptions::default(),
+                    &ExtraBuildRequires::default(),
+                )
+                .expect("valid source distributions");
+            assert_eq!(missing.len(), 1, "{filename}");
+        }
+    }
+
+    #[test]
+    fn build_resolution_target_coverage_is_required_for_editable_operation() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { editable = "a" }
+
+[[resolution]]
+id = "build:a:editable:bootstrap:linux"
+kind = "build"
+operation = "editable"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { editable = "a" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[resolution]]
+id = "build:a:editable:build:linux"
+kind = "build"
+operation = "editable"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { editable = "a" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { editable = "a" }
+build-dependencies = []
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid editable lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert_eq!(missing.len(), 1);
+    }
+
+    #[test]
+    fn staged_build_resolution_rejects_missing_bootstrap_stage() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel:build`: staged build resolution is missing a matching bootstrap resolution"
+        );
+    }
+
+    #[test]
+    fn bootstrap_resolution_rejects_missing_build_stage() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = []
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel:bootstrap`: bootstrap build resolution is missing a matching final build resolution"
+        );
+    }
+
+    #[test]
+    fn staged_build_resolution_rejects_disjoint_bootstrap_target() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'darwin'" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:a:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "c" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "c" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel:bootstrap`: bootstrap build resolution is missing a matching final build resolution"
+        );
+    }
+
+    #[test]
+    fn staged_build_resolution_allows_fallback_bootstrap_target() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:a:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "c" }]
+
+[[resolution]]
+id = "build:a:wheel:build:fallback"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "c" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "c" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        toml::from_str::<Lock>(data).expect("fallback bootstrap covers targeted build");
+    }
+
+    #[test]
+    fn staged_build_resolution_allows_broader_bootstrap_target() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:a:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+roots = [{ name = "c" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "c" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "c"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/c-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        toml::from_str::<Lock>(data).expect("broader bootstrap covers targeted build");
+    }
+
+    #[test]
+    fn uncaptured_registry_source_without_metadata_is_incomplete() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid registry-source lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].0.name.as_ref(), "a");
+    }
+
+    #[test]
+    fn captured_registry_source_without_metadata_rejects_missing_target_coverage() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:bootstrap:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[resolution]]
+id = "build:a:wheel:build:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = []
+sdist = { url = "https://example.com/a-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid registry-source lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].0.name.as_ref(), "a");
+    }
+
+    #[test]
+    fn requires_python_restricted_wheel_does_not_hide_registry_source_targets() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12,<3.14"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+wheels = [{ url = "https://example.com/a-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0, requires-python = ">=3.12,!=3.13.*" }]
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid registry-source lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].0.name.as_ref(), "a");
+
+        let supported = data.replacen(
+            "requires-python = \">=3.12,<3.14\"",
+            "requires-python = \">=3.12,<3.14\"\nsupported-markers = [\"python_full_version == '3.12.*'\"]",
+            1,
+        );
+        let lock = toml::from_str::<Lock>(&supported).expect("valid supported lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert!(missing.is_empty());
+    }
+
+    #[test]
+    fn requires_python_hole_does_not_create_registry_source_targets() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12,!=3.13.*,<3.14"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0, requires-python = ">=3.13,<3.14" }
+wheels = [{ url = "https://example.com/a-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0, requires-python = ">=3.12,<3.13" }]
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }]
+"#;
+
+        let lock = toml::from_str::<Lock>(data).expect("valid requires-python hole lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert!(missing.is_empty());
+    }
+
+    #[test]
+    fn bootstrap_only_nested_source_rejects_missing_target_coverage() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+supported-markers = ["sys_platform == 'linux' or sys_platform == 'darwin'"]
+
+[[resolution]]
+id = "build:a:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+roots = [{ name = "b", marker = "sys_platform == 'win32'" }]
+
+[[resolution]]
+id = "build:a:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+
+[[resolution]]
+id = "build:b:wheel:bootstrap:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "b"
+version = "1.0.0"
+source = { directory = "b" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[resolution]]
+id = "build:b:wheel:build:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "b"
+version = "1.0.0"
+source = { directory = "b" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+build-dependencies = []
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { directory = "b" }
+build-only = true
+build-dependencies = []
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid nested-source lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].0.name.as_ref(), "b");
+
+        let supported = data.replacen(
+            "sys_platform == 'linux' or sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            1,
+        );
+        let lock = toml::from_str::<Lock>(&supported).expect("valid supported lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert!(missing.is_empty());
+    }
+
+    #[test]
+    fn nested_source_target_coverage_ignores_wheel_served_parent_targets() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12,<4"
+supported-markers = ["sys_platform == 'linux' or (sys_platform == 'win32' and platform_machine == 'AMD64')"]
+
+[[resolution]]
+id = "build:a:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:a:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[resolution]]
+id = "build:b:wheel:bootstrap:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "b"
+version = "1.0.0"
+source = { directory = "b" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[resolution]]
+id = "build:b:wheel:build:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "b"
+version = "1.0.0"
+source = { directory = "b" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }]
+sdist = { url = "https://example.com/a-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+wheels = [{ url = "https://example.com/a-1.0.0-py3-none-win_amd64.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[package.metadata]
+build-requires = []
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { directory = "b" }
+build-only = true
+build-dependencies = []
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid nested-source lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert!(missing.is_empty());
+
+        let build_options = BuildOptions::new(NoBinary::All, NoBuild::None);
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &build_options,
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].0.name.as_ref(), "b");
+    }
+
+    #[test]
+    fn scoped_nested_source_target_coverage_uses_scoped_artifacts() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+supported-markers = ["sys_platform == 'linux' or sys_platform == 'darwin'"]
+
+[[resolution]]
+id = "build:a:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+roots = [{ name = "b", resolution-id = "build:a:wheel:bootstrap" }]
+
+[[resolution]]
+id = "build:a:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+roots = [{ name = "b", resolution-id = "build:a:wheel:build" }]
+
+[[resolution]]
+id = "build:b:wheel:bootstrap:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[resolution]]
+id = "build:b:wheel:build:linux"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+target = { marker = "sys_platform == 'linux'" }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { directory = "a" }
+build-dependencies = [{ name = "b", resolution-id = "build:a:wheel:build" }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+build-dependencies = []
+sdist = { url = "https://example.com/b-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+resolution-id = "build:a:wheel:bootstrap"
+build-dependencies = []
+sdist = { url = "https://example.com/b-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+resolution-id = "build:a:wheel:build"
+build-dependencies = []
+sdist = { url = "https://example.com/b-1.0.0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "a" }]
+"#;
+
+        let lock = toml::from_str::<Lock>(data).expect("valid scoped nested-source lock");
+        let missing = lock
+            .source_distributions_missing_build_dependencies(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                &BuildOptions::default(),
+                &ExtraBuildRequires::default(),
+            )
+            .expect("valid source distributions");
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].0.name.as_ref(), "b");
+    }
+
+    #[test]
+    fn legacy_build_resolution_without_stage_is_allowed() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("legacy unstaged build resolution");
+        let serialized = lock.to_toml().expect("serializable legacy lock");
+
+        assert!(!serialized.contains("\nstage = "), "{serialized}");
+    }
+
+    fn cyclic_build_lock(back_edge: &str, wheel: &str, bootstrap_back_edge: bool) -> Lock {
+        let (bootstrap_back_edge, build_back_edge) = if bootstrap_back_edge {
+            (back_edge, "")
+        } else {
+            ("", back_edge)
+        };
+        toml::from_str(&format!(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = {{ registry = "https://pypi.org/simple" }}
+roots = []
+
+[[resolution]]
+id = "build:a:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = {{ registry = "https://pypi.org/simple" }}
+roots = [{{ name = "b" }}]
+
+[[resolution]]
+id = "build:b:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "b"
+version = "1.0.0"
+source = {{ registry = "https://pypi.org/simple" }}
+roots = [{bootstrap_back_edge}]
+
+[[resolution]]
+id = "build:b:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "b"
+version = "1.0.0"
+source = {{ registry = "https://pypi.org/simple" }}
+roots = [{build_back_edge}]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = {{ registry = "https://pypi.org/simple" }}
+build-dependencies = [{{ name = "b" }}]
+sdist = {{ url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }}
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = {{ registry = "https://pypi.org/simple" }}
+build-only = true
+build-dependencies = [{build_back_edge}]
+sdist = {{ url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }}
+wheels = [{wheel}]
+"#
+        ))
+        .expect("valid lock")
+    }
+
+    fn replay_build_lock(
+        lock: &Lock,
+        build_options: &BuildOptions,
+    ) -> Result<BTreeMap<BuildPackageKey, LockedBuildResolution>, LockError> {
+        let markers = marker_environment();
+        let resolver_markers = ResolverMarkerEnvironment::from(markers.clone());
+        let tags = Tags::from_env(
+            Platform::new(
+                Os::Macos {
+                    major: 14,
+                    minor: 0,
+                },
+                Arch::Aarch64,
+            ),
+            (3, 12),
+            "cpython",
+            (3, 12),
+            TagsOptions::default(),
+        )
+        .expect("valid tags");
+        let package = lock
+            .packages
+            .iter()
+            .find(|package| package.id.name.as_ref() == "a")
+            .expect("locked package");
+        let resolution = lock
+            .to_resolution(
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+                [package],
+                None,
+                &resolver_markers,
+                &tags,
+                &ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default()),
+                &DependencyGroupsWithDefaults::none(),
+                build_options,
+                &InstallOptions::default(),
+            )
+            .expect("valid runtime resolution");
+
+        lock.all_build_resolutions(
+            &resolution,
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &tags,
+            build_options,
+            &markers,
+            &markers,
+            true,
+        )
+    }
+
+    #[test]
+    fn collapsed_editable_build_resolution_ignores_wheel_bootstrap() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:editable:build"
+kind = "build"
+operation = "editable"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { editable = "a" }
+
+[[resolution]]
+id = "build:a:wheel:bootstrap"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "bootstrap"
+name = "a"
+version = "1.0.0"
+source = { editable = "a" }
+
+[[resolution]]
+id = "build:a:wheel:build"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+stage = "build"
+name = "a"
+version = "1.0.0"
+source = { editable = "a" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { editable = "a" }
+build-dependencies = [{ name = "b" }]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-only = true
+wheels = [{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid lock");
+
+        replay_build_lock(&lock, &BuildOptions::default()).expect("editable build resolution");
+    }
+
+    #[test]
+    fn registry_source_path_roundtrip() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for path in [PathBuf::from("links"), root.join("links")] {
+            let registry = PortablePath::from(path.as_path()).to_string();
+            let data = format!(
+                r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "builder"
+version = "1.0.0"
+source = {{ registry = "{registry}" }}
+build-only = true
+sdist = {{ path = "builder-1.0.0.tar.gz" }}
+wheels = [{{ path = "builder-1.0.0-py3-none-any.whl" }}]
+"#
+            );
+            let lock: Lock = toml::from_str(&data).expect("valid lock");
+            let package = &lock.packages[0];
+            let expected = Source::Registry(RegistrySource::Path(path.clone().into_boxed_path()));
+
+            let index = package
+                .index(root)
+                .expect("valid package index")
+                .expect("registry package index");
+            assert_eq!(
+                Source::from_index_url(&index, root).expect("valid package source"),
+                expected
+            );
+
+            let sdist = Dist::Source(
+                package
+                    .to_source_dist(root)
+                    .expect("valid source distribution")
+                    .expect("registry source distribution"),
+            );
+            let index = sdist.index().expect("registry source index");
+            assert_eq!(
+                Source::from_index_url(index, root).expect("valid source index"),
+                expected
+            );
+
+            let wheel = package.wheels[0]
+                .to_registry_wheel(&RegistrySource::Path(path.into_boxed_path()), root)
+                .expect("valid wheel");
+            assert_eq!(
+                Source::from_index_url(&wheel.index, root).expect("valid wheel index"),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn locked_build_resolution_rejects_selected_source_cycle() {
+        let lock = cyclic_build_lock(r#"{ name = "a" }"#, "", false);
+        let result = replay_build_lock(&lock, &BuildOptions::default()).unwrap_err();
+        assert_stripped_snapshot!(result, @"Cyclic build dependency detected for `a`");
+    }
+
+    #[test]
+    fn locked_build_resolution_rejects_bootstrap_source_cycle() {
+        let lock = cyclic_build_lock(r#"{ name = "a" }"#, "", true);
+        let result = replay_build_lock(&lock, &BuildOptions::default()).unwrap_err();
+        assert_stripped_snapshot!(result, @"Cyclic build dependency detected for `a`");
+    }
+
+    #[test]
+    fn locked_build_resolution_allows_marker_excluded_source_cycle() {
+        let lock = cyclic_build_lock(
+            r#"{ name = "a", marker = "sys_platform == 'linux'" }"#,
+            "",
+            false,
+        );
+        replay_build_lock(&lock, &BuildOptions::default())
+            .expect("marker-excluded build dependency");
+    }
+
+    #[test]
+    fn locked_build_resolution_allows_wheel_selected_source_cycle() {
+        let lock = cyclic_build_lock(
+            r#"{ name = "a" }"#,
+            r#"{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }"#,
+            false,
+        );
+        replay_build_lock(&lock, &BuildOptions::default())
+            .expect("wheel-selected build dependency");
+    }
+
+    #[test]
+    fn locked_build_resolution_rejects_no_binary_source_cycle() {
+        let lock = cyclic_build_lock(
+            r#"{ name = "a" }"#,
+            r#"{ url = "https://example.com/b-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }"#,
+            false,
+        );
+        let build_options = BuildOptions::new(NoBinary::All, NoBuild::None);
+        let result = replay_build_lock(&lock, &build_options).unwrap_err();
+        assert_stripped_snapshot!(result, @"Cyclic build dependency detected for `a`");
+    }
+
+    #[test]
+    fn locked_build_resolution_rejects_incompatible_wheel_source_cycle() {
+        let lock = cyclic_build_lock(
+            r#"{ name = "a" }"#,
+            r#"{ url = "https://example.com/b-1.0.0-cp311-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }"#,
+            false,
+        );
+        let result = replay_build_lock(&lock, &BuildOptions::default()).unwrap_err();
+        assert_stripped_snapshot!(result, @"Cyclic build dependency detected for `a`");
+    }
+
+    #[test]
+    fn build_resolution_records_must_cover_captured_build_dependencies() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:a:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [{ name = "b" }]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = []
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:b:wheel:build:0584d5b62a248c6b`: package build-dependencies are missing a build resolution"
+        );
+    }
+
+    #[test]
+    fn build_resolution_records_must_cover_captured_build_dependencies_without_existing_records() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "b" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Invalid resolution record `build:a:wheel:build:60eeaccb2dcdee04`: package build-dependencies are missing a build resolution"
+        );
+    }
+
+    #[test]
+    fn dependency_marker_preserves_correlated_marker_and_conflict() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "b", marker = "(platform_machine == 'inapplicable' and extra == 'extra-5-debug-b') or (extra == 'extra-5-debug-a' and extra == 'extra-5-debug-b')" },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "debug"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/debug.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let serialized = lock.to_toml().unwrap();
+
+        assert!(
+            serialized.contains("platform_machine == 'inapplicable'"),
+            "{serialized}"
+        );
+        assert!(serialized.contains("extra-5-debug-b"), "{serialized}");
+        assert!(serialized.contains("extra-5-debug-a"), "{serialized}");
+        assert!(!serialized.contains("selector = { target"), "{serialized}");
+
+        let reparsed = toml::from_str::<Lock>(&serialized).unwrap();
+        assert_eq!(reparsed, lock);
+    }
+
+    #[test]
     fn missing_dependency_source_unambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7677,13 +17389,13 @@ name = "a"
 version = "0.1.0"
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        assert_legacy_lock_debug_snapshot!(result);
     }
 
     #[test]
     fn missing_dependency_version_unambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7703,13 +17415,13 @@ name = "a"
 source = { registry = "https://pypi.org/simple" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        assert_legacy_lock_debug_snapshot!(result);
     }
 
     #[test]
     fn missing_dependency_source_version_unambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7728,13 +17440,13 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 name = "a"
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        assert_legacy_lock_debug_snapshot!(result);
     }
 
     #[test]
     fn missing_dependency_source_ambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7764,9 +17476,96 @@ version = "0.1.0"
     }
 
     #[test]
+    fn build_dependency_source_ambiguous() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[resolution]]
+id = "build:b:wheel"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+roots = [
+    { name = "a", version = "1.0.0", source = { registry = "https://pypi.org/simple" } },
+]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { directory = "vendor/a" }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "a", version = "1.0.0", source = { registry = "https://pypi.org/simple" } },
+]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let lock = toml::from_str::<Lock>(data).unwrap();
+        let package = lock
+            .packages
+            .iter()
+            .find(|package| package.id.name == PackageName::from_str("b").unwrap())
+            .unwrap();
+        assert!(matches!(
+            package.build_dependencies[0].package_id.source,
+            Source::Registry(_)
+        ));
+
+        let serialized = lock.to_toml().unwrap();
+        assert!(serialized.contains(
+            r#"{ name = "a", version = "1.0.0", source = { registry = "https://pypi.org/simple" } }"#
+        ));
+    }
+
+    #[test]
+    fn build_dependency_missing_source_ambiguous() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { directory = "vendor/a" }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [
+    { name = "a", version = "1.0.0" },
+]
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Dependency `a` has missing `source` field but has more than one matching package");
+    }
+
+    #[test]
     fn missing_dependency_version_ambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7813,7 +17612,7 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
     #[test]
     fn missing_dependency_source_version_ambiguous() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7844,7 +17643,7 @@ name = "a"
     #[test]
     fn missing_dependency_version_dynamic() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7868,29 +17667,101 @@ name = "a"
 source = { editable = "path/to/a" }
 "#;
         let result = toml::from_str::<Lock>(data);
-        insta::assert_debug_snapshot!(result);
+        assert_legacy_lock_debug_snapshot!(result);
     }
 
     #[test]
     fn hash_optional_missing() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
 name = "anyio"
 version = "4.3.0"
 source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/anyio-4.3.0.tar.gz" }
 wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        assert_legacy_lock_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn sdist_hash_optional_missing_find_links() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "builder"
+version = "1.0.0"
+source = { registry = "file:///links" }
+build-only = true
+sdist = { path = "builder-1.0.0.tar.gz" }
+"#;
+        toml::from_str::<Lock>(data).unwrap();
+    }
+
+    #[test]
+    fn sdist_hash_required_missing_direct_url() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "builder"
+version = "1.0.0"
+source = { url = "https://example.com/builder-1.0.0.tar.gz" }
+build-only = true
+sdist = {}
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Since the package `builder==1.0.0 @ direct+https://example.com/builder-1.0.0.tar.gz` comes from a direct dependency, a hash was expected but one was not found for source distribution");
+    }
+
+    #[test]
+    fn sdist_hash_required_missing_path() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "builder"
+version = "1.0.0"
+source = { path = "builder-1.0.0.tar.gz" }
+build-only = true
+sdist = {}
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Since the package `builder==1.0.0 @ path+builder-1.0.0.tar.gz` comes from a path dependency, a hash was expected but one was not found for source distribution");
+    }
+
+    #[test]
+    fn sdist_hash_required_missing_git_archive() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "builder"
+version = "1.0.0"
+source = { git = "https://example.com/builder.git?path=builder-1.0.0.tar.gz#1111111111111111111111111111111111111111" }
+build-only = true
+sdist = {}
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Since the package `builder==1.0.0 @ git+https://example.com/builder.git?path=builder-1.0.0.tar.gz#1111111111111111111111111111111111111111` comes from a git dependency, a hash was expected but one was not found for source distribution");
     }
 
     #[test]
     fn hash_optional_present() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7900,13 +17771,13 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        assert_legacy_lock_debug_snapshot!(result);
     }
 
     #[test]
     fn hash_required_present() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7916,13 +17787,13 @@ source = { path = "file:///foo/bar" }
 wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        assert_legacy_lock_debug_snapshot!(result);
     }
 
     #[test]
     fn source_direct_no_subdir() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7931,13 +17802,13 @@ version = "4.3.0"
 source = { url = "https://burntsushi.net" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        assert_legacy_lock_debug_snapshot!(result);
     }
 
     #[test]
     fn source_direct_has_subdir() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7946,13 +17817,13 @@ version = "4.3.0"
 source = { url = "https://burntsushi.net", subdirectory = "wat/foo/bar" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        assert_legacy_lock_debug_snapshot!(result);
     }
 
     #[test]
     fn source_directory() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7961,13 +17832,13 @@ version = "4.3.0"
 source = { directory = "path/to/dir" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        assert_legacy_lock_debug_snapshot!(result);
     }
 
     #[test]
     fn source_editable() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -7976,7 +17847,7 @@ version = "4.3.0"
 source = { editable = "path/to/dir" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        assert_legacy_lock_debug_snapshot!(result);
     }
 
     /// Windows drive letter paths like `C:/...` should be deserialized as local path registry
@@ -7984,7 +17855,7 @@ source = { editable = "path/to/dir" }
     #[test]
     fn registry_source_windows_drive_letter() {
         let data = r#"
-version = 1
+version = 2
 requires-python = ">=3.12"
 
 [[package]]

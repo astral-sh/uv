@@ -1767,7 +1767,8 @@
             "centralized-project-envs",
             "tool-install-locks",
             "workspace-list-scripts",
-            "no-distutils-patch"
+            "no-distutils-patch",
+            "lock-build-dependencies"
           ]
         },
         {

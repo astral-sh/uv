@@ -1986,3 +1986,28 @@ impl OptionsMetadata for BuildBackendSettingsSchema {
         BuildBackendSettings::metadata()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::PyProjectToml;
+
+    #[test]
+    fn malformed_build_system_is_still_a_package() -> Result<(), Box<dyn std::error::Error>> {
+        let pyproject = PyProjectToml::from_string(
+            r#"
+            [project]
+            name = "example"
+            version = "0.1.0"
+
+            [build-system]
+            requires = "setuptools"
+            backend-path = 42
+            "#
+            .to_string(),
+            "pyproject.toml",
+        )?;
+
+        assert!(pyproject.is_package(true));
+        Ok(())
+    }
+}

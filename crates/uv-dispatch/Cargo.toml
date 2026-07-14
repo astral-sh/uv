@@ -20,6 +20,8 @@ workspace = true
 uv-build-backend = { workspace = true }
 uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
+uv-cache-info = { workspace = true }
+uv-cache-key = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
@@ -30,6 +32,7 @@ uv-git = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-installer = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-pep508 = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }

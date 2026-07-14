@@ -6,6 +6,7 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 
 use uv_configuration::HashCheckingMode;
+use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     DistributionMetadata, HashGeneration, HashPolicy, Name, Requirement, RequirementSource,
     Resolution, UnresolvedRequirement, VersionId,
@@ -378,10 +379,14 @@ impl HashStrategy {
             RequirementSource::Url {
                 location,
                 subdirectory,
+                ext,
                 ..
             } => Some(VersionId::from_archive(
                 location.clone(),
-                subdirectory.clone().map(Path::into_path_buf),
+                match ext {
+                    DistExtension::Wheel => None,
+                    DistExtension::Source(_) => subdirectory.clone().map(Path::into_path_buf),
+                },
             )),
             RequirementSource::GitDirectory {
                 git, subdirectory, ..
@@ -487,6 +492,7 @@ pub enum HashStrategyError {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use std::str::FromStr;
     use uv_configuration::HashCheckingMode;
     use uv_distribution_filename::DistExtension;
@@ -494,6 +500,7 @@ mod tests {
         HashPolicy, Requirement, RequirementSource, UnresolvedRequirement,
     };
     use uv_pypi_types::HashDigest;
+    use uv_redacted::DisplaySafeUrl;
 
     use super::HashStrategy;
 
@@ -553,5 +560,39 @@ mod tests {
             };
             assert_eq!(hasher.get_url(url), HashPolicy::All(expected.as_slice()));
         }
+    }
+
+    #[test]
+    fn from_requirements_ignores_wheel_subdirectory_for_direct_url_hashes() {
+        let url = "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#subdirectory=package&sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f";
+        let requirement = UnresolvedRequirement::Named(Requirement {
+            name: "anyio".parse().expect("valid package name"),
+            extras: Box::default(),
+            groups: Box::default(),
+            marker: "python_version >= '3.8'".parse().expect("valid marker"),
+            source: RequirementSource::Url {
+                location: "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl"
+                    .parse()
+                    .expect("valid wheel location"),
+                subdirectory: Some(PathBuf::from("package").into_boxed_path()),
+                ext: DistExtension::Wheel,
+                url: url.parse().expect("valid wheel URL"),
+            },
+            origin: None,
+        });
+        let hasher = HashStrategy::from_requirements(
+            [(&requirement, &[][..])].into_iter(),
+            std::iter::empty(),
+            None,
+            HashCheckingMode::Require,
+        )
+        .expect("valid requirement hashes");
+        let expected = [HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )
+        .expect("valid SHA-256 digest")];
+        let url = DisplaySafeUrl::parse(url).expect("valid wheel URL");
+
+        assert_eq!(hasher.get_url(&url), HashPolicy::All(expected.as_slice()));
     }
 }

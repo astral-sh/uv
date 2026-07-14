@@ -44,13 +44,16 @@ use uv_requirements::{
 };
 use uv_resolver::{
     FlatIndex, Installable, Lock, OptionsBuilder, Preference, PythonRequirement,
-    ResolverEnvironment, ResolverOutput,
+    ResolverEnvironment, ResolverOutput, UpgradePackages,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchSource, TorchStrategy};
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{
+    BuildIsolation, EmptyInstalledPackages, HashStrategy, LockedBuildResolutions,
+    SourceTreeEditablePolicy, UnlockedBuildInputs, unlocked_build_cache_key,
+};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
@@ -155,12 +158,12 @@ pub(crate) enum ProjectError {
     LockWorkspaceMismatch(PackageName),
 
     #[error(
-        "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
+        "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but the maximum supported version is v{0}). Upgrade uv, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
     )]
     UnsupportedLockVersion(u32, u32),
 
     #[error(
-        "Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
+        "Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but the maximum supported version is v{0}). Upgrade uv, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
     )]
     UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
 
@@ -549,6 +552,11 @@ impl PlatformState {
     /// Fork the [`PlatformState`] to create a [`UniversalState`].
     fn fork(&self) -> UniversalState {
         UniversalState(self.0.fork())
+    }
+
+    /// Reset interpreter-specific resolution and build state, retaining universal caches.
+    pub(crate) fn reset(&mut self) {
+        self.0 = self.0.fork();
     }
 
     /// Create a [`SharedState`] from the [`PlatformState`].
@@ -2142,6 +2150,8 @@ pub(crate) async fn resolve_names(
         return Ok(requirements);
     }
 
+    let state = state.fork();
+
     // Extract the project settings.
     let ResolverInstallerSettings {
         resolver:
@@ -2493,7 +2503,17 @@ pub(crate) async fn resolve_environment(
 
             preferences
         }
-        Some(PreferenceLocation::Entries(entries)) => entries,
+        Some(PreferenceLocation::Entries(entries)) => {
+            let upgrade_packages = UpgradePackages::for_non_project(&upgrade);
+            if upgrade.is_none() {
+                entries
+            } else {
+                entries
+                    .into_iter()
+                    .filter(|preference| !upgrade_packages.contains(preference.name()))
+                    .collect()
+            }
+        }
         None => vec![],
     };
 
@@ -2579,7 +2599,9 @@ pub(crate) async fn sync_environment(
     resolution: &Resolution,
     hasher: HashStrategy,
     modifications: Modifications,
+    locked_build_resolutions: LockedBuildResolutions,
     build_constraints: Constraints,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
     settings: InstallerSettingsRef<'_>,
     client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
@@ -2652,7 +2674,12 @@ pub(crate) async fn sync_environment(
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
             .into_inner();
-
+    let match_runtime = extra_build_requires.has_match_runtime_source(resolution);
+    let extra_build_requires = extra_build_requires.match_runtime(resolution)?;
+    let mut install_state = state.clone();
+    if match_runtime {
+        install_state.reset();
+    }
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -2662,7 +2689,7 @@ pub(crate) async fn sync_environment(
         index_locations,
         &flat_index,
         dependency_metadata,
-        state.clone().into_inner(),
+        install_state.clone().into_inner(),
         index_strategy,
         config_setting,
         config_settings_package,
@@ -2674,11 +2701,12 @@ pub(crate) async fn sync_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources,
-        SourceTreeEditablePolicy::Project,
+        source_tree_editable_policy,
         workspace_cache,
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_locked_build_resolutions(locked_build_resolutions);
 
     // Sync the environment.
     pip::operations::install(
@@ -2693,7 +2721,7 @@ pub(crate) async fn sync_environment(
         &hasher,
         tags,
         &client,
-        state.in_flight(),
+        install_state.in_flight(),
         concurrency,
         &build_dispatch,
         cache,
@@ -2801,11 +2829,47 @@ pub(crate) async fn update_environment(
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
+    // Exclude installed distributions for non-isolated builds, since any source can depend
+    // transitively on the shared environment.
+    let resolution_reinstall =
+        if matches!(build_isolation, uv_configuration::BuildIsolation::Isolate) {
+            reinstall.clone()
+        } else {
+            Reinstall::All
+        };
     if reinstall.is_none()
         && upgrade.is_none()
         && source_trees.is_empty()
         && matches!(modifications, Modifications::Sufficient)
+        && matches!(build_isolation, uv_configuration::BuildIsolation::Isolate)
+        && !extra_build_requires.iter().any(|(name, requirements)| {
+            site_packages
+                .get_packages(name)
+                .iter()
+                .any(|distribution| distribution.build_info().is_some())
+                && requirements
+                    .iter()
+                    .any(|requirement| requirement.match_runtime)
+        })
     {
+        let unlocked_build_cache_key = unlocked_build_cache_key(UnlockedBuildInputs {
+            build_constraints: &build_constraints,
+            index_locations,
+            index_strategy: *index_strategy,
+            build_options,
+            dependency_metadata,
+            config_settings: config_setting,
+            config_settings_package,
+            extra_build_requires: &extra_build_requires,
+            extra_build_variables,
+            build_hasher: &HashStrategy::default(),
+            exclude_newer_global: exclude_newer.global.as_ref(),
+            exclude_newer_package: (&exclude_newer.package).into_iter().collect(),
+            sources,
+            source_tree_editable_policy,
+            non_isolated: false,
+            invocation_timestamp: cache.timestamp(),
+        });
         match site_packages.satisfies_spec(
             &requirements,
             &constraints,
@@ -2819,6 +2883,7 @@ pub(crate) async fn update_environment(
             config_settings_package,
             &extra_build_requires,
             extra_build_variables,
+            unlocked_build_cache_key.as_deref(),
         )? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
@@ -2960,7 +3025,7 @@ pub(crate) async fn update_environment(
         preferences,
         site_packages.clone(),
         &hasher,
-        reinstall,
+        &resolution_reinstall,
         upgrade,
         Some(&tags),
         ResolverEnvironment::specific(marker_env.clone()),
@@ -2981,6 +3046,41 @@ pub(crate) async fn update_environment(
         Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
         Err(err) => return Err(err.into()),
     };
+
+    // Constrain any build requirements marked as `match-runtime = true`.
+    let match_runtime = extra_build_requires.has_match_runtime_source(&resolution);
+    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
+    let install_state = if match_runtime {
+        state.fork()
+    } else {
+        state.clone()
+    };
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        &build_constraints,
+        interpreter,
+        index_locations,
+        &flat_index,
+        dependency_metadata,
+        install_state.clone(),
+        *index_strategy,
+        config_setting,
+        config_settings_package,
+        build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
+        *link_mode,
+        build_options,
+        &build_hasher,
+        exclude_newer.clone(),
+        sources.clone(),
+        source_tree_editable_policy,
+        workspace_cache.clone(),
+        concurrency.clone(),
+        preview,
+    );
+
     // Sync the environment.
     let changelog = pip::operations::install(
         &resolution,
@@ -2994,7 +3094,7 @@ pub(crate) async fn update_environment(
         &hasher,
         &tags,
         &client,
-        state.in_flight(),
+        install_state.in_flight(),
         concurrency,
         &build_dispatch,
         cache,

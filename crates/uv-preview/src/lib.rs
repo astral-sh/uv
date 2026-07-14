@@ -263,6 +263,7 @@ pub enum PreviewFeature {
     ToolInstallLocks = 1 << 36,
     WorkspaceListScripts = 1 << 37,
     NoDistutilsPatch = 1 << 38,
+    LockBuildDependencies = 1 << 39,
 }
 
 impl PreviewFeature {
@@ -308,6 +309,7 @@ impl PreviewFeature {
             Self::ToolInstallLocks => "tool-install-locks",
             Self::WorkspaceListScripts => "workspace-list-scripts",
             Self::NoDistutilsPatch => "no-distutils-patch",
+            Self::LockBuildDependencies => "lock-build-dependencies",
         }
     }
 }
@@ -366,6 +368,7 @@ impl FromStr for PreviewFeature {
             "tool-install-locks" => Self::ToolInstallLocks,
             "workspace-list-scripts" => Self::WorkspaceListScripts,
             "no-distutils-patch" => Self::NoDistutilsPatch,
+            "lock-build-dependencies" => Self::LockBuildDependencies,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -464,6 +467,22 @@ impl Preview {
     /// Check if a single feature is enabled.
     pub fn is_enabled(&self, flag: PreviewFeature) -> bool {
         self.flags.contains(flag)
+    }
+
+    /// Return a preview configuration with a single feature enabled.
+    #[must_use]
+    pub fn with(self, flag: PreviewFeature) -> Self {
+        let mut flags = self.flags;
+        flags.insert(flag);
+        Self { flags }
+    }
+
+    /// Return a preview configuration with a single feature disabled.
+    #[must_use]
+    pub fn without(self, flag: PreviewFeature) -> Self {
+        let mut flags = self.flags;
+        flags.remove(flag);
+        Self { flags }
     }
 
     /// Check if all preview feature rae enabled.
@@ -676,6 +695,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::NoDistutilsPatch.as_str(),
             "no-distutils-patch"
+        );
+        assert_eq!(
+            PreviewFeature::LockBuildDependencies.as_str(),
+            "lock-build-dependencies"
         );
     }
 

@@ -479,7 +479,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given extra for the
     /// given package is activated.
-    fn extra(package: &PackageName, extra: &ExtraName) -> Self {
+    pub(crate) fn extra(package: &PackageName, extra: &ExtraName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_extra(package, extra));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -508,7 +508,7 @@ impl ConflictMarker {
     /// Returns a new conflict marker corresponding to the union of `self` and
     /// `other`.
     #[must_use]
-    fn or(self, other: Self) -> Self {
+    pub(crate) fn or(self, other: Self) -> Self {
         let mut marker = self.marker;
         marker.or(other.marker);
         Self { marker }
@@ -526,6 +526,11 @@ impl ConflictMarker {
     /// Returns true if this conflict marker will always evaluate to `true`.
     pub(crate) fn is_true(self) -> bool {
         self.marker.is_true()
+    }
+
+    /// Returns true if this conflict marker will always evaluate to `false`.
+    pub(crate) fn is_false(self) -> bool {
+        self.marker.is_false()
     }
 
     /// Returns true if this conflict marker always evaluates to the same value.
@@ -559,6 +564,11 @@ impl ConflictMarker {
             .map(|extra| ParsedRawExtra::parse(&extra).and_then(|parsed| parsed.to_conflict_item()))
             .collect::<Result<Vec<_>, _>>()?;
         Ok((include, exclude))
+    }
+
+    /// Decode an encoded conflict extra into its typed conflict item.
+    pub(crate) fn decode_extra(extra: &ExtraName) -> Result<ConflictItem, ResolveError> {
+        ParsedRawExtra::parse(extra).and_then(|parsed| parsed.to_conflict_item())
     }
 }
 

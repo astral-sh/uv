@@ -196,7 +196,7 @@ impl<'lock> ExportableRequirements<'lock> {
                     .iter()
                     .map(|dep| &dep.name)
                     .collect::<FxHashSet<_>>();
-                target.lock().packages().iter().fold(
+                target.lock().runtime_packages().fold(
                     FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher),
                     |mut map, package| {
                         if names.contains(&package.id.name) {

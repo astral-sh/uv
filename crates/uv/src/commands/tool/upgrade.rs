@@ -24,7 +24,10 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
-use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{
+    HashStrategy, LockedBuildResolutions, SourceTreeEditablePolicy, UnlockedBuildInputs,
+    unlocked_build_cache_key,
+};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
@@ -36,7 +39,9 @@ use crate::commands::project::{
     update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
+use crate::commands::tool::common::{
+    ToolLock, remove_entrypoints, tool_environment_spec, validate_tool_lock_build_dependencies,
+};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -391,6 +396,7 @@ async fn upgrade_tool(
             python_platform,
             &settings.resolver.build_options,
         )?;
+        validate_tool_lock_build_dependencies(&resolution, preview)?;
         let hash_strategy = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
         if requested_interpreter.is_some() {
@@ -401,7 +407,9 @@ async fn upgrade_tool(
                 &resolution,
                 hash_strategy,
                 Modifications::Exact,
+                LockedBuildResolutions::default(),
                 build_constraints,
+                SourceTreeEditablePolicy::Tool,
                 (&settings).into(),
                 client_builder,
                 &state,
@@ -433,27 +441,57 @@ async fn upgrade_tool(
             } = &settings;
             let extra_build_requires =
                 LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
-                    .into_inner();
+                    .into_inner()
+                    .match_runtime(&resolution)?;
             let tags = resolution_tags(
                 None,
                 python_platform,
                 environment.environment().interpreter(),
             )?;
-            let plan = Planner::new(&resolution).build(
-                site_packages,
-                InstallationStrategy::Permissive,
-                &settings.reinstall,
-                &settings.resolver.build_options,
-                &hash_strategy,
-                &settings.resolver.index_locations,
-                config_setting,
+            let unlocked_build_cache_key = unlocked_build_cache_key(UnlockedBuildInputs {
+                build_constraints: &build_constraints,
+                index_locations: &settings.resolver.index_locations,
+                index_strategy: settings.resolver.index_strategy,
+                build_options: &settings.resolver.build_options,
+                dependency_metadata: &settings.resolver.dependency_metadata,
+                config_settings: config_setting,
                 config_settings_package,
-                &extra_build_requires,
+                extra_build_requires: &extra_build_requires,
                 extra_build_variables,
-                cache,
-                environment.environment(),
-                &tags,
-            )?;
+                build_hasher: &HashStrategy::default(),
+                exclude_newer_global: settings.resolver.exclude_newer.global.as_ref(),
+                exclude_newer_package: (&settings.resolver.exclude_newer.package)
+                    .into_iter()
+                    .collect(),
+                sources: &settings.resolver.sources,
+                source_tree_editable_policy: SourceTreeEditablePolicy::Tool,
+                non_isolated: !matches!(
+                    settings.resolver.build_isolation,
+                    uv_configuration::BuildIsolation::Isolate
+                ),
+                invocation_timestamp: cache.timestamp(),
+            });
+            let plan = Planner::new(&resolution)
+                .with_unlocked_build_cache_key(unlocked_build_cache_key.as_deref())
+                .with_source_cache(matches!(
+                    &settings.resolver.build_isolation,
+                    uv_configuration::BuildIsolation::Isolate
+                ))
+                .build(
+                    site_packages,
+                    InstallationStrategy::Permissive,
+                    &settings.reinstall,
+                    &settings.resolver.build_options,
+                    &hash_strategy,
+                    &settings.resolver.index_locations,
+                    config_setting,
+                    config_settings_package,
+                    &extra_build_requires,
+                    extra_build_variables,
+                    cache,
+                    environment.environment(),
+                    &tags,
+                )?;
             let plan_is_empty = plan.is_empty();
             let changes_tool = plan.cached.iter().any(|dist| dist.name() == name)
                 || plan.remote.iter().any(|dist| dist.name() == name)
@@ -474,7 +512,9 @@ async fn upgrade_tool(
                     &resolution,
                     hash_strategy,
                     Modifications::Exact,
+                    LockedBuildResolutions::default(),
                     build_constraints,
+                    SourceTreeEditablePolicy::Tool,
                     (&settings).into(),
                     client_builder,
                     &state,
@@ -514,7 +554,9 @@ async fn upgrade_tool(
             &resolution.into(),
             HashStrategy::default(),
             Modifications::Exact,
+            LockedBuildResolutions::default(),
             build_constraints,
+            SourceTreeEditablePolicy::Tool,
             (&settings).into(),
             client_builder,
             &state,

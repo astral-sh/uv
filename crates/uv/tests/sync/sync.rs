@@ -2100,7 +2100,8 @@ fn sync_build_isolation_package_order() -> Result<()> {
         "#,
     )?;
 
-    // Running `uv sync` should install everything in a single phase, since the build is cached.
+    // Running `uv sync` should install the isolated dependencies first, then rebuild the source
+    // distribution without build isolation.
     uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
@@ -2108,8 +2109,10 @@ fn sync_build_isolation_package_order() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    Installed 5 packages in [TIME]
+    Prepared 1 package without build isolation in [TIME]
     Uninstalled 1 package in [TIME]
-    Installed 6 packages in [TIME]
+    Installed 1 package in [TIME]
      + hatchling==1.22.4
      + packaging==24.0
      + pathspec==0.12.1
@@ -2195,6 +2198,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
     Prepared [N] packages without build isolation in [TIME]
     Installed [N] packages in [TIME]
@@ -2202,6 +2206,7 @@ fn sync_build_isolation_extra() -> Result<()> {
      + packaging==24.0
      + pathspec==0.12.1
      + pluggy==1.4.0
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      + trove-classifiers==2024.3.3
     ");
@@ -2241,10 +2246,14 @@ fn sync_build_isolation_extra() -> Result<()> {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
+    Prepared [N] packages without build isolation in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - hatchling==1.22.4
      - packaging==24.0
      - pathspec==0.12.1
      - pluggy==1.4.0
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      - trove-classifiers==2024.3.3
     ");
@@ -13673,7 +13682,7 @@ fn sync_build_constraints() -> Result<()> {
     hint: To update the lockfile, run `uv lock`.
     ");
 
-    // Changing the build constraints should lead to a re-resolve.
+    // Changing the build constraints should lead to a re-resolve and rebuild.
     uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
@@ -13681,7 +13690,10 @@ fn sync_build_constraints() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Checked 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ json-merge-patch==0.2
     ");
 
     Ok(())
@@ -15084,6 +15096,7 @@ fn sync_config_settings_package() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
     ");
@@ -15293,7 +15306,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with a 0.1, without `--reinstall`.
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
-        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.2"), @"
+        .env("EXPECTED_A_VERSION", "0.2"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15313,7 +15326,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
-        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.1"), @"
+        .env("EXPECTED_A_VERSION", "0.1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17004,13 +17017,14 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 3 packages in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
+    Installed 2 packages in [TIME]
      - anyio==4.3.0
      + anyio==4.3.0 (from file://[TEMP_DIR]/local_dep)
      - idna==3.6
      - sniffio==1.3.1
+     ~ test-no-sources==0.0.1 (from file://[TEMP_DIR]/)
     ");
 
     // Step 3: `uv sync --no-sources` again should switch back to PyPI package.
@@ -17021,12 +17035,13 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 3 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 4 packages in [TIME]
      - anyio==4.3.0 (from file://[TEMP_DIR]/local_dep)
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
+     ~ test-no-sources==0.0.1 (from file://[TEMP_DIR]/)
     ");
 
     Ok(())

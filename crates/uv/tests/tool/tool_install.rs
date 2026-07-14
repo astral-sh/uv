@@ -6,15 +6,18 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-#[cfg(feature = "test-git")]
 use assert_fs::fixture::ChildPath;
 use assert_fs::{
     assert::PathAssert,
     fixture::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
 };
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
+use futures::executor::block_on;
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use url::Url;
 #[cfg(windows)]
 use uv_fs::Simplified;
 use uv_fs::copy_dir_all;
@@ -6211,6 +6214,7 @@ fn tool_install_find_links() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + basic-app==0.1.0
     Installed 1 executable: basic-app
@@ -6457,7 +6461,10 @@ fn tool_install_locks_are_preview() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(&links)
-        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(
+            EnvVars::UV_PREVIEW_FEATURES,
+            "tool-install-locks,lock-build-dependencies",
+        )
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
@@ -6485,6 +6492,288 @@ fn tool_install_locks_are_preview() {
         ]
         "#);
     });
+}
+
+/// A lock-backed tool must migrate an existing environment when the newly selected wheel requires
+/// a newer Python interpreter.
+#[test]
+fn tool_install_lock_reresolves_for_new_python() -> Result<()> {
+    fn write_launcher(path: &ChildPath, version: &str, requires_python: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let dist_info = format!("simple_launcher-{version}.dist-info");
+
+        let entry = ZipEntryBuilder::new("simple_launcher.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"import sys\n\ndef main(): print('.'.join(str(part) for part in sys.version_info[:2]))\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new(format!("{dist_info}/METADATA").into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            format!(
+                "Metadata-Version: 2.3\nName: simple-launcher\nVersion: {version}\nRequires-Python: {requires_python}\n"
+            )
+            .as_bytes(),
+        ))?;
+        let entry = ZipEntryBuilder::new(format!("{dist_info}/WHEEL").into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry = ZipEntryBuilder::new(
+            format!("{dist_info}/entry_points.txt").into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"[console_scripts]\nsimple-launcher = simple_launcher:main\n",
+        ))?;
+        let entry = ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let first_links = context.temp_dir.child("links1");
+    let second_links = context.temp_dir.child("links2");
+    first_links.create_dir_all()?;
+    second_links.create_dir_all()?;
+    write_launcher(
+        &first_links.child("simple_launcher-1.0.0-py3-none-any.whl"),
+        "1.0.0",
+        ">=3.11",
+    )?;
+    write_launcher(
+        &second_links.child("simple_launcher-2.0.0-py3-none-any.whl"),
+        "2.0.0",
+        ">=3.12",
+    )?;
+
+    context
+        .tool_install()
+        .arg("simple-launcher==1.0.0")
+        .arg("--python")
+        .arg("3.11")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(first_links.path())
+        .env(
+            EnvVars::UV_PREVIEW_FEATURES,
+            "tool-install-locks,lock-build-dependencies",
+        )
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    context
+        .tool_install()
+        .arg("simple-launcher==2.0.0")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(second_links.path())
+        .env(
+            EnvVars::UV_PREVIEW_FEATURES,
+            "tool-install-locks,lock-build-dependencies",
+        )
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("simple-launcher")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher==2.0.0")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(second_links.path())
+        .env(
+            EnvVars::UV_PREVIEW_FEATURES,
+            "tool-install-locks,lock-build-dependencies",
+        )
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `simple-launcher==2.0.0` is already installed
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_lock_rejects_uncaptured_build_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let local_package = context.temp_dir.child("source-launcher");
+    local_package.create_dir_all()?;
+    local_package.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "source-launcher"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        source-launcher = "source_launcher:main"
+
+        [build-system]
+        requires = ["ok==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    local_package
+        .child("build_backend.py")
+        .write_str(indoc! {r"
+        def get_requires_for_build_wheel(config_settings=None):
+            return []
+    "})?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(local_package.path())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(
+            EnvVars::UV_PREVIEW_FEATURES,
+            "tool-install-locks,lock-build-dependencies",
+        )
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Locking build dependencies is not supported for tool environments; `source-launcher` must be built from source
+    ");
+
+    tool_dir
+        .child("source-launcher")
+        .child("uv.lock")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_lock_unnamed_uses_constrained_build_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let index = context.temp_dir.child("simple");
+    let package_index = index.child("ok");
+    package_index.create_dir_all()?;
+    for filename in ["ok-1.0.0-py3-none-any.whl", "ok-2.0.0-py3-none-any.whl"] {
+        fs_err::copy(
+            context.workspace_root.join("test/links").join(filename),
+            package_index.path().join(filename),
+        )?;
+    }
+    package_index.child("index.html").write_str(indoc! {r#"
+        <!doctype html>
+        <html><body>
+        <a href="ok-1.0.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">ok-1.0.0-py3-none-any.whl</a>
+        <a href="ok-2.0.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">ok-2.0.0-py3-none-any.whl</a>
+        </body></html>
+    "#})?;
+    let Ok(index_url) = Url::from_directory_path(index.path()) else {
+        anyhow::bail!("Failed to construct local index URL");
+    };
+
+    let source = context.temp_dir.child("source");
+    source.create_dir_all()?;
+    source.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = ["ok"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    source.child("build_backend.py").write_str(indoc! {r#"
+        from importlib.metadata import version
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = Path(metadata_directory) / "unnamed_tool-1.0.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.3\nName: unnamed-tool\nVersion: 1.0.0\n"
+            )
+            return dist_info.name
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "unnamed_tool-1.0.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("unnamed_tool/__init__.py", f"def main(): print({version('ok')!r})\n")
+                wheel.writestr(
+                    "unnamed_tool-1.0.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: unnamed-tool\nVersion: 1.0.0\n",
+                )
+                wheel.writestr(
+                    "unnamed_tool-1.0.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr(
+                    "unnamed_tool-1.0.0.dist-info/entry_points.txt",
+                    "[console_scripts]\nunnamed-tool = unnamed_tool:main\n",
+                )
+                wheel.writestr("unnamed_tool-1.0.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    let build_constraints = context.temp_dir.child("build-constraints.txt");
+    build_constraints.write_str("ok==1.0.0\n")?;
+
+    context
+        .tool_install()
+        .arg(source.path())
+        .arg("--index")
+        .arg(index_url.as_str())
+        .arg("--build-constraints")
+        .arg(build_constraints.path())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("unnamed-tool").env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1.0.0
+
+    ----- stderr -----
+    ");
+
+    Ok(())
 }
 
 #[test]
@@ -6582,6 +6871,137 @@ fn tool_install_lock_verifies_hashes() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that a tool lock written by a newer uv is ignored instead of being used for replay.
+#[test]
+fn tool_install_ignores_unsupported_lock_schema() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = context
+        .workspace_root
+        .join("test/links/simple_launcher-0.1.0-py3-none-any.whl");
+
+    context
+        .tool_install()
+        .arg(&wheel)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
+    let lock = fs_err::read_to_string(&lock_path)?;
+    lock_path.write_str(&lock.replace("version = 1", "version = 3").replace(
+        "sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    ))?;
+
+    context
+        .tool_install()
+        .arg(&wheel)
+        .arg("--force")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "simple-launcher", path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" }]
+
+        [[package]]
+        name = "simple-launcher"
+        version = "0.1.0"
+        source = { path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" }
+        wheels = [
+            { filename = "simple_launcher-0.1.0-py3-none-any.whl", hash = "sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4" },
+        ]
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Ensure that a copied build-capable lock is ignored instead of replayed without its build graph.
+#[test]
+fn tool_install_ignores_build_lock_schema() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = context
+        .workspace_root
+        .join("test/links/simple_launcher-0.1.0-py3-none-any.whl");
+
+    context
+        .tool_install()
+        .arg(&wheel)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
+    let lock = fs_err::read_to_string(&lock_path)?;
+    lock_path.write_str(
+        &lock
+            .replace("version = 1", "version = 2")
+            .replace("revision = 3", "revision = 4")
+            .replace(
+                "sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+    )?;
+
+    context
+        .tool_install()
+        .arg(&wheel)
+        .arg("--force")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "simple-launcher", path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" }]
+
+        [[package]]
+        name = "simple-launcher"
+        version = "0.1.0"
+        source = { path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" }
+        wheels = [
+            { filename = "simple_launcher-0.1.0-py3-none-any.whl", hash = "sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4" },
+        ]
+        "#);
+    });
+
+    Ok(())
+}
+
 #[test]
 fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
@@ -6674,6 +7094,317 @@ fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
      - simple-launcher==1.0.0 (from file://[TEMP_DIR]/simple-launcher)
      + simple-launcher==2.0.0 (from file://[TEMP_DIR]/simple-launcher)
     Installed 1 executable: simple-launcher
+    ");
+
+    Ok(())
+}
+
+/// Ensure tool no-op planning uses the same matched build requirements as the installed build.
+#[test]
+fn tool_install_lock_matches_runtime_build_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let local_package = context.temp_dir.child("source-launcher");
+    local_package.create_dir_all()?;
+    local_package.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "source-launcher"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        source-launcher = "source_launcher:main"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    local_package
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        from importlib.metadata import version
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def get_requires_for_build_wheel(config_settings=None):
+            return []
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            assert version("ok") == "1.0.0"
+            filename = "source_launcher-1.0.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("source_launcher/__init__.py", "def main(): pass\n")
+                wheel.writestr(
+                    "source_launcher-1.0.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: source-launcher\nVersion: 1.0.0\n",
+                )
+                wheel.writestr(
+                    "source_launcher-1.0.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr(
+                    "source_launcher-1.0.0.dist-info/entry_points.txt",
+                    "[console_scripts]\nsource-launcher = source_launcher:main\n",
+                )
+                wheel.writestr("source_launcher-1.0.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(&format!(
+        "source-launcher @ {}\n",
+        local_package.path().display()
+    ))?;
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+        extra-build-dependencies = { source-launcher = [{ requirement = "ok", match-runtime = true }] }
+    "#})?;
+
+    context
+        .tool_install()
+        .arg("source-launcher")
+        .arg("--with")
+        .arg(&wheel)
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("source-launcher")
+        .arg("--with")
+        .arg(&wheel)
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `source-launcher` is already installed
+    ");
+
+    // The receipt already contains the build settings; avoid applying the same config twice.
+    fs_err::remove_file(uv_toml.path())?;
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("source-launcher")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    Ok(())
+}
+
+/// A tool-lock resolution can prime a nested source wheel while resolving dynamic metadata. The
+/// shared environment sync must rebuild that wheel for a static `match-runtime` target.
+#[test]
+fn tool_install_lock_rebuilds_nested_match_runtime_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let (primer, child) = uv_test::match_runtime_nested_sources(context.temp_dir.path())?;
+    let primer_url = Url::from_directory_path(&primer)
+        .map_err(|()| anyhow::anyhow!("Failed to create primer URL"))?;
+    let child_url = Url::from_directory_path(&child)
+        .map_err(|()| anyhow::anyhow!("Failed to create child URL"))?;
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+        extra-build-dependencies = { child = [{ requirement = "ok", match-runtime = true }] }
+    "#})?;
+
+    context
+        .tool_install()
+        .arg(format!("primer @ {primer_url}"))
+        .arg("--with")
+        .arg(format!("child @ {child_url}"))
+        .arg("--with")
+        .arg(
+            context
+                .workspace_root
+                .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        )
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("primer")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1.0.0 2
+    ok==1.0.0 ; sys_platform == 'never'
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// A locked tool build must lower an implicit workspace build dependency with tool semantics,
+/// keeping the nested workspace sibling non-editable.
+#[test]
+fn tool_install_lock_workspace_build_member_is_non_editable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let root = context.temp_dir.child("root");
+    root.create_dir_all()?;
+    root.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "root-tool"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [project.scripts]
+        root-tool = "root_tool:main"
+
+        [build-system]
+        requires = ["builder"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv.sources]
+        builder = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["builder"]
+    "#})?;
+    root.child("build_backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+        import builder
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = Path(metadata_directory) / "root_tool-0.1.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.3\nName: root-tool\nVersion: 0.1.0\n"
+            )
+            return dist_info.name
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "root_tool-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr(
+                    "root_tool.py",
+                    f"def main():\n    print({builder.VALUE!r})\n",
+                )
+                wheel.writestr(
+                    "root_tool-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: root-tool\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "root_tool-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr(
+                    "root_tool-0.1.0.dist-info/entry_points.txt",
+                    "[console_scripts]\nroot-tool = root_tool:main\n",
+                )
+                wheel.writestr("root_tool-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    let builder = root.child("builder");
+    builder.create_dir_all()?;
+    builder.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    builder.child("build_backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def write_wheel(wheel_directory, value):
+            filename = "builder-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("builder.py", f"VALUE = {value!r}\n")
+                wheel.writestr(
+                    "builder-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: builder\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "builder-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("builder-0.1.0.dist-info/RECORD", "")
+            return filename
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            return write_wheel(wheel_directory, "WHEEL")
+
+        def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+            return write_wheel(wheel_directory, "EDITABLE")
+    "#})?;
+
+    context
+        .tool_install()
+        .arg(root.path())
+        .arg("--no-index")
+        .arg("--no-cache")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new("root-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    WHEEL
+
+    ----- stderr -----
     ");
 
     Ok(())

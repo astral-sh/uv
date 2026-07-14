@@ -382,6 +382,8 @@ pub(crate) async fn add(
 
         // Resolve any unnamed requirements.
         if !unnamed.is_empty() {
+            let name_state = state.clone().into_inner().fork();
+
             // TODO(charlie): These are all default values. We should consider whether we want to
             // make them optional on the downstream APIs.
             let build_constraints = Constraints::default();
@@ -453,7 +455,7 @@ pub(crate) async fn add(
                 &settings.resolver.index_locations,
                 &flat_index,
                 &settings.resolver.dependency_metadata,
-                state.clone().into_inner(),
+                name_state.clone(),
                 settings.resolver.index_strategy,
                 &settings.resolver.config_setting,
                 &settings.resolver.config_settings_package,
@@ -475,7 +477,7 @@ pub(crate) async fn add(
             requirements.extend(
                 NamedRequirementsResolver::new(
                     &hasher,
-                    state.index(),
+                    name_state.index(),
                     DistributionDatabase::new(
                         &client,
                         &build_dispatch,
@@ -1094,7 +1096,7 @@ async fn lock_and_sync(
         // Extract the minimum-supported version for each dependency.
         let mut minimum_version =
             FxHashMap::with_capacity_and_hasher(lock.packages().len(), FxBuildHasher);
-        for dist in lock.packages() {
+        for dist in lock.runtime_packages() {
             let name = dist.name();
             let Some(version) = dist.version() else {
                 continue;

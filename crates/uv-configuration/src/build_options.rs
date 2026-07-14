@@ -89,6 +89,12 @@ impl BuildOptions {
         }
     }
 
+    /// Return `true` if building is permitted for at least one package.
+    pub fn allows_package_builds(&self) -> bool {
+        !self.no_build_all()
+            || matches!(&self.no_binary, NoBinary::Packages(packages) if !packages.is_empty())
+    }
+
     fn no_build_all(&self) -> bool {
         matches!(self.no_build, NoBuild::All)
     }

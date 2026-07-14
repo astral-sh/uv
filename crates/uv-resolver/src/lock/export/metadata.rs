@@ -339,8 +339,7 @@ fn root_dependencies<'lock>(
     // them to the locked packages using the same name and fork-marker logic as lock export.
     for requirement in requirements {
         for package in lock
-            .packages()
-            .iter()
+            .runtime_packages()
             .filter(|package| package.name() == &requirement.name)
         {
             let Some(marker) = lock.root_requirement_marker(requirement, package) else {
@@ -399,8 +398,7 @@ fn metadata_reachability(
 
     if let Some(workspace) = workspace {
         for package in lock
-            .packages()
-            .iter()
+            .runtime_packages()
             .filter(|package| workspace.packages().contains_key(package.name()))
         {
             add_metadata_reachability(
@@ -440,8 +438,7 @@ fn metadata_reachability(
         .chain(lock.dependency_groups().values().flatten())
     {
         for package in lock
-            .packages()
-            .iter()
+            .runtime_packages()
             .filter(|package| package.name() == &requirement.name)
         {
             let Some(marker) = lock.root_requirement_marker(requirement, package) else {
@@ -1144,7 +1141,7 @@ impl Metadata {
         let workspace_root = PortablePathBuf::from(workspace_root);
         let reachability = metadata_reachability(&workspace_root, workspace, lock);
 
-        for lock_package in lock.packages() {
+        for lock_package in lock.runtime_packages() {
             let mut meta_package = MetadataNode::from_package_id(
                 &workspace_root,
                 &lock_package.id,

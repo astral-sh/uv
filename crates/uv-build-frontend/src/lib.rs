@@ -7,7 +7,6 @@ mod pipreqs;
 
 use std::borrow::Cow;
 use std::ffi::OsString;
-use std::fmt::Formatter;
 use std::fmt::Write;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -20,8 +19,8 @@ use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use serde::de::{self, IntoDeserializer, SeqAccess, Visitor, value};
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
+use serde::de::{self, IntoDeserializer};
 use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
@@ -34,16 +33,18 @@ use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
+    SourceDist,
 };
 use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::VerbatimParsedUrl;
+use uv_pypi_types::{BackendPath, BuildSystem, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{
-    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, ResolvedRequirements, SourceBuildTrait,
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildPackageKey, BuildStack, ResolvedRequirements,
+    SourceBuildTrait,
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
@@ -87,18 +88,6 @@ struct Project {
     dynamic: Option<Vec<String>>,
 }
 
-/// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-struct BuildSystem {
-    /// PEP 508 dependencies required to execute the build system.
-    requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
-    /// A string naming a Python object that will be used to perform the build.
-    build_backend: Option<String>,
-    /// Specifies that backend code is hosted in-tree, this key contains a list of directories.
-    backend_path: Option<BackendPath>,
-}
-
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct Tool {
@@ -111,54 +100,6 @@ struct ToolUv {
     workspace: Option<de::IgnoredAny>,
     /// To warn users about ignored build backend settings.
     build_backend: Option<de::IgnoredAny>,
-}
-
-impl BackendPath {
-    /// Return an iterator over the paths in the backend path.
-    fn iter(&self) -> impl Iterator<Item = &str> {
-        self.0.iter().map(String::as_str)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct BackendPath(Vec<String>);
-
-impl<'de> Deserialize<'de> for BackendPath {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct StringOrVec;
-
-        impl<'de> Visitor<'de> for StringOrVec {
-            type Value = Vec<String>;
-
-            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                formatter.write_str("list of strings")
-            }
-
-            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                // Allow exactly `backend-path = "."`, as used in `flit_core==2.3.0`.
-                if s == "." {
-                    Ok(vec![".".to_string()])
-                } else {
-                    Err(de::Error::invalid_value(de::Unexpected::Str(s), &self))
-                }
-            }
-
-            fn visit_seq<S>(self, seq: S) -> Result<Self::Value, S::Error>
-            where
-                S: SeqAccess<'de>,
-            {
-                Deserialize::deserialize(value::SeqAccessDeserializer::new(seq))
-            }
-        }
-
-        deserializer.deserialize_any(StringOrVec).map(BackendPath)
-    }
 }
 
 /// `[build-backend]` from pyproject.toml
@@ -289,6 +230,7 @@ impl SourceBuild {
         source: &Path,
         subdirectory: Option<&Path>,
         install_path: &Path,
+        source_dist: Option<&SourceDist>,
         stop_discovery_at: Option<&Path>,
         fallback_package_name: Option<&PackageName>,
         fallback_package_version: Option<&Version>,
@@ -323,6 +265,9 @@ impl SourceBuild {
             fallback_package_name,
             locations,
             &no_sources,
+            build_context
+                .source_tree_editable_policy()
+                .workspace_member_editable(None),
             stop_discovery_at,
             build_context.cache(),
             workspace_cache,
@@ -341,6 +286,16 @@ impl SourceBuild {
             .and_then(|project| project.version.as_ref())
             .or(fallback_package_version)
             .cloned();
+        let package_key = package_name.clone().map(|name| {
+            BuildPackageKey::from_source_dist(name, package_version.clone(), source_dist)
+        });
+
+        if let Some(package_key) = package_key.as_ref()
+            && !build_isolation.is_isolated(package_name.as_ref())
+            && build_context.has_locked_build_resolution(package_key)
+        {
+            return Err(Error::NonIsolatedLockedBuild(package_key.name.clone()));
+        }
 
         let extra_build_dependencies = package_name
             .as_ref()
@@ -398,7 +353,8 @@ impl SourceBuild {
                 build_context,
                 source_build_context.clone(),
                 &pep517_backend,
-                extra_build_dependencies,
+                extra_build_dependencies.clone(),
+                package_key.as_ref(),
                 build_stack,
             )
             .await?;
@@ -454,9 +410,11 @@ impl SourceBuild {
                 install_path,
                 &venv,
                 &pep517_backend,
+                &extra_build_dependencies,
                 build_context,
                 package_name.as_ref(),
                 package_version.as_ref(),
+                package_key.as_ref(),
                 version_id,
                 locations,
                 no_sources,
@@ -527,18 +485,34 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         pep517_backend: &Pep517Backend,
         extra_build_dependencies: Vec<Requirement>,
+        package: Option<&BuildPackageKey>,
         build_stack: &BuildStack,
     ) -> Result<ResolvedRequirements, Error> {
         Ok(
             if pep517_backend.requirements == DEFAULT_BACKEND.requirements
                 && extra_build_dependencies.is_empty()
+                && !package
+                    .is_some_and(|package| build_context.has_locked_build_resolution(package))
             {
                 let mut resolution = source_build_context.default_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {
-                    resolved_requirements.clone()
+                    if Self::can_reuse_cached_default_resolution(resolved_requirements, package) {
+                        resolved_requirements.clone()
+                    } else {
+                        // A graph captured for another source package can have different
+                        // marker reachability. Recording it unchanged would attribute the
+                        // first package's marker region to later builds.
+                        drop(resolution);
+                        build_context
+                            .resolve(&DEFAULT_BACKEND.requirements, package, build_stack, None)
+                            .await
+                            .map_err(|err| {
+                                Error::RequirementsResolve("`setup.py` build", err.into())
+                            })?
+                    }
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&DEFAULT_BACKEND.requirements, build_stack)
+                        .resolve(&DEFAULT_BACKEND.requirements, package, build_stack, None)
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -563,11 +537,18 @@ impl SourceBuild {
                     )
                 };
                 build_context
-                    .resolve(&requirements, build_stack)
+                    .resolve(&requirements, package, build_stack, None)
                     .await
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },
         )
+    }
+
+    fn can_reuse_cached_default_resolution(
+        resolution: &ResolvedRequirements,
+        package: Option<&BuildPackageKey>,
+    ) -> bool {
+        package.is_none() || resolution.build_resolution_graph().is_none()
     }
 
     /// Extract the PEP 517 backend from the `pyproject.toml` or `setup.py` file.
@@ -577,6 +558,7 @@ impl SourceBuild {
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         no_sources: &NoSources,
+        workspace_member_editable: bool,
         stop_discovery_at: Option<&Path>,
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
@@ -670,7 +652,7 @@ impl SourceBuild {
                     install_path,
                     locations,
                     no_sources,
-                    true,
+                    workspace_member_editable,
                     stop_discovery_at,
                     cache,
                     workspace_cache,
@@ -1009,9 +991,11 @@ async fn create_pep517_build_environment(
     install_path: &Path,
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
+    extra_build_dependencies: &[Requirement],
     build_context: &impl BuildContext,
     package_name: Option<&PackageName>,
     package_version: Option<&Version>,
+    package_key: Option<&BuildPackageKey>,
     version_id: Option<&str>,
     locations: &IndexLocations,
     no_sources: NoSources,
@@ -1134,21 +1118,28 @@ async fn create_pep517_build_environment(
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
     // the pyproject.toml requires (in this case, `wheel`). We can skip doing the whole resolution
-    // and installation again.
+    // and installation again, unless a locked build has a distinct final environment to replay.
     // TODO(konstin): Do we still need this when we have a fast resolver?
     if extra_requires
         .iter()
         .any(|req| !pep517_backend.requirements.contains(req))
+        || package_key.is_some_and(|package| build_context.has_locked_build_resolution(package))
     {
         debug!("Installing extra requirements for build backend");
         let requirements: Vec<_> = pep517_backend
             .requirements
             .iter()
             .cloned()
-            .chain(extra_requires)
+            .chain(extra_build_dependencies.iter().cloned())
+            .chain(extra_requires.iter().cloned())
             .collect();
         let resolution = build_context
-            .resolve(&requirements, build_stack)
+            .resolve(
+                &requirements,
+                package_key,
+                build_stack,
+                Some(&extra_requires),
+            )
             .await
             .map_err(|err| {
                 Error::RequirementsResolve("`build-system.requires`", AnyErrorBuild::from(err))
@@ -1315,6 +1306,38 @@ impl Write for Printer {
             }
             Self::Quiet => {}
         }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use uv_distribution_types::Resolution;
+    use uv_types::{BuildResolutionGraph, HashStrategy};
+
+    use super::*;
+
+    #[test]
+    fn marker_restricted_default_resolution_is_not_reused_for_another_package()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let package = BuildPackageKey::new(PackageName::from_str("dep")?, None);
+        let resolution = ResolvedRequirements::new(Resolution::default(), HashStrategy::default())
+            .with_build_resolution_graph(BuildResolutionGraph::default());
+        let graphless_resolution =
+            ResolvedRequirements::new(Resolution::default(), HashStrategy::default());
+
+        assert!(!SourceBuild::can_reuse_cached_default_resolution(
+            &resolution,
+            Some(&package)
+        ));
+        assert!(SourceBuild::can_reuse_cached_default_resolution(
+            &graphless_resolution,
+            Some(&package)
+        ));
+        assert!(SourceBuild::can_reuse_cached_default_resolution(
+            &resolution,
+            None
+        ));
         Ok(())
     }
 }

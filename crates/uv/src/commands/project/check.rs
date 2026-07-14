@@ -527,17 +527,21 @@ pub(crate) async fn check(
                 // locked tool is excluded from it. Install only the locked `ty` subgraph.
                 let base_interpreter =
                     CachedEnvironment::base_interpreter(lock_interpreter, cache)?;
-                let resolution = project::toolchain::resolution_from_lock(
-                    project,
-                    result.lock(),
-                    &tool,
-                    &base_interpreter,
-                    &settings.resolver.build_options,
-                )?;
+                let (resolution, locked_build_resolutions) =
+                    project::toolchain::resolution_from_lock(
+                        project,
+                        result.lock(),
+                        &tool,
+                        &base_interpreter,
+                        &settings.resolver.build_options,
+                        preview.is_enabled(PreviewFeature::LockBuildDependencies)
+                            || result.lock().supports_build_dependencies(),
+                    )?;
                 project::sync::store_credentials_from_target(target, &client_builder)?;
                 let ty_state = state.fork();
                 let environment = match CachedEnvironment::from_locked_resolution(
                     &resolution,
+                    locked_build_resolutions,
                     result
                         .lock()
                         .build_constraints(project.workspace().install_path()),

@@ -1,5 +1,6 @@
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
@@ -7,6 +8,7 @@ use assert_fs::prelude::*;
 #[cfg(unix)]
 use fs_err::{metadata, set_permissions};
 use indoc::indoc;
+use url::Url;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
@@ -3881,6 +3883,307 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+    ");
+
+    Ok(())
+}
+
+/// Verify that interpreter refinement does not reuse a cached build dependency prepared for the
+/// failed interpreter resolution.
+#[test]
+fn tool_run_reresolve_python_rebuilds_dependencies() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let builder_dir = context.temp_dir.child("builder");
+    builder_dir.create_dir_all()?;
+    builder_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "builder"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    builder_dir.child("build_backend.py").write_str(indoc! {r#"
+        import sys
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "builder-1.0.0-py3-none-any.whl"
+            built_with = ".".join(str(value) for value in sys.version_info[:2])
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("builder/__init__.py", f'BUILT_WITH = "{built_with}"\n')
+                wheel.writestr(
+                    "builder-1.0.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: builder\nVersion: 1.0.0\n",
+                )
+                wheel.writestr(
+                    "builder-1.0.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("builder-1.0.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).expect("valid builder URL");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir.create_dir_all()?;
+    foo_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        dynamic = ["requires-python"]
+
+        [project.scripts]
+        foo = "foo:run"
+
+        [build-system]
+        requires = ["builder @ {builder_url}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    ))?;
+    foo_dir.child("build_backend.py").write_str(indoc! {r#"
+        import sys
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        import builder
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = Path(metadata_directory) / "foo-1.0.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.3\nName: foo\nVersion: 1.0.0\nRequires-Python: >=3.12\n"
+            )
+            return dist_info.name
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "foo-1.0.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr(
+                    "foo/__init__.py",
+                    "import sys\n\n"
+                    "def run():\n"
+                    f'    print("runtime=" + ".".join(str(value) for value in sys.version_info[:2]) + " builder={builder.BUILT_WITH}")\n',
+                )
+                wheel.writestr(
+                    "foo-1.0.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: foo\nVersion: 1.0.0\nRequires-Python: >=3.12\n",
+                )
+                wheel.writestr(
+                    "foo-1.0.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr(
+                    "foo-1.0.0.dist-info/entry_points.txt", "[console_scripts]\nfoo = foo:run\n"
+                )
+                wheel.writestr("foo-1.0.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    runtime=3.12 builder=3.12
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+    ");
+
+    let install_tool_dir = context.temp_dir.child("installed-tools");
+    let install_bin_dir = context.temp_dir.child("installed-bin");
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("./foo")
+        .env(EnvVars::UV_TOOL_DIR, install_tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, install_bin_dir.as_os_str())
+        .env(EnvVars::PATH, install_bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+    Installed 1 executable: foo
+    ");
+
+    let executable = install_bin_dir.child(format!("foo{}", std::env::consts::EXE_SUFFIX));
+    uv_snapshot!(context.filters(), Command::new(executable.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    runtime=3.12 builder=3.12
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// A tool run must not reuse the project-style cached environment, which lowers an implicit
+/// workspace build dependency as editable.
+#[test]
+fn tool_run_workspace_build_member_is_non_editable() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let root = context.temp_dir.child("root");
+    root.create_dir_all()?;
+    root.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "root-tool"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [project.scripts]
+        root-tool = "root_tool:main"
+
+        [build-system]
+        requires = ["builder"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv.sources]
+        builder = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["builder"]
+    "#})?;
+    root.child("build_backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+        import builder
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = Path(metadata_directory) / "root_tool-0.1.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.3\nName: root-tool\nVersion: 0.1.0\n"
+            )
+            return dist_info.name
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "root_tool-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr(
+                    "root_tool.py",
+                    f"def main():\n    print({builder.VALUE!r})\n",
+                )
+                wheel.writestr(
+                    "root_tool-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: root-tool\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "root_tool-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr(
+                    "root_tool-0.1.0.dist-info/entry_points.txt",
+                    "[console_scripts]\nroot-tool = root_tool:main\n",
+                )
+                wheel.writestr("root_tool-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    let builder = root.child("builder");
+    builder.create_dir_all()?;
+    builder.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    builder.child("build_backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def write_wheel(wheel_directory, value):
+            filename = "builder-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("builder.py", f"VALUE = {value!r}\n")
+                wheel.writestr(
+                    "builder-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: builder\nVersion: 0.1.0\n",
+                )
+                wheel.writestr(
+                    "builder-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr("builder-0.1.0.dist-info/RECORD", "")
+            return filename
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            return write_wheel(wheel_directory, "WHEEL")
+
+        def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+            return write_wheel(wheel_directory, "EDITABLE")
+    "#})?;
+
+    // Seed the shared environment cache with project-style lowering.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with")
+        .arg(root.path())
+        .arg("--no-index")
+        .arg("root-tool"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    EDITABLE
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + root-tool==0.1.0 (from file://[TEMP_DIR]/root)
+    ");
+
+    // Tool-style lowering must build the sibling as a wheel and use a distinct cached environment.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(root.path())
+        .arg("--no-index")
+        .arg("root-tool")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    WHEEL
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + root-tool==0.1.0 (from file://[TEMP_DIR]/root)
     ");
 
     Ok(())

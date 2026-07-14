@@ -1,10 +1,10 @@
 ---
 source: crates/uv-resolver/src/lock/mod.rs
-expression: result
+expression: expr
 ---
 Ok(
     Lock {
-        version: 1,
+        version: 2,
         revision: 0,
         fork_markers: [],
         conflicts: Conflicts(
@@ -59,6 +59,7 @@ Ok(
                             ),
                         ),
                     ),
+                    resolution_id: None,
                 },
                 sdist: Some(
                     Url {
@@ -107,6 +108,7 @@ Ok(
                             ),
                         ),
                     ),
+                    resolution_id: None,
                 },
                 sdist: Some(
                     Url {
@@ -147,6 +149,7 @@ Ok(
                                     ),
                                 ),
                             ),
+                            resolution_id: None,
                         },
                         extra: {},
                         simplified_marker: SimplifiedMarkerTree(
@@ -179,6 +182,7 @@ Ok(
                         ),
                     ),
                 ),
+                resolution_id: None,
             }: 0,
             PackageId {
                 name: PackageName(
@@ -194,6 +198,7 @@ Ok(
                         ),
                     ),
                 ),
+                resolution_id: None,
             }: 1,
         },
         manifest: ResolverManifest {

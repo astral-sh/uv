@@ -7,6 +7,7 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
+use uv_cache_info::CacheInfoError;
 use uv_configuration::{BuildKind, BuildOptions, BuildOutput, NoSources};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
@@ -19,7 +20,7 @@ use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
-use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
+use crate::{BuildArena, BuildIsolation, BuildPackageKey, ResolvedRequirements};
 
 /// Controls how source tree requirements influence workspace-member editability during lowering.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
@@ -105,6 +106,11 @@ pub trait BuildContext {
     /// Return a reference to the build arena.
     fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;
 
+    /// Whether an in-process build environment can be reused for this build context.
+    fn reuse_build_arena(&self) -> bool {
+        true
+    }
+
     /// Return a reference to the discovered registry capabilities.
     fn capabilities(&self) -> &IndexCapabilities;
 
@@ -146,11 +152,38 @@ pub trait BuildContext {
     /// Get the extra build variables.
     fn extra_build_variables(&self) -> &ExtraBuildVariables;
 
+    /// Whether a complete locked build resolution is available for the package.
+    fn has_locked_build_resolution(&self, _package: &BuildPackageKey) -> bool {
+        false
+    }
+
+    /// Return a stable cache key for the complete locked build resolution, if available.
+    fn locked_build_resolution_cache_key(
+        &self,
+        _package: &BuildPackageKey,
+    ) -> Result<Option<String>, CacheInfoError> {
+        Ok(None)
+    }
+
+    /// Return a stable cache key for the inputs to an unlocked build environment, if any.
+    fn unlocked_build_cache_key(&self) -> Option<&str> {
+        None
+    }
+
     /// Resolve the given requirements into a ready-to-install set of package versions.
+    ///
+    /// If a package key is provided, the resolver may use previously stored
+    /// build dependency preferences for that package to speed up resolution.
+    /// If `validate_locked_requirements` is provided, a stored locked resolution
+    /// may only be reused when it satisfies those requirements. This is used for
+    /// requirements returned by a backend hook, which can change after a lock is
+    /// generated.
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
+        package: Option<&'a BuildPackageKey>,
         build_stack: &'a BuildStack,
+        validate_locked_requirements: Option<&'a [Requirement]>,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must

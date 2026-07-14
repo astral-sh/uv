@@ -140,6 +140,8 @@ pub enum Error {
     PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
     MissingPyprojectToml,
+    #[error("Failed to parse `[build-system]` in `pyproject.toml`")]
+    BuildSystem(#[source] toml::de::Error),
     #[error("Failed to extract static metadata from `pyproject.toml`")]
     PyprojectToml(#[source] uv_pypi_types::MetadataError),
     #[error(transparent)]

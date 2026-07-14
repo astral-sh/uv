@@ -2,7 +2,7 @@ use uv_distribution_types::{Requirement, Resolution};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 
-use crate::HashStrategy;
+use crate::{BuildResolutionGraph, HashStrategy};
 
 /// A resolved set of requirements, along with the hash policy discovered while resolving them.
 #[derive(Debug, Clone)]
@@ -11,12 +11,25 @@ pub struct ResolvedRequirements {
     resolution: Resolution,
     /// The hash policy to apply when installing the resolution.
     hasher: HashStrategy,
+    /// The build resolution graph that produced this resolution, when captured.
+    build_resolution_graph: Option<BuildResolutionGraph>,
 }
 
 impl ResolvedRequirements {
     /// Instantiate a [`ResolvedRequirements`] with the given [`Resolution`] and [`HashStrategy`].
     pub fn new(resolution: Resolution, hasher: HashStrategy) -> Self {
-        Self { resolution, hasher }
+        Self {
+            resolution,
+            hasher,
+            build_resolution_graph: None,
+        }
+    }
+
+    /// Attach the build resolution graph that produced this resolution.
+    #[must_use]
+    pub fn with_build_resolution_graph(mut self, graph: BuildResolutionGraph) -> Self {
+        self.build_resolution_graph = Some(graph);
+        self
     }
 
     /// Return the resolved distributions to install.
@@ -27,6 +40,11 @@ impl ResolvedRequirements {
     /// Return the hash policy to apply when installing the resolution.
     pub fn hasher(&self) -> &HashStrategy {
         &self.hasher
+    }
+
+    /// Return the build resolution graph that produced this resolution, if one was captured.
+    pub fn build_resolution_graph(&self) -> Option<&BuildResolutionGraph> {
+        self.build_resolution_graph.as_ref()
     }
 }
 

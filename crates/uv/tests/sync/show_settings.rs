@@ -3057,6 +3057,7 @@ fn preview_features() {
     +            ToolInstallLocks,
     +            WorkspaceListScripts,
     +            NoDistutilsPatch,
+    +            LockBuildDependencies,
     +        ],
          },
          python_preference: Managed,

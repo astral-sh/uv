@@ -22,8 +22,8 @@ use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, InstalledDist, Name, Requirement, RequiresPython,
-    Resolution, UnresolvedRequirement,
+    DependencyMetadata, Dist, HashGeneration, Index, InstalledDist, Name, Requirement,
+    RequiresPython, Resolution, ResolvedDist, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
@@ -33,7 +33,7 @@ use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -43,6 +43,7 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_resolver::{
     FlatIndex, Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
+    VERSION,
 };
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
@@ -349,7 +350,23 @@ impl ToolLock {
     pub(crate) fn read(directory: &Path) -> Option<Self> {
         let path = directory.join("uv.lock");
         match fs_err::read_to_string(&path) {
-            Ok(contents) => match toml::from_str(&contents) {
+            Ok(contents) => match toml::from_str::<Lock>(&contents) {
+                Ok(lock) if lock.version() > VERSION => {
+                    debug!(
+                        "Ignoring unsupported tool lock schema version v{} at `{}` (maximum supported version is v{VERSION})",
+                        lock.version(),
+                        path.user_display()
+                    );
+                    None
+                }
+                Ok(lock) if lock.supports_build_dependencies() => {
+                    debug!(
+                        "Ignoring unsupported build-dependency tool lock schema v{} at `{}`",
+                        lock.version(),
+                        path.user_display()
+                    );
+                    None
+                }
                 Ok(lock) => Some(Self {
                     root: directory.to_path_buf(),
                     lock,
@@ -529,6 +546,8 @@ impl ToolLock {
             &overrides,
             excludes,
             build_constraints,
+            &extra_build_requires,
+            None,
             &Conflicts::empty(),
             None,
             None,
@@ -604,6 +623,32 @@ impl ToolLock {
             &InstallOptions::default(),
         )?)
     }
+}
+
+/// Reject tool locks that would need to capture a source build environment.
+pub(crate) fn validate_tool_lock_build_dependencies(
+    resolution: &Resolution,
+    preview: Preview,
+) -> anyhow::Result<()> {
+    if !preview.is_enabled(PreviewFeature::ToolInstallLocks)
+        || !preview.is_enabled(PreviewFeature::LockBuildDependencies)
+    {
+        return Ok(());
+    }
+
+    let Some(source) = resolution.distributions().find(|dist| {
+        matches!(
+            dist,
+            ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Source(_))
+        )
+    }) else {
+        return Ok(());
+    };
+
+    bail!(
+        "Locking build dependencies is not supported for tool environments; `{}` must be built from source",
+        source.name()
+    )
 }
 
 /// Build an environment specification for a tool, preferring versions from its existing lock when
