@@ -1,7 +1,7 @@
 //! Types and interfaces for interacting with [OSV] as a vulnerability service.
 //!
 //! We use OSV's `/v1/querybatch` endpoint to collect vulnerability IDs for all
-//! dependencies in a single round-trip (handling pagination as needed), then
+//! dependencies in batches of up to 1,000 (handling pagination as needed), then
 //! fetch full vulnerability records from `/v1/vulns/{id}` concurrently.
 //!
 //! [OSV]: https://osv.dev/
@@ -224,6 +224,8 @@ impl Filter {
 static VULN_CACHE_CONTROL: LazyLock<http::HeaderValue> =
     LazyLock::new(|| "max-age=600".parse().expect("valid header value"));
 
+const OSV_QUERY_BATCH_SIZE: usize = 1_000;
+
 /// Represents [OSV](https://osv.dev/), an open-source vulnerability database.
 pub struct Osv {
     base_url: DisplaySafeUrl,
@@ -277,55 +279,59 @@ impl Osv {
         let mut pending: Vec<(&types::Dependency, Option<String>)> =
             dependencies.iter().map(|dep| (dep, None)).collect();
 
+        let url = self
+            .base_url
+            .join("v1/querybatch")
+            .map_err(|err| Error::Url(self.base_url.clone(), err))?;
+
         loop {
-            let request = QueryBatchRequest {
-                queries: pending
-                    .iter()
-                    .map(|(dep, page_token)| QueryRequest {
-                        package: Package {
-                            name: dep.name().to_string(),
-                            ecosystem: "PyPI".to_string(),
-                        },
-                        version: dep.version().to_string(),
-                        page_token: page_token.clone(),
-                    })
-                    .collect(),
-            };
-
-            let url = self
-                .base_url
-                .join("v1/querybatch")
-                .map_err(|e| Error::Url(self.base_url.clone(), e))?;
-
-            // NOTE: we need `uncached` here to access the underlying
-            // client for our POST request.
-            let batch_response: QueryBatchResponse = self
-                .client
-                .uncached()
-                .for_host(&url)
-                .raw_client()
-                .post(url.as_ref())
-                .json(&request)
-                .send()
-                .await?
-                .error_for_status()
-                .map_err(reqwest_middleware::Error::Reqwest)?
-                .json()
-                .await
-                .map_err(reqwest_middleware::Error::Reqwest)?;
-
             let mut next_pending = Vec::new();
-            for ((dep, _), batch_result) in pending.iter().zip(batch_response.results.iter()) {
-                let ids = result_map.entry(dep).or_default();
-                ids.extend(
-                    batch_result
-                        .vulns
+            for pending_batch in pending.chunks(OSV_QUERY_BATCH_SIZE) {
+                let request = QueryBatchRequest {
+                    queries: pending_batch
                         .iter()
-                        .filter(|v| filter.matches(&v.id))
-                        .map(|v| VulnerabilityID::new(v.id.clone())),
-                );
-                if let Some(token) = &batch_result.next_page_token {
-                    next_pending.push((*dep, Some(token.clone())));
+                        .map(|(dep, page_token)| QueryRequest {
+                            package: Package {
+                                name: dep.name().to_string(),
+                                ecosystem: "PyPI".to_string(),
+                            },
+                            version: dep.version().to_string(),
+                            page_token: page_token.clone(),
+                        })
+                        .collect(),
+                };
+
+                // NOTE: we need `uncached` here to access the underlying
+                // client for our POST request.
+                let batch_response: QueryBatchResponse = self
+                    .client
+                    .uncached()
+                    .for_host(&url)
+                    .raw_client()
+                    .post(url.as_ref())
+                    .json(&request)
+                    .send()
+                    .await?
+                    .error_for_status()
+                    .map_err(reqwest_middleware::Error::Reqwest)?
+                    .json()
+                    .await
+                    .map_err(reqwest_middleware::Error::Reqwest)?;
+
+                for ((dep, _), batch_result) in
+                    pending_batch.iter().zip(batch_response.results.iter())
+                {
+                    let ids = result_map.entry(dep).or_default();
+                    ids.extend(
+                        batch_result
+                            .vulns
+                            .iter()
+                            .filter(|v| filter.matches(&v.id))
+                            .map(|v| VulnerabilityID::new(v.id.clone())),
+                    );
+                    if let Some(token) = &batch_result.next_page_token {
+                        next_pending.push((*dep, Some(token.clone())));
+                    }
                 }
             }
 
@@ -508,13 +514,12 @@ mod tests {
     use uv_pep440::Version;
     use uv_redacted::DisplaySafeUrl;
     use wiremock::matchers::{body_json, method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
     use crate::service::osv::{Filter, RangeType};
     use crate::types::{Dependency, Finding};
 
-    use super::Event;
-    use super::Osv;
+    use super::{Event, OSV_QUERY_BATCH_SIZE, Osv};
 
     /// Create a [`CachedClient`] suitable for tests (no retries, no cache).
     fn test_client() -> CachedClient {
@@ -644,6 +649,78 @@ mod tests {
             server.received_requests().await.unwrap().len(),
             1,
             "Expected one querybatch request"
+        );
+    }
+
+    /// Ensure that `query_identifiers` splits requests at the OSV query batch limit.
+    #[tokio::test]
+    async fn test_query_identifiers_batch_limit() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/v1/querybatch"))
+            .respond_with(|request: &Request| {
+                let body = serde_json::from_slice::<serde_json::Value>(&request.body)
+                    .expect("request body should be valid JSON");
+                let queries = body
+                    .get("queries")
+                    .and_then(serde_json::Value::as_array)
+                    .expect("request body should contain a query array");
+                let results = queries
+                    .iter()
+                    .map(|query| {
+                        if query.get("page_token").is_some() {
+                            json!({ "vulns": [] })
+                        } else {
+                            json!({ "vulns": [], "next_page_token": "next" })
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                ResponseTemplate::new(200).set_body_json(json!({ "results": results }))
+            })
+            .mount(&server)
+            .await;
+
+        let osv = Osv::new(
+            test_client(),
+            Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
+            Concurrency::default(),
+            Cache::temp().unwrap(),
+        );
+        let dependencies = (0..=OSV_QUERY_BATCH_SIZE)
+            .map(|index| {
+                Dependency::new(
+                    PackageName::from_str(&format!("package-{index}"))
+                        .expect("package name should be valid"),
+                    Version::from_str("1.0.0").expect("version should be valid"),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let identifiers = osv
+            .query_identifiers(&dependencies, Filter::All)
+            .await
+            .expect("query should succeed");
+        assert_eq!(identifiers.len(), dependencies.len());
+
+        let mut batch_sizes = server
+            .received_requests()
+            .await
+            .expect("requests should be recorded")
+            .iter()
+            .map(|request| {
+                serde_json::from_slice::<serde_json::Value>(&request.body)
+                    .expect("request body should be valid JSON")
+                    .get("queries")
+                    .and_then(serde_json::Value::as_array)
+                    .expect("request body should contain a query array")
+                    .len()
+            })
+            .collect::<Vec<_>>();
+        batch_sizes.sort_unstable();
+        assert_eq!(
+            batch_sizes,
+            [1, 1, OSV_QUERY_BATCH_SIZE, OSV_QUERY_BATCH_SIZE]
         );
     }
 
