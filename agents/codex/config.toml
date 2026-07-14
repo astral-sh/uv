@@ -26,8 +26,8 @@ enabled = true
 "pypi.org" = "allow"
 
 [permissions.pull-request-review]
-description = "Read-only pull request review with GitHub API access."
-extends = ":read-only"
+description = "Pull request review with workspace and GitHub API access."
+extends = ":workspace"
 
 [permissions.pull-request-review.network]
 enabled = true

@@ -1,6 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+#
 # /// script
 # requires-python = ">=3.12"
+# dependencies = []
 # ///
 
 """Convert a structured agent review into a GitHub pull request review payload."""
@@ -59,15 +61,10 @@ def review_payload(review: dict[str, Any], commit_id: str) -> dict[str, Any]:
             comment["start_side"] = side
         comments.append(comment)
 
-    body = without_mentions(
-        f"**Automated review: {review['overall_correctness']}**\n\n"
-        f"{review['overall_explanation']}\n\n"
-        f"Confidence: {review['overall_confidence_score']}"
-    )
     return {
         "commit_id": commit_id,
         "event": "COMMENT",
-        "body": body,
+        "body": without_mentions(f"**Automated review**\n\n{review['summary']}"),
         "comments": comments,
     }
 

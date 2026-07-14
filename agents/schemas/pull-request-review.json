@@ -57,21 +57,7 @@
         ]
       }
     },
-    "overall_correctness": {
-      "type": "string",
-      "enum": ["patch is correct", "patch is incorrect"]
-    },
-    "overall_explanation": { "type": "string" },
-    "overall_confidence_score": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1
-    }
+    "summary": { "type": "string", "minLength": 1 }
   },
-  "required": [
-    "findings",
-    "overall_correctness",
-    "overall_explanation",
-    "overall_confidence_score"
-  ]
+  "required": ["findings", "summary"]
 }
