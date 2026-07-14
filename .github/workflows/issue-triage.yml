@@ -1,0 +1,59 @@
+# Analyze newly opened issues without modifying them.
+name: "issue-triage"
+
+on:
+  issues:
+    types: [opened]
+
+permissions: {}
+
+jobs:
+  triage:
+    if: github.repository == 'astral-sh/uv'
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      result: ${{ steps.triage.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Collect issue context"
+        run: |
+          gh issue view "$ISSUE_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author \
+            > .issue-triage-event.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+      - name: "Triage issue"
+        id: triage
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: "agents/codex"
+          permission-profile: "issue-triage"
+          safety-strategy: drop-sudo
+          allow-users: "*"
+          prompt-file: "agents/prompts/triage-issue.md"
+          output-schema-file: "agents/schemas/issue-triage.json"
+
+  report:
+    needs: triage
+    if: needs.triage.outputs.result != ''
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: "Write triage summary"
+        run: printf '%s\n' "$TRIAGE_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          TRIAGE_RESULT: ${{ needs.triage.outputs.result }}

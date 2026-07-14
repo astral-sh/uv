@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "related": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["issue", "pull_request"]
+              },
+              "number": { "type": "integer" },
+              "title": { "type": "string" },
+              "url": { "type": "string" },
+              "state": {
+                "type": "string",
+                "enum": ["open", "closed", "merged"]
+              },
+              "reason": { "type": "string" }
+            },
+            "required": ["kind", "number", "title", "url", "state", "reason"]
+          }
+        },
+        "search_scope": { "type": "string" }
+      },
+      "required": ["items", "search_scope"]
+    },
+    "summary": { "type": "string" }
+  },
+  "required": ["related", "summary"]
+}

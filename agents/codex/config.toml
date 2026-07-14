@@ -1,0 +1,10 @@
+[permissions.issue-triage]
+description = "Read-only issue triage with GitHub API access."
+extends = ":read-only"
+
+[permissions.issue-triage.network]
+enabled = true
+
+[permissions.issue-triage.network.domains]
+"api.github.com" = "allow"
+"github.com" = "allow"
