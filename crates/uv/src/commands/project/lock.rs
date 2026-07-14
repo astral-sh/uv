@@ -1567,7 +1567,9 @@ async fn resolve_all_possible_builds(
                 }
                 uncovered.and(wheel_coverage.negate());
 
-                build_options.no_binary_package(&source_dist.name) || !uncovered.is_false()
+                build_options.no_binary_package(&source_dist.name)
+                    || build_markers.contains_key(&key)
+                    || !uncovered.is_false()
             }
             _ => solve_marker.is_some(),
         };

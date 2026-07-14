@@ -11792,6 +11792,131 @@ def get_requires_for_build_wheel(config_settings=None):
     Ok(())
 }
 
+/// Verify that an excluded universal wheel does not hide the hook requirements of a selected
+/// runtime source distribution.
+#[tokio::test]
+async fn lock_build_dependencies_capture_excluded_runtime_sdist_hooks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    write_wheel(
+        &artifacts.child("dep-0.1.0-py3-none-any.whl"),
+        "dep",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &artifacts.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    let source_dist = artifacts.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12,<4"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+def get_requires_for_build_wheel(config_settings=None):
+    return ["helper==0.1.0"]
+"#,
+    ))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    let server = MockServer::start().await;
+    let index_url = format!("{}/simple/", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/simple/dep/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"
+                <a href="{}/files/dep-0.1.0-py3-none-any.whl" data-upload-time="2024-04-01T00:00:00Z">dep-0.1.0-py3-none-any.whl</a>
+                <a href="{}/files/dep-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z">dep-0.1.0.zip</a>
+                "#,
+                server.uri(),
+                server.uri()
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/helper/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"<a href="{}/files/helper-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">helper-0.1.0-py3-none-any.whl</a>"#,
+                server.uri()
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/dep-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+            artifacts.child("dep-0.1.0-py3-none-any.whl").path(),
+        )?))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/dep-0.1.0.zip"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(source_dist.path())?))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/helper-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+            artifacts.child("helper-0.1.0-py3-none-any.whl").path(),
+        )?))
+        .mount(&server)
+        .await;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<4"
+        dependencies = ["dep==0.1.0"]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--index-url")
+        .arg(index_url)
+        .arg("--exclude-newer")
+        .arg("2024-03-25T00:00:00Z")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{dep}"
+    );
+
+    Ok(())
+}
+
 /// Verify that lock-time metadata builds use the build dependency branch for
 /// the active marker environment instead of flattening every universal branch
 /// into one concrete build environment.
