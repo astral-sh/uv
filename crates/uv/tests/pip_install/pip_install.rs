@@ -1755,6 +1755,21 @@ fn allow_incompatibilities() -> Result<()> {
     // This no longer works, since we have an incompatible version of Jinja2.
     context.assert_command("import flask").failure();
 
+    // Repeating the satisfied installation must still surface diagnostics in strict mode.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    warning: The package `flask` requires `jinja2>=3.1.2`, but `2.11.3` is installed
+    "
+    );
+
     Ok(())
 }
 

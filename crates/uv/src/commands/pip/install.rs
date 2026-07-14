@@ -362,6 +362,19 @@ pub(crate) async fn pip_install(
                 }
                 DefaultInstallLogger.on_check(requirements.len(), start, printer, dry_run)?;
 
+                if strict && !dry_run.enabled() {
+                    operations::diagnose_environment(
+                        recursive_requirements
+                            .iter()
+                            .map(|requirement| &requirement.name),
+                        &environment,
+                        &marker_env,
+                        &tags,
+                        &dependency_metadata,
+                        printer,
+                    )?;
+                }
+
                 return Ok(ExitStatus::Success);
             }
             SatisfiesResult::Unsatisfied(requirement) => {
@@ -685,7 +698,7 @@ pub(crate) async fn pip_install(
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
         operations::diagnose_environment(
-            &resolution,
+            resolution.distributions().map(Name::name),
             &environment,
             &marker_env,
             &tags,

@@ -15,7 +15,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Origin,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name, Origin,
     PackageConfigSettings, Resolution,
 };
 use uv_fs::Simplified;
@@ -565,7 +565,7 @@ pub(crate) async fn pip_sync(
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
         operations::diagnose_environment(
-            &resolution,
+            resolution.distributions().map(Name::name),
             &environment,
             &marker_env,
             &tags,
