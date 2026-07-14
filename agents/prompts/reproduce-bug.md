@@ -17,7 +17,8 @@ Set `reproduction` to exactly one of these values and explain the result in `rea
 - `reproducible` when a targeted reproduction produces the reported behavior. Include the minimal
   commands, relevant environment details, and observed result.
 - `not_reproducible` when the report contains enough information for a targeted reproduction but the
-  reported behavior cannot be reproduced. Include what was tried and the observed result.
+  reported behavior cannot be reproduced. Include what was tried, the observed result, and the
+  additional information needed to reproduce the reported behavior.
 - `needs_more_information` when the report does not contain enough information to construct a
   meaningful reproduction. Identify the specific commands, configuration, versions, platform
   details, or input data needed.
