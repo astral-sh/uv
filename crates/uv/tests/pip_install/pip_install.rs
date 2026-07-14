@@ -16,7 +16,7 @@ use fs_err::File;
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
 use indoc::{formatdoc, indoc};
-use insta::assert_snapshot;
+use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
 #[cfg(unix)]
 use tokio::io::AsyncWriteExt;
@@ -12803,6 +12803,82 @@ fn reserved_script_name() -> Result<()> {
       Caused by: Scripts must not use the reserved name `python`, got: `python`
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn reject_reserved_wheel_data_script_name() -> Result<()> {
+    let interpreter = if cfg!(windows) {
+        "python.exe"
+    } else {
+        "python"
+    };
+    let scripts = if cfg!(windows) { "Scripts" } else { "bin" };
+
+    allow_duplicates! {
+        for data_path in ["python", "Python.exe", "python.EXE"]
+            .into_iter()
+            .flat_map(|executable| {
+                [
+                    format!("foo-0.1.0.data/scripts/{executable}"),
+                    format!("foo-0.1.0.data/data/{scripts}/{executable}"),
+                ]
+            })
+        {
+            let context = uv_test::test_context!("3.12")
+                .with_filter((r"got: `(?:Python\.exe|python(?:\.EXE)?)`", "got: `python`"));
+            let wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
+            let record = formatdoc! {"
+                foo/__init__.py,,
+                foo-0.1.0.dist-info/METADATA,,
+                foo-0.1.0.dist-info/WHEEL,,
+                foo-0.1.0.dist-info/RECORD,,
+                foo-0.1.0.data/data/harmless.txt,,
+                {data_path},,
+            "};
+            let mut writer = ZipFileWriter::new(Vec::new());
+            for (name, contents) in [
+                ("foo/__init__.py", ""),
+                (
+                    "foo-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+                ),
+                (
+                    "foo-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                ),
+                ("foo-0.1.0.dist-info/RECORD", record.as_str()),
+                ("foo-0.1.0.data/data/harmless.txt", "this must not be moved"),
+                (data_path.as_str(), "this must not replace python"),
+            ] {
+                let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+                block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+            }
+            fs_err::write(&wheel, block_on(writer.close())?)?;
+
+            uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Prepared 1 package in [TIME]
+        error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+          Caused by: Scripts must not use the reserved name `python`, got: `python`
+            ");
+
+            Command::new(venv_bin_path(&context.venv).join(interpreter))
+                .arg("--version")
+                .assert()
+                .success();
+            assert!(!context.site_packages().join("foo").exists());
+            assert!(!context.site_packages().join("foo-0.1.0.dist-info").exists());
+            assert!(!context.venv.join("harmless.txt").exists());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
 
     Ok(())
 }

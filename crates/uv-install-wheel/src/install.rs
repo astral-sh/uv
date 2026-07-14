@@ -14,7 +14,8 @@ use uv_pypi_types::{DirectUrl, Metadata10};
 use crate::linker::{InstallState, LinkMode, link_wheel_files};
 use crate::wheel::{
     LibKind, WheelFile, dist_info_metadata, find_dist_info, install_data, parse_scripts,
-    read_record, write_installer_metadata, write_record, write_script_entrypoints,
+    read_record, validate_data_script_destinations, write_installer_metadata, write_record,
+    write_script_entrypoints,
 };
 use crate::{Error, Layout};
 
@@ -88,6 +89,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     // > 1.b Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
+    validate_data_script_destinations(layout, wheel, &dist_info_prefix)?;
     trace!(?name, "Extracting wheel files");
     link_wheel_files(link_mode, site_packages, wheel, state, filename)?;
     trace!(?name, "Extracted wheel files");
