@@ -7,7 +7,7 @@ use std::str::{self};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result, anyhow};
-use cargo_util::{ProcessBuilder, paths};
+use cargo_util::{ProcessBuilder, ProcessError, paths};
 use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
 use url::Url;
@@ -570,7 +570,7 @@ impl GitCheckout {
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
             .cwd(&self.repo.path)
             .exec_with_output()
-            .map_err(|err| redact_git_error(&err, original_remote_url))
+            .map_err(|err| redact_git_error(err, original_remote_url))
             .map(drop)?;
 
         // Recursively update nested submodules without overriding `remote.origin.url`, so each
@@ -589,7 +589,7 @@ impl GitCheckout {
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
             .cwd(&self.repo.path)
             .exec_with_output()
-            .map_err(|err| redact_git_error(&err, original_remote_url))
+            .map_err(|err| redact_git_error(err, original_remote_url))
             .map(drop)?;
 
         // Validate Git LFS objects (if needed) after the reset.
@@ -857,7 +857,7 @@ fn fetch_with_cli(
         if msg.contains("transport '") && msg.contains("' not allowed") && offline {
             return GitError::TransportNotAllowed.into();
         }
-        redact_git_error(&err, url)
+        redact_git_error(err, url)
     })?;
 
     Ok(())
@@ -916,7 +916,7 @@ fn fetch_lfs(
         .cwd(&repo.path);
 
     cmd.exec_with_output()
-        .map_err(|err| redact_git_error(&err, url))?;
+        .map_err(|err| redact_git_error(err, url))?;
 
     // We now validate the Git LFS objects explicitly (if supported). This is
     // needed to avoid issues with Git LFS not being installed or configured
@@ -931,14 +931,21 @@ fn fetch_lfs(
 }
 
 /// Redact a credentialed remote URL from a Git process error.
-fn redact_git_error(error: &anyhow::Error, url: &DisplaySafeUrl) -> anyhow::Error {
+fn redact_git_error(mut error: anyhow::Error, url: &DisplaySafeUrl) -> anyhow::Error {
     let credentialed_root = remote_url_root((**url).clone());
     let redacted_root = DisplaySafeUrl::from_url(credentialed_root.clone()).to_string();
-    let redacted = error
-        .to_string()
-        .replace(url.as_str(), &url.to_string())
-        .replace(credentialed_root.as_str(), &redacted_root);
-    anyhow!("{redacted}")
+    let redact = |message: &str| {
+        message
+            .replace(url.as_str(), &url.to_string())
+            .replace(credentialed_root.as_str(), &redacted_root)
+    };
+
+    if let Some(process_error) = error.downcast_mut::<ProcessError>() {
+        process_error.desc = redact(&process_error.desc);
+        return error;
+    }
+
+    anyhow!("{}", redact(&error.to_string()))
 }
 
 /// Whether `rev` is a shorter hash of `oid`.
@@ -980,16 +987,34 @@ mod tests {
     #[test]
     fn git_process_error_redacts_credentials() -> Result<()> {
         let url = DisplaySafeUrl::parse("https://git:secret-token@example.com/org/repo.git")?;
-        let error = anyhow!(
-            "process didn't exit successfully: `git fetch --force '{}' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)\n--- stderr\nfatal: Authentication failed for '{}'",
-            url.as_str(),
-            url.as_str(),
-        );
+        let stderr = format!("fatal: Authentication failed for '{}'", url.as_str());
+        let error = ProcessError::new_raw(
+            &format!(
+                "process didn't exit successfully: `git fetch --force '{}' '+HEAD:refs/remotes/origin/HEAD'`",
+                url.as_str()
+            ),
+            Some(128),
+            "exit status: 128",
+            Some(b"git output"),
+            Some(stderr.as_bytes()),
+        )
+        .into();
+
+        let error = redact_git_error(error, &url);
+        let process_error = error
+            .downcast_ref::<ProcessError>()
+            .context("expected Git process error")?;
 
         assert_eq!(
-            redact_git_error(&error, &url).to_string(),
-            "process didn't exit successfully: `git fetch --force 'https://git:****@example.com/org/repo.git' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)\n--- stderr\nfatal: Authentication failed for 'https://git:****@example.com/org/repo.git'"
+            error.to_string(),
+            "process didn't exit successfully: `git fetch --force 'https://git:****@example.com/org/repo.git' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)\n--- stdout\ngit output\n--- stderr\nfatal: Authentication failed for 'https://git:****@example.com/org/repo.git'"
         );
+        assert_eq!(process_error.code, Some(128));
+        assert_eq!(
+            process_error.stdout.as_deref(),
+            Some(b"git output".as_slice())
+        );
+        assert_eq!(process_error.stderr.as_deref(), Some(stderr.as_bytes()));
 
         Ok(())
     }
@@ -1002,7 +1027,7 @@ mod tests {
             let error = anyhow!(
                 "process didn't exit successfully: `git -c 'url.https://git:secret-token@example.com/.insteadOf=https://example.com/' submodule update {args}` (exit status: 128)"
             );
-            let redacted = redact_git_error(&error, &url).to_string();
+            let redacted = redact_git_error(error, &url).to_string();
 
             assert!(!redacted.contains("secret-token"));
             assert_eq!(
