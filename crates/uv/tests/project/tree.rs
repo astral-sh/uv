@@ -11,30 +11,6 @@ use url::Url;
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
-fn json_tree_package_names(command: &mut Command) -> Result<Vec<String>> {
-    let output = command
-        .arg("--preview-features")
-        .arg("json-output")
-        .arg("--format")
-        .arg("json")
-        .output()?;
-    output.clone().assert().success();
-
-    let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-    report["resolution"]
-        .as_object()
-        .context("dependency graph resolution should be an object")?
-        .values()
-        .filter(|node| node["kind"] == "package")
-        .map(|node| {
-            node["name"]
-                .as_str()
-                .context("dependency graph node should have a name")
-                .map(ToOwned::to_owned)
-        })
-        .collect()
-}
-
 #[test]
 fn tree_centralized_environment_no_cache() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4698,4 +4674,29 @@ fn workspace_circular_dependencies() -> Result<()> {
     );
 
     Ok(())
+}
+
+fn json_tree_package_names(command: &mut Command) -> Result<Vec<String>> {
+    let assert = command
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .output()?
+        .assert()
+        .success();
+
+    let report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    report["resolution"]
+        .as_object()
+        .context("dependency graph resolution should be an object")?
+        .values()
+        .filter(|node| node["kind"] == "package")
+        .map(|node| {
+            node["name"]
+                .as_str()
+                .context("dependency graph node should have a name")
+                .map(ToOwned::to_owned)
+        })
+        .collect()
 }
