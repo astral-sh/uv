@@ -287,6 +287,13 @@ impl SourceBuild {
             BuildPackageKey::from_source_dist(name, package_version.clone(), source_dist)
         });
 
+        if let Some(package_key) = package_key.as_ref()
+            && !build_isolation.is_isolated(package_name.as_ref())
+            && build_context.has_locked_build_resolution(package_key)
+        {
+            return Err(Error::NonIsolatedLockedBuild(package_key.name.clone()));
+        }
+
         let extra_build_dependencies = package_name
             .as_ref()
             .and_then(|name| extra_build_requires.get(name).cloned())

@@ -93,6 +93,8 @@ pub enum Error {
     NoSourceDistBuilds,
     #[error("Cyclic build dependency detected for `{0}`")]
     CyclicBuildDependency(PackageName),
+    #[error("Cannot replay locked build dependencies for `{0}` without build isolation")]
+    NonIsolatedLockedBuild(PackageName),
     #[error(
         "Extra build requirement `{0}` was declared with `match-runtime = true`, but `{1}` does not declare static metadata, making runtime-matching impossible"
     )]
@@ -114,6 +116,7 @@ impl IsBuildBackendError for Error {
             | Self::NoSourceDistBuild(_)
             | Self::NoSourceDistBuilds
             | Self::CyclicBuildDependency(_)
+            | Self::NonIsolatedLockedBuild(_)
             | Self::UnmatchedRuntime(_, _) => false,
             Self::CommandFailed(_, _)
             | Self::BuildBackend(_)

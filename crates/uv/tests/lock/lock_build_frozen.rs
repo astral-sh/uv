@@ -326,3 +326,84 @@ fn frozen_build_preserves_empty_graphs_and_no_build_wheels() -> Result<()> {
 
     Ok(())
 }
+
+/// Frozen replay cannot silently bypass a captured build environment when build isolation is
+/// disabled globally or for the selected package.
+#[test]
+fn frozen_build_rejects_no_build_isolation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+    write_backend_package(&context.temp_dir.child("dep"), "dep", Some("helper==0.1.0"))?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("revision = 4"), "{lock}");
+    assert!(lock.contains("name = \"helper\""), "{lock}");
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--frozen")
+        .arg("--no-build-isolation"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `dep @ file://[TEMP_DIR]/dep`
+      ╰─▶ Cannot replay locked build dependencies for `dep` without build isolation
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--frozen")
+        .arg("--no-build-isolation-package")
+        .arg("dep"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `dep @ file://[TEMP_DIR]/dep`
+      ╰─▶ Cannot replay locked build dependencies for `dep` without build isolation
+    ");
+
+    Ok(())
+}
