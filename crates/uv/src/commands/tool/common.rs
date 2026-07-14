@@ -739,8 +739,17 @@ fn format_tool_suffix_arg_for_shell(suffix: &str, shell: Option<Shell>) -> Strin
 
     match shell {
         Some(Shell::Powershell) => format!("'{}'", argument.replace('\'', "''")),
+        Some(Shell::Nushell) => quote_nushell_raw_string(&argument),
         _ => posix,
     }
+}
+
+fn quote_nushell_raw_string(argument: &str) -> String {
+    let mut hashes = "#".to_string();
+    while argument.contains(&format!("'{hashes}")) {
+        hashes.push('#');
+    }
+    format!("r{hashes}'{argument}'{hashes}")
 }
 
 fn escape_cmd_argument(argument: &str) -> String {
@@ -1077,6 +1086,14 @@ mod tests {
         assert_eq!(
             format_tool_suffix_arg_for_shell(" old'unsafe", Some(Shell::Powershell)),
             "'--suffix= old''unsafe'"
+        );
+        assert_eq!(
+            format_tool_suffix_arg_for_shell("x'y", Some(Shell::Nushell)),
+            "r#'--suffix=x'y'#"
+        );
+        assert_eq!(
+            format_tool_suffix_arg_for_shell("x'#y", Some(Shell::Nushell)),
+            "r##'--suffix=x'#y'##"
         );
         assert_eq!(
             format_tool_suffix_arg_for_shell(" old&echo unsafe", Some(Shell::Cmd)),
