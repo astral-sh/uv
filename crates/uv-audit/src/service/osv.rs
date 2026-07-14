@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use uv_cache::{Cache, CacheBucket, CacheEntry};
 use uv_client::{CacheControl, CachedClient, CachedClientError};
 use uv_configuration::Concurrency;
+use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
@@ -49,7 +50,7 @@ pub enum Error {
 }
 
 /// Package specification for OSV queries.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Package {
     /// The package's name.
     name: String,
@@ -113,6 +114,7 @@ struct Range {
 /// Package affected by a vulnerability.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Affected {
+    package: Option<Package>,
     ranges: Option<Vec<Range>>,
     // TODO: Enable these fields if/when they contain information that's
     // useful to us, e.g. metadata that constrains a vulnerability to specific
@@ -452,6 +454,13 @@ impl Osv {
             .affected
             .iter()
             .flatten()
+            .filter(|affected| {
+                affected.package.as_ref().is_some_and(|package| {
+                    package.ecosystem == "PyPI"
+                        && PackageName::from_str(&package.name)
+                            .is_ok_and(|name| &name == dependency.name())
+                })
+            })
             .flat_map(|affected| affected.ranges.iter().flatten())
             .filter(|range| matches!(range.range_type, RangeType::Ecosystem))
             .flat_map(|range| &range.events)
