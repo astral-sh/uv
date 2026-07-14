@@ -1061,7 +1061,8 @@ pub enum CacheBucket {
     ///
     /// The structure is similar of that of the `Wheel` bucket, except we have an additional layer
     /// for the source distribution filename and the metadata is at the source distribution-level,
-    /// not at the wheel level.
+    /// not at the wheel level. Build settings and non-isolated builds can add cache shards between
+    /// the source revision and its metadata.
     ///
     /// TODO(konstin): The cache policy should be on the source distribution level, the metadata we
     /// can put next to the wheels as in the `Wheels` bucket.
@@ -1238,15 +1239,24 @@ impl CacheBucket {
     ///
     /// Returns the number of entries removed from the cache.
     fn remove(self, cache: &Cache, name: &PackageName) -> Result<Removal, io::Error> {
-        /// Returns `true` if the [`Path`] represents a built wheel for the given package.
+        /// Returns `true` if the [`Path`] contains built-wheel metadata for the given package.
         fn is_match(path: &Path, name: &PackageName) -> bool {
-            let Ok(metadata) = fs_err::read(path.join("metadata.msgpack")) else {
-                return false;
-            };
-            let Ok(metadata) = rmp_serde::from_slice::<ResolutionMetadata>(&metadata) else {
-                return false;
-            };
-            metadata.name == *name
+            walkdir::WalkDir::new(path)
+                .max_depth(3)
+                .follow_links(false)
+                .into_iter()
+                .filter_map(Result::ok)
+                .filter(|entry| {
+                    entry.file_type().is_file() && entry.file_name() == "metadata.msgpack"
+                })
+                .any(|entry| {
+                    fs_err::read(entry.path())
+                        .ok()
+                        .and_then(|metadata| {
+                            rmp_serde::from_slice::<ResolutionMetadata>(&metadata).ok()
+                        })
+                        .is_some_and(|metadata| metadata.name == *name)
+                })
         }
 
         let mut summary = Removal::default();
@@ -1452,12 +1462,15 @@ impl Refresh {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
     use std::str::FromStr;
 
     use crate::ArchiveId;
 
-    use super::{Cache, Link, Refresh};
+    use super::{Cache, CacheBucket, Link, Refresh};
     use uv_cache_info::Timestamp;
+    use uv_normalize::PackageName;
+    use uv_pypi_types::ResolutionMetadata;
 
     #[test]
     fn refresh_preserves_invocation_timestamp() {
@@ -1487,6 +1500,40 @@ mod tests {
         assert!(Link::from_str("archive/foo").is_err());
         assert!(Link::from_str("v1/foo").is_err());
         assert!(Link::from_str("archive-v0/").is_err());
+    }
+
+    #[test]
+    fn clean_keyed_source_distributions() -> Result<(), Box<dyn Error>> {
+        let cache_root = tempfile::tempdir()?;
+        let bucket = cache_root
+            .path()
+            .join(CacheBucket::SourceDistributions.to_str());
+        let url = bucket.join("url/source-url");
+        let path = bucket.join("path/source-path");
+        let git = bucket.join("git/source-git/revision");
+        let entries = [
+            url.join("revision/build-key"),
+            path.join("revision/no-build-isolation/build-key"),
+            git.join("build-key"),
+        ];
+        let metadata = ResolutionMetadata::parse_metadata(
+            b"Metadata-Version: 2.3\nName: source-distribution\nVersion: 1.0.0\n",
+        )?;
+        let metadata = rmp_serde::to_vec(&metadata)?;
+
+        for entry in entries {
+            fs_err::create_dir_all(&entry)?;
+            fs_err::write(entry.join("metadata.msgpack"), &metadata)?;
+        }
+
+        let name = PackageName::from_str("source-distribution")?;
+        let summary = Cache::from_path(cache_root.path()).remove(&name)?;
+
+        assert_eq!(summary.num_files, 3);
+        assert!(!url.exists());
+        assert!(!path.exists());
+        assert!(!git.exists());
+        Ok(())
     }
 
     #[test]
