@@ -1,13 +1,15 @@
 //! Like `wheel.rs`, but for installing wheels that have already been unzipped, rather than
 //! reading from a zip file.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use fs_err::File;
+use itertools::{Itertools, iproduct};
 use tracing::{instrument, trace};
 
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{ExpandedTags, WheelFilename};
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, Metadata10};
 
@@ -23,23 +25,24 @@ pub fn installed_dist_info_path(
     layout: &Layout,
     wheel: impl AsRef<Path>,
 ) -> Result<PathBuf, Error> {
-    let (dist_info_prefix, site_packages) = wheel_destination(layout, wheel.as_ref())?;
+    let (dist_info_prefix, site_packages, _) = wheel_destination(layout, wheel.as_ref())?;
     Ok(site_packages.join(format!("{dist_info_prefix}.dist-info")))
 }
 
-/// Return the wheel's `.dist-info` prefix and target `site-packages` directory.
+/// Return the wheel's `.dist-info` prefix, target `site-packages` directory, and parsed `WHEEL`.
 fn wheel_destination<'layout>(
     layout: &'layout Layout,
     wheel: &Path,
-) -> Result<(String, &'layout Path), Error> {
+) -> Result<(String, &'layout Path, WheelFile), Error> {
     let dist_info_prefix = find_dist_info(wheel)?;
     let wheel_file_path = wheel.join(format!("{dist_info_prefix}.dist-info/WHEEL"));
     let wheel_text = fs_err::read_to_string(wheel_file_path)?;
-    let site_packages = match WheelFile::parse(&wheel_text)?.lib_kind() {
+    let wheel_file = WheelFile::parse(&wheel_text)?;
+    let site_packages = match wheel_file.lib_kind() {
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
-    Ok((dist_info_prefix, site_packages))
+    Ok((dist_info_prefix, site_packages, wheel_file))
 }
 
 /// Install the given wheel to the given venv
@@ -64,7 +67,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     state: &InstallState,
 ) -> Result<(), Error> {
     let wheel = wheel.as_ref();
-    let (dist_info_prefix, site_packages) = wheel_destination(layout, wheel)?;
+    let (dist_info_prefix, site_packages, wheel_file) = wheel_destination(layout, wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, wheel)?;
     let Metadata10 { name, version } = Metadata10::parse_pkg_info(&metadata)
         .map_err(|err| Error::InvalidWheel(err.to_string()))?;
@@ -79,6 +82,34 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
 
         if version != filename.version && version != filename.version.clone().without_local() {
             return Err(Error::MismatchedVersion(version, filename.version.clone()));
+        }
+
+        let mut wheel_tags = BTreeSet::new();
+        for tag in wheel_file.tags().unwrap_or_default() {
+            let expanded = ExpandedTags::parse([tag.as_str()])
+                .map_err(|err| Error::InvalidWheel(err.to_string()))?;
+            wheel_tags.extend(
+                iproduct!(
+                    expanded.python_tags(),
+                    expanded.abi_tags(),
+                    expanded.platform_tags()
+                )
+                .map(|(python, abi, platform)| format!("{python}-{abi}-{platform}")),
+            );
+        }
+        let filename_tags = iproduct!(
+            filename.python_tags(),
+            filename.abi_tags(),
+            filename.platform_tags()
+        )
+        .map(|(python, abi, platform)| format!("{python}-{abi}-{platform}"))
+        .collect::<BTreeSet<_>>();
+        if wheel_tags != filename_tags {
+            return Err(Error::InvalidWheel(format!(
+                "Wheel tags do not match filename ({} != {})",
+                wheel_tags.iter().join(", "),
+                filename_tags.iter().join(", ")
+            )));
         }
     }
 
