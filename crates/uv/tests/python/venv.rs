@@ -1496,10 +1496,10 @@ fn file_exists() -> Result<()> {
 #[test]
 fn non_utf8_path() {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
-    #[cfg(unix)]
-    let path = OsStr::from_bytes(b".venv-\xff");
-    #[cfg(windows)]
-    let path = OsString::from_wide(&[0x002e, 0x0076, 0x0065, 0x006e, 0x0076, 0x002d, 0xd800]);
+    let path = cfg_select! {
+        unix => OsStr::from_bytes(b".venv-\xff"),
+        windows => OsString::from_wide(&[0x002e, 0x0076, 0x0065, 0x006e, 0x0076, 0x002d, 0xd800]),
+    };
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(path)
