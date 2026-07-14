@@ -1,0 +1,150 @@
+# Review pull requests for security and publish actionable findings as inline comments.
+name: "Pull request security review"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.review.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Checkout Codex Security plugin"
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: openai/plugins
+          ref: 11c74d6ba24d3a6d48f54a194cd00ef3beea18f9
+          path: .codex-security-plugin
+          sparse-checkout: |
+            .agents/plugins
+            plugins/codex-security
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.28"
+
+      - name: "Install Codex Security plugin"
+        run: ./agents/scripts/install-codex-security.sh
+
+      - name: "Collect pull request context"
+        run: |
+          gh pr view "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,isDraft,labels,files,additions,deletions,changedFiles \
+            > .pull-request-review-event.json
+
+          gh pr diff "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            > .pull-request-review.diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+
+      - name: "Review pull request"
+        id: review
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMPDIR: ${{ runner.temp }}/codex-security
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.144.4"
+          codex-home: "agents/codex"
+          permission-profile: "pull-request-review"
+          safety-strategy: drop-sudo
+          prompt-file: "agents/prompts/pull-request-security-review.md"
+          output-schema-file: "agents/schemas/pull-request-security-review.json"
+
+  prepare:
+    needs: review
+    if: needs.review.outputs.result != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      result: ${{ steps.comments.outputs.result }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.28"
+
+      - name: "Prepare review findings"
+        id: comments
+        run: |
+          delimiter="review-$(openssl rand -hex 16)"
+          {
+            printf 'result<<%s\n' "$delimiter"
+            printf '%s\n' "$REVIEW_RESULT" \
+              | ./agents/scripts/agent-review-to-github-comments.py --commit-id "$HEAD_SHA"
+            printf '%s\n' "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_RESULT: ${{ needs.review.outputs.result }}
+
+  report:
+    needs: prepare
+    if: needs.prepare.outputs.result != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: "Publish review findings"
+        run: |
+          printf '%s\n' "$REVIEW_RESULT" > "$RUNNER_TEMP/review.json"
+
+          if jq --exit-status '.comments | length == 0' "$RUNNER_TEMP/review.json" > /dev/null; then
+            echo "No actionable findings to publish."
+            exit 0
+          fi
+
+          current_head_sha="$(
+            gh pr view "$PULL_REQUEST_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json headRefOid \
+              --jq '.headRefOid'
+          )"
+          if [ "$current_head_sha" != "$HEAD_SHA" ]; then
+            echo "The pull request head changed; skipping stale review findings."
+            exit 0
+          fi
+
+          gh api \
+            --method POST \
+            "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/reviews" \
+            --input "$RUNNER_TEMP/review.json"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEW_RESULT: ${{ needs.prepare.outputs.result }}

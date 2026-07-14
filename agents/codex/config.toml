@@ -24,3 +24,14 @@ enabled = true
 "files.pythonhosted.org" = "allow"
 "github.com" = "allow"
 "pypi.org" = "allow"
+
+[permissions.pull-request-review]
+description = "Pull request review with workspace and GitHub API access."
+extends = ":workspace"
+
+[permissions.pull-request-review.network]
+enabled = true
+
+[permissions.pull-request-review.network.domains]
+"api.github.com" = "allow"
+"github.com" = "allow"
