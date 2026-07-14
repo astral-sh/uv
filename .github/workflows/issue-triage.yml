@@ -57,6 +57,7 @@ jobs:
     needs: triage
     if: needs.triage.outputs.result != '' && fromJSON(needs.triage.outputs.result).type == 'bug'
     uses: ./.github/workflows/reproduce-bug.yml
+    secrets: inherit
     with:
       issue: ${{ inputs.issue || github.event.issue.number }}
       runner: ubuntu-latest
