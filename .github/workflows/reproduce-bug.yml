@@ -76,7 +76,7 @@ jobs:
           permission-profile: "reproduce-bug"
           safety-strategy: drop-sudo
           allow-users: "*"
-          prompt-file: "agents/prompts/issue-triage-bug.md"
+          prompt-file: "agents/prompts/reproduce-bug.md"
           output-schema-file: "agents/schemas/issue-triage-bug.json"
 
   report:
