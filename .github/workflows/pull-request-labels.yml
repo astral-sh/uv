@@ -5,16 +5,22 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: "A pull request number"
+        required: true
+        type: number
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ inputs.pull_request || github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   labels:
-    if: github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.repository == 'astral-sh/uv' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 15
@@ -27,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', inputs.pull_request) }}
           persist-credentials: false
 
       - name: "Collect pull request context"
@@ -43,7 +49,7 @@ jobs:
             > .pull-request-labels.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request || github.event.pull_request.number }}
 
       - name: "Determine pull request labels"
         id: labels
