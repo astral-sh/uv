@@ -1,6 +1,5 @@
 ---
 source: crates/uv-requirements-txt/src/lib.rs
-assertion_line: 1591
 expression: actual
 ---
 RequirementsTxt {
@@ -121,6 +120,7 @@ RequirementsTxt {
     extra_index_urls: [],
     find_links: [],
     no_index: false,
+    require_hashes: false,
     no_binary: None,
     only_binary: None,
 }

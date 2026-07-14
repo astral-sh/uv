@@ -83,6 +83,8 @@ pub struct RequirementsSpecification {
     pub extra_index_urls: Vec<IndexUrl>,
     /// Whether to disallow index usage.
     pub no_index: bool,
+    /// Whether all requirements must be hashed.
+    pub require_hashes: bool,
     /// The `--find-links` locations to use for fetching packages.
     pub find_links: Vec<IndexUrl>,
     /// The `--no-binary` flags to enforce when selecting distributions.
@@ -240,6 +242,7 @@ impl RequirementsSpecification {
                 .collect(),
             no_binary: requirements_txt.no_binary,
             no_build: requirements_txt.only_binary,
+            require_hashes: requirements_txt.require_hashes,
             ..Self::default()
         }
     }
@@ -584,6 +587,7 @@ impl RequirementsSpecification {
             spec.find_links.extend(source.find_links);
             spec.no_binary.extend(source.no_binary);
             spec.no_build.extend(source.no_build);
+            spec.require_hashes |= source.require_hashes;
         }
 
         // Read all constraints, treating both requirements _and_ constraints as constraints.
@@ -623,6 +627,7 @@ impl RequirementsSpecification {
             spec.find_links.extend(source.find_links);
             spec.no_binary.extend(source.no_binary);
             spec.no_build.extend(source.no_build);
+            spec.require_hashes |= source.require_hashes;
         }
 
         // Read all overrides, treating both requirements _and_ overrides as overrides.
@@ -650,6 +655,7 @@ impl RequirementsSpecification {
             spec.find_links.extend(source.find_links);
             spec.no_binary.extend(source.no_binary);
             spec.no_build.extend(source.no_build);
+            spec.require_hashes |= source.require_hashes;
         }
 
         // Collect excludes.
