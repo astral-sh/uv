@@ -11,6 +11,7 @@ use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
 use insta::assert_snapshot;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -4546,6 +4547,273 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     assert_eq!(
         fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
         "VALUE = 'second'\n"
+    );
+
+    Ok(())
+}
+
+/// Verify that a cold-cache local source archive used as a build requirement is hashed in the
+/// captured build lock and can be replayed without resolving it again.
+#[test]
+fn lock_build_dependencies_hash_path_build_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let helper_source = context.temp_dir.child("helper-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("helper-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "helper"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("helper-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "helper-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("helper.py", "VALUE = 'locked'\n")
+        wheel.writestr(
+            "helper-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: helper\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "helper-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("helper-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    ))?;
+    let helper_archive = block_on(zip.close())?;
+    let helper_hash = format!("sha256:{:x}", Sha256::digest(&helper_archive));
+    fs_err::write(helper_source.path(), helper_archive)?;
+    let helper_url = Url::from_file_path(helper_source.path()).expect("valid file URL");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper @ {helper_url}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    ))?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+from helper import VALUE
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", f"VALUE = {VALUE!r}\n")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    let helper = package_section(&lock, "helper");
+    assert!(
+        helper.contains(&format!("hash = \"{helper_hash}\"")),
+        "{helper}"
+    );
+
+    context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
+        "VALUE = 'locked'\n"
+    );
+
+    Ok(())
+}
+
+/// Verify that a cold-cache direct URL wheel used as a build requirement is hashed in the
+/// captured build lock and can be replayed without resolving it again.
+#[test]
+fn lock_build_dependencies_hash_direct_build_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    let helper_wheel = links_dir.child("helper-0.1.0-py3-none-any.whl");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b"VALUE = 'locked'\n"))?;
+    let entry = ZipEntryBuilder::new(
+        "helper-0.1.0.dist-info/METADATA".into(),
+        Compression::Stored,
+    );
+    block_on(zip.write_entry_whole(
+        entry,
+        b"Metadata-Version: 2.3\nName: helper\nVersion: 0.1.0\n",
+    ))?;
+    let entry = ZipEntryBuilder::new("helper-0.1.0.dist-info/WHEEL".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+    ))?;
+    let entry = ZipEntryBuilder::new("helper-0.1.0.dist-info/RECORD".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    let helper_archive = block_on(zip.close())?;
+    let helper_hash = format!("sha256:{:x}", Sha256::digest(&helper_archive));
+    fs_err::write(helper_wheel.path(), helper_archive)?;
+    let server = uv_test::find_links::FindLinksServer::new(links_dir.path());
+    let helper_url = format!("{}/helper-0.1.0-py3-none-any.whl", server.url());
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper @ {helper_url}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+    ))?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+from helper import VALUE
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", f"VALUE = {VALUE!r}\n")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    let helper = package_section(&lock, "helper");
+    let mut filters = context.filters();
+    filters.push((r"sha256:[0-9a-f]{64}", "sha256:[HASH]"));
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(helper, @r#"
+        [[package]]
+        name = "helper"
+        version = "0.1.0"
+        source = { url = "http://[LOCALHOST]/helper-0.1.0-py3-none-any.whl" }
+        build-only = true
+        wheels = [
+            { url = "http://[LOCALHOST]/helper-0.1.0-py3-none-any.whl", hash = "sha256:[HASH]" },
+        ]
+        "#);
+    });
+    assert!(
+        helper.contains(&format!("hash = \"{helper_hash}\"")),
+        "{helper}"
+    );
+
+    context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
+        "VALUE = 'locked'\n"
     );
 
     Ok(())

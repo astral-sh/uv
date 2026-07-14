@@ -1399,8 +1399,9 @@ impl Lock {
                     && let ResolvedDist::Installable { dist, .. } = resolved_dist
                     && matches!(
                         dist.as_ref(),
-                        Dist::Built(BuiltDist::Path(_))
+                        Dist::Built(BuiltDist::Path(_) | BuiltDist::DirectUrl(_))
                             | Dist::Source(uv_distribution_types::SourceDist::DirectUrl(_))
+                            | Dist::Source(uv_distribution_types::SourceDist::Path(_))
                     ) {
                     generated_hashes = database
                         .get_or_build_wheel_metadata(
