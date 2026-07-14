@@ -17,7 +17,7 @@ use crate::commands::reporters::AuditReporter;
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rustc_hash::FxHashSet;
 use tracing::trace;
 use uv_audit::{
@@ -33,6 +33,7 @@ use uv_fs::{CWD, find_git_repository_root, relative_to};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_redacted::DisplaySafeUrl;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -63,16 +64,10 @@ pub(crate) async fn audit(
     preview: Preview,
     output_format: AuditOutputFormat,
     service: VulnerabilityServiceFormat,
-    service_url: Option<String>,
+    service_url: Option<DisplaySafeUrl>,
     ignore: Vec<VulnerabilityID>,
     ignore_until_fixed: Vec<VulnerabilityID>,
 ) -> Result<ExitStatus> {
-    let service_url = service_url
-        .as_deref()
-        .map(str::parse)
-        .transpose()
-        .context("Invalid OSV service URL")?;
-
     // Check if the audit feature is in preview
     if !preview.is_enabled(PreviewFeature::Audit) {
         warn_user!(
@@ -254,9 +249,8 @@ pub(crate) async fn audit(
     let osv_future = async {
         match service {
             VulnerabilityServiceFormat::Osv => {
-                let osv_url = service_url.unwrap_or_else(|| osv::API_BASE.clone());
                 let client = CachedClient::new(base_client);
-                let service = osv::Osv::new(client, Some(osv_url), concurrency, cache.clone());
+                let service = osv::Osv::new(client, service_url, concurrency, cache.clone());
                 trace!("Auditing {n} dependencies against OSV", n = auditable.len());
                 service.query_batch(&dependencies, osv::Filter::All).await
             }

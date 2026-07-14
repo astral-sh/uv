@@ -3114,7 +3114,7 @@ pub(crate) struct AuditSettings {
     pub(crate) settings: ResolverSettings,
     pub(crate) output_format: AuditOutputFormat,
     pub(crate) service_format: VulnerabilityServiceFormat,
-    pub(crate) service_url: Option<String>,
+    pub(crate) service_url: Option<DisplaySafeUrl>,
     pub(crate) ignore: Vec<VulnerabilityID>,
     pub(crate) ignore_until_fixed: Vec<VulnerabilityID>,
 }

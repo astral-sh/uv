@@ -23,8 +23,9 @@ fn audit_invalid_service_url() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid OSV service URL
-      Caused by: relative URL without a base
+    error: invalid value 'not-a-url' for '--service-url <SERVICE_URL>': relative URL without a base
+
+    For more information, try '--help'.
     ");
 }
 

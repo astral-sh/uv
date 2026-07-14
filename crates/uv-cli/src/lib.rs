@@ -5573,7 +5573,7 @@ pub struct AuditArgs {
     /// The service needs to use the OSV protocol, unless a different
     /// format was requested by `--service-format`.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub service_url: Option<String>,
+    pub service_url: Option<DisplaySafeUrl>,
 }
 
 #[derive(Args)]
