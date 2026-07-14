@@ -29,9 +29,6 @@ Set `type` to exactly one of these repository label names and explain the choice
 If an issue could fit multiple non-duplicate types, choose the type that best matches the primary
 maintainer action requested.
 
-If `type` is `bug`, read and follow `agents/prompts/issue-triage-bug.md`. Otherwise, set `bug` to
-`null`.
-
 Set `summary` to a concise overview of the closest items, or state that none were found.
 
 Clearly distinguish source-backed findings from hypotheses. Do not draft a public reply or claim a

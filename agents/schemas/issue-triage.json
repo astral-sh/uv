@@ -37,19 +37,7 @@
       "enum": ["bug", "enhancement", "duplicate", "question"]
     },
     "type_reason": { "type": "string" },
-    "bug": {
-      "type": ["object", "null"],
-      "additionalProperties": false,
-      "properties": {
-        "reproduction": {
-          "type": "string",
-          "enum": ["reproducible", "not_reproducible", "needs_more_information"]
-        },
-        "reason": { "type": "string" }
-      },
-      "required": ["reproduction", "reason"]
-    },
     "summary": { "type": "string" }
   },
-  "required": ["related", "type", "type_reason", "bug", "summary"]
+  "required": ["related", "type", "type_reason", "summary"]
 }

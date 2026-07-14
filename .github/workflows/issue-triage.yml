@@ -29,11 +29,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          cache-local-path: "/tmp/setup-uv-cache"
-
       - name: "Collect issue context"
         run: |
           gh issue view "$ISSUE" \
@@ -57,6 +52,17 @@ jobs:
           allow-users: "*"
           prompt-file: "agents/prompts/triage-issue.md"
           output-schema-file: "agents/schemas/issue-triage.json"
+
+  reproduce-bug:
+    needs: triage
+    if: needs.triage.outputs.result != '' && fromJSON(needs.triage.outputs.result).type == 'bug'
+    uses: ./.github/workflows/reproduce-bug.yml
+    with:
+      issue: ${{ inputs.issue || github.event.issue.number }}
+      runner: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
 
   report:
     needs: triage
