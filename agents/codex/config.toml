@@ -1,3 +1,5 @@
+default_permissions = ":read-only"
+
 [permissions.issue-triage]
 description = "Read-only issue triage with GitHub API access."
 extends = ":read-only"
