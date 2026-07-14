@@ -12,6 +12,8 @@ use uv_static::EnvVars;
 use fs_err::os::unix::fs::symlink;
 #[cfg(unix)]
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+#[cfg(windows)]
+use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
 use uv_test::{site_packages_path, uv_snapshot};
 
@@ -1491,11 +1493,13 @@ fn file_exists() -> Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
 #[test]
 fn non_utf8_path() {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
+    #[cfg(unix)]
     let path = OsStr::from_bytes(b".venv-\xff");
+    #[cfg(windows)]
+    let path = OsString::from_wide(&[0x002e, 0x0076, 0x0065, 0x006e, 0x0076, 0x002d, 0xd800]);
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(path)
