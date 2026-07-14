@@ -101,12 +101,6 @@ pub(crate) fn create(
     };
     let absolute = std::path::absolute(location)?;
 
-    if absolute.to_str().is_none() {
-        return Err(Error::NonUtf8Path {
-            path: location.to_path_buf(),
-        });
-    }
-
     // Validate the existing location.
     match location.metadata() {
         Ok(metadata) if metadata.is_file() => {
@@ -486,6 +480,12 @@ pub(crate) fn create(
         .map(|path| path.simplified().to_str().unwrap().replace('\\', "\\\\"))
         .join(path_sep);
 
+        let location_string = location
+            .simplified()
+            .to_str()
+            .ok_or_else(|| Error::NonUtf8Path {
+                path: location.clone(),
+            })?;
         let virtual_env_dir = match (relocatable, name.to_owned()) {
             (true, "activate") => Cow::Borrowed(
                 r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#,
@@ -497,10 +497,10 @@ pub(crate) fn create(
             (true, "activate.nu") => Cow::Borrowed(r"(path self | path dirname | path dirname)"),
             (false, "activate.nu") => Cow::Owned(format!(
                 "'{}'",
-                escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
+                escape_posix_for_single_quotes(location_string)
             )),
             // Note: `activate.ps1` is already relocatable by default.
-            _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
+            _ => escape_posix_for_single_quotes(location_string),
         };
 
         let activator = template

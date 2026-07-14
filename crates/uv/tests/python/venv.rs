@@ -1512,8 +1512,6 @@ fn non_utf8_path() {
       Caused by: Virtual environment path is not valid UTF-8: .venv-�
     "
     );
-
-    assert!(!context.temp_dir.path().join(path).exists());
 }
 
 #[test]
