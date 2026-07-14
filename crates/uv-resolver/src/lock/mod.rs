@@ -2382,9 +2382,18 @@ impl Lock {
                 &runtime_package_ids,
                 BuildResolutionStage::Build,
             )?;
+            let bootstrap_resolution_record = self.build_resolution_record_for_package_in_markers(
+                package,
+                build_operation_for_key(&key),
+                target_markers,
+                &runtime_package_ids,
+                BuildResolutionStage::Bootstrap,
+            )?;
             if require_locked_build_resolutions
                 && !build_options.no_build_package(&key.name)
-                && build_resolution_record.is_none()
+                && (build_resolution_record.is_none()
+                    || build_resolution_record.is_some_and(|resolution| resolution.stage.is_some())
+                        && bootstrap_resolution_record.is_none())
             {
                 return Err(LockErrorKind::UncapturedBuildResolution {
                     name: key.name.clone(),
@@ -2395,38 +2404,52 @@ impl Lock {
                 .map_or(package.build_dependencies.as_slice(), |resolution| {
                     resolution.dependencies.as_slice()
                 });
-            let resolution_context =
-                build_resolution_record.map(|resolution| resolution.id.as_str());
-            let Some(dependency_ids) = self.build_dependency_package_ids_from(
-                package,
-                build_dependencies,
-                &package_by_id,
-                Some(executor_markers),
-                Some(&runtime_package_ids),
-                resolution_context,
-            ) else {
-                continue;
-            };
-            for dependency_id in dependency_ids {
-                let Some(dependency_package) = package_by_id.get(&dependency_id) else {
+            let bootstrap_dependencies = bootstrap_resolution_record
+                .map(|resolution| resolution.dependencies.as_slice())
+                .unwrap_or_default();
+            for (dependencies, resolution_context) in [
+                (
+                    build_dependencies,
+                    build_resolution_record.map(|resolution| resolution.id.as_str()),
+                ),
+                (
+                    bootstrap_dependencies,
+                    bootstrap_resolution_record.map(|resolution| resolution.id.as_str()),
+                ),
+            ] {
+                let Some(dependency_ids) = self.build_dependency_package_ids_from(
+                    package,
+                    dependencies,
+                    &package_by_id,
+                    Some(executor_markers),
+                    Some(&runtime_package_ids),
+                    resolution_context,
+                ) else {
                     continue;
                 };
-                let HashedDist { dist, .. } = dependency_package.to_dist(
-                    workspace_root,
-                    tag_policy,
-                    build_options,
-                    executor_markers,
-                )?;
-                let Dist::Source(source_dist) = dist else {
-                    continue;
-                };
-                let key = BuildPackageKey::from_source_dist(
-                    dependency_package.id.name.clone(),
-                    dependency_package.id.version.clone(),
-                    Some(&source_dist),
-                );
-                if !build_resolution_roots.contains(&(dependency_package.id.clone(), key.clone())) {
-                    queue.push_back((dependency_package.id.clone(), key));
+                for dependency_id in dependency_ids {
+                    let Some(dependency_package) = package_by_id.get(&dependency_id) else {
+                        continue;
+                    };
+                    let HashedDist { dist, .. } = dependency_package.to_dist(
+                        workspace_root,
+                        tag_policy,
+                        build_options,
+                        executor_markers,
+                    )?;
+                    let Dist::Source(source_dist) = dist else {
+                        continue;
+                    };
+                    let key = BuildPackageKey::from_source_dist(
+                        dependency_package.id.name.clone(),
+                        dependency_package.id.version.clone(),
+                        Some(&source_dist),
+                    );
+                    if !build_resolution_roots
+                        .contains(&(dependency_package.id.clone(), key.clone()))
+                    {
+                        queue.push_back((dependency_package.id.clone(), key));
+                    }
                 }
             }
         }

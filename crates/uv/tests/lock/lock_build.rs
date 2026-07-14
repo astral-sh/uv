@@ -3232,6 +3232,35 @@ def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
         "{dep}"
     );
 
+    // Removing the complete bootstrap record must not fall back to the final environment.
+    let bootstrap_resolution = resolution_sections(&lock)
+        .split("\n\n")
+        .find(|resolution| {
+            resolution.contains("stage = \"bootstrap\"") && resolution.contains("name = \"dep\"")
+        })
+        .expect("locked bootstrap resolution")
+        .to_string();
+    context.temp_dir.child("uv.lock").write_str(&lock.replacen(
+        &format!("{bootstrap_resolution}\n\n"),
+        "",
+        1,
+    ))?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The lockfile does not contain build dependencies for `dep`; run `uv lock --preview-features lock-build-dependencies` without disabling builds for this package
+    ");
+
     // Removing the initial root must not allow a frozen build to fall back to live resolution.
     let bootstrap_root = lock
         .lines()
@@ -3260,6 +3289,212 @@ def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
       ╰─▶ The initial build requirements for `dep` do not match the locked bootstrap environment
 
     hint: `dep` was included because `project` (v0.1.0) depends on `dep`
+    ");
+
+    Ok(())
+}
+
+/// Verify that source builds reachable only from the bootstrap environment replay their locked
+/// nested build requirements without invoking the resolver.
+#[test]
+fn lock_build_dependencies_replay_bootstrap_only_nested_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("seed-1.0.0-py3-none-any.whl"),
+        "seed",
+        "1.0.0",
+    )?;
+    write_wheel(
+        &links_dir.child("tool-1.0.0-py3-none-any.whl"),
+        "tool",
+        "1.0.0",
+    )?;
+
+    let seed_source = links_dir.child("seed-2.0.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("seed-2.0.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "seed"
+        version = "2.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["tool==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("seed-2.0.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "seed-2.0.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("seed.py", "")
+        wheel.writestr(
+            "seed-2.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: seed\nVersion: 2.0.0\n",
+        )
+        wheel.writestr(
+            "seed-2.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("seed-2.0.0.dist-info/RECORD", "")
+    return filename
+"#,
+    ))?;
+    fs_err::write(seed_source.path(), block_on(zip.close())?)?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["seed"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return ["seed<2"]
+
+def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+    dist_info = Path(metadata_directory) / "dep-0.1.0.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n"
+    )
+    return dist_info.name
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep.py", "")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let resolutions = resolution_sections(&lock);
+    let dep_bootstrap_resolution = resolutions
+        .split("\n\n")
+        .find(|resolution| {
+            resolution.contains("stage = \"bootstrap\"") && resolution.contains("name = \"dep\"")
+        })
+        .expect("locked bootstrap resolution");
+    let dep_build_resolution = resolutions
+        .split("\n\n")
+        .find(|resolution| {
+            resolution.contains("stage = \"build\"") && resolution.contains("name = \"dep\"")
+        })
+        .expect("locked build resolution");
+    assert!(
+        dep_bootstrap_resolution.contains(r#"{ name = "seed", version = "2.0.0""#),
+        "{dep_bootstrap_resolution}"
+    );
+    assert!(
+        dep_build_resolution.contains(r#"{ name = "seed", version = "1.0.0""#),
+        "{dep_build_resolution}"
+    );
+    assert!(
+        !dep_build_resolution.contains(r#"{ name = "seed", version = "2.0.0""#),
+        "{dep_build_resolution}"
+    );
+    let seed_bootstrap_resolution = resolutions
+        .split("\n\n")
+        .find(|resolution| {
+            resolution.contains("stage = \"bootstrap\"")
+                && resolution.contains("\nname = \"seed\"\n")
+        })
+        .expect("locked nested bootstrap resolution");
+    assert!(
+        seed_bootstrap_resolution.contains(r#"{ name = "tool", version = "1.0.0""#),
+        "{seed_bootstrap_resolution}"
+    );
+
+    // With no index or find-links configured, a live nested resolution would be unsatisfiable.
+    // The frozen build can only succeed by reconstructing the bootstrap-only source build.
+    context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    context.temp_dir.child("uv.lock").write_str(&lock.replacen(
+        &format!("{seed_bootstrap_resolution}\n\n"),
+        "",
+        1,
+    ))?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The lockfile does not contain build dependencies for `seed`; run `uv lock --preview-features lock-build-dependencies` without disabling builds for this package
     ");
 
     Ok(())

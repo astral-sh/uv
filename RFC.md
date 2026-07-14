@@ -654,10 +654,9 @@ First-class build records add a new top-level lockfile concept. The same package
 multiple environment member lists, increasing lockfile size.
 
 The proposal changes frozen replay. A backend's dependency-discovery hook runs during lock
-generation, not during frozen replay. Backends that rely on side effects from dependency-discovery
-hooks during every build would not observe those side effects under frozen replay. PEP 517 and PEP
-660 define these hooks as dependency discovery; relying on unrelated side effects is not part of
-this replay contract.
+generation and again in the locked bootstrap environment during frozen replay. PEP 517 and PEP 660
+define these hooks as dependency discovery; relying on unrelated side effects is not part of this
+replay contract.
 
 Capturing build requirements can require backend execution during locking even when project metadata
 is otherwise statically available. This is necessary to record the complete build environment.
@@ -1087,8 +1086,8 @@ Frozen replay reruns dependency-discovery hooks and validates their requirements
 final roots.
 
 This preserves the ordinary frontend invocation sequence and ensures that hook-only dependencies are
-not installed before the hook runs. Hook output can change between locking and replay, so a changed
-hook is rejected instead of resolving new requirements outside the lockfile.
+not installed before the hook runs. New or incompatible hook requirements are rejected instead of
+being resolved outside the lockfile; omitted requirements remain in the captured final environment.
 
 The selected bootstrap and final environments both come from the lockfile.
 
@@ -1107,8 +1106,8 @@ run prepare_metadata_for_build_wheel or build_wheel
 This avoids installing hook-only dependencies before the discovery hook runs.
 
 The lockfile must distinguish bootstrap, hook-added, configured extra, and final requirements as
-replay authority. A changed backend can produce changed hook output during frozen replay and must be
-rejected by validation.
+replay authority. A changed backend can produce new or incompatible hook requirements during frozen
+replay and must be rejected by validation; omitted requirements remain captured.
 
 Requirement provenance can still be stored for diagnostics, while the staged resolutions remain the
 replay authority.
