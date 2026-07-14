@@ -17,6 +17,7 @@ jobs:
     runs-on: depot-ubuntu-24.04
     outputs:
       test-code: ${{ steps.plan.outputs.test_code }}
+      review-security: ${{ steps.plan.outputs.review_security }}
       check-schema: ${{ steps.plan.outputs.check_schema }}
       build-release-binaries: ${{ steps.plan.outputs.build_release_binaries }}
       run-checks: ${{ steps.plan.outputs.run_checks }}
@@ -109,6 +110,7 @@ jobs:
 
           # Decisions
           [[ ! $has_skip_label && ($any_code_changed || $on_main_branch) ]] && test_code=1
+          [[ $any_code_changed ]] && review_security=1
           [[ $schema_changed ]] && check_schema=1
           [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
           [[ ! $has_skip_label ]] && run_checks=1
@@ -129,6 +131,7 @@ jobs:
           out() { [[ "$2" ]] && echo "$1=true" || echo "$1=false"; }
           {
             out test_code               "$test_code"
+            out review_security         "$review_security"
             out check_schema            "$check_schema"
             out build_release_binaries  "$build_release_binaries"
             out run_checks              "$run_checks"
@@ -148,6 +151,15 @@ jobs:
 
   check-fmt:
     uses: ./.github/workflows/check-fmt.yml
+
+  review:
+    needs: plan
+    if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
+    uses: ./.github/workflows/pull-request-security-review.yml
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write
 
   check-lint:
     needs: plan
