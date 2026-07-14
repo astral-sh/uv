@@ -57,7 +57,7 @@ jobs:
     needs: triage
     if: needs.triage.outputs.result != '' && fromJSON(needs.triage.outputs.result).type == 'bug'
     uses: ./.github/workflows/reproduce-bug.yml
-    secrets: inherit
+    secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
     with:
       issue: ${{ inputs.issue || github.event.issue.number }}
       runner: ubuntu-latest
