@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   review:
-    if: github.repository == 'astral-sh/uv' && github.event.pull_request.user.login == 'zanieb' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    if: github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 20
