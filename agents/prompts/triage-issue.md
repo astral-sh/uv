@@ -13,10 +13,9 @@ inspect promising issues, pull requests, and their comments as needed. Compare t
 symptoms, commands, conditions, expected behavior, actual behavior, and requested changes. Shared
 terminology alone is not enough to establish a meaningful relationship.
 
-Do not decide whether the new issue is a duplicate. Populate `related.items` with the closest
-existing issues and pull requests. Explain the important evidence for every item. Leave the array
-empty when no meaningful relationship was found, and summarize the searches performed in
-`related.search_scope`.
+Populate `related.items` with the closest existing issues and pull requests. Explain the important
+evidence for every item. Leave the array empty when no meaningful relationship was found, and
+summarize the searches performed in `related.search_scope`.
 
 Set `summary` to a concise overview of the closest items, or state that none were found.
 
