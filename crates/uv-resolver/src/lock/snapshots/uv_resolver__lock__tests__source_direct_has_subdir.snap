@@ -34,7 +34,7 @@ Ok(
         },
         options: ResolverOptions {
             resolution_mode: Highest,
-            prerelease_mode: IfNecessaryOrExplicit,
+            prerelease_mode: IfNecessary,
             fork_strategy: RequiresPython,
             exclude_newer: ExcludeNewer {
                 global: None,

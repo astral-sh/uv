@@ -25,7 +25,7 @@ use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
-use crate::prerelease::AllowPrerelease;
+use crate::prerelease::PrereleaseSelection;
 use crate::pubgrub::{
     PubGrubHint, PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, Range,
     report_derivation_tree,
@@ -1556,8 +1556,8 @@ fn simplify_range(
     // Check if pre-releases are allowed
     let prereleases_not_allowed = candidate_selector
         .prerelease_strategy()
-        .allows(name, resolver_environment)
-        != AllowPrerelease::Yes;
+        .selection(name, resolver_environment)
+        == PrereleaseSelection::Disallow;
 
     let any_prerelease = range.iter().any(|(start, end)| {
         let is_pre1 = match start {

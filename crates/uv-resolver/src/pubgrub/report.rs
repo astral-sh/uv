@@ -27,7 +27,7 @@ use crate::error::{ErrorTree, PrefixMatch};
 use crate::exclude_newer::EffectiveExcludeNewerSource;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
-use crate::prerelease::AllowPrerelease;
+use crate::prerelease::PrereleaseSelection;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
@@ -1324,7 +1324,7 @@ impl PubGrubReportFormatter<'_> {
         options: &Options,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
-        if selector.prerelease_strategy().allows(name, env) == AllowPrerelease::Yes {
+        if selector.prerelease_strategy().selection(name, env) != PrereleaseSelection::Disallow {
             return;
         }
 

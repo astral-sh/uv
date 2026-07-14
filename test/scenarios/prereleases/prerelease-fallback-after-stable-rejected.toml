@@ -1,0 +1,28 @@
+name = "prerelease-fallback-after-stable-rejected"
+description = "A pre-release is selected when PubGrub rejects every stable candidate in the active range."
+
+[root]
+requires = ["a==1.0.0", "c>=1.0.0"]
+
+[expected]
+satisfiable = true
+explanation = "The stable version of `c` and its newest pre-release conflict with the root requirement on `a`, so the remaining pre-release is selected."
+
+[expected.packages]
+a = "1.0.0"
+c = "1.5.0a1"
+
+[packages.a.versions."1.0.0"]
+
+[packages.a.versions."2.0.0"]
+
+[packages.c.versions."1.0.0"]
+requires = ["d==2.0.0"]
+
+[packages.c.versions."1.5.0a1"]
+
+[packages.c.versions."2.0.0b1"]
+requires = ["a>=2.0.0"]
+
+[packages.d.versions."2.0.0"]
+requires = ["a>=2.0.0b1"]
