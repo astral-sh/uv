@@ -47,7 +47,7 @@ jobs:
       fail-fast: false
       matrix:
         issue: ${{ fromJSON(needs.collect.outputs.issues) }}
-    uses: ./.github/workflows/issue-triage.yml
+    uses: ./.github/workflows/issue-triage.yml # zizmor: ignore[secrets-inherit] Required for environment secrets in reusable workflows.
     with:
       issue: ${{ matrix.issue }}
     secrets: inherit
