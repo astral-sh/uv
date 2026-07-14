@@ -1,10 +1,15 @@
 [permissions.issue-triage]
-description = "Read-only issue triage with GitHub API access."
+description = "Issue triage with temporary filesystem and GitHub API access."
 extends = ":read-only"
+
+[permissions.issue-triage.filesystem]
+":tmpdir" = "write"
 
 [permissions.issue-triage.network]
 enabled = true
 
 [permissions.issue-triage.network.domains]
 "api.github.com" = "allow"
+"files.pythonhosted.org" = "allow"
 "github.com" = "allow"
+"pypi.org" = "allow"
