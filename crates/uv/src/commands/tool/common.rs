@@ -814,10 +814,10 @@ pub(crate) fn finalize_tool_install(
                                 .unwrap_or_else(|| filename.clone());
                             stem.push(suffix);
                             if let Some(extension) = path.extension() {
-                                PathBuf::from(stem).with_extension(extension).into_os_string()
-                            } else {
-                                stem
+                                stem.push(".");
+                                stem.push(extension);
                             }
+                            stem
                         },
                         unix => {
                             let mut filename = filename;

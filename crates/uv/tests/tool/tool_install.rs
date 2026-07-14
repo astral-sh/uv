@@ -224,7 +224,7 @@ fn tool_install_suffix() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.2.0")
         .arg("--suffix")
-        .arg("-old")
+        .arg("-0.11")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -242,14 +242,14 @@ fn tool_install_suffix() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed 2 executables: black-old, blackd-old
+    Installed 2 executables: black-0.11, blackd-0.11
     ");
 
     context
         .tool_install()
         .arg("black==24.3.0")
         .arg("--suffix")
-        .arg("-new")
+        .arg("-0.12")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
@@ -257,16 +257,16 @@ fn tool_install_suffix() {
         .success();
 
     tool_dir
-        .child("black-old")
+        .child("black-0.11")
         .assert(predicate::path::is_dir());
     tool_dir
-        .child("black-new")
+        .child("black-0.12")
         .assert(predicate::path::is_dir());
     bin_dir
-        .child(format!("black-old{}", std::env::consts::EXE_SUFFIX))
+        .child(format!("black-0.11{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
     bin_dir
-        .child(format!("black-new{}", std::env::consts::EXE_SUFFIX))
+        .child(format!("black-0.12{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
     bin_dir
         .child(format!("black{}", std::env::consts::EXE_SUFFIX))
@@ -275,14 +275,14 @@ fn tool_install_suffix() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black-old").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black-0.11").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         package = "black"
-        suffix = "-old"
+        suffix = "-0.11"
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
-            { name = "black-old", install-path = "[TEMP_DIR]/bin/black-old", from = "black" },
-            { name = "blackd-old", install-path = "[TEMP_DIR]/bin/blackd-old", from = "black" },
+            { name = "black-0.11", install-path = "[TEMP_DIR]/bin/black-0.11", from = "black" },
+            { name = "blackd-0.11", install-path = "[TEMP_DIR]/bin/blackd-0.11", from = "black" },
         ]
 
         [tool.options]
@@ -297,18 +297,18 @@ fn tool_install_suffix() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black-new v24.3.0
-    - black-new
-    - blackd-new
-    black-old v24.2.0
-    - black-old
-    - blackd-old
+    black-0.11 v24.2.0
+    - black-0.11
+    - blackd-0.11
+    black-0.12 v24.3.0
+    - black-0.12
+    - blackd-0.12
 
     ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.tool_uninstall()
-        .arg("black-old")
+        .arg("black-0.11")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -317,20 +317,20 @@ fn tool_install_suffix() {
     ----- stdout -----
 
     ----- stderr -----
-    Uninstalled 2 executables: black-old, blackd-old
+    Uninstalled 2 executables: black-0.11, blackd-0.11
     ");
 
     tool_dir
-        .child("black-old")
+        .child("black-0.11")
         .assert(predicate::path::missing());
     tool_dir
-        .child("black-new")
+        .child("black-0.12")
         .assert(predicate::path::is_dir());
     bin_dir
-        .child(format!("black-old{}", std::env::consts::EXE_SUFFIX))
+        .child(format!("black-0.11{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::missing());
     bin_dir
-        .child(format!("black-new{}", std::env::consts::EXE_SUFFIX))
+        .child(format!("black-0.12{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
 }
 
