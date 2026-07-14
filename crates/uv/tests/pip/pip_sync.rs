@@ -6069,6 +6069,41 @@ fn pep_751() -> Result<()> {
 }
 
 #[test]
+fn pep_751_rejects_duplicate_active_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.1.0"
+        wheels = [{ url = "https://example.com/iniconfig-2.1.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Multiple active package entries found for `iniconfig`
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_require_hashes_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
