@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -289,6 +290,24 @@ impl InstalledTools {
             }
         }
         Ok(tools)
+    }
+
+    /// Return an installed tool with a name that differs only by ASCII case.
+    pub fn find_case_insensitive_name(&self, name: &ToolName) -> Result<Option<ToolName>, Error> {
+        for directory in uv_fs::directories(self.root())? {
+            let Some(existing_name) = directory
+                .file_name()
+                .and_then(OsStr::to_str)
+                .and_then(|name| ToolName::from_str(name).ok())
+            else {
+                continue;
+            };
+            if existing_name != *name && existing_name.as_str().eq_ignore_ascii_case(name.as_str())
+            {
+                return Ok(Some(existing_name));
+            }
+        }
+        Ok(None)
     }
 
     /// Get the receipt for the given tool.

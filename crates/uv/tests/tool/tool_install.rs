@@ -334,6 +334,58 @@ fn tool_install_suffix() {
         .assert(predicate::path::exists());
 }
 
+/// Reject suffixes that alias an existing tool on case-insensitive filesystems.
+#[test]
+fn tool_install_case_insensitive_suffix_collision() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .arg("--suffix")
+        .arg("_PREVIEW")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black==24.2.0")
+        .arg("--suffix")
+        .arg("_preview")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Tool name `black_preview` conflicts with existing tool `black_PREVIEW`
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black_PREVIEW").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        package = "black"
+        suffix = "_PREVIEW"
+        requirements = [{ name = "black", specifier = "==24.2.0" }]
+        entrypoints = [
+            { name = "black_PREVIEW", install-path = "[TEMP_DIR]/bin/black_PREVIEW", from = "black" },
+            { name = "blackd_PREVIEW", install-path = "[TEMP_DIR]/bin/blackd_PREVIEW", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+}
+
 #[test]
 fn tool_install_relative_exclude_newer_receipt_preserves_span() {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();

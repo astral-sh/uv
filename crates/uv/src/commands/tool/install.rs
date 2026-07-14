@@ -470,6 +470,9 @@ pub(crate) async fn install(
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
+    if let Some(existing_name) = installed_tools.find_case_insensitive_name(&tool_name)? {
+        bail!("Tool name `{tool_name}` conflicts with existing tool `{existing_name}`");
+    }
     let tool_dir = installed_tools.tool_dir(&tool_name);
 
     // Find the existing receipt, if it exists. If the receipt is present but malformed, we'll
@@ -512,6 +515,15 @@ pub(crate) async fn install(
             "Tool name `{tool_name}` is already used by package `{}`",
             existing_tool_receipt.package().cyan()
         );
+    }
+    if let Some(existing_tool_receipt) = &existing_tool_receipt
+        && existing_tool_receipt.suffix() != suffix.as_deref()
+    {
+        let existing_name = ToolName::from_package_name(
+            existing_tool_receipt.package(),
+            existing_tool_receipt.suffix(),
+        )?;
+        bail!("Tool name `{tool_name}` conflicts with existing tool `{existing_name}`");
     }
 
     let existing_environment = if force {
