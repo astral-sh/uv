@@ -4,6 +4,7 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
 
+use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 // Print the version
@@ -2566,6 +2567,76 @@ fn version_virtual_workspace_root_rejects_before_members() -> Result<()> {
 
     ----- stderr -----
     error: No `project` table found in: [TEMP_DIR]/pyproject.toml
+    ");
+
+    Ok(())
+}
+
+/// Read the frozen version of a workspace member without discovering an interpreter.
+#[test]
+fn version_get_frozen_workspace_without_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["child"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child"
+            version = "2.0.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [manifest]
+        members = ["child"]
+
+        [[package]]
+        name = "child"
+        version = "1.0.0"
+        source = { editable = "child" }
+    "#})?;
+
+    // A file can't be initialized as a cache directory.
+    let cache_file = context.temp_dir.child("cache-file");
+    cache_file.touch()?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child")
+        .arg("--short")
+        .env(EnvVars::UV_CACHE_DIR, cache_file.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    2.0.0
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child")
+        .arg("--frozen")
+        .arg("--python").arg("9.9")
+        .arg("--no-python-downloads")
+        .env(EnvVars::UV_CACHE_DIR, cache_file.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child 1.0.0
+
+    ----- stderr -----
     ");
 
     Ok(())
