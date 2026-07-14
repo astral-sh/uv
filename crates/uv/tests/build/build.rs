@@ -2346,6 +2346,80 @@ fn build_nested_script_entry_point_name() -> Result<()> {
     Ok(())
 }
 
+/// Plugin entry point names must not be able to inject a new `console_scripts` section.
+#[test]
+fn build_entry_point_name_injection() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [project.entry-points."project.plugins"]
+        "plugin\n\n[console_scripts]\nowned" = "project:plugin"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Invalid project metadata
+      Caused by: Entrypoint name "plugin/n/n[console_scripts]/nowned" must not start with `[`, contain `=` or a newline, or have leading or trailing whitespace
+    "#);
+
+    Ok(())
+}
+
+/// Entry point object references must not be able to inject a new `console_scripts` section.
+#[test]
+fn build_entry_point_object_injection() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [project.entry-points."project.plugins"]
+        plugin = "project:plugin\n\n[console_scripts]\nowned = project:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Invalid project metadata
+      Caused by: Entrypoint object reference "project:plugin/n/n[console_scripts]/nowned = project:main" must be a valid Python object reference
+    "#);
+
+    Ok(())
+}
+
 /// Test the `--list` option.
 #[test]
 fn build_list_files() -> Result<()> {

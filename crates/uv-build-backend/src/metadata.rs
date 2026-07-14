@@ -1,5 +1,6 @@
 use indexmap::IndexMap;
 use itertools::Itertools;
+use regex::Regex;
 use serde::{Deserialize, Deserializer};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, Bound};
@@ -8,7 +9,8 @@ use std::fmt::Display;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
-use tracing::{debug, trace, warn};
+use std::sync::LazyLock;
+use tracing::{debug, trace};
 use uv_warnings::warn_user_once;
 use version_ranges::Ranges;
 use walkdir::WalkDir;
@@ -80,6 +82,12 @@ pub enum ValidationError {
         "Script entry point name `{0}` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes"
     )]
     InvalidScriptName(String),
+    #[error(
+        "Entrypoint name {0:?} must not start with `[`, contain `=` or a newline, or have leading or trailing whitespace"
+    )]
+    InvalidEntryPointName(String),
+    #[error("Entrypoint object reference {0:?} must be a valid Python object reference")]
+    InvalidEntryPointObjectReference(String),
     #[error("Use `project.scripts` instead of `project.entry-points.console_scripts`")]
     ReservedScripts,
     #[error("Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`")]
@@ -900,43 +908,128 @@ impl PyProjectToml {
         group: &str,
         entries: impl IntoIterator<Item = (&'a String, &'a String)>,
     ) -> Result<(), ValidationError> {
-        if !group
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_alphanumeric() || c == '_')
-            || !group
-                .chars()
-                .all(|c| c.is_alphanumeric() || c == '.' || c == '_')
-        {
+        if group.split('.').any(|part| {
+            part.is_empty()
+                || !part
+                    .chars()
+                    .all(|character| character.is_alphanumeric() || character == '_')
+        }) {
             return Err(ValidationError::InvalidGroup(group.to_string()));
         }
 
         let _ = writeln!(writer, "[{group}]");
         for (name, object_reference) in entries {
-            let compliant_name = name.chars().all(|character| {
-                character.is_alphanumeric() || matches!(character, '.' | '-' | '_')
-            });
+            let compliant_script_name = !name.is_empty()
+                && name.chars().all(|character| {
+                    character.is_alphanumeric() || matches!(character, '.' | '-' | '_')
+                });
             let dot_only_name = name.chars().all(|character| character == '.');
 
             if matches!(group, "console_scripts" | "gui_scripts")
-                && (name.is_empty() || dot_only_name || !compliant_name)
+                && (name.is_empty() || dot_only_name || !compliant_script_name)
             {
                 return Err(ValidationError::InvalidScriptName(name.clone()));
             }
 
-            if !compliant_name {
-                warn!(
-                    "Entrypoint names should consist of letters, numbers, dots, underscores and \
-                    dashes; non-compliant name: {name}"
-                );
+            if name.is_empty()
+                || name.starts_with('[')
+                || name.contains(['=', '\r', '\n'])
+                || name.trim() != name
+            {
+                return Err(ValidationError::InvalidEntryPointName(name.clone()));
             }
 
-            // TODO(konsti): Validate that the object references are valid Python identifiers.
+            if !valid_entry_point_object_reference(object_reference) {
+                return Err(ValidationError::InvalidEntryPointObjectReference(
+                    object_reference.clone(),
+                ));
+            }
+
             let _ = writeln!(writer, "{name} = {object_reference}");
         }
         writer.push('\n');
         Ok(())
     }
+}
+
+/// Validate a Python object reference, including the deprecated extra syntax.
+fn valid_entry_point_object_reference(object_reference: &str) -> bool {
+    static PYTHON_IDENTIFIER: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"^[_\p{XID_Start}]\p{XID_Continue}*$").expect("valid Python identifier regex")
+    });
+
+    let object_reference = object_reference.trim_end();
+    let object_reference =
+        if let Some((object_reference, extras)) = object_reference.split_once('[') {
+            let Some(extras) = extras.strip_suffix(']') else {
+                return false;
+            };
+            if extras
+                .split(',')
+                .any(|extra| ExtraName::from_str(extra.trim()).is_err())
+            {
+                return false;
+            }
+            object_reference.trim_end()
+        } else {
+            object_reference
+        };
+
+    let (module, object) = object_reference
+        .split_once(':')
+        .map_or((object_reference, None), |(module, object)| {
+            (module.trim_end(), Some(object.trim_start()))
+        });
+
+    module
+        .split('.')
+        .all(|part| PYTHON_IDENTIFIER.is_match(part) && !is_python_keyword(part))
+        && object.is_none_or(|object| {
+            object
+                .split('.')
+                .all(|part| PYTHON_IDENTIFIER.is_match(part) && !is_python_keyword(part))
+        })
+}
+
+fn is_python_keyword(value: &str) -> bool {
+    matches!(
+        value,
+        "False"
+            | "None"
+            | "True"
+            | "and"
+            | "as"
+            | "assert"
+            | "async"
+            | "await"
+            | "break"
+            | "class"
+            | "continue"
+            | "def"
+            | "del"
+            | "elif"
+            | "else"
+            | "except"
+            | "finally"
+            | "for"
+            | "from"
+            | "global"
+            | "if"
+            | "import"
+            | "in"
+            | "is"
+            | "lambda"
+            | "nonlocal"
+            | "not"
+            | "or"
+            | "pass"
+            | "raise"
+            | "return"
+            | "try"
+            | "while"
+            | "with"
+            | "yield"
+    )
 }
 
 /// The `[project]` section of a pyproject.toml as specified in
@@ -2017,6 +2110,67 @@ mod tests {
         "#
         });
         assert_snapshot!(script_error(&contents), @"Entrypoint groups must consist of letters and numbers separated by dots, invalid group: a@b");
+    }
+
+    #[test]
+    fn valid_plugin_entry_point_names_and_objects() {
+        let contents = extend_project(indoc! {r#"
+            [project.entry-points."project.plugins"]
+            "my plugin" = "project:plugin [extra]   "
+            "plugin+v2" = "cafe\u0301:handler"
+        "#});
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
+
+        assert_eq!(
+            pyproject_toml.to_entry_points().unwrap().unwrap(),
+            "[project.plugins]\nmy plugin = project:plugin [extra]   \nplugin+v2 = cafe\u{301}:handler\n\n"
+        );
+    }
+
+    #[test]
+    fn invalid_plugin_entry_point_names() {
+        for name in [
+            "plugin=bad",
+            " leading",
+            "trailing ",
+            "[plugin",
+            "plugin\nother",
+            "plugin\rother",
+        ] {
+            let contents = extend_project(&formatdoc! {r#"
+                [project.entry-points."project.plugins"]
+                {name:?} = "project:plugin"
+            "#});
+
+            assert!(
+                script_error(&contents).starts_with("Entrypoint name"),
+                "expected `{name}` to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_entry_point_object_components() {
+        for object_reference in [
+            "project-name:plugin",
+            "project:plugin-name",
+            "1project:plugin",
+            "project:1plugin",
+            "project\u{b2}:plugin",
+            "project:plugin\u{b2}",
+            "class:plugin",
+            "project:class",
+        ] {
+            let contents = extend_project(&formatdoc! {r#"
+                [project.entry-points."project.plugins"]
+                plugin = {object_reference:?}
+            "#});
+
+            assert!(
+                script_error(&contents).starts_with("Entrypoint object reference"),
+                "expected `{object_reference}` to be rejected"
+            );
+        }
     }
 
     #[test]

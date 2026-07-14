@@ -39,6 +39,7 @@ futures-lite = { workspace = true }
 globset = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
+regex = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
@@ -69,4 +70,3 @@ uv-preview = { workspace = true, features = ["testing"] }
 anstream = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
-regex = { workspace = true }
