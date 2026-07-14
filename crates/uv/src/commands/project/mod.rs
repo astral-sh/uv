@@ -1809,7 +1809,7 @@ impl ProjectEnvironment {
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
                         ),
                         uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
-                        false,
+                        uv_virtualenv::Seed::Disabled,
                         upgradeable,
                     )?;
                     return Ok(if replace_environment {
@@ -1871,7 +1871,7 @@ impl ProjectEnvironment {
                         uv_virtualenv::RemovalReason::ManagedEnvironment,
                     ),
                     uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     upgradeable,
                 )?;
 
@@ -2025,7 +2025,7 @@ impl ScriptEnvironment {
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
                         ),
                         false,
-                        false,
+                        uv_virtualenv::Seed::Disabled,
                         upgradeable,
                     )?;
                     return Ok(if root.exists() {
@@ -2062,7 +2062,7 @@ impl ScriptEnvironment {
                         uv_virtualenv::RemovalReason::ManagedEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     upgradeable,
                 )?;
 

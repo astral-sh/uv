@@ -312,7 +312,7 @@ impl CachedEnvironment {
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             true,
-            false,
+            uv_virtualenv::Seed::Disabled,
             false,
         )?;
 

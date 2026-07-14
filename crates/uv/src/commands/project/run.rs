@@ -481,7 +481,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?;
 
@@ -689,7 +689,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?
             } else {
@@ -921,7 +921,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?;
                 venv.into_interpreter()
@@ -1047,7 +1047,7 @@ pub(crate) async fn run(
                     uv_virtualenv::RemovalReason::TemporaryEnvironment,
                 ),
                 false,
-                false,
+                uv_virtualenv::Seed::Disabled,
                 false,
             )
         })

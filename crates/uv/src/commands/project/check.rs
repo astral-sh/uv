@@ -223,7 +223,7 @@ pub(crate) async fn check(
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             false,
-            false,
+            uv_virtualenv::Seed::Disabled,
             false,
         )?)
     } else {

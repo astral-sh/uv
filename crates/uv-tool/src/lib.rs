@@ -347,7 +347,7 @@ impl InstalledTools {
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::ManagedEnvironment),
             false,
-            false,
+            uv_virtualenv::Seed::Disabled,
             false,
         )?;
 
