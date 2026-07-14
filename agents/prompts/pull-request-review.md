@@ -19,7 +19,8 @@ priority from 0 (highest) to 3 (lowest), and a confidence score between 0 and 1.
 useful line range. `relative_file_path` must be relative to the repository root, and the entire
 range must be present in `.pull-request-review.diff` so GitHub can attach the comment. Use `RIGHT`
 for added or context lines and `LEFT` for deleted lines. Verify every path, line number, and side
-before returning the result.
+before returning the result. When a finding has a clear, localized fix, include a tested GitHub
+`suggestion` block in its body that replaces the exact cited `RIGHT`-side line range.
 
 Leave `findings` empty when there are no actionable issues. Set `summary` to a concise,
 evidence-based overview of the review. Clearly distinguish confirmed defects from hypotheses.

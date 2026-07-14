@@ -18,7 +18,26 @@ from typing import Any, TextIO
 
 
 def without_mentions(text: str) -> str:
-    return re.sub(r"(?<![A-Za-z0-9_.])@(?=[A-Za-z0-9])", "@\u200b", text)
+    lines = []
+    fence: tuple[str, int] | None = None
+    for line in text.splitlines(keepends=True):
+        match = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        if match:
+            marker = match[1]
+            if fence is None:
+                fence = marker[0], len(marker)
+            elif (
+                marker[0] == fence[0]
+                and len(marker) >= fence[1]
+                and not line[match.end() :].strip()
+            ):
+                fence = None
+            lines.append(line)
+        elif fence is not None:
+            lines.append(line)
+        else:
+            lines.append(re.sub(r"(?<![A-Za-z0-9_.])@(?=[A-Za-z0-9])", "@\u200b", line))
+    return "".join(lines)
 
 
 def review_payload(review: dict[str, Any], commit_id: str) -> dict[str, Any]:
