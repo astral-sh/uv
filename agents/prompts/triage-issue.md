@@ -26,6 +26,9 @@ Set `type` to exactly one of these repository label names and explain the choice
 - `enhancement` when the issue requests new functionality or an improvement to existing behavior.
 - `question` when the issue primarily asks for clarification or support.
 
+Do not classify the new issue as a duplicate just because a pull request created in response to it
+fixes or implements the reported behavior.
+
 If an issue could fit multiple non-duplicate types, choose the type that best matches the primary
 maintainer action requested.
 
