@@ -13096,7 +13096,7 @@ fn pep_751_install_invalid_artifact_urls() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Artifact URL cannot be used to infer an index: `data:application/octet-stream,ignored`
+    error: Invalid artifact URL: `data:application/octet-stream,ignored`
     "
     );
 
@@ -13124,7 +13124,7 @@ fn pep_751_install_invalid_artifact_urls() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Artifact URL cannot be used to infer an index: `data:application/octet-stream,ignored`
+    error: Invalid artifact URL: `data:application/octet-stream,ignored`
     "
     );
 

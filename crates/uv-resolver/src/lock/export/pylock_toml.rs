@@ -100,7 +100,7 @@ pub enum PylockTomlErrorKind {
     VcsMissingPathUrl(PackageName),
     #[error("URL must end in a valid wheel filename: `{0}`")]
     UrlMissingFilename(DisplaySafeUrl),
-    #[error("Artifact URL cannot be used to infer an index: `{0}`")]
+    #[error("Invalid artifact URL: `{0}`")]
     InvalidArtifactUrl(UrlString),
     #[error("Path must end in a valid wheel filename: `{0}`")]
     PathMissingFilename(Box<Path>),
