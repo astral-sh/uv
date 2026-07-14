@@ -1,31 +1,28 @@
 # 1. Overview
 
-`uv` is a Rust CLI that resolves, builds, installs, manages, and publishes Python packages;
-downloads runtimes; and updates itself. It runs with the developer's or CI worker's access to files,
-networks, repositories, credentials, secrets, and OpenID Connect (OIDC) tokens. Its main boundary
-separates trusted local input from independently attacker-controlled supply-chain input.
+uv is a Rust CLI that resolves, builds, installs, manages, and publishes Python packages; downloads
+runtimes; and updates itself. It runs with the developer's or CI worker's access to files, networks,
+repositories, credentials, secrets, and OpenID Connect (OIDC) tokens.
 
 A behavior is a security issue only when an independent attacker controls a concrete input, current
-`uv` code or repository automation uses that input to cross a boundary defined below, and the
-crossing gives the attacker new power or harms a protected asset. Trusted-source compromise,
-intended behavior, and correctness defects that give an attacker no new power are not security
-issues.
+uv code or repository automation uses that input to cross a boundary defined below, and the crossing
+gives the attacker new power or harms a protected asset. Trusted-source compromise, intended
+behavior, and correctness defects that give an attacker no new power are not security issues.
 
 # 2. Trust boundaries and assumptions
 
 TLS roots, secure operator-selected mirrors, configured runners, and their intended protocol
-behavior are **trust roots**; their compromise or misconfiguration alone is not a `uv` flaw.
+behavior are **trust roots**; their compromise or misconfiguration alone is not a uv flaw.
 
 Packages and their sources (indexes, Git repositories, and files) are trusted during initial
-resolution or explicit lock updates. When using an existing lockfile, its sources, object IDs, and
-hashes are authoritative; upstream changes cannot replace them without updating the lock.
+resolution or explicit lock updates. During a locked operation, the lockfile's sources, object IDs,
+and hashes are authoritative; uv must not replace them in response to upstream changes.
 
 - **Attacker-controlled:** files and metadata from an untrusted publisher; public package-name
   registrations; remote Git repositories or refs controlled by an untrusted owner; unauthenticated
   network responses; archives; malformed protocol data; and changes from an untrusted contributor
-  that a privileged workflow runs before review. A network attacker is in scope only when endpoint
-  choice, trusted certificates, or transport security permits interception.
-- **Trusted local input for the product threat model:** the entire machine on which `uv` runs,
+  that a privileged workflow runs before review.
+- **Trusted local input for the product threat model:** the entire machine on which uv runs,
   including all environment variables; the filesystem and its links; local project files such as
   `pyproject.toml`, `uv.toml`, requirements, lockfiles, scripts, `.python-version`, and workspace
   members; installed programs and interpreters; virtual environments; PATH; network and proxy
@@ -33,54 +30,55 @@ hashes are authoritative; upstream changes cannot replace them without updating 
   flags, explicit requirements and scripts, maintainer-supplied workflow dispatch inputs, and
   choices such as `--allow-insecure-host`, `--no-index`, `--no-sources`, `--no-build`,
   `--only-binary`, and `--require-hashes` are also trusted. `--no-project`, `--no-config`, and
-  similar isolation options require `uv` to ignore relevant inputs.
+  similar isolation options require uv to ignore relevant inputs.
 
-- `uv` is not setuid; running it as root creates no separate attacker boundary. Selected packages
-  may run arbitrary code. Interpreter startup, `.pth` loading, bytecode compilation, metadata reads,
-  and entry points—including one named `python`—change timing, not authority. Execution crosses a
-  security boundary only when it occurs before `uv` selects the relevant package, target, or
-  interpreter; violates an effective build or isolation rule; crosses an actor or privilege
-  boundary; or grants capability beyond what the selected package already has.
+- uv is not normally installed setuid. Running uv as root is not considered a route to local
+  privilege escalation. Selected packages may run arbitrary code. Interpreter startup, `.pth`
+  loading, bytecode compilation, metadata reads, and entry points—including one named
+  `python`—change timing, not authority. Execution crosses a security boundary only when it occurs
+  before uv selects the relevant package, target, or interpreter; violates an effective build or
+  isolation rule; crosses an actor or privilege boundary; or grants capability beyond what the
+  selected package already has.
 - Choosing a trusted local filesystem root authorizes normal operations on its target, including
   trusted symlinks and junctions. A path escaping its written directory or following a link is a
-  security issue only if `uv` promised to prevent it or remote untrusted data chose the path.
-  Bare-command lookup, explicit relative paths, and placing CWD on PATH use trusted local authority
-  because PATH, CWD, and the filesystem belong to the trusted machine.
+  security issue only if uv promised to prevent it or remote untrusted data chose the path.
+  Operations that rely on `PATH` lookup or explicit relative paths are not security issues because
+  `PATH`, `CWD`, and the filesystem are trusted local input. This includes placing `CWD` on `PATH`.
 
 # 3. Threat models and security invariants
 
-## 3.1 Product threat model: `uv`
+## 3.1 Product threat model: uv
 
-The `uv` product runs on a trusted machine while processing package, Git, archive, and protocol data
+The uv product runs on a trusted machine while processing package, Git, archive, and protocol data
 from independent suppliers. Its security goal is to preserve the operator's choices about sources,
 integrity, credentials, execution, and filesystem destinations while handling that data.
 
-- **Sources and locks:** `uv` must follow its documented rules for choosing dependency sources and
+- **Sources and locks:** uv must follow its documented rules for choosing dependency sources and
   deciding whether CLI or configuration settings take precedence. Requirements files describe
   dependencies, not administrative policy, so explicit CLI options may override them. An unsupported
   option that warns and points to a supported replacement sets no policy.
 - **Hashes and file identity:** A hash protects a file only when its expected value comes from a
-  trusted source and covers the exact bytes `uv` uses, including separately downloaded compressed
+  trusted source and covers the exact bytes uv uses, including separately downloaded compressed
   metadata. Active rules may come from requirements, constraints, lockfiles, CLI options, or
   metadata. When hash verification is active, selected bytes must match an allowed trusted hash for
   the requirement, even if the requirement does not pin a version. An existing lockfile or output
-  format that requires hashes keeps that guarantee when index metadata omits them: `uv` must obtain
+  format that requires hashes keeps that guarantee when index metadata omits them: uv must obtain
   and verify the hashes or fail. During initial resolution, missing index hashes matter only under
   an explicit required-hash policy or a format that requires them. Trusted operator runtime
   manifests may omit SHA-256 unless such a rule applies.
-- **Metadata consistency:** `uv` may use registry-generated, embedded, cached, compressed, or
-  fast-path metadata. Security-relevant fields in representations of the same package must agree;
-  `uv` must reject mismatches before selecting, locking, building, or installing it.
+- **Metadata consistency:** uv may use registry-generated, embedded, cached, compressed, or
+  fast-path metadata. Security-relevant fields in representations of the same package must agree; uv
+  must reject mismatches before selecting, locking, building, or installing it.
 - **Caches:** Same-user caches and installed programs belong to the trusted machine. Cached data
   crosses a security boundary when data accepted for one independently controlled package or source
   is reused for another without that request's required checks. Mutable-source reuse breaks no
   freshness or revocation promise unless one is documented. Trusted cached metadata may establish
-  identity before `uv` decides whether to run a build backend.
+  identity before uv decides whether to run a build backend.
 - **Network and credentials:** Credentials stay within their documented origin, path, realm, and
   audience. A redirect crosses this boundary only when an independent attacker controls it and an
   unauthorized recipient can use the credential. Registry compromise or misconfiguration alone does
-  not cross the boundary. Credentials also remain protected in redacted URLs, errors, subprocess
-  arguments, cache keys, and displayed output.
+  not cross the boundary. uv must not expose credentials through URLs, errors, subprocess arguments,
+  cache keys, or displayed output.
 - **Builds and metadata:** Selected source distributions and Git dependencies may run build
   backends. Dynamic identity may delay package-specific rules. For pip compatibility, `--no-build`
   means binary-only selection but permits backend execution for an explicitly selected editable
@@ -95,27 +93,27 @@ integrity, credentials, execution, and filesystem destinations while handling th
 - **Generated shell code:** Generated shell code quotes untrusted values for its target shell.
   Output that requires later execution or sourcing has a limited, multi-step impact. Automatic or
   privileged use, or a comparable increase in authority, raises the impact.
-- **Git identity:** When a documented 40-character hexadecimal value names a commit, `uv` must
-  resolve it as that immutable Git object; a branch or tag with the same name must not override it.
-  For a hexadecimal identifier shorter than 40 characters, an attacker-controlled ref crosses the
-  Git identity boundary if it redirects the identifier from its intended Git object. The
-  identifier's length and whether the lockfile records the full object ID determine whether that
-  redirect is possible. Undocumented legacy query or fragment pins should be rejected or migrated
-  rather than silently unpinned. Non-hex branches and tags are intentionally mutable. `uv` must not
-  silently replace an immutable Git reference with a mutable one, send credentials outside their
-  approved destination, or violate a documented integrity guarantee. Operator-selected transports
-  and endpoints are trusted.
+- **Git identity:** When a documented 40-character hexadecimal value names a commit, uv must resolve
+  it as that immutable Git object; a branch or tag with the same name must not override it. For a
+  hexadecimal identifier shorter than 40 characters, an attacker-controlled ref crosses the Git
+  identity boundary if it redirects the identifier from its intended Git object. The identifier's
+  length and whether the lockfile records the full object ID determine whether that redirect is
+  possible. Undocumented legacy query or fragment pins should be rejected or migrated rather than
+  silently unpinned. Non-hex branches and tags are intentionally mutable. uv must not silently
+  replace an immutable Git reference with a mutable one, send credentials outside their approved
+  destination, or violate a documented integrity guarantee. Operator-selected transports and
+  endpoints are trusted.
 - **Runtimes and updates:** Built-in metadata and explicit integrity promises bind the selected
   bytes. Configured HTTPS vendors and secure mirrors are trust roots, so the absence of another
-  checksum embedded in `uv` does not establish attacker control. For Ruff metadata,
+  checksum embedded in uv does not establish attacker control. For Ruff metadata,
   `astral-sh/versions`, its maintainers and GitHub controls, authenticated `main`, and HTTPS are
   trusted. That manifest's checksum is a valid trust root; mutability alone does not require another
   uv-embedded digest.
-- **Stored credentials, publishing, and OIDC:** A stored credential matters according to its issuer,
-  audience, intended and unauthorized recipients, validity, usable authority, and reach. Material
-  impact includes private-data access, writes, publication, trusted execution, lateral movement, or
-  privilege escalation. A credential has negligible impact only if it is single-purpose and its
-  effective authority is read-only and limited to inert test infrastructure.
+- **Stored credentials, publishing, and OIDC:** The impact of exposing a stored credential depends
+  on its issuer, audience, intended and unauthorized recipients, validity, usable authority, and
+  reach. Material impact includes private-data access, writes, publication, trusted execution,
+  lateral movement, or privilege escalation. A credential has negligible impact only if it is
+  single-purpose and its effective authority is read-only and limited to inert test infrastructure.
 - **Availability:** Local input and authenticated metadata accepted during initial resolution or a
   lock update are trusted for that operation. Resource exhaustion from them is a performance bug,
   not a security issue. Under an existing lockfile, changed remote state has no authority;
@@ -126,7 +124,7 @@ integrity, credentials, execution, and filesystem destinations while handling th
 
 ## 3.2 Repository threat model: GitHub
 
-The GitHub repository holds `uv`'s source, build and release workflows, and maintainer automation.
+The GitHub repository holds uv's source, build and release workflows, and maintainer automation.
 Maintainers, reviewed changes, protected refs, repository settings, configured runners and
 environments, and explicitly trusted third-party actions are trusted. Untrusted inputs include
 public contributions, workflow inputs supplied by untrusted actors, third-party refs or actions
@@ -163,4 +161,4 @@ downstream users.
   credential, or authoritative output materially increases impact.
 - **Low:** A narrow safety gap, rare reuse of one cache entry across independently authorized
   identities, limited disclosure, or a robustness problem across a real but weak boundary.
-- **Informational:** A genuine `SECURITY` observation with negligible impact.
+- **Informational:** A genuine **security** concern with no or negligible current impact.
