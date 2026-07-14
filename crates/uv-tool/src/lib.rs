@@ -63,7 +63,6 @@ impl ToolName {
         if name.is_empty()
             || matches!(name.as_str(), "." | "..")
             || name.ends_with(['.', ' '])
-            || is_windows_reserved_device_name(&name)
             || name.bytes().any(|character| {
                 character.is_ascii_control()
                     || matches!(
@@ -77,27 +76,6 @@ impl ToolName {
 
         Ok(Self(name))
     }
-}
-
-fn is_windows_reserved_device_name(name: &str) -> bool {
-    let basename = name
-        .split_once('.')
-        .map_or(name, |(basename, _)| basename)
-        .to_ascii_uppercase();
-
-    if matches!(basename.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
-        return true;
-    }
-
-    basename
-        .strip_prefix("COM")
-        .or_else(|| basename.strip_prefix("LPT"))
-        .is_some_and(|port| {
-            matches!(
-                port,
-                "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
-            )
-        })
 }
 
 impl From<&PackageName> for ToolName {
@@ -600,37 +578,4 @@ pub fn entrypoint_paths(
     }
 
     Ok(entrypoints)
-}
-
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use super::ToolName;
-
-    #[test]
-    fn windows_reserved_device_names() {
-        for name in [
-            "con",
-            "CON.txt",
-            "prn.log",
-            "aux",
-            "nul.json",
-            "com1",
-            "COM9.exe",
-            "com¹.log",
-            "lpt1",
-            "LPT9.txt",
-            "lpt³.log",
-        ] {
-            assert!(
-                ToolName::from_str(name).is_err(),
-                "`{name}` should be rejected"
-            );
-        }
-
-        for name in ["console", "com0", "com10", "lpt0", "lpt10", "com1port"] {
-            assert!(ToolName::from_str(name).is_ok(), "`{name}` should be valid");
-        }
-    }
 }

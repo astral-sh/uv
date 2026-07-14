@@ -386,24 +386,6 @@ fn tool_install_case_insensitive_suffix_collision() {
     });
 }
 
-/// Reject tool names that are reserved device names on Windows, even when they have extensions.
-#[test]
-fn tool_install_windows_reserved_name() {
-    let context = uv_test::test_context!("3.12");
-
-    uv_snapshot!(context.filters(), context.tool_install()
-        .arg("c")
-        .arg("--suffix")
-        .arg("on.txt"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Invalid tool name `con.txt`; tool names must be valid cross-platform filenames
-    ");
-}
-
 #[test]
 fn tool_install_relative_exclude_newer_receipt_preserves_span() {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
