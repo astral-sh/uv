@@ -3883,6 +3883,9 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
     ");
 
     Ok(())

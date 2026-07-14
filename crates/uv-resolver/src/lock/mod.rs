@@ -728,8 +728,12 @@ impl Lock {
         root: &Path,
         supported_environments: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
-        Self::from_resolution_with_build_markers(resolution, root, supported_environments)
-            .map(|(lock, _)| lock)
+        Self::from_resolution_with_build_markers(resolution, root, supported_environments).map(
+            |(mut lock, _)| {
+                lock.normalize_legacy_artifact_eligibility();
+                lock
+            },
+        )
     }
 
     /// Initialize a [`Lock`] and retain source-package reachability for build resolution.
@@ -2950,6 +2954,26 @@ impl Lock {
     /// Returns whether the lockfile can contain build dependencies.
     pub fn supports_build_dependencies(&self) -> bool {
         (self.version(), self.revision()) >= (VERSION, BUILD_DEPENDENCIES_REVISION)
+    }
+
+    /// Remove artifact eligibility metadata that is not serialized by legacy lockfile schemas.
+    pub fn normalize_legacy_artifact_eligibility(&mut self) {
+        if self.supports_build_dependencies() {
+            return;
+        }
+
+        for package in &mut self.packages {
+            if let Some(sdist) = &mut package.sdist {
+                match sdist {
+                    SourceDist::Metadata { metadata }
+                    | SourceDist::Url { metadata, .. }
+                    | SourceDist::Path { metadata, .. } => metadata.requires_python = None,
+                }
+            }
+            for wheel in &mut package.wheels {
+                wheel.requires_python = None;
+            }
+        }
     }
 
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
@@ -12608,6 +12632,42 @@ resolution-markers = ["sys_platform != 'darwin'"]
     }
 
     #[test]
+    fn legacy_artifact_eligibility_does_not_affect_equality() {
+        let data = r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "example"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/example-1.0.0.tar.gz" }
+wheels = [{ url = "https://example.com/example-1.0.0-py3-none-any.whl" }]
+"#;
+        let lock = toml::from_str::<Lock>(data).expect("valid legacy lock");
+        let mut fresh = lock.clone();
+        let requires_python = Arc::new(
+            VersionSpecifiers::from_str(">=3.8").expect("valid requires-python specifier"),
+        );
+        let package = fresh.packages.first_mut().expect("package exists");
+        if let Some(sdist) = &mut package.sdist {
+            match sdist {
+                SourceDist::Metadata { metadata }
+                | SourceDist::Url { metadata, .. }
+                | SourceDist::Path { metadata, .. } => {
+                    metadata.requires_python = Some(requires_python.clone());
+                }
+            }
+        }
+        package.wheels[0].requires_python = Some(requires_python);
+
+        assert_ne!(fresh, lock);
+        fresh.normalize_legacy_artifact_eligibility();
+        assert_eq!(fresh, lock);
+    }
+
+    #[test]
     fn dependency_marker_preserves_parent_conflicts() {
         let requires_python = RequiresPython::from_specifiers(
             VersionSpecifiers::from_str(">=3.12").expect("valid version specifier"),
@@ -15807,7 +15867,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(data).expect("valid lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -15823,7 +15883,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(&supported).expect("valid supported lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -15887,7 +15947,7 @@ source = {{ virtual = "." }}
             let lock = toml::from_str::<Lock>(&data).expect("valid runtime edge lock");
             let missing = lock
                 .source_distributions_missing_build_dependencies(
-                    Path::new("/workspace"),
+                    Path::new(env!("CARGO_MANIFEST_DIR")),
                     &BuildOptions::default(),
                     &ExtraBuildRequires::default(),
                 )
@@ -15905,7 +15965,7 @@ source = {{ virtual = "." }}
             let lock = toml::from_str::<Lock>(&data).expect("valid manifest root lock");
             let missing = lock
                 .source_distributions_missing_build_dependencies(
-                    Path::new("/workspace"),
+                    Path::new(env!("CARGO_MANIFEST_DIR")),
                     &BuildOptions::default(),
                     &ExtraBuildRequires::default(),
                 )
@@ -15964,7 +16024,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(data).expect("valid wheel-served lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -15999,7 +16059,7 @@ dependencies = [{ name = "a" }]
             let lock = toml::from_str::<Lock>(&data).expect("valid versioned wheel lock");
             let missing = lock
                 .source_distributions_missing_build_dependencies(
-                    Path::new("/workspace"),
+                    Path::new(env!("CARGO_MANIFEST_DIR")),
                     &BuildOptions::default(),
                     &ExtraBuildRequires::default(),
                 )
@@ -16010,7 +16070,7 @@ dependencies = [{ name = "a" }]
         let build_options = BuildOptions::new(NoBinary::All, NoBuild::None);
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &build_options,
                 &ExtraBuildRequires::default(),
             )
@@ -16082,7 +16142,7 @@ dependencies = [{{ name = "a" }}]
             let lock = toml::from_str::<Lock>(&data).expect("valid platform-wheel lock");
             let missing = lock
                 .source_distributions_missing_build_dependencies(
-                    Path::new("/workspace"),
+                    Path::new(env!("CARGO_MANIFEST_DIR")),
                     &BuildOptions::default(),
                     &ExtraBuildRequires::default(),
                 )
@@ -16144,7 +16204,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(data).expect("valid editable lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -16422,7 +16482,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(data).expect("valid registry-source lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -16476,7 +16536,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(data).expect("valid registry-source lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -16508,7 +16568,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(data).expect("valid registry-source lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -16524,7 +16584,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(&supported).expect("valid supported lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -16556,7 +16616,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(data).expect("valid requires-python hole lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -16637,7 +16697,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(data).expect("valid nested-source lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -16653,7 +16713,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(&supported).expect("valid supported lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -16740,7 +16800,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(data).expect("valid nested-source lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -16750,7 +16810,7 @@ dependencies = [{ name = "a" }]
         let build_options = BuildOptions::new(NoBinary::All, NoBuild::None);
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &build_options,
                 &ExtraBuildRequires::default(),
             )
@@ -16854,7 +16914,7 @@ dependencies = [{ name = "a" }]
         let lock = toml::from_str::<Lock>(data).expect("valid scoped nested-source lock");
         let missing = lock
             .source_distributions_missing_build_dependencies(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 &BuildOptions::default(),
                 &ExtraBuildRequires::default(),
             )
@@ -17002,7 +17062,7 @@ wheels = [{wheel}]
             .expect("locked package");
         let resolution = lock
             .to_resolution(
-                Path::new("/workspace"),
+                Path::new(env!("CARGO_MANIFEST_DIR")),
                 [package],
                 None,
                 &resolver_markers,
@@ -17016,7 +17076,7 @@ wheels = [{wheel}]
 
         lock.all_build_resolutions(
             &resolution,
-            Path::new("/workspace"),
+            Path::new(env!("CARGO_MANIFEST_DIR")),
             &tags,
             build_options,
             &markers,

@@ -1475,6 +1475,7 @@ async fn do_lock(
                 }
             }
 
+            lock.normalize_legacy_artifact_eligibility();
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
                 Ok(LockResult::Unchanged(lock))
             } else {
