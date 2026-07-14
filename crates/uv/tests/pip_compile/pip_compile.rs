@@ -6643,7 +6643,7 @@ fn resolver_legacy() -> Result<()> {
 /// `--cert` is forwarded to the HTTP client rather than silently ignored.
 #[test]
 fn cert() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_missing_file_error();
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==3.0.1")?;
 
@@ -6657,7 +6657,7 @@ fn cert() -> Result<()> {
 
     ----- stderr -----
     error: Failed to read certificate file `ca-bundle.pem`
-      Caused by: No such file or directory (os error 2)
+      Caused by: [OS ERROR 2]
     "
     );
 
