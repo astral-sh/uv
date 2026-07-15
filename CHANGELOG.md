@@ -3,6 +3,75 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.29
+
+Released on 2026-07-15.
+
+### Enhancements
+
+- Add CUDA 13.2 support ([#20267](https://github.com/astral-sh/uv/pull/20267))
+- Add `--cert` support to `uv pip` ([#20367](https://github.com/astral-sh/uv/pull/20367))
+- Add json output to `uv tree` ([#19978](https://github.com/astral-sh/uv/pull/19978))
+- Clarify empty version range diagnostics ([#20227](https://github.com/astral-sh/uv/pull/20227))
+- Error on unsupported `--cert` in pip compat layer ([#20351](https://github.com/astral-sh/uv/pull/20351))
+- Mention project in missing extra errors ([#20358](https://github.com/astral-sh/uv/pull/20358))
+- Minimize version sets by widening decided versions ([#20115](https://github.com/astral-sh/uv/pull/20115))
+- Prefer local artifacts when installing pylock files ([#20393](https://github.com/astral-sh/uv/pull/20393))
+- Preserve direct archive hashes in pip freeze ([#20395](https://github.com/astral-sh/uv/pull/20395))
+- Reject duplicate active pylock packages ([#20391](https://github.com/astral-sh/uv/pull/20391))
+- Require package entries in pylock files ([#20402](https://github.com/astral-sh/uv/pull/20402))
+
+### Preview features
+
+- Avoid panic for invalid audit service URLs ([#20374](https://github.com/astral-sh/uv/pull/20374))
+- Batch large OSV queries ([#20398](https://github.com/astral-sh/uv/pull/20398))
+- Don't install venv distutils monkeypatch (`_virtualenv.pth`) for Python 3.10+ ([#20222](https://github.com/astral-sh/uv/pull/20222))
+- Preserve direct dependency selection context for locked project tools ([#20078](https://github.com/astral-sh/uv/pull/20078))
+- Scope OSV fixes to matching packages ([#20399](https://github.com/astral-sh/uv/pull/20399))
+
+### Performance
+
+- Avoid unnecessary setup for version reads ([#20360](https://github.com/astral-sh/uv/pull/20360))
+- Defer sync client setup until installation is needed ([#20364](https://github.com/astral-sh/uv/pull/20364))
+- Reuse complete workspace discovery for frozen sync ([#20363](https://github.com/astral-sh/uv/pull/20363))
+- Reuse workspace discovery after settings resolution ([#20356](https://github.com/astral-sh/uv/pull/20356))
+- Reuse workspace discovery in project inspection commands ([#20359](https://github.com/astral-sh/uv/pull/20359))
+
+### Bug fixes
+
+- Canonicalize PEP 440 ranges for PubGrub ([#20182](https://github.com/astral-sh/uv/pull/20182))
+- Fix exclusive post-release ordering ([#20268](https://github.com/astral-sh/uv/pull/20268))
+- Fix versionless egg-info file handling ([#20403](https://github.com/astral-sh/uv/pull/20403))
+- Honor Python version pins when initializing scripts ([#20404](https://github.com/astral-sh/uv/pull/20404))
+- Make locking idempotent for impossible platform markers ([#20369](https://github.com/astral-sh/uv/pull/20369))
+- Report strict diagnostics for satisfied installs ([#20388](https://github.com/astral-sh/uv/pull/20388))
+- Respect package-scoped source filtering for scripts ([#20389](https://github.com/astral-sh/uv/pull/20389))
+- Scan platlib when purelib is missing ([#20405](https://github.com/astral-sh/uv/pull/20405))
+
+### Documentation
+
+- Clarify no-build docs for editable requirements ([#20234](https://github.com/astral-sh/uv/pull/20234))
+- Document uv's threat model ([#20236](https://github.com/astral-sh/uv/pull/20236))
+- Reduce the number of badges in the README ([#11257](https://github.com/astral-sh/uv/pull/11257))
+
+### Other changes
+
+- Avoid panic for non-UTF-8 virtualenv paths ([#20375](https://github.com/astral-sh/uv/pull/20375))
+- Avoid panics for invalid cloud endpoint URLs ([#20372](https://github.com/astral-sh/uv/pull/20372))
+- Avoid panics for invalid pylock artifact URLs ([#20373](https://github.com/astral-sh/uv/pull/20373))
+- Explain empty root requirement ranges ([#20228](https://github.com/astral-sh/uv/pull/20228))
+- Fix preview schema in schemastore ([#20304](https://github.com/astral-sh/uv/pull/20304))
+- Redact credentials from failed Git fetches ([#20401](https://github.com/astral-sh/uv/pull/20401))
+- Reject build backends outside the source tree ([#20387](https://github.com/astral-sh/uv/pull/20387))
+- Respect wheel data boundaries and excludes ([#20397](https://github.com/astral-sh/uv/pull/20397))
+- Return an error from unsupported build-backend requires hooks ([#20376](https://github.com/astral-sh/uv/pull/20376))
+- Revert "Add `--cert` support to `uv pip`" ([#20417](https://github.com/astral-sh/uv/pull/20417))
+- Revert "Error on unsupported `--cert` in pip compat layer" ([#20366](https://github.com/astral-sh/uv/pull/20366))
+- Revert "Require package entries in pylock files" ([#20407](https://github.com/astral-sh/uv/pull/20407))
+- Upgrade Hawk to 0.1.7 ([#20292](https://github.com/astral-sh/uv/pull/20292))
+- Use 16x32 Windows test runners ([#20215](https://github.com/astral-sh/uv/pull/20215))
+- Use gz artifacts for PyPy downloads ([#20265](https://github.com/astral-sh/uv/pull/20265))
+
 ## 0.11.28
 
 Released on 2026-07-07.
@@ -916,3 +985,4 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
