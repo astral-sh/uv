@@ -1,20 +1,11 @@
-# Review pull requests for security and publish actionable findings as inline comments.
-name: "Pull request security review"
-
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main]
+  workflow_call:
 
 permissions: {}
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
   review:
-    if: github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository
+    name: "security review"
     runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 20
