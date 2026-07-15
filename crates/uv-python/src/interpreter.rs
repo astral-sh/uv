@@ -965,6 +965,10 @@ impl InterpreterInfo {
         // Sanitize the path by (1) running under isolated mode (`-I`) to ignore any site packages
         // modifications, and then (2) adding the path containing our query script to the front of
         // `sys.path` so that we can import it.
+        // There are user reports that `sitecustomize.py` output breaks worker communication, but
+        // we cannot use `-S` here because interpreter discovery needs the site-initialized
+        // `sys.path`. We may want to fix this in the future if there are more reports. See:
+        // https://github.com/astral-sh/uv/issues/11508.
         let script = format!(
             r#"import sys; sys.path = ["{}"] + sys.path; from python.get_interpreter_info import main; main()"#,
             tempdir.path().escape_for_python()
