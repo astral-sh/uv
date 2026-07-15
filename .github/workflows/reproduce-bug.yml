@@ -48,7 +48,8 @@ jobs:
           if [[ '${{ matrix.variant }}' = optimized ]]; then
             toolchain=nightly-2026-07-13
           fi
-          rustup toolchain install "$toolchain" --profile minimal
+          rustup toolchain install 1.97.0 --profile minimal
+          rustup toolchain install nightly-2026-07-13 --profile minimal
           cargo +"$toolchain" --version
           rustc +"$toolchain" --version --verbose
 
@@ -58,7 +59,7 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: ${{ matrix.variant == 'optimized' && 'nightly-2026-07-13' || '1.97.0' }}
         with:
-          prefix-key: v0-uv-macos-workspace-cache-20260715a
+          prefix-key: v0-uv-macos-workspace-cache-20260715b
           shared-key: ${{ matrix.variant }}-${{ matrix.sample }}
           workspaces: ". -> target-${{ matrix.variant }}"
           cache-workspace-crates: ${{ matrix.variant == 'optimized' }}
@@ -127,31 +128,27 @@ jobs:
 
       - name: "Restore stable cache"
         id: cache-stable
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: 1.97.0
         with:
-          key: v0-uv-macos-workspace-cache-20260715a-stable-${{ matrix.sample }}-Darwin-arm64-63c54866-f430e92f
-          fail-on-cache-miss: true
-          path: |
-            ~/.cargo/bin
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-            ~/.cargo/registry
-            ~/.cargo/git
-            target-stable
+          prefix-key: v0-uv-macos-workspace-cache-20260715b
+          shared-key: stable-${{ matrix.sample }}
+          workspaces: ". -> target-stable"
+          cache-workspace-crates: "false"
+          save-if: false
 
       - name: "Restore optimized cache"
         id: cache-optimized
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
-          key: v0-uv-macos-workspace-cache-20260715a-optimized-${{ matrix.sample }}-Darwin-arm64-58c8e58c-f430e92f
-          fail-on-cache-miss: true
-          path: |
-            ~/.cargo/bin
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-            ~/.cargo/registry
-            ~/.cargo/git
-            target-optimized
+          prefix-key: v0-uv-macos-workspace-cache-20260715b
+          shared-key: optimized-${{ matrix.sample }}
+          workspaces: ". -> target-optimized"
+          cache-workspace-crates: "true"
+          save-if: false
 
       - name: "Confirm cache hits"
         shell: bash
