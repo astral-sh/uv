@@ -6390,6 +6390,27 @@ fn emit_options_unsupported() -> Result<()> {
     Ok(())
 }
 
+/// `--cert` is forwarded to the HTTP client rather than silently ignored.
+#[test]
+fn cert() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_missing_file_error();
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("werkzeug==3.0.1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in")
+            .arg("--cert")
+            .arg("ca-bundle.pem"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read certificate file `ca-bundle.pem`
+      Caused by: [OS ERROR 2]
+    "
+    );
+
+    Ok(())
+}
+
 /// Avoid including the `--index` and `-i` flags in the header.
 #[test]
 fn hide_index_urls() -> Result<()> {

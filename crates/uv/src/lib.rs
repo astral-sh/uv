@@ -32,7 +32,7 @@ use uv_cli::{
     PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
     WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, Certificates};
 use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
@@ -628,6 +628,18 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         WorkspaceCache::default()
     };
 
+    // Configure custom CA certificates from `--cert` or from the environment (`SSL_CERT_FILE` and
+    // `SSL_CERT_DIR`).
+    // Like pip, an explicit certificate bundle overrides the environment certificate sources.
+    let custom_certificates = if let Commands::Pip(PipNamespace {
+        cert: Some(cert), ..
+    }) = &*cli.command
+    {
+        Some(Certificates::from_file(cert)?)
+    } else {
+        Certificates::from_env()
+    };
+
     // Configure the global network settings.
     let client_builder = BaseClientBuilder::new(
         globals.network_settings.connectivity,
@@ -642,6 +654,11 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     .http_proxy(globals.network_settings.http_proxy.clone())
     .https_proxy(globals.network_settings.https_proxy.clone())
     .no_proxy(globals.network_settings.no_proxy.clone());
+    let client_builder = if let Some(certificates) = custom_certificates {
+        client_builder.custom_certificates(certificates)
+    } else {
+        client_builder
+    };
 
     match *cli.command {
         Commands::Auth(AuthNamespace {
@@ -723,6 +740,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         ),
         Commands::Pip(PipNamespace {
             command: PipCommand::Compile(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
@@ -842,6 +860,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Sync(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
@@ -931,6 +950,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Install(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
@@ -1093,6 +1113,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Uninstall(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
@@ -1130,6 +1151,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipFreezeSettings::resolve(args, filesystem, environment)?;
@@ -1154,6 +1176,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::List(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
@@ -1189,6 +1212,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Show(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipShowSettings::resolve(args, filesystem, environment)?;
@@ -1212,6 +1236,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Tree(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipTreeSettings::resolve(args, filesystem, environment)?;
@@ -1245,6 +1270,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Check(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCheckSettings::resolve(args, filesystem, environment)?;
@@ -1265,6 +1291,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Debug(_),
+            ..
         }) => Err(anyhow!(
             "pip's `debug` is unsupported (consider using `uvx pip debug` instead)"
         )),
