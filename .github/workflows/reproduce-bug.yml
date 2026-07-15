@@ -95,7 +95,7 @@ jobs:
 
   measure:
     needs: seed
-    name: "measure macos sample ${{ matrix.sample }}"
+    name: "measure macos ${{ matrix.variant }} sample ${{ matrix.sample }}"
     runs-on: depot-macos-15
     timeout-minutes: 40
     permissions:
@@ -104,6 +104,7 @@ jobs:
       fail-fast: false
       matrix:
         sample: [1, 2, 3, 4, 5]
+        variant: [stable, optimized]
     env:
       CARGO_BUILD_JOBS: 8
       CARGO_NET_RETRY: 10
@@ -190,29 +191,21 @@ jobs:
           UV_INTERNAL__TEST_ALT_FS: ${{ env.HFS_MOUNT }}
         run: |
           set -euo pipefail
-          run() {
-            local variant="$1"
-            local toolchain="$2"
-            local target="$3"
-            shift 3
-            local -a args=(
-              nextest run --cargo-profile fast-build
-              --no-default-features
-              --features 'test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native'
-              --workspace --locked --profile ci-macos
-              --status-level fail --final-status-level fail
-              --failure-output immediate --success-output never
-            )
-            args+=("$@")
-            local start
-            start=$(date +%s)
-            CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
-            printf 'TIMING overall variant=%s sample=%s real=%ss\n' "$variant" '${{ matrix.sample }}' "$(( $(date +%s) - start ))"
-          }
-          if (( ${{ matrix.sample }} % 2 )); then
-            run stable 1.97.0 target-stable
-            run optimized nightly-2026-07-13 target-optimized --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests -Z checksum-freshness
-          else
-            run optimized nightly-2026-07-13 target-optimized --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests -Z checksum-freshness
-            run stable 1.97.0 target-stable
+          variant='${{ matrix.variant }}'
+          toolchain=1.97.0
+          target="target-$variant"
+          args=(
+            nextest run --cargo-profile fast-build
+            --no-default-features
+            --features 'test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native'
+            --workspace --locked --profile ci-macos
+            --status-level fail --final-status-level fail
+            --failure-output immediate --success-output never
+          )
+          if [[ "$variant" = optimized ]]; then
+            toolchain=nightly-2026-07-13
+            args+=(--config 'profile.fast-build.panic="abort"' -Z panic-abort-tests -Z checksum-freshness)
           fi
+          start=$(date +%s)
+          CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
+          printf 'TIMING overall variant=%s sample=%s real=%ss\n' "$variant" '${{ matrix.sample }}' "$(( $(date +%s) - start ))"
