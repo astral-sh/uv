@@ -131,16 +131,16 @@ jobs:
     timeout-minutes: 20
     # Only run macOS tests on main without opt-in
     if: ${{ inputs.test-macos == 'true' }}
-    runs-on: namespace-profile-macos-15
+    runs-on: namespace-profile-macos-15;overrides.cache-tag=uv-macos-cache-experiment
     name: "cargo test on macos"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
         with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          cache: rust
 
       - name: "Install Rust toolchain"
         run: rustup show
