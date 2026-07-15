@@ -1297,6 +1297,9 @@ pub struct PipOptions {
     /// any parent directory. The `--system` option instructs uv to instead use the first Python
     /// found in the system `PATH`.
     ///
+    /// This option only applies to the `uv pip` interface. For other commands (like `uv sync`
+    /// or `uv run`), see the `UV_PROJECT_ENVIRONMENT` environment variable.
+    ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
     #[option(
