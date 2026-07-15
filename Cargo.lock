@@ -5946,7 +5946,6 @@ dependencies = [
  "base64",
  "etcetera",
  "fs-err",
- "futures",
  "http",
  "insta",
  "jiff",

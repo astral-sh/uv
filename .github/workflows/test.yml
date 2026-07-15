@@ -36,12 +36,14 @@ jobs:
       - name: "Install mold"
         run: ./scripts/install-mold.sh
 
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install nightly-2026-07-13 --profile minimal
+
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-
-      - name: "Install Rust toolchain"
-        run: rustup show
 
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
@@ -102,8 +104,10 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
+          cargo +nightly-2026-07-13 nextest run \
             --cargo-profile fast-build \
+            --config 'profile.fast-build.panic="abort"' \
+            -Z panic-abort-tests \
             --features test-python-patch,test-universal,native-auth,secret-service \
             --workspace \
             --profile ci-linux
