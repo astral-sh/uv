@@ -18,19 +18,33 @@ on:
 
 permissions: {}
 
-env:
-  CARGO_BUILD_JOBS: 16
-  CARGO_INCREMENTAL: 0
-  CARGO_NET_RETRY: 10
-  CARGO_TERM_COLOR: always
-  RUSTUP_MAX_RETRIES: 10
-
 jobs:
   benchmark:
+    name: "cargo test ${{ matrix.variant }} sample ${{ matrix.sample }}"
     runs-on: depot-ubuntu-24.04-16
-    timeout-minutes: 45
+    timeout-minutes: 25
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [stable, nightly, abort]
+        sample: [1, 2, 3, 4, 5]
+    env:
+      CARGO_BUILD_JOBS: 16
+      CARGO_INCREMENTAL: 0
+      CARGO_NET_RETRY: 10
+      CARGO_TERM_COLOR: always
+      RUSTUP_MAX_RETRIES: 10
+      TOOLCHAIN: ${{ matrix.variant == 'stable' && '1.97.0' || 'nightly-2026-07-13' }}
+      UV_HTTP_RETRIES: 5
+      RUST_BACKTRACE: 1
+      UV_INTERNAL__TEST_COW_FS: /btrfs
+      UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
+      UV_INTERNAL__TEST_ALT_FS: /tmpfs
+      UV_INTERNAL__TEST_LOWLINKS_FS: /minix
+      INSTA_UPDATE: new
+      INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -39,14 +53,49 @@ jobs:
       - name: "Install mold"
         run: ./scripts/install-mold.sh
 
-      - name: "Install toolchains"
+      - name: "Install Rust toolchain"
         run: |
-          rustup show
-          rustup toolchain install nightly-2026-07-13 --profile minimal --component rust-src
-          cargo +1.97.0 --version
-          rustc +1.97.0 --version --verbose
-          cargo +nightly-2026-07-13 --version
-          rustc +nightly-2026-07-13 --version --verbose
+          rustup toolchain install "$TOOLCHAIN" --profile minimal
+          cargo +"$TOOLCHAIN" --version
+          rustc +"$TOOLCHAIN" --version --verbose
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.28"
+
+      - name: "Install required Python versions"
+        run: uv python install
+
+      - name: "Install secret service"
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+          sudo apt install -y gnome-keyring
+
+      - name: "Start gnome-keyring"
+        run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
+
+      - name: "Create btrfs filesystem"
+        run: |
+          sudo apt install -y btrfs-progs
+          truncate -s 1G /tmp/btrfs.img
+          mkfs.btrfs /tmp/btrfs.img
+          sudo mkdir /btrfs
+          sudo mount -o loop /tmp/btrfs.img /btrfs
+          sudo chown "$(id -u):$(id -g)" /btrfs
+
+      - name: "Create tmpfs filesystem"
+        run: |
+          sudo mkdir /tmpfs
+          sudo mount -t tmpfs -o size=256m tmpfs /tmpfs
+          sudo chown "$(id -u):$(id -g)" /tmpfs
+
+      - name: "Create minix filesystem"
+        run: |
+          truncate -s 16M /tmp/minix.img
+          mkfs.minix /tmp/minix.img
+          sudo mkdir /minix
+          sudo mount -o loop /tmp/minix.img /minix
+          sudo chown "$(id -u):$(id -g)" /minix
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
@@ -54,142 +103,50 @@ jobs:
           tool: cargo-nextest
 
       - name: "Warm registry cache"
-        run: cargo +1.97.0 fetch --locked
+        run: cargo +"$TOOLCHAIN" fetch --locked
 
-      - name: "Build test artifacts"
+      - name: "Warm test artifacts"
         shell: bash
         run: |
-          run() {
-            local variant="$1"
-            local toolchain="$2"
-            local target="$RUNNER_TEMP/uv-$variant"
-            shift 2
-            local -a args=(
-              nextest run --no-run --cargo-quiet --cargo-profile fast-build
-              --features test-python-patch,test-universal,native-auth,secret-service
-              --workspace --locked --profile ci-linux
-            )
-            args+=("$@")
-            echo "::group::cold $variant"
-            /usr/bin/time -f "TIMING cold $variant real=%e user=%U sys=%S" -o "$RUNNER_TEMP/timings" -a \
-              env CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
-            echo "::endgroup::"
-          }
+          args=(
+            nextest run --no-run --cargo-quiet --cargo-profile fast-build
+            --features test-python-patch,test-universal,native-auth,secret-service
+            --workspace --locked --profile ci-linux
+          )
+          if [[ "${{ matrix.variant }}" == abort ]]; then
+            args+=(--config 'profile.fast-build.panic="abort"' -Z panic-abort-tests)
+          fi
+          /usr/bin/time -f 'TIMING warmup variant=${{ matrix.variant }} sample=${{ matrix.sample }} real=%e user=%U sys=%S' \
+            env CARGO_TARGET_DIR="$RUNNER_TEMP/uv-target" cargo +"$TOOLCHAIN" "${args[@]}"
 
-          run stable 1.97.0
-          run nightly nightly-2026-07-13
-          run abort nightly-2026-07-13 --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
-          run immediate nightly-2026-07-13 --target x86_64-unknown-linux-gnu --config 'profile.fast-build.panic="immediate-abort"' -Z panic-abort-tests -Z panic-immediate-abort -Z build-std
-          du -sh "$RUNNER_TEMP"/uv-* || true
-
-      - name: "Warm rebuild pass one"
+      - name: "Measure warm compile"
         shell: bash
         run: |
           touch crates/uv/src/lib.rs
-          run() {
-            local variant="$1"
-            local toolchain="$2"
-            local target="$RUNNER_TEMP/uv-$variant"
-            shift 2
-            local -a args=(
-              nextest run --no-run --cargo-quiet --cargo-profile fast-build
-              --features test-python-patch,test-universal,native-auth,secret-service
-              --workspace --locked --profile ci-linux
-            )
-            args+=("$@")
-            echo "::group::warm-1 $variant"
-            /usr/bin/time -f "TIMING warm-1 $variant real=%e user=%U sys=%S" -o "$RUNNER_TEMP/timings" -a \
-              env CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
-            echo "::endgroup::"
-          }
+          args=(
+            nextest run --no-run --cargo-quiet --cargo-profile fast-build
+            --features test-python-patch,test-universal,native-auth,secret-service
+            --workspace --locked --profile ci-linux
+          )
+          if [[ "${{ matrix.variant }}" == abort ]]; then
+            args+=(--config 'profile.fast-build.panic="abort"' -Z panic-abort-tests)
+          fi
+          /usr/bin/time -f 'TIMING compile variant=${{ matrix.variant }} sample=${{ matrix.sample }} real=%e user=%U sys=%S' \
+            env CARGO_TARGET_DIR="$RUNNER_TEMP/uv-target" cargo +"$TOOLCHAIN" "${args[@]}"
 
-          run stable 1.97.0
-          run nightly nightly-2026-07-13
-          run abort nightly-2026-07-13 --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
-          run immediate nightly-2026-07-13 --target x86_64-unknown-linux-gnu --config 'profile.fast-build.panic="immediate-abort"' -Z panic-abort-tests -Z panic-immediate-abort -Z build-std
-
-      - name: "Warm rebuild pass two"
+      - name: "Measure overall test job"
         shell: bash
         run: |
           touch crates/uv/src/lib.rs
-          run() {
-            local variant="$1"
-            local toolchain="$2"
-            local target="$RUNNER_TEMP/uv-$variant"
-            shift 2
-            local -a args=(
-              nextest run --no-run --cargo-quiet --cargo-profile fast-build
-              --features test-python-patch,test-universal,native-auth,secret-service
-              --workspace --locked --profile ci-linux
-            )
-            args+=("$@")
-            echo "::group::warm-2 $variant"
-            /usr/bin/time -f "TIMING warm-2 $variant real=%e user=%U sys=%S" -o "$RUNNER_TEMP/timings" -a \
-              env CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
-            echo "::endgroup::"
-          }
-
-          run immediate nightly-2026-07-13 --target x86_64-unknown-linux-gnu --config 'profile.fast-build.panic="immediate-abort"' -Z panic-abort-tests -Z panic-immediate-abort -Z build-std
-          run abort nightly-2026-07-13 --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
-          run nightly nightly-2026-07-13
-          run stable 1.97.0
-
-      - name: "Measure no-op builds"
-        shell: bash
-        run: |
-          run() {
-            local repeat="$1"
-            local variant="$2"
-            local toolchain="$3"
-            local target="$RUNNER_TEMP/uv-$variant"
-            shift 3
-            local -a args=(
-              nextest run --no-run --cargo-quiet --cargo-profile fast-build
-              --features test-python-patch,test-universal,native-auth,secret-service
-              --workspace --locked --profile ci-linux
-            )
-            args+=("$@")
-            /usr/bin/time -f "TIMING noop-$repeat $variant real=%e user=%U sys=%S" -o "$RUNNER_TEMP/timings" -a \
-              env CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
-          }
-
-          for repeat in 1 2 3; do
-            run "$repeat" stable 1.97.0
-            run "$repeat" nightly nightly-2026-07-13
-            run "$repeat" abort nightly-2026-07-13 --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
-            run "$repeat" immediate nightly-2026-07-13 --target x86_64-unknown-linux-gnu --config 'profile.fast-build.panic="immediate-abort"' -Z panic-abort-tests -Z panic-immediate-abort -Z build-std
-          done
-
-          printf '%s\n' '### Cargo test build timings' '```text' >> "$GITHUB_STEP_SUMMARY"
-          sed -n '/^TIMING /p' "$RUNNER_TEMP/timings" | tee -a "$GITHUB_STEP_SUMMARY"
-          printf '%s\n' '```' >> "$GITHUB_STEP_SUMMARY"
-
-      - name: "Run panic-sensitive tests"
-        shell: bash
-        run: |
-          set +e
-          run() {
-            local variant="$1"
-            local toolchain="$2"
-            local target="$RUNNER_TEMP/uv-$variant"
-            shift 2
-            local -a args=(
-              nextest run --cargo-quiet --cargo-profile fast-build
-              --features test-python-patch,test-universal,native-auth,secret-service
-              --workspace --locked --profile ci-linux --ignore-default-filter
-              -E 'test(/fetch_url_(no_host|with_password|with_empty_username)/) or test(/test_global_preview_panic_(nested|uninitialized)/)'
-              --status-level fail --final-status-level fail --failure-output never --success-output never
-            )
-            args+=("$@")
-            echo "::group::panic-tests $variant"
-            env CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
-            local result=$?
-            echo "PANIC_TEST_RESULT $variant exit=$result"
-            echo "::endgroup::"
-            return 0
-          }
-
-          run stable 1.97.0
-          run nightly nightly-2026-07-13
-          run abort nightly-2026-07-13 --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
-          run immediate nightly-2026-07-13 --target x86_64-unknown-linux-gnu --config 'profile.fast-build.panic="immediate-abort"' -Z panic-abort-tests -Z panic-immediate-abort -Z build-std
+          args=(
+            nextest run --cargo-quiet --cargo-profile fast-build
+            --features test-python-patch,test-universal,native-auth,secret-service
+            --workspace --locked --profile ci-linux
+            --status-level fail --final-status-level fail
+            --failure-output immediate --success-output never
+          )
+          if [[ "${{ matrix.variant }}" == abort ]]; then
+            args+=(--config 'profile.fast-build.panic="abort"' -Z panic-abort-tests)
+          fi
+          /usr/bin/time -f 'TIMING overall variant=${{ matrix.variant }} sample=${{ matrix.sample }} real=%e user=%U sys=%S' \
+            env CARGO_TARGET_DIR="$RUNNER_TEMP/uv-target" cargo +"$TOOLCHAIN" "${args[@]}"
