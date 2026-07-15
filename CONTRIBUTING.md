@@ -344,9 +344,14 @@ Changelog entries and version bumps are automated. First, run:
 ./scripts/release.sh
 ```
 
-If release preparation detects a new workspace crate, use `scripts/setup-crates-io-publish.py` to
-bootstrap its initial crates.io publication and trusted-publisher configuration, then add the crate
-to
+If release preparation detects a new workspace crate, bootstrap its initial crates.io publication
+and trusted-publisher configuration with:
+
+```shell
+CARGO_REGISTRY_TOKEN=... uv run scripts/setup-crates-io-publish.py <crate>
+```
+
+Then add the crate to
 [`astral-sh/crates-policies`](https://github.com/astral-sh/crates-policies/blob/main/trusted-publishing/uv.json)
 before continuing.
 

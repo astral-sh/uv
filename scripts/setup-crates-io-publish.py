@@ -10,12 +10,9 @@
 # It authenticates with `CARGO_REGISTRY_TOKEN`, which must have the `publish-new` and
 # `trusted-publishing` scopes.
 #
-# Crates tracked in `astral-sh/crates-policies` are assumed to be configured and are skipped unless
-# `--force` is used.
-#
 # Usage:
 #
-#   CARGO_REGISTRY_TOKEN=<tok> uv run scripts/setup-crates-io-publish.py [--dry-run] [--force] [--quiet]
+#   CARGO_REGISTRY_TOKEN=<tok> uv run scripts/setup-crates-io-publish.py [--dry-run] [--quiet] CRATE...
 
 # /// script
 # requires-python = ">=3.13"
@@ -46,8 +43,6 @@ ENVIRONMENT = "release"
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 WORKSPACE_MANIFEST_PATH = REPO_ROOT / "Cargo.toml"
-CRATES_POLICIES_REPOSITORY = "https://github.com/astral-sh/crates-policies.git"
-CRATES_POLICY_PATH = pathlib.Path("trusted-publishing/uv.json")
 
 PLACEHOLDER_VERSION = "0.0.0"
 
@@ -76,30 +71,6 @@ def get_publishable_crates() -> list[dict[str, str]]:
         crates.append({"name": package["name"], "version": package["version"]})
 
     return sorted(crates, key=lambda c: c["name"])
-
-
-def load_known_crates() -> set[str]:
-    """Load configured crate names from ``astral-sh/crates-policies``."""
-    with tempfile.TemporaryDirectory(prefix="uv-crates-policies-") as temp_dir:
-        subprocess.run(
-            [
-                "git",
-                "clone",
-                "--depth=1",
-                "--quiet",
-                CRATES_POLICIES_REPOSITORY,
-                temp_dir,
-            ],
-            check=True,
-        )
-        policy = json.loads((pathlib.Path(temp_dir) / CRATES_POLICY_PATH).read_text())
-
-    crates = policy.get("crates")
-    if not isinstance(crates, list) or not all(
-        isinstance(crate, str) for crate in crates
-    ):
-        raise RuntimeError(f"`{CRATES_POLICY_PATH}` does not contain a crate list")
-    return set(crates)
 
 
 def get_crate_metadata(
@@ -285,9 +256,9 @@ def main() -> None:
         help="Show what would be done without making changes",
     )
     parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Re-check crates already in astral-sh/crates-policies",
+        "crates",
+        nargs="+",
+        help="Workspace crates to bootstrap",
     )
     parser.add_argument(
         "--quiet", "-q", action="store_true", help="Suppress informational output"
@@ -295,22 +266,21 @@ def main() -> None:
     args = parser.parse_args()
 
     dry_run = args.dry_run
-    force = args.force
     quiet = args.quiet
 
     workspace_package = load_workspace_package_metadata()
 
     crates = get_publishable_crates()
-    known = set() if force else load_known_crates()
-    candidates = [c for c in crates if c["name"] not in known]
+    requested = set(args.crates)
+    candidates = [crate for crate in crates if crate["name"] in requested]
+    missing = sorted(requested - {crate["name"] for crate in candidates})
 
-    if not candidates:
-        if not quiet:
-            print(
-                f"All {len(crates)} publishable crates are in astral-sh/crates-policies — "
-                "nothing to do."
-            )
-        return
+    if missing:
+        print(
+            f"error: crates are not publishable workspace members: {', '.join(missing)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     token = os.environ.get("CARGO_REGISTRY_TOKEN", "")
     if not token:
