@@ -327,7 +327,7 @@ fn python_list_downloads() {
     graalpy-3.10.0-[PLATFORM]     <download available>
     ");
 
-    // Show patch versions
+    // Show patch versions.
     uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--all-versions").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -351,9 +351,6 @@ fn python_list_downloads() {
     cpython-3.10.2-[PLATFORM]     <download available>
     cpython-3.10.0-[PLATFORM]     <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
-    pypy-3.10.14-[PLATFORM]       <download available>
-    pypy-3.10.13-[PLATFORM]       <download available>
-    pypy-3.10.12-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
     ");
 }
