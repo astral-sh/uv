@@ -20,7 +20,7 @@ permissions: {}
 
 jobs:
   benchmark:
-    name: "cargo test ${{ matrix.variant }} sample ${{ matrix.sample }}"
+    name: "cargo test paired sample ${{ matrix.sample }}"
     runs-on: depot-ubuntu-24.04-16
     timeout-minutes: 25
     permissions:
@@ -28,7 +28,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [stable, nightly, abort]
         sample: [1, 2, 3, 4, 5]
     env:
       CARGO_BUILD_JOBS: 16
@@ -36,7 +35,6 @@ jobs:
       CARGO_NET_RETRY: 10
       CARGO_TERM_COLOR: always
       RUSTUP_MAX_RETRIES: 10
-      TOOLCHAIN: ${{ matrix.variant == 'stable' && '1.97.0' || 'nightly-2026-07-13' }}
       UV_HTTP_RETRIES: 5
       RUST_BACKTRACE: 1
       UV_INTERNAL__TEST_COW_FS: /btrfs
@@ -53,11 +51,13 @@ jobs:
       - name: "Install mold"
         run: ./scripts/install-mold.sh
 
-      - name: "Install Rust toolchain"
+      - name: "Install Rust toolchains"
         run: |
-          rustup toolchain install "$TOOLCHAIN" --profile minimal
-          cargo +"$TOOLCHAIN" --version
-          rustc +"$TOOLCHAIN" --version --verbose
+          rustup toolchain install 1.97.0 nightly-2026-07-13 --profile minimal
+          cargo +1.97.0 --version
+          rustc +1.97.0 --version --verbose
+          cargo +nightly-2026-07-13 --version
+          rustc +nightly-2026-07-13 --version --verbose
 
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
@@ -103,50 +103,83 @@ jobs:
           tool: cargo-nextest
 
       - name: "Warm registry cache"
-        run: cargo +"$TOOLCHAIN" fetch --locked
+        run: cargo +1.97.0 fetch --locked
 
       - name: "Warm test artifacts"
         shell: bash
         run: |
-          args=(
-            nextest run --no-run --cargo-quiet --cargo-profile fast-build
-            --features test-python-patch,test-universal,native-auth,secret-service
-            --workspace --locked --profile ci-linux
-          )
-          if [[ "${{ matrix.variant }}" == abort ]]; then
-            args+=(--config 'profile.fast-build.panic="abort"' -Z panic-abort-tests)
+          run() {
+            local variant="$1"
+            local toolchain="$2"
+            local target="$RUNNER_TEMP/uv-$variant"
+            shift 2
+            local -a args=(
+              nextest run --no-run --cargo-quiet --cargo-profile fast-build
+              --features test-python-patch,test-universal,native-auth,secret-service
+              --workspace --locked --profile ci-linux
+            )
+            args+=("$@")
+            /usr/bin/time -f "TIMING warmup variant=$variant sample=${{ matrix.sample }} real=%e user=%U sys=%S" \
+              env CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
+          }
+          if (( ${{ matrix.sample }} % 2 )); then
+            run stable 1.97.0
+            run abort nightly-2026-07-13 --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
+          else
+            run abort nightly-2026-07-13 --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
+            run stable 1.97.0
           fi
-          /usr/bin/time -f 'TIMING warmup variant=${{ matrix.variant }} sample=${{ matrix.sample }} real=%e user=%U sys=%S' \
-            env CARGO_TARGET_DIR="$RUNNER_TEMP/uv-target" cargo +"$TOOLCHAIN" "${args[@]}"
 
       - name: "Measure warm compile"
         shell: bash
         run: |
           touch crates/uv/src/lib.rs
-          args=(
-            nextest run --no-run --cargo-quiet --cargo-profile fast-build
-            --features test-python-patch,test-universal,native-auth,secret-service
-            --workspace --locked --profile ci-linux
-          )
-          if [[ "${{ matrix.variant }}" == abort ]]; then
-            args+=(--config 'profile.fast-build.panic="abort"' -Z panic-abort-tests)
+          run() {
+            local variant="$1"
+            local toolchain="$2"
+            local target="$RUNNER_TEMP/uv-$variant"
+            shift 2
+            local -a args=(
+              nextest run --no-run --cargo-quiet --cargo-profile fast-build
+              --features test-python-patch,test-universal,native-auth,secret-service
+              --workspace --locked --profile ci-linux
+            )
+            args+=("$@")
+            /usr/bin/time -f "TIMING compile variant=$variant sample=${{ matrix.sample }} real=%e user=%U sys=%S" \
+              env CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
+          }
+          if (( ${{ matrix.sample }} % 2 )); then
+            run abort nightly-2026-07-13 --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
+            run stable 1.97.0
+          else
+            run stable 1.97.0
+            run abort nightly-2026-07-13 --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
           fi
-          /usr/bin/time -f 'TIMING compile variant=${{ matrix.variant }} sample=${{ matrix.sample }} real=%e user=%U sys=%S' \
-            env CARGO_TARGET_DIR="$RUNNER_TEMP/uv-target" cargo +"$TOOLCHAIN" "${args[@]}"
 
       - name: "Measure overall test job"
         shell: bash
         run: |
           touch crates/uv/src/lib.rs
-          args=(
-            nextest run --cargo-quiet --cargo-profile fast-build
-            --features test-python-patch,test-universal,native-auth,secret-service
-            --workspace --locked --profile ci-linux
-            --status-level fail --final-status-level fail
-            --failure-output immediate --success-output never
-          )
-          if [[ "${{ matrix.variant }}" == abort ]]; then
-            args+=(--config 'profile.fast-build.panic="abort"' -Z panic-abort-tests)
+          run() {
+            local variant="$1"
+            local toolchain="$2"
+            local target="$RUNNER_TEMP/uv-$variant"
+            shift 2
+            local -a args=(
+              nextest run --cargo-quiet --cargo-profile fast-build
+              --features test-python-patch,test-universal,native-auth,secret-service
+              --workspace --locked --profile ci-linux
+              --status-level fail --final-status-level fail
+              --failure-output immediate --success-output never
+            )
+            args+=("$@")
+            /usr/bin/time -f "TIMING overall variant=$variant sample=${{ matrix.sample }} real=%e user=%U sys=%S" \
+              env CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
+          }
+          if (( ${{ matrix.sample }} % 2 )); then
+            run stable 1.97.0
+            run abort nightly-2026-07-13 --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
+          else
+            run abort nightly-2026-07-13 --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
+            run stable 1.97.0
           fi
-          /usr/bin/time -f 'TIMING overall variant=${{ matrix.variant }} sample=${{ matrix.sample }} real=%e user=%U sys=%S' \
-            env CARGO_TARGET_DIR="$RUNNER_TEMP/uv-target" cargo +"$TOOLCHAIN" "${args[@]}"
