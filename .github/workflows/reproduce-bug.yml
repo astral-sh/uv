@@ -20,7 +20,7 @@ permissions: {}
 
 jobs:
   seed:
-    name: "seed workspace caches sample ${{ matrix.sample }}"
+    name: "seed workspace cache ${{ matrix.variant }} sample ${{ matrix.sample }}"
     runs-on: depot-ubuntu-24.04-16
     timeout-minutes: 20
     permissions:
@@ -29,6 +29,7 @@ jobs:
       fail-fast: false
       matrix:
         sample: [1, 2, 3, 4, 5]
+        variant: [mtime, checksum]
     env:
       CARGO_BUILD_JOBS: 16
       CARGO_NET_RETRY: 10
@@ -48,25 +49,14 @@ jobs:
           cargo +nightly-2026-07-13 --version
           rustc +nightly-2026-07-13 --version --verbose
 
-      - name: "Rust cache mtime"
+      - name: "Rust cache"
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         env:
           RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
-          prefix-key: v0-uv-workspace-cache-20260715a
-          shared-key: mtime-${{ matrix.sample }}
-          workspaces: ". -> target-mtime"
-          cache-workspace-crates: "true"
-          save-if: true
-
-      - name: "Rust cache checksum"
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
-        with:
-          prefix-key: v0-uv-workspace-cache-20260715a
-          shared-key: checksum-${{ matrix.sample }}
-          workspaces: ". -> target-checksum"
+          prefix-key: v0-uv-workspace-cache-20260715b
+          shared-key: ${{ matrix.variant }}-${{ matrix.sample }}
+          workspaces: ". -> target-${{ matrix.variant }}"
           cache-workspace-crates: "true"
           save-if: true
 
@@ -79,28 +69,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          run() {
-            local variant="$1"
-            local target="$2"
-            shift 2
-            local -a args=(
-              nextest run --no-run --cargo-quiet --cargo-profile fast-build
-              --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
-              --features 'test-python-patch,test-universal,native-auth,secret-service'
-              --workspace --locked --profile ci-linux
-            )
-            args+=("$@")
-            /usr/bin/time -f "TIMING seed variant=$variant sample=${{ matrix.sample }} real=%e user=%U sys=%S" \
-              env CARGO_TARGET_DIR="$target" cargo +nightly-2026-07-13 "${args[@]}"
-          }
-          if (( ${{ matrix.sample }} % 2 )); then
-            run mtime target-mtime
-            run checksum target-checksum -Z checksum-freshness
-          else
-            run checksum target-checksum -Z checksum-freshness
-            run mtime target-mtime
+          variant='${{ matrix.variant }}'
+          target="target-$variant"
+          args=(
+            nextest run --no-run --cargo-quiet --cargo-profile fast-build
+            --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
+            --features 'test-python-patch,test-universal,native-auth,secret-service'
+            --workspace --locked --profile ci-linux
+          )
+          if [[ "$variant" = checksum ]]; then
+            args+=(-Z checksum-freshness)
           fi
-          du -sh target-mtime target-checksum
+          /usr/bin/time -f "TIMING seed variant=$variant sample=${{ matrix.sample }} real=%e user=%U sys=%S" \
+            env CARGO_TARGET_DIR="$target" cargo +nightly-2026-07-13 "${args[@]}"
+          du -sh "$target"
 
   measure:
     needs: seed
@@ -146,7 +128,7 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
-          prefix-key: v0-uv-workspace-cache-20260715a
+          prefix-key: v0-uv-workspace-cache-20260715b
           shared-key: mtime-${{ matrix.sample }}
           workspaces: ". -> target-mtime"
           cache-workspace-crates: "true"
@@ -158,7 +140,7 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
-          prefix-key: v0-uv-workspace-cache-20260715a
+          prefix-key: v0-uv-workspace-cache-20260715b
           shared-key: checksum-${{ matrix.sample }}
           workspaces: ". -> target-checksum"
           cache-workspace-crates: "true"
