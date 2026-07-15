@@ -635,6 +635,8 @@ impl Authentication {
 
 #[cfg(test)]
 mod tests {
+    use std::future::{self, Future};
+
     use insta::{assert_debug_snapshot, assert_snapshot};
     use reqsign::aws::Credential as AwsCredential;
     use reqsign::azure::Credential as AzureCredential;
@@ -648,11 +650,11 @@ mod tests {
     impl ProvideCredential for EmptyAwsCredentialProvider {
         type Credential = AwsCredential;
 
-        async fn provide_credential(
+        fn provide_credential(
             &self,
             _ctx: &Context,
-        ) -> reqsign::Result<Option<Self::Credential>> {
-            Ok(None)
+        ) -> impl Future<Output = reqsign::Result<Option<Self::Credential>>> {
+            future::ready(Ok(None))
         }
     }
 
@@ -662,11 +664,11 @@ mod tests {
     impl ProvideCredential for EmptyAzureCredentialProvider {
         type Credential = AzureCredential;
 
-        async fn provide_credential(
+        fn provide_credential(
             &self,
             _ctx: &Context,
-        ) -> reqsign::Result<Option<Self::Credential>> {
-            Ok(None)
+        ) -> impl Future<Output = reqsign::Result<Option<Self::Credential>>> {
+            future::ready(Ok(None))
         }
     }
 
