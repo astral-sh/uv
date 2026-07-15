@@ -16,9 +16,6 @@ Released on 2026-07-15.
 - Add JSON output to `uv tree` ([#19978](https://github.com/astral-sh/uv/pull/19978))
 - Add CUDA 13.2 as a supported PyTorch backend ([#20267](https://github.com/astral-sh/uv/pull/20267))
 - Prefer local artifacts over URLs when installing from `pylock.toml` ([#20393](https://github.com/astral-sh/uv/pull/20393))
-- Reject duplicate active package entries in `pylock.toml` ([#20391](https://github.com/astral-sh/uv/pull/20391))
-- Preserve direct-archive hashes in `uv pip freeze` output ([#20395](https://github.com/astral-sh/uv/pull/20395))
-- Explain conflicting root requirements instead of displaying an empty version range ([#20228](https://github.com/astral-sh/uv/pull/20228))
 - Clarify diagnostics for unsatisfiable direct requirement ranges ([#20227](https://github.com/astral-sh/uv/pull/20227))
 - Include the selected project name in missing-extra errors ([#20358](https://github.com/astral-sh/uv/pull/20358))
 
@@ -42,6 +39,9 @@ Released on 2026-07-15.
 
 ### Bug fixes
 
+- Reject duplicate active package entries in `pylock.toml` ([#20391](https://github.com/astral-sh/uv/pull/20391))
+- Preserve direct-archive hashes in `uv pip freeze` output ([#20395](https://github.com/astral-sh/uv/pull/20395))
+- Explain conflicting root requirements instead of displaying an empty version range ([#20228](https://github.com/astral-sh/uv/pull/20228))
 - Prevent build-backend data paths from escaping the project or bypassing wheel exclusions ([#20397](https://github.com/astral-sh/uv/pull/20397))
 - Reject PEP 517 backend paths outside the source tree, including paths that escape through symlinks ([#20387](https://github.com/astral-sh/uv/pull/20387))
 - Redact credentials from failed Git fetch commands ([#20401](https://github.com/astral-sh/uv/pull/20401))
