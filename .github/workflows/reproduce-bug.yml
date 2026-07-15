@@ -1,30 +1,14 @@
-# Reproduce reported bugs without modifying the repository or GitHub.
-name: "reproduce-bug"
+name: "windows-workspace-cache-benchmark"
 
 on:
-  workflow_call:
-    inputs:
-      issue:
-        description: "An issue URL or number"
-        required: true
-        type: string
-      runner:
-        description: "The runner to use for reproduction"
-        default: ubuntu-latest
-        required: false
-        type: string
-    outputs:
-      result:
-        description: "The bug reproduction result"
-        value: ${{ jobs.reproduce.outputs.result }}
   workflow_dispatch:
     inputs:
       issue:
-        description: "An issue URL or number"
+        description: "Benchmark label"
         required: true
         type: string
       runner:
-        description: "The runner to use for reproduction"
+        description: "Unused; retained for the existing dispatch interface"
         default: ubuntu-latest
         required: true
         type: choice
@@ -34,60 +18,210 @@ on:
 
 permissions: {}
 
+env:
+  CARGO_BUILD_JOBS: 16
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  PYTHON_VERSION: "3.12"
+  RUSTUP_MAX_RETRIES: 10
+
 jobs:
-  reproduce:
-    if: github.repository == 'astral-sh/uv'
-    runs-on: ${{ inputs.runner }}
-    environment: automations
-    timeout-minutes: 15
+  seed:
+    name: "seed windows cache ${{ matrix.variant }} sample ${{ matrix.sample }}"
+    runs-on: namespace-profile-windows-2022-x86-64-16x32
+    timeout-minutes: 35
     permissions:
       contents: read
-      issues: read
-    outputs:
-      result: ${{ steps.reproduce.outputs.final-message }}
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5]
+        variant: [stable, optimized]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
+      - name: "Setup Dev Drive"
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      - name: "Copy Git Repo to Dev Drive"
+        run: Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - name: "Install Rust toolchains"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          rustup toolchain install nightly-2026-07-13 --profile minimal
+          cargo +1.97.0 --version
+          cargo +nightly-2026-07-13 --version
+          rustc +1.97.0 --version --verbose
+          rustc +nightly-2026-07-13 --version --verbose
+
+      - name: "Rust cache"
+        id: cache-seed
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: ${{ matrix.variant == 'optimized' && 'nightly-2026-07-13' || '1.97.0' }}
+        with:
+          prefix-key: v0-uv-windows-workspace-cache-20260715a
+          shared-key: ${{ matrix.variant }}-${{ matrix.sample }}
+          workspaces: ${{ env.UV_WORKSPACE }} -> target-${{ matrix.variant }}
+          cache-workspace-crates: ${{ matrix.variant == 'optimized' }}
+          save-if: true
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        with:
+          tool: cargo-nextest
+
+      - name: "Seed windows test artifacts"
+        if: steps.cache-seed.outputs.cache-hit != 'true'
+        working-directory: ${{ env.UV_WORKSPACE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          variant='${{ matrix.variant }}'
+          toolchain=1.97.0
+          target="target-$variant"
+          args=(
+            nextest run --no-run --cargo-quiet --cargo-profile fast-build
+            --no-default-features
+            --features 'test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native'
+            --workspace --locked --profile ci-windows
+          )
+          if [[ "$variant" = optimized ]]; then
+            toolchain=nightly-2026-07-13
+            args+=(--config 'profile.fast-build.panic="abort"' -Z panic-abort-tests -Z checksum-freshness)
+          fi
+          start=$(date +%s)
+          CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
+          printf 'TIMING seed variant=%s sample=%s real=%ss\n' "$variant" '${{ matrix.sample }}' "$(( $(date +%s) - start ))"
+          du -sh "$target"
+
+  measure:
+    needs: seed
+    name: "measure windows ${{ matrix.variant }} sample ${{ matrix.sample }}"
+    runs-on: namespace-profile-windows-2022-x86-64-16x32
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5]
+        variant: [stable, optimized]
+    env:
+      UV_HTTP_RETRIES: 5
+      UV_LINK_MODE: copy
+      INSTA_UPDATE: new
+      INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Setup Dev Drive"
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      - name: "Copy Git Repo to Dev Drive"
+        run: Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - name: "Install Rust toolchains"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          rustup toolchain install nightly-2026-07-13 --profile minimal
+          cargo +1.97.0 --version
+          cargo +nightly-2026-07-13 --version
+          rustc +1.97.0 --version --verbose
+          rustc +nightly-2026-07-13 --version --verbose
+
+      - name: "Restore stable cache"
+        id: cache-stable
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: 1.97.0
+        with:
+          prefix-key: v0-uv-windows-workspace-cache-20260715a
+          shared-key: stable-${{ matrix.sample }}
+          workspaces: ${{ env.UV_WORKSPACE }} -> target-stable
+          cache-workspace-crates: "false"
+          save-if: false
+
+      - name: "Restore optimized cache"
+        id: cache-optimized
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
+        with:
+          prefix-key: v0-uv-windows-workspace-cache-20260715a
+          shared-key: optimized-${{ matrix.sample }}
+          workspaces: ${{ env.UV_WORKSPACE }} -> target-optimized
+          cache-workspace-crates: "true"
+          save-if: false
+
+      - name: "Confirm cache hits"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        shell: bash
+        env:
+          STABLE_CACHE_HIT: ${{ steps.cache-stable.outputs.cache-hit }}
+          OPTIMIZED_CACHE_HIT: ${{ steps.cache-optimized.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          printf 'CACHE sample=%s variant=stable hit=%s\n' '${{ matrix.sample }}' "$STABLE_CACHE_HIT"
+          printf 'CACHE sample=%s variant=optimized hit=%s\n' '${{ matrix.sample }}' "$OPTIMIZED_CACHE_HIT"
+          test "$STABLE_CACHE_HIT" = true
+          test "$OPTIMIZED_CACHE_HIT" = true
+          du -sh target-stable target-optimized
+
       - name: "Install uv"
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
-          enable-cache: false
+          version: "0.11.28"
 
-      - name: "Collect issue context"
+      - name: "Install required Python versions"
+        run: uv python install
+
+      - name: "Create NTFS test directory"
+        run: New-Item -Path "C:\uv" -ItemType Directory -Force
+
+      - name: "Create SMB test share"
         run: |
-          gh issue view "$ISSUE" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,author \
-            > .issue-triage-event.json
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ inputs.issue }}
+          New-Item -Path "C:\uv-smb" -ItemType Directory -Force
+          New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
 
-      - name: "Reproduce bug"
-        id: reproduce
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TMPDIR: ${{ runner.temp }}
-          UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-home: "agents/codex"
-          permission-profile: "reproduce-bug"
-          safety-strategy: drop-sudo
-          allow-users: "*"
-          prompt-file: "agents/prompts/reproduce-bug.md"
-          output-schema-file: "agents/schemas/issue-triage-bug.json"
+          tool: cargo-nextest
 
-  report:
-    needs: reproduce
-    if: needs.reproduce.outputs.result != ''
-    runs-on: ubuntu-latest
-    permissions: {}
-    steps:
-      - name: "Write reproduction summary"
-        run: printf '%s\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
+      - name: "Measure windows test job"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        shell: bash
         env:
-          REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
+          RUST_BACKTRACE: 1
+          UV_INTERNAL__TEST_ALT_FS: "\\\\localhost\\uv-alt-fs"
+          UV_INTERNAL__TEST_SMB_FS: "\\\\localhost\\uv-alt-fs"
+          UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
+        run: |
+          set -euo pipefail
+          variant='${{ matrix.variant }}'
+          toolchain=1.97.0
+          target="target-$variant"
+          args=(
+            nextest run --cargo-profile fast-build
+            --no-default-features
+            --features 'test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native'
+            --workspace --locked --profile ci-windows --partition hash:1/3
+            --status-level fail --final-status-level fail
+            --failure-output immediate --success-output never
+          )
+          if [[ "$variant" = optimized ]]; then
+            toolchain=nightly-2026-07-13
+            args+=(--config 'profile.fast-build.panic="abort"' -Z panic-abort-tests -Z checksum-freshness)
+          fi
+          start=$(date +%s)
+          CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
+          printf 'TIMING overall variant=%s sample=%s real=%ss\n' "$variant" '${{ matrix.sample }}' "$(( $(date +%s) - start ))"
