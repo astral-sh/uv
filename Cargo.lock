@@ -7230,6 +7230,7 @@ dependencies = [
  "tokio-stream",
  "toml",
  "toml_edit",
+ "toml_writer",
  "tracing",
  "url",
  "uv-cache-key",
