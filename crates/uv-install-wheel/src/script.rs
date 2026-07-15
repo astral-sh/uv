@@ -2,6 +2,8 @@ use configparser::ini::{Ini, IniDefault};
 use regex::Regex;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
+use std::io;
+use std::path::Path;
 use std::sync::LazyLock;
 
 use crate::{Error, wheel};
@@ -64,61 +66,85 @@ impl Script {
     }
 }
 
-pub(crate) fn scripts_from_ini(
-    extras: Option<&[String]>,
-    python_minor: u8,
-    ini: String,
-) -> Result<(Vec<Script>, Vec<Script>), Error> {
-    // Per the Entry Points specification, `entry_points.txt` is a case-sensitive
-    // INI file that only uses `=` as the field delimiter.
-    // See: <https://packaging.python.org/en/latest/specifications/entry-points/#file-format>
-    let mut ini_options = IniDefault::default();
-    ini_options.case_sensitive = true;
-    ini_options.delimiters = vec!['='];
+/// Console and GUI scripts declared by an `entry_points.txt` metadata file.
+#[derive(Default)]
+pub(crate) struct EntryPoints {
+    pub(crate) console_scripts: Vec<Script>,
+    pub(crate) gui_scripts: Vec<Script>,
+}
 
-    let mut parser = Ini::new_from_defaults(ini_options);
-
-    let entry_points_mapping = parser
-        .read(ini)
-        .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?;
-
-    // TODO: handle extras
-    let mut console_scripts = match entry_points_mapping.get("console_scripts") {
-        Some(console_scripts) => {
-            wheel::read_scripts_from_section(console_scripts, "console_scripts", extras)?
-        }
-        None => Vec::new(),
-    };
-    let gui_scripts = match entry_points_mapping.get("gui_scripts") {
-        Some(gui_scripts) => wheel::read_scripts_from_section(gui_scripts, "gui_scripts", extras)?,
-        None => Vec::new(),
-    };
-
-    // Special case to generate versioned pip launchers.
-    // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283
-    // https://github.com/astral-sh/uv/issues/1593
-    // Older pip versions have a wrong `pip3.x` launcher we have to remove, while newer pip versions
-    // (post https://github.com/pypa/pip/pull/12536) don't, ...
-    console_scripts.retain(|script| {
-        let Some((left, right)) = script.name.split_once('.') else {
-            return true;
+impl EntryPoints {
+    pub(crate) fn read(
+        path: impl AsRef<Path>,
+        extras: Option<&[String]>,
+        python_minor: u8,
+    ) -> Result<Self, Error> {
+        let ini = match fs_err::read_to_string(path) {
+            Ok(ini) => ini,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
+            Err(err) => return Err(err.into()),
         };
-        !(left == "pip3" && right.parse::<u8>().is_ok())
-    });
-    // ... either has a `pip3` launcher we can use as template for the `pip3.x` users expect.
-    if let Some(pip_script) = console_scripts.iter().find(|script| script.name == "pip3") {
-        console_scripts.push(Script {
-            name: format!("pip3.{python_minor}"),
-            ..pip_script.clone()
-        });
+
+        Self::parse(ini, extras, python_minor)
     }
 
-    Ok((console_scripts, gui_scripts))
+    fn parse(ini: String, extras: Option<&[String]>, python_minor: u8) -> Result<Self, Error> {
+        // Per the Entry Points specification, `entry_points.txt` is a case-sensitive
+        // INI file that only uses `=` as the field delimiter.
+        // See: <https://packaging.python.org/en/latest/specifications/entry-points/#file-format>
+        let mut ini_options = IniDefault::default();
+        ini_options.case_sensitive = true;
+        ini_options.delimiters = vec!['='];
+
+        let mut parser = Ini::new_from_defaults(ini_options);
+
+        let entry_points_mapping = parser
+            .read(ini)
+            .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?;
+
+        // TODO: handle extras
+        let mut console_scripts = match entry_points_mapping.get("console_scripts") {
+            Some(console_scripts) => {
+                wheel::read_scripts_from_section(console_scripts, "console_scripts", extras)?
+            }
+            None => Vec::new(),
+        };
+        let gui_scripts = match entry_points_mapping.get("gui_scripts") {
+            Some(gui_scripts) => {
+                wheel::read_scripts_from_section(gui_scripts, "gui_scripts", extras)?
+            }
+            None => Vec::new(),
+        };
+
+        // Special case to generate versioned pip launchers.
+        // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283
+        // https://github.com/astral-sh/uv/issues/1593
+        // Older pip versions have a wrong `pip3.x` launcher we have to remove, while newer pip versions
+        // (post https://github.com/pypa/pip/pull/12536) don't, ...
+        console_scripts.retain(|script| {
+            let Some((left, right)) = script.name.split_once('.') else {
+                return true;
+            };
+            !(left == "pip3" && right.parse::<u8>().is_ok())
+        });
+        // ... either has a `pip3` launcher we can use as template for the `pip3.x` users expect.
+        if let Some(pip_script) = console_scripts.iter().find(|script| script.name == "pip3") {
+            console_scripts.push(Script {
+                name: format!("pip3.{python_minor}"),
+                ..pip_script.clone()
+            });
+        }
+
+        Ok(Self {
+            console_scripts,
+            gui_scripts,
+        })
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::script::{Script, scripts_from_ini};
+    use crate::script::{EntryPoints, Script};
 
     #[test]
     fn test_valid_script_names() {
@@ -174,8 +200,9 @@ pip4.11 = a:b5
 memray = a:b6
 memray3.11 = a:b7
 ";
-        let (mut console_scripts, _gui_scripts) =
-            scripts_from_ini(None, 99, sample_ini.to_string()).unwrap();
+        let mut console_scripts = EntryPoints::parse(sample_ini.to_string(), None, 99)
+            .unwrap()
+            .console_scripts;
         console_scripts.sort();
 
         assert_eq!(
@@ -235,6 +262,6 @@ memray3.11 = a:b7
 script: package.module:main
 ";
 
-        assert!(scripts_from_ini(None, 99, sample_ini.to_string()).is_err());
+        assert!(EntryPoints::parse(sample_ini.to_string(), None, 99).is_err());
     }
 }
