@@ -440,6 +440,7 @@ class PyPyFinder(Finder):
         versions = resp.json()
 
         results = {}
+        incomplete_versions = set()
         for version in versions:
             if not version["stable"]:
                 continue
@@ -448,10 +449,20 @@ class PyPyFinder(Finder):
                 continue
             pypy_version = version["pypy_version"]
             for file in version["files"]:
-                # Only a small number of older pypy builds are bz2-only; we filter
+                # Only a small number of older pypy builds are bz2; we filter
                 # them because uv 0.12+ won't support extracting them.
                 if file["filename"].endswith(".tar.bz2"):
+                    incomplete_versions.add(version["python_version"])
                     continue
+
+                # If we've filtered out a bz2 distribution above, we want to
+                # make sure we filter out its other variants as well. Otherwise
+                # we'd have a partial state where some patch versions of PyPy
+                # are available on Windows but not other platforms (since Windows
+                # uses zip, not bz2).
+                if version["python_version"] in incomplete_versions:
+                    continue
+
                 arch = self._normalize_arch(file["arch"])
                 platform = self._normalize_os(file["platform"])
                 libc = "gnu" if platform == "linux" else "none"

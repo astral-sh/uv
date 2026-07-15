@@ -86444,40 +86444,6 @@
     "variant": null,
     "build": "7.3.23"
   },
-  "pypy-3.11.13-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 11,
-    "patch": 13,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.20-win64.zip",
-    "sha256": "a8d36f6ceb1d9be6cf24a73b0ba103e7567e396b2f7a33426b05e4a06330755b",
-    "variant": null,
-    "build": "7.3.20"
-  },
-  "pypy-3.11.11-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 11,
-    "patch": 11,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.19-win64.zip",
-    "sha256": "b61c7c1dbf879eda6f779c374bfbbeecd3f618ada08404705a1a19d39df48dbd",
-    "variant": null,
-    "build": "7.3.19"
-  },
   "pypy-3.10.16-darwin-aarch64-none": {
     "name": "pypy",
     "arch": {
@@ -86579,57 +86545,6 @@
     "sha256": "c0d07bba6c8fb4e5804f4a8b3f8ef07cc3d89f6ad1db42a45ffb9be60bbb7cc2",
     "variant": null,
     "build": "7.3.19"
-  },
-  "pypy-3.10.14-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 10,
-    "patch": 14,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.17-win64.zip",
-    "sha256": "cab794a03ddda26238c72942ea6f225612e0dc17c76cac6652da83a95024e6e8",
-    "variant": null,
-    "build": "7.3.17"
-  },
-  "pypy-3.10.13-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 10,
-    "patch": 13,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.15-win64.zip",
-    "sha256": "b378b3ab1c3719aee0c3e5519e7bff93ff67b2d8aa987fe4f088b54382db676c",
-    "variant": null,
-    "build": "7.3.15"
-  },
-  "pypy-3.10.12-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 10,
-    "patch": 12,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.12-win64.zip",
-    "sha256": "8c3b1d34fb99100e230e94560410a38d450dc844effbee9ea183518e4aff595c",
-    "variant": null,
-    "build": "7.3.12"
   },
   "pypy-3.9.19-darwin-aarch64-none": {
     "name": "pypy",
@@ -86750,108 +86665,6 @@
     "variant": null,
     "build": "7.3.16"
   },
-  "pypy-3.9.18-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 9,
-    "patch": 18,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.15-win64.zip",
-    "sha256": "a156dad8b58570597eaaabe05663f00f80c60bc11df4a9c46d0953b6c5eb9209",
-    "variant": null,
-    "build": "7.3.15"
-  },
-  "pypy-3.9.17-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 9,
-    "patch": 17,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.12-win64.zip",
-    "sha256": "0996054207b401aeacace1aa11bad82cfcb463838a1603c5f263626c47bbe0e6",
-    "variant": null,
-    "build": "7.3.12"
-  },
-  "pypy-3.9.16-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 9,
-    "patch": 16,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.11-win64.zip",
-    "sha256": "57faad132d42d3e7a6406fcffafffe0b4f390cf0e2966abb8090d073c6edf405",
-    "variant": null,
-    "build": "7.3.11"
-  },
-  "pypy-3.9.15-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 9,
-    "patch": 15,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.10-win64.zip",
-    "sha256": "07e18b7b24c74af9730dfaab16e24b22ef94ea9a4b64cbb2c0d80610a381192a",
-    "variant": null,
-    "build": "7.3.10"
-  },
-  "pypy-3.9.12-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 9,
-    "patch": 12,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.9-win64.zip",
-    "sha256": "be48ab42f95c402543a7042c999c9433b17e55477c847612c8733a583ca6dff5",
-    "variant": null,
-    "build": "7.3.9"
-  },
-  "pypy-3.9.10-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 9,
-    "patch": 10,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.8-win64.zip",
-    "sha256": "c1b2e4cde2dcd1208d41ef7b7df8e5c90564a521e7a5db431673da335a1ba697",
-    "variant": null,
-    "build": "7.3.8"
-  },
   "pypy-3.8.16-darwin-aarch64-none": {
     "name": "pypy",
     "arch": {
@@ -86970,57 +86783,6 @@
     "sha256": "0f46fb6df32941ea016f77cfd7e9b426d5ac25a2af2453414df66103941c8435",
     "variant": null,
     "build": "7.3.11"
-  },
-  "pypy-3.8.15-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 8,
-    "patch": 15,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.10-win64.zip",
-    "sha256": "362dd624d95bd64743190ea2539b97452ecb3d53ea92ceb2fbe9f48dc60e6b8f",
-    "variant": null,
-    "build": "7.3.10"
-  },
-  "pypy-3.8.13-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 8,
-    "patch": 13,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.9-win64.zip",
-    "sha256": "05022baaa55db2b60880f2422312d9e4025e1267303ac57f33e8253559d0be88",
-    "variant": null,
-    "build": "7.3.9"
-  },
-  "pypy-3.8.12-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 8,
-    "patch": 12,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.8-win64.zip",
-    "sha256": "0894c468e7de758c509a602a28ef0ba4fbf197ccdf946c7853a7283d9bb2a345",
-    "variant": null,
-    "build": "7.3.8"
   },
   "graalpy-3.12.0-darwin-aarch64-none": {
     "name": "graalpy",
