@@ -15,6 +15,7 @@ fn add_shared_args(mut command: Command) -> Command {
         .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "50")
         .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "8")
+        .env(EnvVars::UV_CONCURRENT_CACHE_READS, "2")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env_remove(EnvVars::UV_PYTHON_DOWNLOADS);
 
@@ -60,6 +61,7 @@ fn pip_compile_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -260,6 +262,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -427,6 +430,7 @@ fn pip_install_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -610,6 +614,7 @@ fn lock_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -732,6 +737,7 @@ fn version_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -869,6 +875,7 @@ fn tool_install_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
