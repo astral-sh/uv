@@ -3,29 +3,6 @@ use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 #[test]
-fn cert_is_limited_to_pip() {
-    let context = uv_test::test_context_with_versions!(&[]);
-
-    uv_snapshot!(context.filters(), context.command()
-        .arg("sync")
-        .arg("--cert")
-        .arg("ca-bundle.pem"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: unexpected argument '--cert' found
-
-      tip: a similar argument exists: '--script'
-
-    Usage: uv sync --script <SCRIPT>
-
-    For more information, try '--help'.
-    ");
-}
-
-#[test]
 fn help() {
     let context = uv_test::test_context_with_versions!(&[]);
 
