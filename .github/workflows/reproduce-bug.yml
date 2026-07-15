@@ -1,30 +1,14 @@
-# Reproduce reported bugs without modifying the repository or GitHub.
-name: "reproduce-bug"
+name: "workspace-cache-benchmark"
 
 on:
-  workflow_call:
-    inputs:
-      issue:
-        description: "An issue URL or number"
-        required: true
-        type: string
-      runner:
-        description: "The runner to use for reproduction"
-        default: ubuntu-latest
-        required: false
-        type: string
-    outputs:
-      result:
-        description: "The bug reproduction result"
-        value: ${{ jobs.reproduce.outputs.result }}
   workflow_dispatch:
     inputs:
       issue:
-        description: "An issue URL or number"
+        description: "Benchmark label"
         required: true
         type: string
       runner:
-        description: "The runner to use for reproduction"
+        description: "Unused; retained for the existing dispatch interface"
         default: ubuntu-latest
         required: true
         type: choice
@@ -35,59 +19,231 @@ on:
 permissions: {}
 
 jobs:
-  reproduce:
-    if: github.repository == 'astral-sh/uv'
-    runs-on: ${{ inputs.runner }}
-    environment: automations
-    timeout-minutes: 15
+  seed:
+    name: "seed workspace caches sample ${{ matrix.sample }}"
+    runs-on: depot-ubuntu-24.04-16
+    timeout-minutes: 20
     permissions:
       contents: read
-      issues: read
-    outputs:
-      result: ${{ steps.reproduce.outputs.final-message }}
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5]
+    env:
+      CARGO_BUILD_JOBS: 16
+      CARGO_NET_RETRY: 10
+      CARGO_TERM_COLOR: always
+      RUSTUP_MAX_RETRIES: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          enable-cache: false
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
 
-      - name: "Collect issue context"
+      - name: "Install Rust toolchain"
         run: |
-          gh issue view "$ISSUE" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,author \
-            > .issue-triage-event.json
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ inputs.issue }}
+          rustup toolchain install nightly-2026-07-13 --profile minimal
+          cargo +nightly-2026-07-13 --version
+          rustc +nightly-2026-07-13 --version --verbose
 
-      - name: "Reproduce bug"
-        id: reproduce
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+      - name: "Rust cache mtime"
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TMPDIR: ${{ runner.temp }}
-          UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-home: "agents/codex"
-          permission-profile: "reproduce-bug"
-          safety-strategy: drop-sudo
-          allow-users: "*"
-          prompt-file: "agents/prompts/reproduce-bug.md"
-          output-schema-file: "agents/schemas/issue-triage-bug.json"
+          prefix-key: v0-uv-workspace-cache-20260715a
+          shared-key: mtime-${{ matrix.sample }}
+          workspaces: ". -> target-mtime"
+          cache-workspace-crates: "true"
+          save-if: true
 
-  report:
-    needs: reproduce
-    if: needs.reproduce.outputs.result != ''
-    runs-on: ubuntu-latest
-    permissions: {}
-    steps:
-      - name: "Write reproduction summary"
-        run: printf '%s\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
+      - name: "Rust cache checksum"
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         env:
-          REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
+        with:
+          prefix-key: v0-uv-workspace-cache-20260715a
+          shared-key: checksum-${{ matrix.sample }}
+          workspaces: ". -> target-checksum"
+          cache-workspace-crates: "true"
+          save-if: true
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        with:
+          tool: cargo-nextest
+
+      - name: "Seed workspace artifacts"
+        shell: bash
+        run: |
+          set -euo pipefail
+          run() {
+            local variant="$1"
+            local target="$2"
+            shift 2
+            local -a args=(
+              nextest run --no-run --cargo-quiet --cargo-profile fast-build
+              --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
+              --features 'test-python-patch,test-universal,native-auth,secret-service'
+              --workspace --locked --profile ci-linux
+            )
+            args+=("$@")
+            /usr/bin/time -f "TIMING seed variant=$variant sample=${{ matrix.sample }} real=%e user=%U sys=%S" \
+              env CARGO_TARGET_DIR="$target" cargo +nightly-2026-07-13 "${args[@]}"
+          }
+          if (( ${{ matrix.sample }} % 2 )); then
+            run mtime target-mtime
+            run checksum target-checksum -Z checksum-freshness
+          else
+            run checksum target-checksum -Z checksum-freshness
+            run mtime target-mtime
+          fi
+          du -sh target-mtime target-checksum
+
+  measure:
+    needs: seed
+    name: "measure workspace caches sample ${{ matrix.sample }}"
+    runs-on: depot-ubuntu-24.04-16
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5]
+    env:
+      CARGO_BUILD_JOBS: 16
+      CARGO_NET_RETRY: 10
+      CARGO_TERM_COLOR: always
+      RUSTUP_MAX_RETRIES: 10
+      UV_HTTP_RETRIES: 5
+      RUST_BACKTRACE: 1
+      UV_INTERNAL__TEST_COW_FS: /btrfs
+      UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
+      UV_INTERNAL__TEST_ALT_FS: /tmpfs
+      UV_INTERNAL__TEST_LOWLINKS_FS: /minix
+      INSTA_UPDATE: new
+      INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
+
+      - name: "Install Rust toolchain"
+        run: |
+          rustup toolchain install nightly-2026-07-13 --profile minimal
+          cargo +nightly-2026-07-13 --version
+          rustc +nightly-2026-07-13 --version --verbose
+
+      - name: "Restore Rust cache mtime"
+        id: cache-mtime
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
+        with:
+          prefix-key: v0-uv-workspace-cache-20260715a
+          shared-key: mtime-${{ matrix.sample }}
+          workspaces: ". -> target-mtime"
+          cache-workspace-crates: "true"
+          save-if: false
+
+      - name: "Restore Rust cache checksum"
+        id: cache-checksum
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
+        with:
+          prefix-key: v0-uv-workspace-cache-20260715a
+          shared-key: checksum-${{ matrix.sample }}
+          workspaces: ". -> target-checksum"
+          cache-workspace-crates: "true"
+          save-if: false
+
+      - name: "Confirm workspace cache hits"
+        shell: bash
+        env:
+          MTIME_CACHE_HIT: ${{ steps.cache-mtime.outputs.cache-hit }}
+          CHECKSUM_CACHE_HIT: ${{ steps.cache-checksum.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          printf 'CACHE sample=%s variant=mtime hit=%s\n' '${{ matrix.sample }}' "$MTIME_CACHE_HIT"
+          printf 'CACHE sample=%s variant=checksum hit=%s\n' '${{ matrix.sample }}' "$CHECKSUM_CACHE_HIT"
+          test "$MTIME_CACHE_HIT" = true
+          test "$CHECKSUM_CACHE_HIT" = true
+          du -sh target-mtime target-checksum
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.28"
+
+      - name: "Install required Python versions"
+        run: uv python install
+
+      - name: "Install secret service"
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+          sudo apt install -y gnome-keyring
+
+      - name: "Start gnome-keyring"
+        run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
+
+      - name: "Create btrfs filesystem"
+        run: |
+          sudo apt install -y btrfs-progs
+          truncate -s 1G /tmp/btrfs.img
+          mkfs.btrfs /tmp/btrfs.img
+          sudo mkdir /btrfs
+          sudo mount -o loop /tmp/btrfs.img /btrfs
+          sudo chown "$(id -u):$(id -g)" /btrfs
+
+      - name: "Create tmpfs filesystem"
+        run: |
+          sudo mkdir /tmpfs
+          sudo mount -t tmpfs -o size=256m tmpfs /tmpfs
+          sudo chown "$(id -u):$(id -g)" /tmpfs
+
+      - name: "Create minix filesystem"
+        run: |
+          truncate -s 16M /tmp/minix.img
+          mkfs.minix /tmp/minix.img
+          sudo mkdir /minix
+          sudo mount -o loop /tmp/minix.img /minix
+          sudo chown "$(id -u):$(id -g)" /minix
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        with:
+          tool: cargo-nextest
+
+      - name: "Measure restored workspace artifacts"
+        shell: bash
+        run: |
+          set -euo pipefail
+          run() {
+            local variant="$1"
+            local target="$2"
+            shift 2
+            local -a args=(
+              nextest run --cargo-profile fast-build
+              --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests
+              --features 'test-python-patch,test-universal,native-auth,secret-service'
+              --workspace --locked --profile ci-linux
+              --status-level fail --final-status-level fail
+              --failure-output immediate --success-output never
+            )
+            args+=("$@")
+            /usr/bin/time -f "TIMING overall variant=$variant sample=${{ matrix.sample }} real=%e user=%U sys=%S" \
+              env CARGO_TARGET_DIR="$target" cargo +nightly-2026-07-13 "${args[@]}"
+          }
+          if (( ${{ matrix.sample }} % 2 )); then
+            run mtime target-mtime
+            run checksum target-checksum -Z checksum-freshness
+          else
+            run checksum target-checksum -Z checksum-freshness
+            run mtime target-mtime
+          fi
