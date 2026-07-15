@@ -11,6 +11,8 @@ permissions: {}
 env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
+  # Include the panic strategy in the Rust cache key.
+  CARGO_PROFILE_NO_DEBUG_PANIC: abort
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
 
