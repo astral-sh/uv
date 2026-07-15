@@ -972,9 +972,8 @@ async fn check_malware(
         .collect();
 
     let all_extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::All);
-    let all_groups =
-        DependencyGroups::from_args(false, false, false, vec![], vec![], false, vec![], true)
-            .with_defaults(DefaultGroups::All);
+    let all_groups = DependencyGroups::from_args(None, vec![], vec![], false, vec![], true)
+        .with_defaults(DefaultGroups::All);
 
     // NOTE: For now, we only check locked packages that indicate a source from
     // PyPI. The rationale behind this is that private (i.e. non-PyPI) packages

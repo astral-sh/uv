@@ -34,8 +34,8 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode,
+    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode, DryRun, EditableMode,
+    EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode,
     IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, Override,
     PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion,
     TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
@@ -804,9 +804,7 @@ impl RunSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev.into(),
-                no_dev.into(),
-                only_dev,
+                DevMode::from_args(dev.into(), no_dev.into(), only_dev),
                 group,
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -1942,9 +1940,7 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev.into(),
-                no_dev.into(),
-                only_dev,
+                DevMode::from_args(dev.into(), no_dev.into(), only_dev),
                 group,
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -2719,9 +2715,7 @@ impl TreeSettings {
 
         Self {
             groups: DependencyGroups::from_args(
-                dev.into(),
-                no_dev.into(),
-                only_dev,
+                DevMode::from_args(dev.into(), no_dev.into(), only_dev),
                 group,
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -2884,9 +2878,7 @@ impl ExportSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev.into(),
-                no_dev.into(),
-                only_dev,
+                DevMode::from_args(dev.into(), no_dev.into(), only_dev),
                 group,
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -3074,9 +3066,7 @@ impl CheckSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev.into(),
-                no_dev.into(),
-                only_dev,
+                DevMode::from_args(dev.into(), no_dev.into(), only_dev),
                 group,
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -3181,9 +3171,7 @@ impl AuditSettings {
                 true,
             ),
             groups: DependencyGroups::from_args(
-                only_group.is_empty() && !only_dev,
-                no_dev,
-                only_dev,
+                DevMode::from_args(only_group.is_empty() && !only_dev, no_dev, only_dev),
                 vec![],
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
