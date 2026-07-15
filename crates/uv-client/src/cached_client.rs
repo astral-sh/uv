@@ -1,3 +1,4 @@
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 use std::{borrow::Cow, io::Read, path::Path};
 
@@ -9,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 
 use uv_cache::{CacheEntry, Freshness};
+use uv_configuration::min_stack_size;
 use uv_fs::write_atomic;
 use uv_redacted::DisplaySafeUrl;
 
@@ -803,6 +805,16 @@ pub struct DataWithCachePolicy {
     cache_policy: OwnedArchive<CachePolicy>,
 }
 
+/// A small, dedicated blocking pool for short-lived cache reads.
+static CACHE_READ_RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
+    tokio::runtime::Builder::new_current_thread()
+        .thread_name("uv-cache-read")
+        .thread_stack_size(min_stack_size())
+        .max_blocking_threads(2)
+        .build()
+        .expect("Failed building the cache-read Runtime")
+});
+
 impl DataWithCachePolicy {
     /// Loads cached data and its associated HTTP cache policy from the given
     /// file path in an asynchronous fashion (via `spawn_blocking`).
@@ -813,7 +825,8 @@ impl DataWithCachePolicy {
     /// file given fails, then this returns an error.
     async fn from_path_async(path: &Path) -> Result<Self, Error> {
         let path = path.to_path_buf();
-        tokio::task::spawn_blocking(move || Self::from_path_sync(&path))
+        CACHE_READ_RUNTIME
+            .spawn_blocking(move || Self::from_path_sync(&path))
             .await
             // This just forwards panics from the closure.
             .unwrap()
