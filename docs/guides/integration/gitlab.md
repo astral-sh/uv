@@ -13,7 +13,7 @@ Select a variant that is suitable for your workflow.
 
 ```yaml title=".gitlab-ci.yml"
 variables:
-  UV_VERSION: "0.11.28"
+  UV_VERSION: "0.11.29"
   PYTHON_VERSION: "3.12"
   BASE_LAYER: trixie-slim
   # GitLab CI creates a separate mountpoint for the build directory,
