@@ -101,8 +101,8 @@ pub(crate) fn create(
     };
     let absolute = std::path::absolute(location)?;
 
-    // Validate the path before creating the virtual environment, since some filesystems reject
-    // non-UTF-8 paths before the activation scripts are generated.
+    // Validate the path before creating the virtual environment, since some filesystems, e.g.,
+    // APFS, reject non-UTF-8 paths before the activation scripts are generated.
     if absolute.simplified().to_str().is_none() {
         return Err(Error::NonUtf8Path { path: absolute });
     }

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
@@ -1496,10 +1498,10 @@ fn file_exists() -> Result<()> {
 #[test]
 fn non_utf8_path() {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
-    let path = cfg_select! {
+    let path = PathBuf::from(cfg_select! {
         unix => OsStr::from_bytes(b".venv-\xff"),
         windows => OsString::from_wide(&[0x002e, 0x0076, 0x0065, 0x006e, 0x0076, 0x002d, 0xd800]),
-    };
+    });
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(&path)
