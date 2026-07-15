@@ -33,6 +33,9 @@ pub struct PipCompileCompatArgs {
     max_rounds: Option<usize>,
 
     #[clap(long, hide = true)]
+    cert: Option<String>,
+
+    #[clap(long, hide = true)]
     client_cert: Option<String>,
 
     #[clap(long, hide = true)]
@@ -104,6 +107,12 @@ impl CompatArgs for PipCompileCompatArgs {
         if self.max_rounds.is_some() {
             return Err(anyhow!(
                 "pip-compile's `--max-rounds` is unsupported (uv always resolves until convergence)"
+            ));
+        }
+
+        if self.cert.is_some() {
+            return Err(anyhow!(
+                "pip-compile's `--cert` is unsupported (set the `SSL_CERT_FILE` environment variable to use a custom CA certificate bundle)"
             ));
         }
 
@@ -190,6 +199,9 @@ pub struct PipSyncCompatArgs {
     user: bool,
 
     #[clap(long, hide = true)]
+    cert: Option<String>,
+
+    #[clap(long, hide = true)]
     client_cert: Option<String>,
 
     #[clap(long, hide = true)]
@@ -224,6 +236,12 @@ impl CompatArgs for PipSyncCompatArgs {
         if self.user {
             return Err(anyhow!(
                 "pip-sync's `--user` is unsupported (use a virtual environment instead)"
+            ));
+        }
+
+        if self.cert.is_some() {
+            return Err(anyhow!(
+                "pip-sync's `--cert` is unsupported (set the `SSL_CERT_FILE` environment variable to use a custom CA certificate bundle)"
             ));
         }
 

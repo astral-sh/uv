@@ -93,7 +93,6 @@ pub struct BaseClientBuilder<'a> {
     preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
     system_certs: bool,
-    custom_certificates: Option<Certificates>,
     retries: u32,
     pub connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
@@ -166,7 +165,6 @@ impl Default for BaseClientBuilder<'_> {
             preview: Preview::default(),
             allow_insecure_host: vec![],
             system_certs: false,
-            custom_certificates: None,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
             markers: None,
@@ -257,13 +255,6 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn with_system_certs(mut self, system_certs: bool) -> Self {
         self.system_certs = system_certs;
-        self
-    }
-
-    /// Use custom certificate authorities for TLS verification.
-    #[must_use]
-    pub fn custom_certificates(mut self, certificates: Certificates) -> Self {
-        self.custom_certificates = Some(certificates);
         self
     }
 
@@ -485,10 +476,8 @@ impl<'a> BaseClientBuilder<'a> {
             let _ = write!(user_agent_string, " {output}");
         }
 
-        let custom_certs = self
-            .custom_certificates
-            .as_ref()
-            .map(Certificates::to_reqwest_certs);
+        // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
+        let custom_certs = Certificates::from_env().map(|certs| certs.to_reqwest_certs());
         let certificate_source = if custom_certs.is_some() {
             CertificateSource::Custom
         } else if self.system_certs {
@@ -548,7 +537,8 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Configure the certificate source.
         //
-        // Explicit certificates override the default certificate source.
+        // `SSL_CERT_FILE` and `SSL_CERT_DIR` override the default certificate source when they
+        // contain valid certificates.
         let client_builder = if let Some(custom_certs) = custom_certs {
             client_builder.tls_certs_only(custom_certs)
         } else if self.system_certs {
@@ -719,7 +709,7 @@ pub(crate) enum CertificateSource {
     System,
     /// The bundled `WebPKI` certificate roots.
     WebPki,
-    /// Custom certificate roots.
+    /// Custom roots loaded from `SSL_CERT_FILE` or `SSL_CERT_DIR`.
     Custom,
     /// An externally constructed client whose certificate roots are unknown.
     Unknown,
