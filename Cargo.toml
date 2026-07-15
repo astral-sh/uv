@@ -446,6 +446,8 @@ strip = "debuginfo"
 inherits = "dev"
 debug = 0
 strip = "debuginfo"
+# This will still show a panic message, we only skip the unwind.
+panic = "abort"
 
 # Profile to build a minimally sized binary for uv-build
 [profile.minimal-size]
