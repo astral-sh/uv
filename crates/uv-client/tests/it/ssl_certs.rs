@@ -12,8 +12,7 @@ use tokio::net::{TcpListener, TcpStream};
 use url::Url;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, Certificates, RegistryClientBuilder};
 use uv_distribution_types::IndexUrl;
 use uv_errors::{ErrorOptions, Hint, write_error_chain_with_options};
 use uv_redacted::DisplaySafeUrl;
@@ -141,6 +140,7 @@ struct TestClient {
     overrides: Vec<(&'static str, String)>,
     system_certs: bool,
     custom_client: bool,
+    cert: Option<PathBuf>,
 }
 
 /// Create a [`TestClient`] with no environment overrides.
@@ -149,10 +149,17 @@ fn client() -> TestClient {
         overrides: Vec::new(),
         system_certs: false,
         custom_client: false,
+        cert: None,
     }
 }
 
 impl TestClient {
+    /// Set the explicit certificate file used to construct [`Certificates`].
+    fn cert(mut self, path: &Path) -> Self {
+        self.cert = Some(path.to_path_buf());
+        self
+    }
+
     /// Enable or disable system certificate loading.
     fn system_certs(mut self, enabled: bool) -> Self {
         self.system_certs = enabled;
@@ -229,13 +236,16 @@ impl TestClient {
         async_with_vars(vars, async {
             let (server_task, addr) = start_https_user_agent_server(&cert.server).await.unwrap();
             let cache = Cache::temp().unwrap().init().await.unwrap();
-            let client = RegistryClientBuilder::new(
-                BaseClientBuilder::default()
-                    .retries(0)
-                    .no_retry_delay(true)
-                    .with_system_certs(system_certs),
-                cache,
-            );
+            let base = BaseClientBuilder::default()
+                .retries(0)
+                .no_retry_delay(true)
+                .with_system_certs(system_certs);
+            let base = if let Some(certificates) = Certificates::from_env() {
+                base.custom_certificates(certificates)
+            } else {
+                base
+            };
+            let client = RegistryClientBuilder::new(base, cache);
             let client = if custom_client {
                 client.with_reqwest_client(reqwest::Client::new())
             } else {
@@ -381,7 +391,7 @@ impl TestClient {
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
             let (server_task, addr) = start_https_user_agent_server(&cert.server).await.unwrap();
-            let response = send_request(addr, system_certs).await;
+            let response = send_request(addr, system_certs, self.cert.as_deref()).await;
             check(response, server_task).await;
         })
         .await;
@@ -403,7 +413,7 @@ impl TestClient {
             let (server_task, addr) = start_https_mtls_user_agent_server(&cert.ca, &cert.server)
                 .await
                 .unwrap();
-            let response = send_request(addr, system_certs).await;
+            let response = send_request(addr, system_certs, self.cert.as_deref()).await;
             check(response, server_task).await;
         })
         .await;
@@ -414,20 +424,40 @@ impl TestClient {
 async fn send_request(
     addr: SocketAddr,
     system_certs: bool,
+    cert: Option<&Path>,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-    send_request_to(&url, system_certs).await
+    send_request_to_with_cert(&url, system_certs, cert).await
 }
 
 /// Send a GET request to an arbitrary URL using a fresh registry client.
+#[cfg(feature = "test-pypi")]
 async fn send_request_to(
     url: &DisplaySafeUrl,
     system_certs: bool,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
+    send_request_to_with_cert(url, system_certs, None).await
+}
+
+async fn send_request_to_with_cert(
+    url: &DisplaySafeUrl,
+    system_certs: bool,
+    cert: Option<&Path>,
+) -> Result<reqwest::Response, reqwest_middleware::Error> {
     let cache = Cache::temp().unwrap().init().await.unwrap();
+    let custom_certificates = if let Some(cert) = cert {
+        Some(Certificates::from_file(cert).expect("failed to load certificate file"))
+    } else {
+        Certificates::from_env()
+    };
     let base = BaseClientBuilder::default()
         .no_retry_delay(true)
         .with_system_certs(system_certs);
+    let base = if let Some(certificates) = custom_certificates {
+        base.custom_certificates(certificates)
+    } else {
+        base
+    };
     let client = RegistryClientBuilder::new(base, cache)
         .build()
         .expect("failed to build registry client");
@@ -502,7 +532,7 @@ async fn test_certificate_tls_alerts_are_not_retried() -> Result<()> {
         Ok::<_, anyhow::Error>(())
     });
 
-    let response = send_request(addr, false).await;
+    let response = send_request(addr, false, None).await;
     assert_fatal_reqwest_error(&response);
     server_task.await??;
     Ok(())
@@ -533,7 +563,7 @@ async fn test_non_certificate_tls_errors_are_retried() -> Result<()> {
         Ok::<_, anyhow::Error>(())
     });
 
-    let response = send_request(addr, false).await;
+    let response = send_request(addr, false, None).await;
     let Err(reqwest_middleware::Error::Middleware(middleware_error)) = response else {
         panic!("expected middleware error, got: {response:?}");
     };
@@ -615,6 +645,30 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
     let cert = TestCertificate::new()?;
     client()
         .ssl_cert_file(&cert.trust_path)
+        .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// An explicit certificate file pointing to the server's CA cert is trusted.
+#[tokio::test]
+async fn test_cli_cert_valid() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    client()
+        .cert(&cert.trust_path)
+        .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// An explicit certificate file overrides the environment certificate sources.
+#[tokio::test]
+async fn test_cli_cert_overrides_environment() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    let wrong_cert = TestCertificate::new()?;
+    client()
+        .ssl_cert_file(&wrong_cert.trust_path)
+        .cert(&cert.trust_path)
         .expect_https_connect_succeeds(&cert)
         .await;
     Ok(())
