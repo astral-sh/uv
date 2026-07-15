@@ -1,93 +1,293 @@
-# Reproduce reported bugs without modifying the repository or GitHub.
-name: "reproduce-bug"
+name: "nightly-dev-build-benchmark"
 
 on:
-  workflow_call:
-    inputs:
-      issue:
-        description: "An issue URL or number"
-        required: true
-        type: string
-      runner:
-        description: "The runner to use for reproduction"
-        default: ubuntu-latest
-        required: false
-        type: string
-    outputs:
-      result:
-        description: "The bug reproduction result"
-        value: ${{ jobs.reproduce.outputs.result }}
   workflow_dispatch:
     inputs:
       issue:
-        description: "An issue URL or number"
+        description: "Benchmark label"
         required: true
         type: string
       runner:
-        description: "The runner to use for reproduction"
+        description: "Unused; retained for the existing dispatch interface"
         default: ubuntu-latest
         required: true
         type: choice
         options:
           - ubuntu-latest
           - macos-latest
+      target:
+        description: "Development-binary target to benchmark"
+        required: true
+        type: choice
+        options:
+          - linux-libc
+          - linux-aarch64
+          - linux-armv7-gnueabihf
+          - linux-musl
+          - macos-aarch64
+          - macos-x86_64
+          - windows-x86_64
+          - windows-aarch64
+          - android-aarch64
 
 permissions: {}
 
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
 jobs:
-  reproduce:
-    if: github.repository == 'astral-sh/uv'
-    runs-on: ${{ inputs.runner }}
-    environment: automations
-    timeout-minutes: 15
+  seed:
+    name: "seed ${{ inputs.target }} ${{ matrix.variant }}"
+    runs-on: ${{ inputs.target == 'linux-aarch64' && 'github-ubuntu-24.04-aarch64-4' || inputs.target == 'macos-aarch64' && 'macos-14' || inputs.target == 'macos-x86_64' && 'macos-latest-large' || inputs.target == 'windows-x86_64' && 'windows-latest' || inputs.target == 'windows-aarch64' && 'windows-11-arm' || 'github-ubuntu-24.04-x86_64-8' }}
+    timeout-minutes: 30
     permissions:
       contents: read
-      issues: read
-    outputs:
-      result: ${{ steps.reproduce.outputs.final-message }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [stable, optimized]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          enable-cache: false
+      - name: "Setup Dev Drive"
+        if: startsWith(inputs.target, 'windows-')
+        shell: pwsh
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
-      - name: "Collect issue context"
+      - name: "Copy Git Repo to Dev Drive"
+        if: startsWith(inputs.target, 'windows-')
+        shell: pwsh
+        run: Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - name: "Install native dependencies"
+        if: startsWith(inputs.target, 'linux-')
+        shell: bash
         run: |
-          gh issue view "$ISSUE" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,author \
-            > .issue-triage-event.json
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ inputs.issue }}
+          set -euo pipefail
+          ./scripts/install-mold.sh
+          case '${{ inputs.target }}' in
+            linux-armv7-gnueabihf)
+              sudo apt-get update
+              sudo apt-get install -y gcc-arm-linux-gnueabihf
+              ;;
+            linux-musl)
+              sudo apt-get install -y musl-tools
+              ;;
+          esac
 
-      - name: "Reproduce bug"
-        id: reproduce
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+      - name: "Setup Android NDK"
+        if: inputs.target == 'android-aarch64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${ANDROID_NDK_ROOT:-}" ]]; then
+            NDK_ROOT=$(ls -d "${ANDROID_HOME}/ndk/"* 2>/dev/null | sort -V | tail -n1)
+          else
+            NDK_ROOT="${ANDROID_NDK_ROOT}"
+          fi
+          TOOLCHAIN="${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64"
+          echo "CC_aarch64_linux_android=${TOOLCHAIN}/bin/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
+          echo "CXX_aarch64_linux_android=${TOOLCHAIN}/bin/aarch64-linux-android24-clang++" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=${TOOLCHAIN}/bin/llvm-ar" >> "$GITHUB_ENV"
+          echo "RANLIB_aarch64_linux_android=${TOOLCHAIN}/bin/llvm-ranlib" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${TOOLCHAIN}/bin/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_RANLIB=${TOOLCHAIN}/bin/llvm-ranlib" >> "$GITHUB_ENV"
+          LIBDIR=$(echo "${TOOLCHAIN}"/lib/clang/*/lib/linux/aarch64)
+          if [[ ! -f "${LIBDIR}/libgcc.a" ]]; then
+            echo 'INPUT(-lunwind)' | sudo tee "${LIBDIR}/libgcc.a" > /dev/null
+          fi
+
+      - name: "Install Rust toolchains"
+        working-directory: ${{ env.UV_WORKSPACE || github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--profile minimal)
+          case '${{ inputs.target }}' in
+            linux-armv7-gnueabihf) args+=(--target armv7-unknown-linux-gnueabihf) ;;
+            linux-musl) args+=(--target x86_64-unknown-linux-musl) ;;
+            android-aarch64) args+=(--target aarch64-linux-android) ;;
+          esac
+          rustup toolchain install 1.97.0 "${args[@]}"
+          rustup toolchain install nightly-2026-07-13 "${args[@]}"
+          cargo +1.97.0 --version
+          cargo +nightly-2026-07-13 --version
+          rustc +1.97.0 --version --verbose
+          rustc +nightly-2026-07-13 --version --verbose
+
+      - name: "Rust cache"
+        id: cache-seed
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TMPDIR: ${{ runner.temp }}
-          UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
+          RUSTUP_TOOLCHAIN: ${{ matrix.variant == 'optimized' && 'nightly-2026-07-13' || '1.97.0' }}
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-home: "agents/codex"
-          permission-profile: "reproduce-bug"
-          safety-strategy: drop-sudo
-          allow-users: "*"
-          prompt-file: "agents/prompts/reproduce-bug.md"
-          output-schema-file: "agents/schemas/issue-triage-bug.json"
+          prefix-key: v0-uv-nightly-dev-build-${{ inputs.target }}-20260715a
+          shared-key: ${{ matrix.variant }}
+          workspaces: ${{ env.UV_WORKSPACE || github.workspace }} -> target-${{ matrix.variant }}
+          cache-workspace-crates: ${{ matrix.variant == 'optimized' }}
+          cache-bin: false
+          save-if: true
 
-  report:
-    needs: reproduce
-    if: needs.reproduce.outputs.result != ''
-    runs-on: ubuntu-latest
-    permissions: {}
-    steps:
-      - name: "Write reproduction summary"
-        run: printf '%s\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
+      - name: "Seed development binary"
+        if: steps.cache-seed.outputs.cache-hit != 'true'
+        working-directory: ${{ env.UV_WORKSPACE || github.workspace }}
+        shell: bash
         env:
-          REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+        run: |
+          set -euo pipefail
+          variant='${{ matrix.variant }}'
+          toolchain=1.97.0
+          profile=no-debug
+          args=(build --profile "$profile" --locked)
+          case '${{ inputs.target }}' in
+            linux-armv7-gnueabihf) args+=(--target armv7-unknown-linux-gnueabihf --bin uv --bin uvx) ;;
+            linux-musl) args+=(--target x86_64-unknown-linux-musl --bin uv --bin uvx) ;;
+            android-aarch64) args+=(--target aarch64-linux-android --bin uv --bin uvx) ;;
+            linux-libc|linux-aarch64) ;;
+            *) args+=(--bin uv --bin uvx) ;;
+          esac
+          if [[ "$variant" = optimized ]]; then
+            toolchain=nightly-2026-07-13
+            args[2]=no-debug-nightly
+            args+=(-Z checksum-freshness)
+          fi
+          start=$(date +%s)
+          CARGO_TARGET_DIR="target-$variant" cargo +"$toolchain" "${args[@]}"
+          printf 'TIMING seed target=%s variant=%s real=%ss\n' '${{ inputs.target }}' "$variant" "$(( $(date +%s) - start ))"
+          du -sh "target-$variant"
+
+  measure:
+    needs: seed
+    name: "measure ${{ inputs.target }} ${{ matrix.variant }} sample ${{ matrix.sample }}"
+    runs-on: ${{ inputs.target == 'linux-aarch64' && 'github-ubuntu-24.04-aarch64-4' || inputs.target == 'macos-aarch64' && 'macos-14' || inputs.target == 'macos-x86_64' && 'macos-latest-large' || inputs.target == 'windows-x86_64' && 'windows-latest' || inputs.target == 'windows-aarch64' && 'windows-11-arm' || 'github-ubuntu-24.04-x86_64-8' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5]
+        variant: [stable, optimized]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Setup Dev Drive"
+        if: startsWith(inputs.target, 'windows-')
+        shell: pwsh
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      - name: "Copy Git Repo to Dev Drive"
+        if: startsWith(inputs.target, 'windows-')
+        shell: pwsh
+        run: Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - name: "Install native dependencies"
+        if: startsWith(inputs.target, 'linux-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/install-mold.sh
+          case '${{ inputs.target }}' in
+            linux-armv7-gnueabihf)
+              sudo apt-get update
+              sudo apt-get install -y gcc-arm-linux-gnueabihf
+              ;;
+            linux-musl)
+              sudo apt-get install -y musl-tools
+              ;;
+          esac
+
+      - name: "Setup Android NDK"
+        if: inputs.target == 'android-aarch64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${ANDROID_NDK_ROOT:-}" ]]; then
+            NDK_ROOT=$(ls -d "${ANDROID_HOME}/ndk/"* 2>/dev/null | sort -V | tail -n1)
+          else
+            NDK_ROOT="${ANDROID_NDK_ROOT}"
+          fi
+          TOOLCHAIN="${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64"
+          echo "CC_aarch64_linux_android=${TOOLCHAIN}/bin/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
+          echo "CXX_aarch64_linux_android=${TOOLCHAIN}/bin/aarch64-linux-android24-clang++" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=${TOOLCHAIN}/bin/llvm-ar" >> "$GITHUB_ENV"
+          echo "RANLIB_aarch64_linux_android=${TOOLCHAIN}/bin/llvm-ranlib" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${TOOLCHAIN}/bin/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_RANLIB=${TOOLCHAIN}/bin/llvm-ranlib" >> "$GITHUB_ENV"
+          LIBDIR=$(echo "${TOOLCHAIN}"/lib/clang/*/lib/linux/aarch64)
+          if [[ ! -f "${LIBDIR}/libgcc.a" ]]; then
+            echo 'INPUT(-lunwind)' | sudo tee "${LIBDIR}/libgcc.a" > /dev/null
+          fi
+
+      - name: "Install Rust toolchains"
+        working-directory: ${{ env.UV_WORKSPACE || github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--profile minimal)
+          case '${{ inputs.target }}' in
+            linux-armv7-gnueabihf) args+=(--target armv7-unknown-linux-gnueabihf) ;;
+            linux-musl) args+=(--target x86_64-unknown-linux-musl) ;;
+            android-aarch64) args+=(--target aarch64-linux-android) ;;
+          esac
+          rustup toolchain install 1.97.0 "${args[@]}"
+          rustup toolchain install nightly-2026-07-13 "${args[@]}"
+
+      - name: "Restore Rust cache"
+        id: cache-restore
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: ${{ matrix.variant == 'optimized' && 'nightly-2026-07-13' || '1.97.0' }}
+        with:
+          prefix-key: v0-uv-nightly-dev-build-${{ inputs.target }}-20260715a
+          shared-key: ${{ matrix.variant }}
+          workspaces: ${{ env.UV_WORKSPACE || github.workspace }} -> target-${{ matrix.variant }}
+          cache-workspace-crates: ${{ matrix.variant == 'optimized' }}
+          cache-bin: false
+          save-if: false
+
+      - name: "Confirm cache hit"
+        working-directory: ${{ env.UV_WORKSPACE || github.workspace }}
+        shell: bash
+        env:
+          CACHE_HIT: ${{ steps.cache-restore.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          printf 'CACHE target=%s variant=%s sample=%s hit=%s\n' '${{ inputs.target }}' '${{ matrix.variant }}' '${{ matrix.sample }}' "$CACHE_HIT"
+          test "$CACHE_HIT" = true
+          du -sh 'target-${{ matrix.variant }}'
+
+      - name: "Measure development binary"
+        working-directory: ${{ env.UV_WORKSPACE || github.workspace }}
+        shell: bash
+        env:
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+        run: |
+          set -euo pipefail
+          variant='${{ matrix.variant }}'
+          toolchain=1.97.0
+          profile=no-debug
+          args=(build --profile "$profile" --locked)
+          case '${{ inputs.target }}' in
+            linux-armv7-gnueabihf) args+=(--target armv7-unknown-linux-gnueabihf --bin uv --bin uvx) ;;
+            linux-musl) args+=(--target x86_64-unknown-linux-musl --bin uv --bin uvx) ;;
+            android-aarch64) args+=(--target aarch64-linux-android --bin uv --bin uvx) ;;
+            linux-libc|linux-aarch64) ;;
+            *) args+=(--bin uv --bin uvx) ;;
+          esac
+          if [[ "$variant" = optimized ]]; then
+            toolchain=nightly-2026-07-13
+            args[2]=no-debug-nightly
+            args+=(-Z checksum-freshness)
+          fi
+          start=$(date +%s)
+          CARGO_TARGET_DIR="target-$variant" cargo +"$toolchain" "${args[@]}"
+          printf 'TIMING warm target=%s variant=%s sample=%s real=%ss\n' '${{ inputs.target }}' "$variant" '${{ matrix.sample }}' "$(( $(date +%s) - start ))"
