@@ -1,93 +1,166 @@
-# Reproduce reported bugs without modifying the repository or GitHub.
 name: "reproduce-bug"
 
 on:
-  workflow_call:
-    inputs:
-      issue:
-        description: "An issue URL or number"
-        required: true
-        type: string
-      runner:
-        description: "The runner to use for reproduction"
-        default: ubuntu-latest
-        required: false
-        type: string
-    outputs:
-      result:
-        description: "The bug reproduction result"
-        value: ${{ jobs.reproduce.outputs.result }}
   workflow_dispatch:
     inputs:
       issue:
-        description: "An issue URL or number"
+        description: "Benchmark label"
         required: true
         type: string
       runner:
-        description: "The runner to use for reproduction"
+        description: "Compatibility input"
         default: ubuntu-latest
         required: true
         type: choice
         options:
           - ubuntu-latest
-          - macos-latest
+      target:
+        description: "Clippy runner"
+        required: true
+        type: choice
+        options:
+          - linux
+          - windows
 
 permissions: {}
 
 jobs:
-  reproduce:
-    if: github.repository == 'astral-sh/uv'
-    runs-on: ${{ inputs.runner }}
-    environment: automations
-    timeout-minutes: 15
+  seed:
+    name: "seed ${{ inputs.target }} ${{ matrix.variant }}"
+    runs-on: ${{ inputs.target == 'windows' && 'namespace-profile-windows-2022-x86-64-4' || 'ubuntu-latest' }}
+    timeout-minutes: 30
     permissions:
       contents: read
-      issues: read
-    outputs:
-      result: ${{ steps.reproduce.outputs.final-message }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [stable, optimized]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          enable-cache: false
+      - name: "Setup Dev Drive"
+        if: inputs.target == 'windows'
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
-      - name: "Collect issue context"
+      - name: "Copy Git Repo to Dev Drive"
+        if: inputs.target == 'windows'
+        run: Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - name: "Install Rust toolchains"
+        shell: bash
         run: |
-          gh issue view "$ISSUE" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,author \
-            > .issue-triage-event.json
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ inputs.issue }}
+          set -euo pipefail
+          if [[ '${{ inputs.target }}' = linux ]]; then
+            export RUSTUP_HOME="$RUNNER_TEMP/uv-rustup"
+            printf 'RUSTUP_HOME=%s\n' "$RUSTUP_HOME" >> "$GITHUB_ENV"
+          fi
+          rustup toolchain install 1.97.0 --profile minimal --component clippy
+          rustup toolchain install nightly-2026-07-13 --profile minimal --component clippy
 
-      - name: "Reproduce bug"
-        id: reproduce
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+      - name: "Rust cache"
+        id: cache-seed
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TMPDIR: ${{ runner.temp }}
-          UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
+          RUSTUP_TOOLCHAIN: ${{ matrix.variant == 'optimized' && 'nightly-2026-07-13' || '1.97.0' }}
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-home: "agents/codex"
-          permission-profile: "reproduce-bug"
-          safety-strategy: drop-sudo
-          allow-users: "*"
-          prompt-file: "agents/prompts/reproduce-bug.md"
-          output-schema-file: "agents/schemas/issue-triage-bug.json"
+          prefix-key: v0-uv-clippy-workspace-cache-${{ inputs.target }}-20260715a
+          shared-key: ${{ matrix.variant }}
+          workspaces: ${{ env.UV_WORKSPACE || github.workspace }} -> target-${{ matrix.variant }}
+          cache-workspace-crates: ${{ matrix.variant == 'optimized' }}
+          save-if: true
 
-  report:
-    needs: reproduce
-    if: needs.reproduce.outputs.result != ''
-    runs-on: ubuntu-latest
-    permissions: {}
+      - name: "Seed Clippy"
+        if: steps.cache-seed.outputs.cache-hit != 'true'
+        working-directory: ${{ env.UV_WORKSPACE || github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          variant='${{ matrix.variant }}'
+          toolchain=1.97.0
+          args=(clippy --workspace --all-targets --all-features --locked)
+          if [[ "$variant" = optimized ]]; then
+            toolchain=nightly-2026-07-13
+            args+=(-Z checksum-freshness)
+          fi
+          start=$(date +%s)
+          CARGO_TARGET_DIR="target-$variant" cargo +"$toolchain" "${args[@]}" -- -D warnings
+          printf 'TIMING seed target=%s variant=%s real=%ss\n' '${{ inputs.target }}' "$variant" "$(( $(date +%s) - start ))"
+          du -sh "target-$variant"
+
+  measure:
+    name: "measure ${{ inputs.target }} ${{ matrix.variant }} sample ${{ matrix.sample }}"
+    needs: seed
+    runs-on: ${{ inputs.target == 'windows' && 'namespace-profile-windows-2022-x86-64-4' || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [stable, optimized]
+        sample: [1, 2, 3, 4, 5]
     steps:
-      - name: "Write reproduction summary"
-        run: printf '%s\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Setup Dev Drive"
+        if: inputs.target == 'windows'
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      - name: "Copy Git Repo to Dev Drive"
+        if: inputs.target == 'windows'
+        run: Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - name: "Install Rust toolchains"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ '${{ inputs.target }}' = linux ]]; then
+            export RUSTUP_HOME="$RUNNER_TEMP/uv-rustup"
+            printf 'RUSTUP_HOME=%s\n' "$RUSTUP_HOME" >> "$GITHUB_ENV"
+          fi
+          rustup toolchain install 1.97.0 --profile minimal --component clippy
+          rustup toolchain install nightly-2026-07-13 --profile minimal --component clippy
+
+      - name: "Restore Rust cache"
+        id: cache-restore
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         env:
-          REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
+          RUSTUP_TOOLCHAIN: ${{ matrix.variant == 'optimized' && 'nightly-2026-07-13' || '1.97.0' }}
+        with:
+          prefix-key: v0-uv-clippy-workspace-cache-${{ inputs.target }}-20260715a
+          shared-key: ${{ matrix.variant }}
+          workspaces: ${{ env.UV_WORKSPACE || github.workspace }} -> target-${{ matrix.variant }}
+          cache-workspace-crates: ${{ matrix.variant == 'optimized' }}
+          save-if: false
+
+      - name: "Confirm cache hit"
+        working-directory: ${{ env.UV_WORKSPACE || github.workspace }}
+        shell: bash
+        env:
+          CACHE_HIT: ${{ steps.cache-restore.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          printf 'CACHE target=%s variant=%s sample=%s hit=%s\n' '${{ inputs.target }}' '${{ matrix.variant }}' '${{ matrix.sample }}' "$CACHE_HIT"
+          test "$CACHE_HIT" = true
+          du -sh 'target-${{ matrix.variant }}'
+
+      - name: "Measure Clippy"
+        working-directory: ${{ env.UV_WORKSPACE || github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          variant='${{ matrix.variant }}'
+          toolchain=1.97.0
+          args=(clippy --workspace --all-targets --all-features --locked)
+          if [[ "$variant" = optimized ]]; then
+            toolchain=nightly-2026-07-13
+            args+=(-Z checksum-freshness)
+          fi
+          start=$(date +%s)
+          CARGO_TARGET_DIR="target-$variant" cargo +"$toolchain" "${args[@]}" -- -D warnings
+          printf 'TIMING warm target=%s variant=%s sample=%s real=%ss\n' '${{ inputs.target }}' "$variant" '${{ matrix.sample }}' "$(( $(date +%s) - start ))"
+          du -sh "target-$variant"
