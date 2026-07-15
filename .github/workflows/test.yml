@@ -131,7 +131,7 @@ jobs:
     timeout-minutes: 20
     # Only run macOS tests on main without opt-in
     if: ${{ inputs.test-macos == 'true' }}
-    runs-on: namespace-profile-macos-15;overrides.cache-tag=uv-macos-cache-experiment
+    runs-on: namespace-profile-macos-15-cache-experiment
     name: "cargo test on macos"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
