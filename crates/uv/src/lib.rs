@@ -1406,7 +1406,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 &client_builder.subcommand(vec!["venv".to_owned()]),
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
-                args.seed,
+                uv_virtualenv::Seed::from_args(args.seed),
                 on_existing,
                 args.settings.exclude_newer,
                 globals.concurrency,

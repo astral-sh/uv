@@ -62,7 +62,6 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
 }
 
 /// Create a [`VirtualEnvironment`] at the given location.
-#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) fn create(
     location: &Path,
     interpreter: &Interpreter,
@@ -70,7 +69,7 @@ pub(crate) fn create(
     system_site_packages: bool,
     on_existing: OnExisting,
     relocatable: bool,
-    seed: bool,
+    seed: Seed,
     upgradeable: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
@@ -556,8 +555,9 @@ pub(crate) fn create(
         pyvenv_cfg_data.push(("relocatable".to_string(), "true".to_string()));
     }
 
-    if seed {
-        pyvenv_cfg_data.push(("seed".to_string(), "true".to_string()));
+    match seed {
+        Seed::Enabled => pyvenv_cfg_data.push(("seed".to_string(), "true".to_string())),
+        Seed::Disabled => {}
     }
 
     if let Some(prompt) = prompt {
@@ -704,6 +704,22 @@ impl OnExisting {
         } else {
             Self::Prompt
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
+pub enum Seed {
+    /// Seed the virtual environment with one or more of `pip`, `setuptools`, and `wheel`.
+    Enabled,
+    /// Do not seed the virtual environment.
+    #[default]
+    Disabled,
+}
+
+impl Seed {
+    /// Determine the [`Seed`] setting based on the command-line arguments.
+    pub fn from_args(seed: bool) -> Self {
+        if seed { Self::Enabled } else { Self::Disabled }
     }
 }
 
