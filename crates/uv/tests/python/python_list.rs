@@ -424,7 +424,38 @@ fn python_list_downloads() {
     ----- stderr -----
     ");
 
-    // Show patch versions
+    // Show patch versions. Older PyPy distributions are only available on Windows.
+    #[cfg(unix)]
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--all-versions").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.[LATEST]-[PLATFORM]    <download available>
+    cpython-3.10.19-[PLATFORM]    <download available>
+    cpython-3.10.18-[PLATFORM]    <download available>
+    cpython-3.10.17-[PLATFORM]    <download available>
+    cpython-3.10.16-[PLATFORM]    <download available>
+    cpython-3.10.15-[PLATFORM]    <download available>
+    cpython-3.10.14-[PLATFORM]    <download available>
+    cpython-3.10.13-[PLATFORM]    <download available>
+    cpython-3.10.12-[PLATFORM]    <download available>
+    cpython-3.10.11-[PLATFORM]    <download available>
+    cpython-3.10.9-[PLATFORM]     <download available>
+    cpython-3.10.8-[PLATFORM]     <download available>
+    cpython-3.10.7-[PLATFORM]     <download available>
+    cpython-3.10.6-[PLATFORM]     <download available>
+    cpython-3.10.5-[PLATFORM]     <download available>
+    cpython-3.10.4-[PLATFORM]     <download available>
+    cpython-3.10.3-[PLATFORM]     <download available>
+    cpython-3.10.2-[PLATFORM]     <download available>
+    cpython-3.10.0-[PLATFORM]     <download available>
+    pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
+
+    ----- stderr -----
+    ");
+
+    #[cfg(windows)]
     uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--all-versions").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
     success: true
     exit_code: 0

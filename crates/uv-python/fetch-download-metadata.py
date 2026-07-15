@@ -448,6 +448,10 @@ class PyPyFinder(Finder):
                 continue
             pypy_version = version["pypy_version"]
             for file in version["files"]:
+                # Only a small number of older pypy builds are bz2-only; we filter
+                # them because uv 0.12+ won't support extracting them.
+                if file["filename"].endswith(".tar.bz2"):
+                    continue
                 arch = self._normalize_arch(file["arch"])
                 platform = self._normalize_os(file["platform"])
                 libc = "gnu" if platform == "linux" else "none"
