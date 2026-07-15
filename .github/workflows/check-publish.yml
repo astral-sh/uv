@@ -12,7 +12,7 @@ env:
 jobs:
   cargo-publish-dry-run:
     timeout-minutes: 20
-    runs-on: depot-ubuntu-24.04-8
+    runs-on: namespace-profile-ubuntu-24-04-8
     name: "cargo publish dry-run"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

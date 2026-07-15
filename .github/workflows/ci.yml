@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   plan:
-    runs-on: depot-ubuntu-24.04
+    runs-on: namespace-profile-ubuntu-24-04
     outputs:
       test-code: ${{ steps.plan.outputs.test_code }}
       review-security: ${{ steps.plan.outputs.review_security }}
@@ -156,7 +156,6 @@ jobs:
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
     uses: ./.github/workflows/pull-request-security-review.yml
-    secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
     permissions:
       contents: read
       issues: read

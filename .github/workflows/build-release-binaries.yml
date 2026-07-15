@@ -32,7 +32,7 @@ permissions: {}
 jobs:
   sdist:
     name: sdist
-    runs-on: depot-ubuntu-24.04-4
+    runs-on: namespace-profile-ubuntu-24-04-4
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -343,7 +343,7 @@ jobs:
 
   linux:
     name: ${{ matrix.target }}
-    runs-on: depot-ubuntu-latest-4
+    runs-on: namespace-profile-ubuntu-latest-4
     strategy:
       matrix:
         include:
@@ -361,6 +361,15 @@ jobs:
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
 
+      - name: "Pull manylinux image"
+        run: |
+          for attempt in 1 2 3; do
+            if /vendor/docker/docker pull quay.io/pypa/manylinux2014; then
+              exit 0
+            fi
+          done
+          exit 1
+
       # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
@@ -375,25 +384,7 @@ jobs:
           docker-options: -e CARGO
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
-            # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
-            rustup target add ${{ matrix.target }}
-            # If we're running on rhel centos, install needed packages.
-            if command -v yum &> /dev/null; then
-                yum update -y && yum install -y pkgconfig libatomic
-
-                # Install cross build requirements
-                if [[ "${{ matrix.target }}" == "i686-unknown-linux-gnu" ]]; then
-                  yum install -y glibc-devel.i686 libstdc++-devel.i686 libatomic.i686
-                fi
-
-                # Symlink libatomic so the linker can find it with -latomic.
-                if [[ -f "/usr/lib/libatomic.so.1" && ! -f "/usr/lib/libatomic.so" ]]; then
-                    ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
-                fi
-            else
-                # If we're running on debian-based system.
-                apt update -y && apt-get install -y pkg-config
-            fi
+            scripts/install-manylinux-build-requirements.sh ${{ matrix.target }}
             # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
         env:
@@ -438,12 +429,18 @@ jobs:
         with:
           maturin-version: v1.14.1
           target: ${{ matrix.target }}
+          # Namespace's Docker path requests linux/amd64 images, so cross-compile i686 in the
+          # 64-bit container as in the uv wheel build above.
+          container: quay.io/pypa/manylinux2014
           manylinux: 2_17
           docker-options: -e CARGO
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
+            scripts/install-manylinux-build-requirements.sh ${{ matrix.target }}
+            # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
         env:
+          CC: ${{ matrix.cc }}
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
@@ -459,7 +456,7 @@ jobs:
 
   linux-arm:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-24.04-8
+    runs-on: namespace-profile-ubuntu-24-04-8
     timeout-minutes: 30
     strategy:
       matrix:
@@ -504,6 +501,10 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder
+      # for its tests. See https://namespace.so/docs/reference/github-actions/runner-configuration#disable-build-caching
+      - name: "Use local Docker builder for emulated tests"
+        run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
@@ -511,6 +512,7 @@ jobs:
           arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
           distro: ${{ matrix.platform.arch == 'arm' && 'bullseye' || 'ubuntu20.04' }}
           install: |
+            sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.ocf.berkeley.edu/ubuntu-ports|g' /etc/apt/sources.list
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
@@ -569,6 +571,7 @@ jobs:
           arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
           distro: ${{ matrix.platform.arch == 'arm' && 'bullseye' || 'ubuntu20.04' }}
           install: |
+            sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.ocf.berkeley.edu/ubuntu-ports|g' /etc/apt/sources.list
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
@@ -590,7 +593,7 @@ jobs:
   linux-s390x:
     name: ${{ matrix.platform.target }}
     timeout-minutes: 30
-    runs-on: depot-ubuntu-latest-4
+    runs-on: namespace-profile-ubuntu-latest-4
     strategy:
       matrix:
         platform:
@@ -626,6 +629,10 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
 
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder
+      # for its tests. See https://namespace.so/docs/reference/github-actions/runner-configuration#disable-build-caching
+      - name: "Use local Docker builder for emulated tests"
+        run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
@@ -633,6 +640,7 @@ jobs:
           arch: ${{ matrix.platform.arch }}
           distro: ubuntu20.04
           install: |
+            sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.ocf.berkeley.edu/ubuntu-ports|g' /etc/apt/sources.list
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
@@ -691,6 +699,7 @@ jobs:
           arch: ${{ matrix.platform.arch }}
           distro: ubuntu20.04
           install: |
+            sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.ocf.berkeley.edu/ubuntu-ports|g' /etc/apt/sources.list
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
@@ -711,7 +720,7 @@ jobs:
   # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-24.04-4
+    runs-on: namespace-profile-ubuntu-24-04-4
     strategy:
       matrix:
         platform:
@@ -822,7 +831,7 @@ jobs:
   linux-riscv64:
     name: ${{ matrix.platform.target }}
     timeout-minutes: 30
-    runs-on: depot-ubuntu-latest-4
+    runs-on: namespace-profile-ubuntu-latest-4
     strategy:
       matrix:
         platform:
@@ -853,6 +862,10 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder
+      # for its tests. See https://namespace.so/docs/reference/github-actions/runner-configuration#disable-build-caching
+      - name: "Use local Docker builder for emulated tests"
+        run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
@@ -861,6 +874,7 @@ jobs:
           distro: ubuntu20.04
           githubToken: ${{ github.token }}
           install: |
+            sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.ocf.berkeley.edu/ubuntu-ports|g' /etc/apt/sources.list
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
@@ -920,6 +934,7 @@ jobs:
           distro: ubuntu20.04
           githubToken: ${{ github.token }}
           install: |
+            sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.ocf.berkeley.edu/ubuntu-ports|g' /etc/apt/sources.list
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
@@ -939,7 +954,7 @@ jobs:
 
   musllinux:
     name: ${{ matrix.target }}
-    runs-on: depot-ubuntu-24.04-4
+    runs-on: namespace-profile-ubuntu-24-04-4
     strategy:
       matrix:
         target:
@@ -1042,7 +1057,7 @@ jobs:
 
   musllinux-cross:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-24.04-8
+    runs-on: namespace-profile-ubuntu-24-04-8
     env:
       CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C target-feature=+crt-static"
     strategy:
@@ -1083,6 +1098,10 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # run-on-arch installs binfmt handlers on local Docker, so bypass the Namespace Remote Builder
+      # for its tests. See https://namespace.so/docs/reference/github-actions/runner-configuration#disable-build-caching
+      - name: "Use local Docker builder for emulated tests"
+        run: docker buildx use default
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
@@ -1109,6 +1128,7 @@ jobs:
           arch: aarch64
           distro: ubuntu20.04
           install: |
+            sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.ocf.berkeley.edu/ubuntu-ports|g' /etc/apt/sources.list
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
@@ -1187,6 +1207,7 @@ jobs:
           arch: aarch64
           distro: ubuntu20.04
           install: |
+            sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.ocf.berkeley.edu/ubuntu-ports|g' /etc/apt/sources.list
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
