@@ -1502,7 +1502,7 @@ fn non_utf8_path() {
     };
 
     uv_snapshot!(context.filters(), context.venv()
-        .arg(path)
+        .arg(&path)
         .arg("--python")
         .arg("3.12"), @"
     success: false
@@ -1516,6 +1516,8 @@ fn non_utf8_path() {
       Caused by: Virtual environment path is not valid UTF-8: .venv-�
     "
     );
+
+    assert!(!context.temp_dir.join(path).exists());
 }
 
 #[test]
