@@ -37,7 +37,7 @@ use uv_static::EnvVars;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
-use crate::linehaul::LineHaul;
+use crate::linehaul::{LineHaul, RustcVersion};
 use crate::middleware::OfflineMiddleware;
 use crate::tls::{Certificates, read_identity};
 use crate::{Connectivity, RetriableError, RetryState, UvRetryableStrategy};
@@ -117,6 +117,8 @@ pub struct BaseClientBuilder<'a> {
     custom_client: Option<Client>,
     /// uv subcommand in which this client is being used
     subcommand: Option<Vec<String>>,
+    /// The version of `rustc` available for this uv invocation.
+    rustc_version: Option<RustcVersion>,
     /// Optional name for this client, used in debug logging.
     client_name: Option<&'static str>,
     /// Whether to disable retry delays (for testing).
@@ -183,6 +185,7 @@ impl Default for BaseClientBuilder<'_> {
             cross_origin_credential_policy: CrossOriginCredentialsPolicy::Secure,
             custom_client: None,
             subcommand: None,
+            rustc_version: None,
             client_name: None,
             no_retry_delay: env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
         }
@@ -349,6 +352,12 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
+    pub fn rustc_version(mut self, rustc_version: RustcVersion) -> Self {
+        self.rustc_version = Some(rustc_version);
+        self
+    }
+
+    #[must_use]
     pub fn client_name(mut self, name: &'static str) -> Self {
         self.client_name = Some(name);
         self
@@ -471,7 +480,13 @@ impl<'a> BaseClientBuilder<'a> {
         let mut user_agent_string = format!("uv/{}", version());
 
         // Add linehaul metadata.
-        let linehaul = LineHaul::new(self.markers, self.platform, self.subcommand.clone());
+        let rustc_version = self.rustc_version.as_ref().and_then(RustcVersion::get);
+        let linehaul = LineHaul::new(
+            self.markers,
+            self.platform,
+            self.subcommand.clone(),
+            rustc_version,
+        );
         if let Ok(output) = serde_json::to_string(&linehaul) {
             let _ = write!(user_agent_string, " {output}");
         }

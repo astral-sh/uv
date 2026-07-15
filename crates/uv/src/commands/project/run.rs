@@ -19,7 +19,7 @@ use url::Url;
 
 use uv_cache::Cache;
 use uv_cli::{ExternalCommand, GlobalArgs};
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, RustcVersion};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile, ExtrasSpecification,
     InstallOptions, TargetTriple,
@@ -1457,6 +1457,7 @@ impl ParsedRunCommand {
         global_args: &GlobalArgs,
         filesystem: Option<&FilesystemOptions>,
         environment: &EnvironmentOptions,
+        rustc_version: &RustcVersion,
     ) -> anyhow::Result<(Option<Pep723Item>, RunCommand)> {
         match self {
             Self::Ready(run_command) => {
@@ -1474,6 +1475,7 @@ impl ParsedRunCommand {
                     settings.network_settings.connect_timeout,
                     settings.network_settings.retries,
                 )
+                .rustc_version(rustc_version.clone())
                 .http_proxy(settings.network_settings.http_proxy)
                 .https_proxy(settings.network_settings.https_proxy)
                 .no_proxy(settings.network_settings.no_proxy);

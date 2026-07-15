@@ -5,8 +5,7 @@ use insta::{assert_json_snapshot, assert_snapshot, with_settings};
 use url::Url;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder, RustcVersion};
 use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use uv_platform_tags::{Arch, Os, Platform};
 use uv_redacted::DisplaySafeUrl;
@@ -158,8 +157,11 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
 
     // Initialize uv-client
     let cache = Cache::temp()?.init().await?;
-    let mut builder =
-        RegistryClientBuilder::new(BaseClientBuilder::default(), cache).markers(&markers);
+    let mut builder = RegistryClientBuilder::new(
+        BaseClientBuilder::default().rustc_version(RustcVersion::ready("1.90.0".to_string())),
+        cache,
+    )
+    .markers(&markers);
 
     let linux = Platform::new(
         Os::Manylinux {
@@ -236,7 +238,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
           },
           "openssl_version": null,
           "python": "3.12.2",
-          "rustc_version": null,
+          "rustc_version": "1.90.0",
           "setuptools_version": null,
           "system": {
             "name": "Linux",
