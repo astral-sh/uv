@@ -53,6 +53,7 @@ jobs:
           rustc +"$toolchain" --version --verbose
 
       - name: "Rust cache"
+        id: cache-seed
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         env:
           RUSTUP_TOOLCHAIN: ${{ matrix.variant == 'optimized' && 'nightly-2026-07-13' || '1.97.0' }}
@@ -69,6 +70,7 @@ jobs:
           tool: cargo-nextest
 
       - name: "Seed macos test artifacts"
+        if: steps.cache-seed.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -125,27 +127,31 @@ jobs:
 
       - name: "Restore stable cache"
         id: cache-stable
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: 1.97.0
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          prefix-key: v0-uv-macos-workspace-cache-20260715a
-          shared-key: stable-${{ matrix.sample }}
-          workspaces: ". -> target-stable"
-          cache-workspace-crates: "false"
-          save-if: false
+          key: v0-uv-macos-workspace-cache-20260715a-stable-${{ matrix.sample }}-Darwin-arm64-63c54866-f430e92f
+          fail-on-cache-miss: true
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+            ~/.cargo/registry
+            ~/.cargo/git
+            target-stable
 
       - name: "Restore optimized cache"
         id: cache-optimized
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          prefix-key: v0-uv-macos-workspace-cache-20260715a
-          shared-key: optimized-${{ matrix.sample }}
-          workspaces: ". -> target-optimized"
-          cache-workspace-crates: "true"
-          save-if: false
+          key: v0-uv-macos-workspace-cache-20260715a-optimized-${{ matrix.sample }}-Darwin-arm64-58c8e58c-f430e92f
+          fail-on-cache-miss: true
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+            ~/.cargo/registry
+            ~/.cargo/git
+            target-optimized
 
       - name: "Confirm cache hits"
         shell: bash
