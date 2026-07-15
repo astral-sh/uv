@@ -1983,8 +1983,6 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             Ok(ExitStatus::Success)
         }
         Commands::Publish(args) => {
-            show_settings!(args);
-
             if args.skip_existing {
                 bail!(
                     "`uv publish` does not support `--skip-existing` because there is not a \
@@ -1996,6 +1994,9 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PublishSettings::resolve(args, filesystem);
+            show_settings!(args);
+
             let PublishSettings {
                 files,
                 username,
@@ -2009,7 +2010,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 check_url,
                 index,
                 index_locations,
-            } = PublishSettings::resolve(args, filesystem);
+            } = args;
 
             commands::publish(
                 files,
