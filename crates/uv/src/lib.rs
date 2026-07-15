@@ -3046,6 +3046,7 @@ where
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .thread_stack_size(min_stack_size)
+            .max_blocking_threads(2)
             .build()
             .expect("Failed building the Runtime");
         // Box the large main future to avoid stack overflows.
