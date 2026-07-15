@@ -411,7 +411,6 @@ impl TestContext {
     /// depending on the specific machine used:
     /// - `home = foo/bar/baz/python3.X.X/bin`
     /// - `uv = X.Y.Z`
-    /// - `extends-environment = <path/to/parent/venv>`
     #[must_use]
     pub fn with_pyvenv_cfg_filters(mut self) -> Self {
         let added_filters = [
@@ -419,10 +418,6 @@ impl TestContext {
             (
                 r"uv = \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?".to_string(),
                 "uv = [UV_VERSION]".to_string(),
-            ),
-            (
-                r"extends-environment = .+".to_string(),
-                "extends-environment = [PARENT_VENV]".to_string(),
             ),
         ];
         for filter in added_filters {

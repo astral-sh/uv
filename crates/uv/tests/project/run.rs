@@ -1662,6 +1662,8 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
 #[test]
 fn run_with_pyvenv_cfg_file() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_pyvenv_cfg_filters();
+    let parent_environment_path = context.venv.path().to_path_buf();
+    let context = context.with_filtered_path(&parent_environment_path, "PARENT_VENV");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1700,7 +1702,7 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
     uv = [UV_VERSION]
     version_info = 3.12.[X]
     include-system-site-packages = false
-    extends-environment = [PARENT_VENV]
+    extends-environment = [PARENT_VENV]/
 
 
     ----- stderr -----
