@@ -1,4 +1,5 @@
 use std::env::VarError;
+use std::fmt;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process;
@@ -4984,7 +4985,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
 }
 
 /// The resolved settings to use for an invocation of the `uv publish` CLI.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct PublishSettings {
     // CLI only, see [`PublishArgs`] for docs.
     pub(crate) files: Vec<String>,
@@ -5003,6 +5004,25 @@ pub(crate) struct PublishSettings {
 
     // Configuration only
     pub(crate) index_locations: IndexLocations,
+}
+
+impl fmt::Debug for PublishSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PublishSettings")
+            .field("files", &self.files)
+            .field("username", &self.username)
+            .field("password", &self.password.as_ref().map(|_| "****"))
+            .field("index", &self.index)
+            .field("dry_run", &self.dry_run)
+            .field("no_attestations", &self.no_attestations)
+            .field("direct", &self.direct)
+            .field("publish_url", &self.publish_url)
+            .field("trusted_publishing", &self.trusted_publishing)
+            .field("keyring_provider", &self.keyring_provider)
+            .field("check_url", &self.check_url)
+            .field("index_locations", &self.index_locations)
+            .finish()
+    }
 }
 
 impl PublishSettings {
