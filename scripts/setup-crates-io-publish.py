@@ -1,4 +1,4 @@
-# Ensure workspace crates are ready for trusted publishing on crates.io.
+# Bootstrap new workspace crates for trusted publishing on crates.io.
 #
 # This script performs four steps for each candidate crate:
 #
@@ -10,8 +10,8 @@
 # It authenticates with `CARGO_REGISTRY_TOKEN`, which must have the `publish-new` and
 # `trusted-publishing` scopes.
 #
-# Crates tracked in `.known-crates` are assumed to be configured and are skipped unless `--force` is
-# used.
+# Crates tracked in `astral-sh/crates-policies` are assumed to be configured and are skipped unless
+# `--force` is used.
 #
 # Usage:
 #
@@ -46,8 +46,8 @@ ENVIRONMENT = "release"
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 WORKSPACE_MANIFEST_PATH = REPO_ROOT / "Cargo.toml"
-KNOWN_CRATES_PATH = REPO_ROOT / ".known-crates"
-KNOWN_CRATES_HEADER = "# GENERATED-BY scripts/setup-crates-io-publish.py\n"
+CRATES_POLICIES_REPOSITORY = "https://github.com/astral-sh/crates-policies.git"
+CRATES_POLICY_PATH = pathlib.Path("trusted-publishing/uv.json")
 
 PLACEHOLDER_VERSION = "0.0.0"
 
@@ -79,25 +79,27 @@ def get_publishable_crates() -> list[dict[str, str]]:
 
 
 def load_known_crates() -> set[str]:
-    """Load crate names from ``.known-crates``."""
-    if not KNOWN_CRATES_PATH.exists():
-        return set()
+    """Load configured crate names from ``astral-sh/crates-policies``."""
+    with tempfile.TemporaryDirectory(prefix="uv-crates-policies-") as temp_dir:
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--depth=1",
+                "--quiet",
+                CRATES_POLICIES_REPOSITORY,
+                temp_dir,
+            ],
+            check=True,
+        )
+        policy = json.loads((pathlib.Path(temp_dir) / CRATES_POLICY_PATH).read_text())
 
-    known = set()
-    for line in KNOWN_CRATES_PATH.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        known.add(line)
-    return known
-
-
-def save_known_crates(crates: set[str]) -> None:
-    """Persist the sorted set of fully-configured crate names."""
-    lines = [KNOWN_CRATES_HEADER]
-    for name in sorted(crates):
-        lines.append(f"{name}\n")
-    KNOWN_CRATES_PATH.write_text("".join(lines))
+    crates = policy.get("crates")
+    if not isinstance(crates, list) or not all(
+        isinstance(crate, str) for crate in crates
+    ):
+        raise RuntimeError(f"`{CRATES_POLICY_PATH}` does not contain a crate list")
+    return set(crates)
 
 
 def get_crate_metadata(
@@ -275,7 +277,7 @@ def handle_trusted_publisher_error(exc: httpx.HTTPStatusError) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Ensure workspace crates are ready for trusted publishing on crates.io."
+        description="Bootstrap new workspace crates for trusted publishing on crates.io."
     )
     parser.add_argument(
         "--dry-run",
@@ -283,7 +285,9 @@ def main() -> None:
         help="Show what would be done without making changes",
     )
     parser.add_argument(
-        "--force", action="store_true", help="Re-check crates already in .known-crates"
+        "--force",
+        action="store_true",
+        help="Re-check crates already in astral-sh/crates-policies",
     )
     parser.add_argument(
         "--quiet", "-q", action="store_true", help="Suppress informational output"
@@ -303,7 +307,8 @@ def main() -> None:
     if not candidates:
         if not quiet:
             print(
-                f"All {len(crates)} publishable crates are in .known-crates — nothing to do."
+                f"All {len(crates)} publishable crates are in astral-sh/crates-policies — "
+                "nothing to do."
             )
         return
 
@@ -320,7 +325,9 @@ def main() -> None:
             file=sys.stderr,
         )
         print(
-            "\nPlease reach out to Zanie about releases which add a new crate.",
+            "\nUse this script to bootstrap new crates, then add them to "
+            "https://github.com/astral-sh/crates-policies/blob/main/"
+            "trusted-publishing/uv.json before preparing a release.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -449,10 +456,11 @@ def main() -> None:
         ):
             print(f"{name}: already configured")
 
-        known.add(name)
-
     if not dry_run:
-        save_known_crates(known)
+        crate_names = ", ".join(crate["name"] for crate in candidates)
+        print(
+            f"Add the bootstrapped crates to astral-sh/crates-policies: {crate_names}"
+        )
 
 
 if __name__ == "__main__":
