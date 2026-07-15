@@ -43,6 +43,8 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
@@ -108,6 +110,7 @@ jobs:
             --cargo-profile fast-build \
             --config 'profile.fast-build.panic="abort"' \
             -Z panic-abort-tests \
+            -Z checksum-freshness \
             --features test-python-patch,test-universal,native-auth,secret-service \
             --workspace \
             --profile ci-linux
