@@ -38,3 +38,14 @@ enabled = true
 [permissions.pull-request-review.network.domains]
 "api.github.com" = "allow"
 "github.com" = "allow"
+
+[permissions.pull-request-reviewers]
+description = "Read-only pull request reviewer selection with GitHub API access."
+extends = ":read-only"
+
+[permissions.pull-request-reviewers.network]
+enabled = true
+
+[permissions.pull-request-reviewers.network.domains]
+"api.github.com" = "allow"
+"github.com" = "allow"

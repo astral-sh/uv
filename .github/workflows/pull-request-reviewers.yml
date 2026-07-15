@@ -1,0 +1,148 @@
+# Select and request a reviewer for ready pull requests.
+name: "Pull request reviewers"
+
+on: # zizmor: ignore[dangerous-triggers] trusted-base checkout never executes pull request code
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: "A pull request number"
+        required: true
+        type: number
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.pull_request || github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  select:
+    if: github.repository == 'astral-sh/uv' && (github.event_name == 'workflow_dispatch' || (!github.event.pull_request.draft && (github.event.pull_request.user.login == 'zaniebot' || contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association))))
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.select.outputs.final-message }}
+      head_sha: ${{ steps.context.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Collect pull request context"
+        id: context
+        run: |
+          gh pr view "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,isDraft,state,labels,files,additions,deletions,changedFiles,reviewRequests,reviews,latestReviews \
+            > .pull-request-reviewers-event.json
+
+          jq --raw-output '"head_sha=\(.headRefOid)"' .pull-request-reviewers-event.json >> "$GITHUB_OUTPUT"
+          if ! jq --exit-status '.state == "OPEN" and (.isDraft | not) and (.reviewRequests | length == 0)' .pull-request-reviewers-event.json > /dev/null; then
+            echo "The pull request is not ready or already has a requested reviewer."
+            exit 0
+          fi
+          echo "needs_reviewer=true" >> "$GITHUB_OUTPUT"
+
+          gh pr diff "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            > .pull-request-reviewers.diff
+
+          gh api --paginate --slurp --method GET \
+            "repos/$GITHUB_REPOSITORY/collaborators" \
+            -f affiliation=all \
+            -f permission=push \
+            -F per_page=100 \
+            | jq 'flatten | map(select(.type == "User" and .permissions.push) | {login, role: .role_name})' \
+            > .pull-request-reviewers.json
+
+          gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --limit 1000 \
+            --json number,title,author,isDraft,createdAt,reviewRequests \
+            > .pull-request-reviewers-open.json
+
+          gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state merged \
+            --limit 100 \
+            --json number,title,author,mergedAt,reviews,files \
+            > .pull-request-reviewers-history.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request || github.event.pull_request.number }}
+
+      - name: "Select pull request reviewer"
+        id: select
+        if: steps.context.outputs.needs_reviewer == 'true'
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: "agents/codex"
+          permission-profile: "pull-request-reviewers"
+          safety-strategy: drop-sudo
+          allow-users: "zaniebot"
+          prompt-file: "agents/prompts/pull-request-reviewers.md"
+          output-schema-file: "agents/schemas/pull-request-reviewers.json"
+
+  request:
+    needs: select
+    if: needs.select.outputs.result != '' && fromJSON(needs.select.outputs.result).reviewer != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: "Request pull request reviewer"
+        run: |
+          reviewer="$(jq --raw-output '.reviewer' <<< "$REVIEW_RESULT")"
+
+          gh pr view "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json author,headRefOid,isDraft,state,reviewRequests,latestReviews \
+            > "$RUNNER_TEMP/pull-request.json"
+
+          if ! jq --exit-status \
+            --arg head_sha "$HEAD_SHA" \
+            --arg reviewer "$reviewer" \
+            '.state == "OPEN" and (.isDraft | not) and .headRefOid == $head_sha and (.reviewRequests | length == 0) and .author.login != $reviewer and (.latestReviews | all(.author.login != $reviewer))' \
+            "$RUNNER_TEMP/pull-request.json" > /dev/null; then
+            echo "The pull request changed, is not ready, or already has a requested reviewer."
+            exit 0
+          fi
+
+          if ! gh api --paginate --slurp --method GET \
+            "repos/$GITHUB_REPOSITORY/collaborators" \
+            -f affiliation=all \
+            -f permission=push \
+            -F per_page=100 \
+            | jq --exit-status --arg reviewer "$reviewer" \
+              'flatten | any(.login == $reviewer and .type == "User" and .permissions.push)' \
+              > /dev/null; then
+            echo "The selected reviewer is not an eligible repository collaborator."
+            exit 0
+          fi
+
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/requested_reviewers" \
+            -f "reviewers[]=$reviewer" \
+            --silent
+
+          jq --raw-output '.summary' <<< "$REVIEW_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ needs.select.outputs.head_sha }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request || github.event.pull_request.number }}
+          REVIEW_RESULT: ${{ needs.select.outputs.result }}
