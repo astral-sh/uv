@@ -1,8 +1,8 @@
 # Select and request a reviewer for ready pull requests.
 name: "Pull request reviewers"
 
-on: # zizmor: ignore[dangerous-triggers] trusted-base checkout never executes pull request code
-  pull_request_target:
+on:
+  pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
   workflow_dispatch:
@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   select:
-    if: github.repository == 'astral-sh/uv' && (github.event_name == 'workflow_dispatch' || (!github.event.pull_request.draft && (github.event.pull_request.user.login == 'zaniebot' || contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association))))
+    if: github.repository == 'astral-sh/uv' && (github.event_name == 'workflow_dispatch' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 15
@@ -93,7 +93,6 @@ jobs:
           codex-home: "agents/codex"
           permission-profile: "pull-request-reviewers"
           safety-strategy: drop-sudo
-          allow-users: "zaniebot"
           prompt-file: "agents/prompts/pull-request-reviewers.md"
           output-schema-file: "agents/schemas/pull-request-reviewers.json"
 
