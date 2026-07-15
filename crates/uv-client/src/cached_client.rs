@@ -1,4 +1,5 @@
-use std::sync::LazyLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 use std::{borrow::Cow, io::Read, path::Path};
 
@@ -7,6 +8,7 @@ use reqwest::{Request, Response};
 use rkyv::util::AlignedVec;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use tokio::sync::{Semaphore, SemaphorePermit};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 
 use uv_cache::{CacheEntry, Freshness};
@@ -810,10 +812,102 @@ static CACHE_READ_RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| 
     tokio::runtime::Builder::new_current_thread()
         .thread_name("uv-cache-read")
         .thread_stack_size(min_stack_size())
-        .max_blocking_threads(2)
+        .max_blocking_threads(8)
         .build()
         .expect("Failed building the cache-read Runtime")
 });
+
+static CACHE_READ_CONCURRENCY: LazyLock<AdaptiveCacheReadConcurrency> = LazyLock::new(|| {
+    AdaptiveCacheReadConcurrency::new(2, 8, Duration::from_millis(10), Duration::from_secs(1))
+});
+
+struct AdaptiveCacheReadConcurrency {
+    semaphore: Semaphore,
+    state: Mutex<CacheReadConcurrencyState>,
+    expanded: AtomicBool,
+    minimum: usize,
+    maximum: usize,
+    growth_delay: Duration,
+    decay_delay: Duration,
+}
+
+struct CacheReadConcurrencyState {
+    current: usize,
+    last_pressure: Option<Instant>,
+}
+
+impl AdaptiveCacheReadConcurrency {
+    fn new(minimum: usize, maximum: usize, growth_delay: Duration, decay_delay: Duration) -> Self {
+        Self {
+            semaphore: Semaphore::new(minimum),
+            state: Mutex::new(CacheReadConcurrencyState {
+                current: minimum,
+                last_pressure: None,
+            }),
+            expanded: AtomicBool::new(false),
+            minimum,
+            maximum,
+            growth_delay,
+            decay_delay,
+        }
+    }
+
+    async fn acquire(&self) -> SemaphorePermit<'_> {
+        if let Ok(permit) = self.semaphore.try_acquire() {
+            return permit;
+        }
+
+        let acquire = self.semaphore.acquire();
+        tokio::pin!(acquire);
+
+        tokio::select! {
+            biased;
+            permit = &mut acquire => permit.expect("Cache-read semaphore should not be closed"),
+            () = tokio::time::sleep(self.growth_delay) => {
+                self.grow();
+                acquire.await.expect("Cache-read semaphore should not be closed")
+            }
+        }
+    }
+
+    fn grow(&self) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("Cache-read concurrency state should not be poisoned");
+        state.last_pressure = Some(Instant::now());
+
+        if state.current < self.maximum {
+            state.current += 1;
+            self.semaphore.add_permits(1);
+            self.expanded.store(true, Ordering::Relaxed);
+        }
+    }
+
+    fn shrink(&self) {
+        if !self.expanded.load(Ordering::Relaxed) {
+            return;
+        }
+
+        let mut state = self
+            .state
+            .lock()
+            .expect("Cache-read concurrency state should not be poisoned");
+        if state
+            .last_pressure
+            .is_some_and(|last_pressure| last_pressure.elapsed() < self.decay_delay)
+        {
+            return;
+        }
+
+        let removed = self
+            .semaphore
+            .forget_permits(state.current.saturating_sub(self.minimum));
+        state.current -= removed;
+        self.expanded
+            .store(state.current > self.minimum, Ordering::Relaxed);
+    }
+}
 
 impl DataWithCachePolicy {
     /// Loads cached data and its associated HTTP cache policy from the given
@@ -825,8 +919,14 @@ impl DataWithCachePolicy {
     /// file given fails, then this returns an error.
     async fn from_path_async(path: &Path) -> Result<Self, Error> {
         let path = path.to_path_buf();
+        let permit = CACHE_READ_CONCURRENCY.acquire().await;
         CACHE_READ_RUNTIME
-            .spawn_blocking(move || Self::from_path_sync(&path))
+            .spawn_blocking(move || {
+                let result = Self::from_path_sync(&path);
+                drop(permit);
+                CACHE_READ_CONCURRENCY.shrink();
+                result
+            })
             .await
             // This just forwards panics from the closure.
             .unwrap()
@@ -1004,5 +1104,55 @@ impl DataWithCachePolicy {
             return Err(ErrorKind::ArchiveRead(msg).into());
         }
         Ok(len_usize)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use futures::FutureExt;
+
+    use super::AdaptiveCacheReadConcurrency;
+
+    #[tokio::test]
+    async fn cache_read_concurrency_grows_under_pressure() {
+        let concurrency = AdaptiveCacheReadConcurrency::new(
+            2,
+            4,
+            Duration::from_millis(10),
+            Duration::from_millis(20),
+        );
+        let first = concurrency.acquire().await;
+        let second = concurrency.acquire().await;
+
+        let third = concurrency.acquire();
+        tokio::pin!(third);
+        assert!(third.as_mut().now_or_never().is_none());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let third = third.await;
+        assert_eq!(concurrency.semaphore.available_permits(), 0);
+
+        let fourth = concurrency.acquire();
+        tokio::pin!(fourth);
+        assert!(fourth.as_mut().now_or_never().is_none());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let fourth = fourth.await;
+
+        let fifth = concurrency.acquire();
+        tokio::pin!(fifth);
+        assert!(fifth.as_mut().now_or_never().is_none());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert!(fifth.as_mut().now_or_never().is_none());
+
+        drop(fourth);
+        let fifth = fifth.await;
+        drop(fifth);
+        drop(third);
+        drop(second);
+        drop(first);
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        concurrency.shrink();
+        assert_eq!(concurrency.semaphore.available_permits(), 2);
     }
 }
