@@ -542,6 +542,12 @@ version = "2.6.3"
 requires-dist = ["torch", "einops"]
 ```
 
+## Dynamic metadata
+
+If your project uses dynamic metadata (e.g., to determine the version or dependencies dynamically), uv may need additional configuration to invalidate its cache when the metadata changes.
+
+See the [caching documentation](../cache.md#dynamic-metadata) for details on configuring cache invalidation for dynamic metadata.
+
 ## Editable mode
 
 By default, the project will be installed in editable mode, such that changes to the source code are
