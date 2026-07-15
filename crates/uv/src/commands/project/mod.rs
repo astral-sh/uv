@@ -1148,6 +1148,8 @@ pub(crate) fn centralized_environment_root(
     upgradeable: bool,
     cache: &Cache,
 ) -> PathBuf {
+    let workspace_path = fs_err::canonicalize(workspace.install_path())
+        .unwrap_or_else(|_| workspace.install_path().clone());
     let interpreter_key = interpreter.key();
     // Use the workspace path to isolate projects and the interpreter key to maximize intra-project
     // environment re-use while avoiding clashes with incompatible environments. Ignoring the patch
@@ -1158,12 +1160,12 @@ pub(crate) fn centralized_environment_root(
             .is_some_and(|link| link.exists())
     {
         (
-            cache_digest(&(workspace.install_path(), installation.minor_version_key())),
+            cache_digest(&(&workspace_path, installation.minor_version_key())),
             interpreter.python_minor_version(),
         )
     } else {
         (
-            cache_digest(&(workspace.install_path(), &interpreter_key)),
+            cache_digest(&(&workspace_path, &interpreter_key)),
             interpreter.python_version().clone(),
         )
     };
@@ -1173,8 +1175,7 @@ pub(crate) fn centralized_environment_root(
         .as_ref()
         .and_then(|project| cache_name(project.name.as_ref(), Some(100)))
         .or_else(|| {
-            workspace
-                .install_path()
+            workspace_path
                 .file_name()
                 .and_then(|name| name.to_str())
                 .and_then(|name| cache_name(name, Some(100)))
