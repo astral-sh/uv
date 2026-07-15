@@ -467,6 +467,14 @@ impl GitCheckout {
             // have a HEAD checked out.
             .arg(database.repo.path.simplified_display().to_string())
             .arg(into.simplified_display().to_string())
+            // Unset GIT_DIR and related env vars to prevent git from searching
+            // the wrong repository. See discussion in `fetch_with_cli`.
+            .env_remove(EnvVars::GIT_DIR)
+            .env_remove(EnvVars::GIT_WORK_TREE)
+            .env_remove(EnvVars::GIT_INDEX_FILE)
+            .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+            .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+            .env_remove(EnvVars::GIT_COMMON_DIR)
             .exec_with_output();
 
         if let Err(e) = res {
@@ -478,6 +486,13 @@ impl GitCheckout {
                 .arg("--no-hardlinks")
                 .arg(database.repo.path.simplified_display().to_string())
                 .arg(into.simplified_display().to_string())
+                // Unset GIT_DIR and related env vars. See discussion in `fetch_with_cli`.
+                .env_remove(EnvVars::GIT_DIR)
+                .env_remove(EnvVars::GIT_WORK_TREE)
+                .env_remove(EnvVars::GIT_INDEX_FILE)
+                .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+                .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+                .env_remove(EnvVars::GIT_COMMON_DIR)
                 .exec_with_output()?;
         }
 
@@ -587,6 +602,14 @@ impl GitCheckout {
             .arg("--recursive")
             .arg("--init")
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
+            // Unset GIT_DIR and related env vars to prevent git from using
+            // the wrong repository. See discussion in `fetch_with_cli`.
+            .env_remove(EnvVars::GIT_DIR)
+            .env_remove(EnvVars::GIT_WORK_TREE)
+            .env_remove(EnvVars::GIT_INDEX_FILE)
+            .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+            .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+            .env_remove(EnvVars::GIT_COMMON_DIR)
             .cwd(&self.repo.path)
             .exec_with_output()
             .map_err(|err| redact_git_error(err, original_remote_url))
