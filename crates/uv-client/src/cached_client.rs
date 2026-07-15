@@ -810,7 +810,7 @@ static CACHE_READ_RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| 
     tokio::runtime::Builder::new_current_thread()
         .thread_name("uv-cache-read")
         .thread_stack_size(min_stack_size())
-        .max_blocking_threads(2)
+        .max_blocking_threads(4)
         .build()
         .expect("Failed building the cache-read Runtime")
 });
