@@ -107,8 +107,7 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           cargo +nightly-2026-07-13 nextest run \
-            --cargo-profile fast-build \
-            --config 'profile.fast-build.panic="abort"' \
+            --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
             --features test-python-patch,test-universal,native-auth,secret-service \
@@ -189,8 +188,7 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           cargo +nightly-2026-07-13 nextest run \
-            --cargo-profile fast-build \
-            --config 'profile.fast-build.panic="abort"' \
+            --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
             --no-default-features \
