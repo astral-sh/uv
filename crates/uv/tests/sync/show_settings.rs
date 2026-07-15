@@ -262,6 +262,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
