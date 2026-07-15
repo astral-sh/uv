@@ -422,6 +422,10 @@ impl EnvVars {
     #[attr_added_in("0.1.45")]
     pub const UV_CONCURRENT_INSTALLS: &'static str = "UV_CONCURRENT_INSTALLS";
 
+    /// Controls the number of threads used to read cached HTTP responses.
+    #[attr_added_in("0.11.29")]
+    pub const UV_CONCURRENT_CACHE_READS: &'static str = "UV_CONCURRENT_CACHE_READS";
+
     /// Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
     /// example, spinners and progress bars.
     #[attr_added_in("0.2.28")]

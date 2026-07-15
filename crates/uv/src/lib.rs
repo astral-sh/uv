@@ -633,6 +633,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         globals.network_settings.connect_timeout,
         globals.network_settings.retries,
     )
+    .cache_read_concurrency(globals.concurrency.cache_reads)
     .http_proxy(globals.network_settings.http_proxy.clone())
     .https_proxy(globals.network_settings.https_proxy.clone())
     .no_proxy(globals.network_settings.no_proxy.clone());

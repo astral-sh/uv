@@ -128,6 +128,11 @@ impl GlobalSettings {
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_installs))
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
+                environment
+                    .concurrency
+                    .cache_reads
+                    .map(NonZeroUsize::get)
+                    .unwrap_or(Concurrency::DEFAULT_CACHE_READS),
             ),
             show_settings: args.show_settings,
             preview: resolve_preview(args, workspace, environment),
