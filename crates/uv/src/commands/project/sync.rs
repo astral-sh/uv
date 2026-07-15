@@ -959,7 +959,7 @@ pub(crate) async fn do_sync<'a>(
 /// were already checked instead of querying OSV twice.
 pub(crate) struct MalwareCheckContext<'a> {
     settings: &'a MalwareCheckSettings,
-    checked_dependencies: Vec<Dependency>,
+    checked_dependencies: FxHashSet<Dependency>,
 }
 
 impl MalwareCheckContext<'_> {
@@ -975,7 +975,7 @@ impl<'a> From<&'a MalwareCheckSettings> for MalwareCheckContext<'a> {
     fn from(settings: &'a MalwareCheckSettings) -> Self {
         Self {
             settings,
-            checked_dependencies: Vec::new(),
+            checked_dependencies: FxHashSet::default(),
         }
     }
 }
@@ -1063,7 +1063,7 @@ async fn maybe_check_malware(
 async fn check_malware(
     target: &InstallTarget<'_>,
     resolution: &Resolution,
-    checked_dependencies: &[Dependency],
+    checked_dependencies: &FxHashSet<Dependency>,
     client_builder: &BaseClientBuilder<'_>,
     concurrency: &Concurrency,
     malware_check_url: Option<DisplaySafeUrl>,
