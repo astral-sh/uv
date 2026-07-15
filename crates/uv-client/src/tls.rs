@@ -17,13 +17,15 @@ use uv_warnings::warn_user_once;
 
 #[derive(Debug, Clone)]
 enum CertificateSource {
+    CertFileArg(PathBuf),
     SslCertFile(PathBuf),
     SslCertDir(PathBuf),
 }
 
 impl CertificateSource {
-    const fn env_var(&self) -> &'static str {
+    const fn description(&self) -> &'static str {
         match self {
+            Self::CertFileArg(_) => "--cert",
             Self::SslCertFile(_) => EnvVars::SSL_CERT_FILE,
             Self::SslCertDir(_) => EnvVars::SSL_CERT_DIR,
         }
@@ -31,7 +33,7 @@ impl CertificateSource {
 
     fn path(&self) -> &Path {
         match self {
-            Self::SslCertFile(path) | Self::SslCertDir(path) => path,
+            Self::CertFileArg(path) | Self::SslCertFile(path) | Self::SslCertDir(path) => path,
         }
     }
 }
@@ -133,7 +135,7 @@ impl Display for InvalidCertificateWarning {
             f,
             "certificate in `{}` (from `{}`) ",
             self.source.path().simplified_display(),
-            self.source.env_var()
+            self.source.description()
         )?;
         match &self.reason {
             InvalidCertificateReason::UnsupportedCriticalExtension => {
@@ -192,7 +194,7 @@ impl Display for InvalidCertificateWarning {
 
 /// A collection of TLS certificates in DER form.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct Certificates(Vec<CertificateDer<'static>>);
+pub struct Certificates(Vec<CertificateDer<'static>>);
 
 impl Certificates {
     /// Load the bundled Mozilla root certificates.
@@ -210,12 +212,41 @@ impl Certificates {
         Self(webpki_root_certs::TLS_SERVER_ROOT_CERTS.to_vec())
     }
 
+    /// Load a custom CA certificate bundle from an explicit path.
+    ///
+    /// Unlike [`Self::from_ssl_cert_file`], an invalid path or a bundle without any valid
+    /// certificates returns an error instead of being ignored with a warning.
+    pub fn from_file(file: &Path) -> Result<Self, CertificateFileError> {
+        let metadata = file
+            .metadata()
+            .map_err(|err| CertificateFileError::Io(file.to_path_buf(), err))?;
+        if !metadata.is_file() {
+            return Err(CertificateFileError::NotFile(file.to_path_buf()));
+        }
+
+        let result = Self::from_paths(Some(file), None);
+        for err in &result.errors {
+            warn!(
+                "Failed to load certificate file ({}): {err}",
+                file.simplified_display()
+            );
+        }
+        let certs =
+            Self::from(result).filter_invalid(&CertificateSource::CertFileArg(file.to_path_buf()));
+        if certs.0.is_empty() {
+            return Err(CertificateFileError::NoValidCertificates(
+                file.to_path_buf(),
+            ));
+        }
+        Ok(certs)
+    }
+
     /// Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
     ///
     /// Returns `None` if neither variable is set, if the referenced files or directories are
     /// missing or inaccessible, or if no valid certificates are found (with a warning in each
     /// case). Delegates path loading to [`rustls_native_certs::load_certs_from_paths`].
-    pub(crate) fn from_env() -> Option<Self> {
+    pub fn from_env() -> Option<Self> {
         let mut certs = Self::default();
         let mut has_source = false;
 
@@ -439,6 +470,16 @@ pub(crate) enum CertificateError {
     Io(#[from] io::Error),
     #[error(transparent)]
     Reqwest(reqwest::Error),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum CertificateFileError {
+    #[error("Failed to read certificate file `{}`", .0.simplified_display())]
+    Io(PathBuf, #[source] io::Error),
+    #[error("Certificate path is not a file: `{}`", .0.simplified_display())]
+    NotFile(PathBuf),
+    #[error("No valid certificates found in: `{}`", .0.simplified_display())]
+    NoValidCertificates(PathBuf),
 }
 
 /// Return the `Identity` from the provided file.
