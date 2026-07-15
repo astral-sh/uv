@@ -1,30 +1,14 @@
-# Reproduce reported bugs without modifying the repository or GitHub.
-name: "reproduce-bug"
+name: "macos-workspace-cache-benchmark"
 
 on:
-  workflow_call:
-    inputs:
-      issue:
-        description: "An issue URL or number"
-        required: true
-        type: string
-      runner:
-        description: "The runner to use for reproduction"
-        default: ubuntu-latest
-        required: false
-        type: string
-    outputs:
-      result:
-        description: "The bug reproduction result"
-        value: ${{ jobs.reproduce.outputs.result }}
   workflow_dispatch:
     inputs:
       issue:
-        description: "An issue URL or number"
+        description: "Benchmark label"
         required: true
         type: string
       runner:
-        description: "The runner to use for reproduction"
+        description: "Unused; retained for the existing dispatch interface"
         default: ubuntu-latest
         required: true
         type: choice
@@ -35,59 +19,197 @@ on:
 permissions: {}
 
 jobs:
-  reproduce:
-    if: github.repository == 'astral-sh/uv'
-    runs-on: ${{ inputs.runner }}
-    environment: automations
-    timeout-minutes: 15
+  seed:
+    name: "seed macos cache ${{ matrix.variant }} sample ${{ matrix.sample }}"
+    runs-on: depot-macos-15
+    timeout-minutes: 30
     permissions:
       contents: read
-      issues: read
-    outputs:
-      result: ${{ steps.reproduce.outputs.final-message }}
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5]
+        variant: [stable, optimized]
+    env:
+      CARGO_BUILD_JOBS: 8
+      CARGO_NET_RETRY: 10
+      CARGO_TERM_COLOR: always
+      RUSTUP_MAX_RETRIES: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          enable-cache: false
-
-      - name: "Collect issue context"
+      - name: "Install Rust toolchain"
+        shell: bash
         run: |
-          gh issue view "$ISSUE" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,author \
-            > .issue-triage-event.json
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ inputs.issue }}
+          set -euo pipefail
+          toolchain=1.97.0
+          if [[ '${{ matrix.variant }}' = optimized ]]; then
+            toolchain=nightly-2026-07-13
+          fi
+          rustup toolchain install "$toolchain" --profile minimal
+          cargo +"$toolchain" --version
+          rustc +"$toolchain" --version --verbose
 
-      - name: "Reproduce bug"
-        id: reproduce
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+      - name: "Rust cache"
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TMPDIR: ${{ runner.temp }}
-          UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
+          RUSTUP_TOOLCHAIN: ${{ matrix.variant == 'optimized' && 'nightly-2026-07-13' || '1.97.0' }}
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-home: "agents/codex"
-          permission-profile: "reproduce-bug"
-          safety-strategy: drop-sudo
-          allow-users: "*"
-          prompt-file: "agents/prompts/reproduce-bug.md"
-          output-schema-file: "agents/schemas/issue-triage-bug.json"
+          prefix-key: v0-uv-macos-workspace-cache-20260715a
+          shared-key: ${{ matrix.variant }}-${{ matrix.sample }}
+          workspaces: ". -> target-${{ matrix.variant }}"
+          cache-workspace-crates: ${{ matrix.variant == 'optimized' }}
+          save-if: true
 
-  report:
-    needs: reproduce
-    if: needs.reproduce.outputs.result != ''
-    runs-on: ubuntu-latest
-    permissions: {}
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        with:
+          tool: cargo-nextest
+
+      - name: "Seed macos test artifacts"
+        shell: bash
+        run: |
+          set -euo pipefail
+          variant='${{ matrix.variant }}'
+          toolchain=1.97.0
+          target="target-$variant"
+          args=(
+            nextest run --no-run --cargo-quiet --cargo-profile fast-build
+            --no-default-features
+            --features 'test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native'
+            --workspace --locked --profile ci-macos
+          )
+          if [[ "$variant" = optimized ]]; then
+            toolchain=nightly-2026-07-13
+            args+=(--config 'profile.fast-build.panic="abort"' -Z panic-abort-tests -Z checksum-freshness)
+          fi
+          start=$(date +%s)
+          CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
+          printf 'TIMING seed variant=%s sample=%s real=%ss\n' "$variant" '${{ matrix.sample }}' "$(( $(date +%s) - start ))"
+          du -sh "$target"
+
+  measure:
+    needs: seed
+    name: "measure macos sample ${{ matrix.sample }}"
+    runs-on: depot-macos-15
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5]
+    env:
+      CARGO_BUILD_JOBS: 8
+      CARGO_NET_RETRY: 10
+      CARGO_TERM_COLOR: always
+      RUSTUP_MAX_RETRIES: 10
+      UV_HTTP_RETRIES: 5
+      INSTA_UPDATE: new
+      INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
     steps:
-      - name: "Write reproduction summary"
-        run: printf '%s\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Install Rust toolchains"
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          rustup toolchain install nightly-2026-07-13 --profile minimal
+          cargo +1.97.0 --version
+          cargo +nightly-2026-07-13 --version
+          rustc +1.97.0 --version --verbose
+          rustc +nightly-2026-07-13 --version --verbose
+
+      - name: "Restore stable cache"
+        id: cache-stable
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         env:
-          REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
+          RUSTUP_TOOLCHAIN: 1.97.0
+        with:
+          prefix-key: v0-uv-macos-workspace-cache-20260715a
+          shared-key: stable-${{ matrix.sample }}
+          workspaces: ". -> target-stable"
+          cache-workspace-crates: "false"
+          save-if: false
+
+      - name: "Restore optimized cache"
+        id: cache-optimized
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
+        with:
+          prefix-key: v0-uv-macos-workspace-cache-20260715a
+          shared-key: optimized-${{ matrix.sample }}
+          workspaces: ". -> target-optimized"
+          cache-workspace-crates: "true"
+          save-if: false
+
+      - name: "Confirm cache hits"
+        shell: bash
+        env:
+          STABLE_CACHE_HIT: ${{ steps.cache-stable.outputs.cache-hit }}
+          OPTIMIZED_CACHE_HIT: ${{ steps.cache-optimized.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          printf 'CACHE sample=%s variant=stable hit=%s\n' '${{ matrix.sample }}' "$STABLE_CACHE_HIT"
+          printf 'CACHE sample=%s variant=optimized hit=%s\n' '${{ matrix.sample }}' "$OPTIMIZED_CACHE_HIT"
+          test "$STABLE_CACHE_HIT" = true
+          test "$OPTIMIZED_CACHE_HIT" = true
+          du -sh target-stable target-optimized
+
+      - name: "Create HFS+ disk image"
+        run: |
+          hdiutil create -size 256m -fs HFS+ -volname NoReflink /tmp/noreflink.dmg
+          hdiutil attach /tmp/noreflink.dmg
+          echo "HFS_MOUNT=/Volumes/NoReflink" >> "$GITHUB_ENV"
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.28"
+
+      - name: "Install required Python versions"
+        run: uv python install
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        with:
+          tool: cargo-nextest
+
+      - name: "Measure macos test job"
+        shell: bash
+        env:
+          RUST_BACKTRACE: 1
+          UV_INTERNAL__TEST_COW_FS: ${{ runner.temp }}
+          UV_INTERNAL__TEST_NOCOW_FS: ${{ env.HFS_MOUNT }}
+          UV_INTERNAL__TEST_ALT_FS: ${{ env.HFS_MOUNT }}
+        run: |
+          set -euo pipefail
+          run() {
+            local variant="$1"
+            local toolchain="$2"
+            local target="$3"
+            shift 3
+            local -a args=(
+              nextest run --cargo-profile fast-build
+              --no-default-features
+              --features 'test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native'
+              --workspace --locked --profile ci-macos
+              --status-level fail --final-status-level fail
+              --failure-output immediate --success-output never
+            )
+            args+=("$@")
+            local start
+            start=$(date +%s)
+            CARGO_TARGET_DIR="$target" cargo +"$toolchain" "${args[@]}"
+            printf 'TIMING overall variant=%s sample=%s real=%ss\n' "$variant" '${{ matrix.sample }}' "$(( $(date +%s) - start ))"
+          }
+          if (( ${{ matrix.sample }} % 2 )); then
+            run stable 1.97.0 target-stable
+            run optimized nightly-2026-07-13 target-optimized --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests -Z checksum-freshness
+          else
+            run optimized nightly-2026-07-13 target-optimized --config 'profile.fast-build.panic="abort"' -Z panic-abort-tests -Z checksum-freshness
+            run stable 1.97.0 target-stable
+          fi
