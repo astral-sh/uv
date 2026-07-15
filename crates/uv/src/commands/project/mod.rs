@@ -285,6 +285,9 @@ pub(crate) enum ProjectError {
     #[error("Failed to find `site-packages` directory for environment")]
     NoSitePackages,
 
+    #[error("Cannot write parent environment path to `pyvenv.cfg` because it is not valid UTF-8")]
+    InvalidParentEnvironmentPath,
+
     #[error("Attempted to drop a temporary virtual environment while still in-use")]
     DroppedEnvironment,
 

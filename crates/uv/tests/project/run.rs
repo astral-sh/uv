@@ -1661,8 +1661,18 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
 /// search paths are available in these ephemeral environments.
 #[test]
 fn run_with_pyvenv_cfg_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_pyvenv_cfg_filters();
-    let parent_environment_path = context.venv.path().to_path_buf();
+    let mut context = uv_test::test_context!("3.12").with_pyvenv_cfg_filters();
+
+    // This is kind of a pseudo regression-test to ensure we don't escape/mangle the path. Windows
+    // gives us free backslashes but on *nix we need to add something silly like a double quote.
+    let parent_environment = context.temp_dir.child(if cfg!(windows) {
+        "parent-environment"
+    } else {
+        "parent\"environment"
+    });
+    let parent_environment_path = parent_environment.path().to_path_buf();
+    fs_err::rename(context.venv.path(), &parent_environment_path)?;
+    context.venv = parent_environment;
     let context = context.with_filtered_path(&parent_environment_path, "PARENT_VENV");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1693,7 +1703,11 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @"
+    uv_snapshot!(context.filters(), context.run()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, &parent_environment_path)
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
