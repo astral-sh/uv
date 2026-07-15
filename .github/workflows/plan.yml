@@ -69,7 +69,7 @@ permissions:
 
 jobs:
   plan:
-    runs-on: depot-ubuntu-24.04
+    runs-on: namespace-profile-ubuntu-24-04
     outputs:
       test-code: ${{ steps.plan.outputs.test_code }}
       review-security: ${{ steps.plan.outputs.review_security }}
