@@ -131,16 +131,16 @@ jobs:
     timeout-minutes: 20
     # Only run macOS tests on main without opt-in
     if: ${{ inputs.test-macos == 'true' }}
-    runs-on: depot-macos-15
+    runs-on: namespace-profile-macos-15-cache-experiment
     name: "cargo test on macos"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
         with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          cache: rust
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -150,6 +150,16 @@ jobs:
           hdiutil create -size 256m -fs HFS+ -volname NoReflink /tmp/noreflink.dmg
           hdiutil attach /tmp/noreflink.dmg
           echo "HFS_MOUNT=/Volumes/NoReflink" >> "$GITHUB_ENV"
+
+      - name: "Create CI keychain"
+        # Namespace macOS runners do not start with an unlocked default user keychain. Create an
+        # empty-password keychain for native-auth tests; GitHub and Depot runners provide one.
+        run: |
+          security create-keychain -p "" "$RUNNER_TEMP/uv-ci.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/uv-ci.keychain-db"
+          security unlock-keychain -p "" "$RUNNER_TEMP/uv-ci.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
+          security default-keychain -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
 
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:

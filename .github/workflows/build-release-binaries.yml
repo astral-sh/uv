@@ -87,11 +87,15 @@ jobs:
 
   macos-x86_64:
     name: x86_64-apple-darwin
-    runs-on: depot-macos-15
+    runs-on: namespace-profile-macos-15-cache-experiment
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      - uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
+        with:
+          cache: rust
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
@@ -159,11 +163,15 @@ jobs:
 
   macos-aarch64:
     name: aarch64-apple-darwin
-    runs-on: depot-macos-15
+    runs-on: namespace-profile-macos-15-cache-experiment
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      - uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
+        with:
+          cache: rust
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
