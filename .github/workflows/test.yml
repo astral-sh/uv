@@ -145,12 +145,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
-
       - name: "Install Rust toolchain"
-        run: rustup show
+        run: rustup toolchain install nightly-2026-07-13 --profile minimal
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
+        with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Create HFS+ disk image (no reflink support)"
         run: |
@@ -184,8 +188,11 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
+          cargo +nightly-2026-07-13 nextest run \
             --cargo-profile fast-build \
+            --config 'profile.fast-build.panic="abort"' \
+            -Z panic-abort-tests \
+            -Z checksum-freshness \
             --no-default-features \
             --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
             --workspace \
