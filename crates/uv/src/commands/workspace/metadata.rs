@@ -8,7 +8,9 @@ use uv_configuration::{
     Concurrency, DependencyGroupsWithDefaults, DryRun, ExtrasSpecificationWithDefaults,
 };
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_python::{
+    ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest,
+};
 use uv_resolver::Metadata;
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -46,7 +48,7 @@ pub(crate) async fn metadata(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -90,7 +92,7 @@ pub(crate) async fn metadata(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
+                config_discovery,
                 Some(false),
                 cache,
                 printer,
@@ -103,7 +105,7 @@ pub(crate) async fn metadata(
                     Some(workspace),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
@@ -181,7 +183,7 @@ pub(crate) async fn metadata(
                         python_preference,
                         python_downloads,
                         false,
-                        no_config,
+                        config_discovery,
                         Some(false),
                         cache,
                         DryRun::Disabled,
@@ -198,7 +200,7 @@ pub(crate) async fn metadata(
                         python_downloads,
                         &install_mirrors,
                         false,
-                        no_config,
+                        config_discovery,
                         Some(false),
                         cache,
                         DryRun::Disabled,

@@ -28,7 +28,7 @@ use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
@@ -736,7 +736,7 @@ async fn get_or_create_environment(
         unresolved_target_requirement
             .as_ref()
             .map(|requirement| &requirement.requirement),
-        false,
+        ConfigDiscovery::Enabled,
         lfs,
         state.git(),
         client_builder,

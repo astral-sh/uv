@@ -36,9 +36,9 @@ use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_resolver::{
@@ -178,7 +178,7 @@ impl ToolPython {
     pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
         requirement: Option<&UnresolvedRequirement>,
-        no_config: bool,
+        config_discovery: ConfigDiscovery,
         lfs: GitLfsSetting,
         git_resolver: &GitResolver,
         client_builder: &BaseClientBuilder<'_>,
@@ -207,7 +207,7 @@ impl ToolPython {
         } else if let Some(file) = PythonVersionFile::discover(
             &*CWD,
             &VersionFileDiscoveryOptions::default()
-                .with_no_config(no_config)
+                .with_config_discovery(config_discovery)
                 .with_no_local(true),
         )
         .await?

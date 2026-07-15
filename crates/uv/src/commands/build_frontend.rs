@@ -33,7 +33,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::RequirementsSource;
@@ -156,7 +156,7 @@ pub(crate) async fn build_frontend(
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
@@ -185,7 +185,7 @@ pub(crate) async fn build_frontend(
         install_mirrors,
         settings,
         client_builder,
-        no_config,
+        config_discovery,
         python_preference,
         python_downloads,
         &concurrency,
@@ -234,7 +234,7 @@ async fn build_impl(
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: &Concurrency,
@@ -415,7 +415,7 @@ async fn build_impl(
             output_dir,
             python_request,
             install_mirrors.clone(),
-            no_config,
+            config_discovery,
             workspace.as_deref(),
             python_preference,
             python_downloads,
@@ -491,7 +491,7 @@ async fn build_package(
     output_dir: Option<&Path>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     workspace: Result<&Workspace, &WorkspaceError>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -550,7 +550,7 @@ async fn build_package(
     if interpreter_request.is_none() {
         interpreter_request = PythonVersionFile::discover(
             source.directory(),
-            &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+            &VersionFileDiscoveryOptions::default().with_config_discovery(config_discovery),
         )
         .await?
         .and_then(PythonVersionFile::into_version);
