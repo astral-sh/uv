@@ -119,17 +119,61 @@ impl<T: AsRef<Path>> Simplified for T {
 }
 
 pub trait PythonExt {
-    /// Escape a [`Path`] for use in Python code.
+    /// Render a [`Path`] as a Python expression that evaluates to a [`str`].
+    ///
+    /// On Unix, paths are arbitrary byte strings, so this uses [`os.fsdecode()`] to produce a
+    /// surrogate-escaped `str`. On Windows, paths are encoded as UTF-16, so this returns a `str`
+    /// literal that preserves the original UTF-16 code units.
+    ///
+    /// [`str`]: https://docs.python.org/3/library/stdtypes.html#text-sequence-type-str
+    /// [`os.fsdecode()`]: https://docs.python.org/3/library/os.html#os.fsdecode
     fn escape_for_python(&self) -> String;
 }
 
 impl<T: AsRef<Path>> PythonExt for T {
     fn escape_for_python(&self) -> String {
-        self.as_ref()
-            .to_string_lossy()
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
+        escape_path_for_python(self)
     }
+}
+
+/// Serialize a path as a Python expression that evaluates to a `str`.
+///
+/// Note: Due to the fun quirks *nix paths, how python handles them, and expectations of things that
+/// might consume those paths, this produces an expression wrapped in `__import__("os").fsdecode()`.
+#[cfg(unix)]
+fn escape_path_for_python<P: AsRef<Path>>(path: P) -> String {
+    use std::os::unix::ffi::OsStrExt;
+    format!(
+        r#"__import__("os").fsdecode(b"{}")"#,
+        path.as_ref().as_os_str().as_bytes().escape_ascii()
+    )
+}
+
+/// Serialize a path as a Python expression that evaluates to a `str`.
+#[cfg(windows)]
+fn escape_path_for_python<P: AsRef<Path>>(path: P) -> String {
+    use std::fmt::Write;
+    use std::os::windows::ffi::OsStrExt;
+
+    let mut literal = String::new();
+    literal.push('"');
+    for character in char::decode_utf16(path.as_ref().as_os_str().encode_wide()) {
+        match character {
+            Ok(character) if character.is_ascii() => {
+                literal.extend((character as u8).escape_ascii().map(char::from));
+            }
+            // `is_control` also covers the non-ASCII C1 range (`U+0080..=U+009F`).
+            Ok(character) if character.is_control() => {
+                let _ = write!(literal, r"\u{:04x}", u32::from(character));
+            }
+            Ok(character) => literal.push(character),
+            Err(error) => {
+                let _ = write!(literal, r"\u{:04x}", error.unpaired_surrogate());
+            }
+        }
+    }
+    literal.push('"');
+    literal
 }
 
 /// Normalize the `path` component of a URL for use as a file path.
@@ -896,5 +940,45 @@ mod tests {
         for (input, expected) in cases {
             assert_eq!(verbatim_path(Path::new(input)), Path::new(expected));
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_path_escape_for_python() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        // A *nix filename can contain any byte except NUL and the path separator.
+        let bytes = b"/foo/"
+            .iter()
+            .copied()
+            .chain((1..=u8::MAX).filter(|byte| *byte != b'/'))
+            .chain(b"/bar".iter().copied())
+            .collect::<Box<[_]>>();
+        let path = Path::new(OsStr::from_bytes(&bytes));
+        // This should be copy-pastable into a python interpreter and reproduce the path.
+        assert_eq!(
+            path.escape_for_python(),
+            r##"__import__("os").fsdecode(b"/foo/\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f !\"#$%&\'()*+,-.0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\x7f\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8a\x8b\x8c\x8d\x8e\x8f\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9a\x9b\x9c\x9d\x9e\x9f\xa0\xa1\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xab\xac\xad\xae\xaf\xb0\xb1\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xbb\xbc\xbd\xbe\xbf\xc0\xc1\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xcb\xcc\xcd\xce\xcf\xd0\xd1\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xdb\xdc\xdd\xde\xdf\xe0\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xeb\xec\xed\xee\xef\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff/bar")"##
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_path_escape_for_python() {
+        use std::os::windows::ffi::OsStringExt;
+
+        // Exhaustive testing for windows is impractical, this has ASCII range (including NUL and
+        // control chars), surrogate pairs, and unpaired surrogates.
+        let path_osstr = OsString::from_wide(&[
+            0x5c, 0x5c, 0x3f, 0x5c, 0x43, 0x3a, 0x5c, 0x63, 0x61, 0x66, 0x00e9, 0x5c, 0xd83d,
+            0xde00, 0x5c, 0xd800, 0x78, 0xdc00, 0x22, 0x09, 0x0a, 0x0d,
+        ]);
+        let path = Path::new(&path_osstr);
+        // This should be copy-pastable into a python interpreter and reproduce the path.
+        assert_eq!(
+            path.escape_for_python(),
+            r#""\\\\?\\C:\\café\\😀\\\ud800x\udc00\"\t\n\r""#
+        );
     }
 }
