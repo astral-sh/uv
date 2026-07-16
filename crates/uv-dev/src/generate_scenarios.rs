@@ -162,22 +162,26 @@ fn scenarios_for_template(
 ) -> Vec<&ScenarioCase> {
     scenarios
         .iter()
-        .filter(|case| match case.scenario.resolver_options.test {
-            Some(ScenarioTest::None) => false,
-            Some(ScenarioTest::Install) => template == TemplateKind::Install,
-            Some(ScenarioTest::Compile) => template == TemplateKind::Compile,
-            Some(ScenarioTest::Lock) => template == TemplateKind::Lock,
-            None => match template {
-                TemplateKind::Install => {
-                    !case.scenario.resolver_options.universal
-                        && case.scenario.resolver_options.python.is_none()
-                }
-                TemplateKind::Compile => {
-                    !case.scenario.resolver_options.universal
-                        && case.scenario.resolver_options.python.is_some()
-                }
-                TemplateKind::Lock => case.scenario.resolver_options.universal,
-            },
+        .filter(|case| {
+            if case.scenario.testgen.disable {
+                return false;
+            }
+            match case.scenario.testgen.kind {
+                Some(ScenarioTest::Install) => template == TemplateKind::Install,
+                Some(ScenarioTest::Compile) => template == TemplateKind::Compile,
+                Some(ScenarioTest::Lock) => template == TemplateKind::Lock,
+                None => match template {
+                    TemplateKind::Install => {
+                        !case.scenario.resolver_options.universal
+                            && case.scenario.resolver_options.python.is_none()
+                    }
+                    TemplateKind::Compile => {
+                        !case.scenario.resolver_options.universal
+                            && case.scenario.resolver_options.python.is_some()
+                    }
+                    TemplateKind::Lock => case.scenario.resolver_options.universal,
+                },
+            }
         })
         .collect()
 }
@@ -1015,8 +1019,9 @@ requires = []
 [expected]
 satisfiable = true
 
-[resolver_options]
-test = "none"
+[testgen]
+disable = true
+kind = "compile"
 "#,
         )
         .expect("scenario should be written");
