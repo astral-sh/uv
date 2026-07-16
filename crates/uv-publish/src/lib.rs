@@ -1001,20 +1001,14 @@ pub async fn check_url(
         return Ok(false);
     };
 
-    let archived_file = match filename {
-        DistFilename::SourceDistFilename(source_dist) => metadatum
-            .files
-            .source_dists
-            .iter()
-            .find(|entry| &entry.name == source_dist)
-            .map(|entry| &entry.file),
-        DistFilename::WheelFilename(wheel) => metadatum
-            .files
-            .wheels
-            .iter()
-            .find(|entry| &entry.name == wheel)
-            .map(|entry| &entry.file),
+    let archived_files = match filename {
+        DistFilename::SourceDistFilename(_) => &metadatum.files.source_dists,
+        DistFilename::WheelFilename(_) => &metadatum.files.wheels,
     };
+    let archived_file = archived_files.iter().find(|file| {
+        DistFilename::try_from_filename(&file.filename, filename.name())
+            .is_some_and(|candidate| &candidate == filename)
+    });
     let Some(archived_file) = archived_file else {
         return Ok(false);
     };
