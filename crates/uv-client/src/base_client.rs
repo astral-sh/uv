@@ -1,7 +1,7 @@
 use std::env;
 use std::fmt::{Debug, Write};
 use std::num::ParseIntError;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTimeError};
 
 use anyhow::anyhow;
@@ -25,7 +25,7 @@ use uv_auth::{
     AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes, PyxTokenStore,
 };
 use uv_configuration::ProxyUrlKind;
-use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
+use uv_configuration::{Concurrency, KeyringProviderType, ProxyUrl, TrustedHost};
 use uv_distribution_types::IndexCredentialsError;
 use uv_git::GitHttpSettings;
 use uv_pep508::MarkerEnvironment;
@@ -121,6 +121,44 @@ pub struct BaseClientBuilder<'a> {
     client_name: Option<&'static str>,
     /// Whether to disable retry delays (for testing).
     no_retry_delay: bool,
+    /// A shared, dedicated blocking pool for short-lived cache reads.
+    cache_read_runtime: Arc<CacheReadRuntime>,
+}
+
+#[derive(Debug)]
+struct CacheReadRuntime {
+    workers: usize,
+    runtime: OnceLock<tokio::runtime::Runtime>,
+}
+
+impl CacheReadRuntime {
+    fn new(workers: usize) -> Self {
+        Self {
+            workers,
+            runtime: OnceLock::new(),
+        }
+    }
+
+    fn get(&self) -> &tokio::runtime::Runtime {
+        self.runtime.get_or_init(|| {
+            tokio::runtime::Builder::new_current_thread()
+                .thread_name("uv-cache-read")
+                .thread_stack_size(uv_configuration::min_stack_size())
+                .max_blocking_threads(self.workers)
+                .build()
+                .expect("Failed building the cache-read Runtime")
+        })
+    }
+}
+
+impl Drop for CacheReadRuntime {
+    fn drop(&mut self) {
+        if let Some(runtime) = self.runtime.take() {
+            // This pool can be released from within uv's main runtime, where waiting for another
+            // runtime to shut down is not permitted.
+            runtime.shutdown_background();
+        }
+    }
 }
 
 /// The policy for handling HTTP redirects.
@@ -185,6 +223,7 @@ impl Default for BaseClientBuilder<'_> {
             subcommand: None,
             client_name: None,
             no_retry_delay: env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
+            cache_read_runtime: Arc::new(CacheReadRuntime::new(Concurrency::DEFAULT_CACHE_READS)),
         }
     }
 }
@@ -249,6 +288,13 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn no_retry_delay(mut self, no_retry_delay: bool) -> Self {
         self.no_retry_delay = no_retry_delay;
+        self
+    }
+
+    /// Set the number of workers available for reading cached HTTP responses.
+    #[must_use]
+    pub fn cache_read_concurrency(mut self, workers: usize) -> Self {
+        self.cache_read_runtime = Arc::new(CacheReadRuntime::new(workers));
         self
     }
 
@@ -429,6 +475,7 @@ impl<'a> BaseClientBuilder<'a> {
             connect_timeout: self.connect_timeout,
             credentials_cache: self.credentials_cache.clone(),
             certificate_source,
+            cache_read_runtime: self.cache_read_runtime.clone(),
         })
     }
 
@@ -459,6 +506,7 @@ impl<'a> BaseClientBuilder<'a> {
             connect_timeout: existing.connect_timeout,
             credentials_cache: existing.credentials_cache.clone(),
             certificate_source: existing.certificate_source,
+            cache_read_runtime: self.cache_read_runtime.clone(),
         }
     }
 
@@ -700,6 +748,8 @@ pub struct BaseClient {
     credentials_cache: Arc<CredentialsCache>,
     /// The certificate roots used by the underlying HTTP client.
     certificate_source: CertificateSource,
+    /// A shared, dedicated blocking pool for short-lived cache reads.
+    cache_read_runtime: Arc<CacheReadRuntime>,
 }
 
 /// The certificate roots used by a [`BaseClient`].
@@ -724,6 +774,10 @@ enum Security {
 }
 
 impl BaseClient {
+    pub(crate) fn cache_read_runtime(&self) -> &tokio::runtime::Runtime {
+        self.cache_read_runtime.get()
+    }
+
     /// Selects the appropriate client based on the host's trustworthiness.
     pub fn for_host(&self, url: &DisplaySafeUrl) -> &RedirectClientWithMiddleware {
         if self.disable_ssl(url) {
@@ -1175,6 +1229,13 @@ mod tests {
     use reqwest::{Client, Method};
     use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[tokio::test]
+    async fn cache_read_runtime_can_be_dropped_from_an_async_context() {
+        let runtime = CacheReadRuntime::new(1);
+        runtime.get().spawn_blocking(|| {}).await.unwrap();
+        drop(runtime);
+    }
 
     #[tokio::test]
     async fn test_redirect_preserves_authorization_header_on_same_origin() -> Result<()> {

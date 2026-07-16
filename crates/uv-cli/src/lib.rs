@@ -4651,7 +4651,13 @@ pub struct RemoveArgs {
     /// Remove the packages from the development dependency group [env: UV_DEV=]
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, conflicts_with("optional"), conflicts_with("group"), value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(
+        long,
+        conflicts_with("optional"),
+        conflicts_with("group"),
+        conflicts_with("script"),
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub dev: bool,
 
     /// Remove the packages from the project's optional dependencies for the specified extra.

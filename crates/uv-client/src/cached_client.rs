@@ -248,7 +248,7 @@ impl CachedClient {
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let start = Instant::now();
-        let cached_response = if let Some(cached) = Self::read_cache(cache_entry).await {
+        let cached_response = if let Some(cached) = self.read_cache(cache_entry).await {
             self.send_cached(req, cache_control.clone(), cached)
                 .boxed_local()
                 .await?
@@ -438,8 +438,10 @@ impl CachedClient {
 
     #[instrument(name = "read_and_parse_cache", skip_all, fields(file = %cache_entry.path().display()
     ))]
-    async fn read_cache(cache_entry: &CacheEntry) -> Option<DataWithCachePolicy> {
-        match DataWithCachePolicy::from_path_async(cache_entry.path()).await {
+    async fn read_cache(&self, cache_entry: &CacheEntry) -> Option<DataWithCachePolicy> {
+        match DataWithCachePolicy::from_path_async(cache_entry.path(), self.0.cache_read_runtime())
+            .await
+        {
             Ok(data) => Some(data),
             Err(err) => {
                 // When we know the cache entry doesn't exist, then things are
@@ -811,9 +813,13 @@ impl DataWithCachePolicy {
     ///
     /// If the given byte buffer is not in a valid format or if reading the
     /// file given fails, then this returns an error.
-    async fn from_path_async(path: &Path) -> Result<Self, Error> {
+    async fn from_path_async(
+        path: &Path,
+        runtime: &tokio::runtime::Runtime,
+    ) -> Result<Self, Error> {
         let path = path.to_path_buf();
-        tokio::task::spawn_blocking(move || Self::from_path_sync(&path))
+        runtime
+            .spawn_blocking(move || Self::from_path_sync(&path))
             .await
             // This just forwards panics from the closure.
             .unwrap()

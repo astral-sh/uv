@@ -3,6 +3,67 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.29
+
+Released on 2026-07-15.
+
+### Python
+
+- Use gzip-compressed artifacts for PyPy downloads ([#20265](https://github.com/astral-sh/uv/pull/20265))
+
+### Enhancements
+
+- Add JSON output to `uv tree` ([#19978](https://github.com/astral-sh/uv/pull/19978))
+- Add CUDA 13.2 as a supported PyTorch backend ([#20267](https://github.com/astral-sh/uv/pull/20267))
+- Prefer local artifacts over URLs when installing from `pylock.toml` ([#20393](https://github.com/astral-sh/uv/pull/20393))
+- Clarify diagnostics for unsatisfiable direct requirement ranges ([#20227](https://github.com/astral-sh/uv/pull/20227))
+- Include the selected project name in missing-extra errors ([#20358](https://github.com/astral-sh/uv/pull/20358))
+
+### Preview features
+
+- Preserve extras and dependency-group conflict context when selecting locked project tools ([#20078](https://github.com/astral-sh/uv/pull/20078))
+- Split OSV audit queries that exceed the service's 1,000-package limit ([#20398](https://github.com/astral-sh/uv/pull/20398))
+- Apply OSV fixed-version information only to the matching package and ecosystem ([#20399](https://github.com/astral-sh/uv/pull/20399))
+- Skip the virtualenv distutils monkeypatch on Python 3.10 and later ([#20222](https://github.com/astral-sh/uv/pull/20222))
+- Report invalid `uv audit --service-url` values instead of panicking ([#20374](https://github.com/astral-sh/uv/pull/20374))
+- Include preview settings in the published SchemaStore schema ([#20304](https://github.com/astral-sh/uv/pull/20304))
+
+### Performance
+
+- Reduce resolver work by widening selected versions across ranges without other known candidates ([#20115](https://github.com/astral-sh/uv/pull/20115))
+- Defer client and build setup for no-op `uv sync` operations ([#20364](https://github.com/astral-sh/uv/pull/20364))
+- Reuse workspace discovery during frozen syncs ([#20363](https://github.com/astral-sh/uv/pull/20363))
+- Reuse workspace discovery after resolving settings ([#20356](https://github.com/astral-sh/uv/pull/20356))
+- Reuse workspace discovery in `uv tree`, `uv export`, `uv format`, and `uv audit` ([#20359](https://github.com/astral-sh/uv/pull/20359))
+- Avoid cache and interpreter setup when reading a project version ([#20360](https://github.com/astral-sh/uv/pull/20360))
+
+### Bug fixes
+
+- Reject duplicate active package entries in `pylock.toml` ([#20391](https://github.com/astral-sh/uv/pull/20391))
+- Preserve direct-archive hashes in `uv pip freeze` output ([#20395](https://github.com/astral-sh/uv/pull/20395))
+- Explain conflicting root requirements instead of displaying an empty version range ([#20228](https://github.com/astral-sh/uv/pull/20228))
+- Prevent build-backend data paths from escaping the project or bypassing wheel exclusions ([#20397](https://github.com/astral-sh/uv/pull/20397))
+- Reject PEP 517 backend paths outside the source tree, including paths that escape through symlinks ([#20387](https://github.com/astral-sh/uv/pull/20387))
+- Redact credentials from failed Git fetch commands ([#20401](https://github.com/astral-sh/uv/pull/20401))
+- Fix exclusive post-release range ordering to match PEP 440 ([#20268](https://github.com/astral-sh/uv/pull/20268))
+- Canonicalize equivalent PEP 440 ranges during dependency resolution ([#20182](https://github.com/astral-sh/uv/pull/20182))
+- Honor Python version pins when initializing scripts ([#20404](https://github.com/astral-sh/uv/pull/20404))
+- Respect package-scoped source filtering for scripts ([#20389](https://github.com/astral-sh/uv/pull/20389))
+- Report existing environment incompatibilities when `uv pip install --strict` has nothing to install ([#20388](https://github.com/astral-sh/uv/pull/20388))
+- Continue scanning `platlib` when `purelib` is missing ([#20405](https://github.com/astral-sh/uv/pull/20405))
+- Handle versionless `.egg-info` files as legacy package metadata ([#20403](https://github.com/astral-sh/uv/pull/20403))
+- Make repeated locking idempotent for impossible cross-variable platform markers ([#20369](https://github.com/astral-sh/uv/pull/20369))
+- Report invalid cloud credential endpoint URLs instead of panicking ([#20372](https://github.com/astral-sh/uv/pull/20372))
+- Report invalid `pylock.toml` artifact URLs instead of panicking ([#20373](https://github.com/astral-sh/uv/pull/20373))
+- Report non-UTF-8 virtual environment paths instead of panicking while generating activation scripts ([#20375](https://github.com/astral-sh/uv/pull/20375))
+- Return an unsupported-operation error from unimplemented build-backend requirement hooks ([#20376](https://github.com/astral-sh/uv/pull/20376))
+
+### Documentation
+
+- Clarify `--no-build` behavior for editable requirements ([#20234](https://github.com/astral-sh/uv/pull/20234))
+- Document uv's threat model ([#20236](https://github.com/astral-sh/uv/pull/20236))
+- Reduce the number of badges in the README ([#11257](https://github.com/astral-sh/uv/pull/11257))
+
 ## 0.11.28
 
 Released on 2026-07-07.
@@ -916,3 +977,4 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+

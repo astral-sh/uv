@@ -378,7 +378,7 @@ impl SourceBuild {
                     uv_virtualenv::RemovalReason::TemporaryEnvironment,
                 ),
                 false,
-                false,
+                uv_virtualenv::Seed::Disabled,
                 false,
             )?
         };

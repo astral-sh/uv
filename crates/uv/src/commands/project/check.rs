@@ -13,7 +13,7 @@ use uv_configuration::{
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
 };
 use uv_scripts::Pep723Script;
@@ -66,7 +66,7 @@ pub(crate) async fn check(
     printer: Printer,
     preview: Preview,
     no_project: bool,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     if !preview.is_enabled(PreviewFeature::Check) {
@@ -165,7 +165,7 @@ pub(crate) async fn check(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
+                config_discovery,
                 Some(false),
                 cache,
                 printer,
@@ -183,7 +183,7 @@ pub(crate) async fn check(
                 workspace,
                 &groups,
                 project_dir,
-                no_config,
+                config_discovery,
             )
             .await?;
 
@@ -223,7 +223,7 @@ pub(crate) async fn check(
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             false,
-            false,
+            uv_virtualenv::Seed::Disabled,
             false,
         )?)
     } else {
@@ -246,7 +246,7 @@ pub(crate) async fn check(
                 python_downloads,
                 &install_mirrors,
                 no_sync,
-                no_config,
+                config_discovery,
                 Some(false),
                 cache,
                 DryRun::Disabled,
@@ -396,7 +396,7 @@ pub(crate) async fn check(
                 python_preference,
                 python_downloads,
                 no_sync,
-                no_config,
+                config_discovery,
                 None,
                 cache,
                 DryRun::Disabled,
@@ -415,7 +415,7 @@ pub(crate) async fn check(
                 Some(project.workspace()),
                 &groups,
                 project_dir,
-                no_config,
+                config_discovery,
             )
             .await?;
             Some(

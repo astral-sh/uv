@@ -15,7 +15,7 @@ use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement, VerbatimUrl, VersionOrUrl};
 use uv_preview::Preview;
 use uv_pypi_types::{PyProjectToml, ResolutionMetadata, VerbatimParsedUrl};
-use uv_python::{PythonDownloads, PythonPreference};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::MetadataResponse;
 use uv_settings::PythonInstallMirrors;
@@ -42,7 +42,7 @@ pub(crate) async fn upgrade(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -118,7 +118,7 @@ pub(crate) async fn upgrade(
         Some(project.workspace()),
         &groups,
         project_dir,
-        no_config,
+        config_discovery,
     )
     .await?;
     let interpreter = ProjectInterpreter::discover(

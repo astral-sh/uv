@@ -32,8 +32,8 @@ use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions,
 };
 use uv_redacted::DisplaySafeUrl;
@@ -99,7 +99,7 @@ pub(crate) async fn run(
     all_packages: bool,
     package: Option<PackageName>,
     no_project: bool,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
@@ -213,7 +213,7 @@ pub(crate) async fn run(
                 python_downloads,
                 &install_mirrors,
                 no_sync,
-                no_config,
+                config_discovery,
                 active.map_or(Some(false), Some),
                 &cache,
                 DryRun::Disabled,
@@ -379,7 +379,7 @@ pub(crate) async fn run(
                     python_downloads,
                     &install_mirrors,
                     no_sync,
-                    no_config,
+                    config_discovery,
                     active.map_or(Some(false), Some),
                     &cache,
                     DryRun::Disabled,
@@ -463,7 +463,7 @@ pub(crate) async fn run(
                     python_downloads,
                     &install_mirrors,
                     no_sync,
-                    no_config,
+                    config_discovery,
                     active.map_or(Some(false), Some),
                     &cache,
                     printer,
@@ -481,7 +481,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?;
 
@@ -649,7 +649,7 @@ pub(crate) async fn run(
                     Some(project.workspace()),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
 
@@ -689,7 +689,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?
             } else {
@@ -704,7 +704,7 @@ pub(crate) async fn run(
                     python_preference,
                     python_downloads,
                     no_sync,
-                    no_config,
+                    config_discovery,
                     active,
                     &cache,
                     DryRun::Disabled,
@@ -883,7 +883,8 @@ pub(crate) async fn run(
                 } else {
                     PythonVersionFile::discover(
                         &project_dir,
-                        &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+                        &VersionFileDiscoveryOptions::default()
+                            .with_config_discovery(config_discovery),
                     )
                     .await?
                     .and_then(PythonVersionFile::into_version)
@@ -921,7 +922,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?;
                 venv.into_interpreter()
@@ -1047,7 +1048,7 @@ pub(crate) async fn run(
                     uv_virtualenv::RemovalReason::TemporaryEnvironment,
                 ),
                 false,
-                false,
+                uv_virtualenv::Seed::Disabled,
                 false,
             )
         })

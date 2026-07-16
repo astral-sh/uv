@@ -253,6 +253,18 @@ impl VersionMap {
         }
     }
 
+    /// Return an iterator over the versions that can be considered for selection.
+    ///
+    /// Unlike [`Self::iter`], this skips lazy registry versions whose files are all excluded by
+    /// an upload-time cutoff without materializing their distributions. Files without an upload
+    /// time remain included so that materialization can emit the appropriate warning.
+    pub(crate) fn iter_included(
+        &self,
+        range: &Ranges<Version>,
+    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle<'_>)> {
+        self.iter(range).filter(|(_, dist)| dist.is_included())
+    }
+
     /// Return the [`Hashes`] for the given version, if any.
     pub(crate) fn hashes(&self, version: &Version) -> Option<&[HashDigest]> {
         match self.inner {
@@ -327,6 +339,18 @@ enum VersionMapDistHandleInner<'a> {
 }
 
 impl<'a> VersionMapDistHandle<'a> {
+    /// Returns whether this distribution can be considered for selection.
+    fn is_included(&self) -> bool {
+        match self.inner {
+            VersionMapDistHandleInner::Eager(_) => true,
+            VersionMapDistHandleInner::Lazy { lazy, dist } => match (&dist.flat, &dist.simple) {
+                (Some(_), _) => true,
+                (None, Some(simple)) => lazy.any_file_materializable(simple),
+                (None, None) => false,
+            },
+        }
+    }
+
     /// Returns a prioritized distribution from this handle.
     pub(crate) fn prioritized_dist(&self) -> Option<&'a PrioritizedDist> {
         match self.inner {
@@ -558,6 +582,34 @@ impl VersionMapLazy {
                     false
                 };
                 !excluded
+            })
+    }
+
+    /// Returns whether a version should be materialized during candidate selection.
+    ///
+    /// Missing upload times are retained here, even for `included_version_cutoff`, since
+    /// materializing them is what emits the corresponding `exclude-newer` warning.
+    fn any_file_materializable(&self, simple: &SimplePrioritizedDist) -> bool {
+        let Some(cutoff) = self
+            .included_version_cutoff
+            .as_ref()
+            .or(self.available_version_cutoff.as_ref())
+        else {
+            return true;
+        };
+        let Some(datum) = self.simple_metadata.datum(simple.datum_index) else {
+            return false;
+        };
+        datum
+            .files
+            .wheels
+            .iter()
+            .map(|wheel| &wheel.file)
+            .chain(datum.files.source_dists.iter().map(|sdist| &sdist.file))
+            .any(|file| {
+                file.upload_time_utc_ms
+                    .as_ref()
+                    .is_none_or(|upload_time| upload_time.to_native() < cutoff.as_millisecond())
             })
     }
 

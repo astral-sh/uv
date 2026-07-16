@@ -113,7 +113,7 @@ jobs:
           name: artifacts-plan-dist-manifest
           path: plan-dist-manifest.json
 
-  custom-build-release-binaries:
+  build-release-binaries:
     needs:
       - plan
     if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
@@ -122,7 +122,7 @@ jobs:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
 
-  custom-build-docker:
+  build-docker:
     needs:
       - plan
       - release-gate
@@ -140,7 +140,7 @@ jobs:
   generate-checksum-manifest:
     needs:
       - plan
-      - custom-build-release-binaries
+      - build-release-binaries
     if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
     runs-on: "depot-ubuntu-latest-4"
     steps:
@@ -179,8 +179,8 @@ jobs:
   build-global-artifacts:
     needs:
       - plan
-      - custom-build-release-binaries
-      - custom-build-docker
+      - build-release-binaries
+      - build-docker
       - generate-checksum-manifest
     runs-on: "depot-ubuntu-latest-4"
     env:
@@ -229,11 +229,11 @@ jobs:
   host:
     needs:
       - plan
-      - custom-build-release-binaries
-      - custom-build-docker
+      - build-release-binaries
+      - build-docker
       - build-global-artifacts
     # Only run if we're "publishing", and only if plan, local and global didn't fail (skipped is fine)
-    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.custom-build-release-binaries.result == 'skipped' || needs.custom-build-release-binaries.result == 'success') && (needs.custom-build-docker.result == 'skipped' || needs.custom-build-docker.result == 'success') }}
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-release-binaries.result == 'skipped' || needs.build-release-binaries.result == 'success') && (needs.build-docker.result == 'skipped' || needs.build-docker.result == 'success') }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: "depot-ubuntu-latest-4"
@@ -274,7 +274,7 @@ jobs:
           name: artifacts-dist-manifest
           path: dist-manifest.json
 
-  custom-publish-pypi:
+  publish-pypi:
     needs:
       - plan
       - host
@@ -289,12 +289,12 @@ jobs:
       "id-token": "write"
       "packages": "write"
 
-  custom-publish-crates:
+  publish-crates:
     needs:
       - plan
       - host
       - release-gate
-      - custom-publish-pypi # DIRTY: see #16989
+      - publish-pypi # DIRTY: see #16989
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
     uses: ./.github/workflows/publish-crates.yml
     with:
@@ -306,17 +306,17 @@ jobs:
       "id-token": "write"
 
   # Create a GitHub Release while uploading all files to it
-  announce:
+  publish-github:
     needs:
       - plan
       - host
       - release-gate
-      - custom-publish-pypi
+      - publish-pypi
     # use "always() && ..." to allow publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
-    # `custom-publish-crates` is intentionally not a dependency: it's not
+    # `publish-crates` is intentionally not a dependency: it's not
     # critical to the release and isn't idempotent on retry.
-    if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && (needs.custom-publish-pypi.result == 'skipped' || needs.custom-publish-pypi.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && (needs.publish-pypi.result == 'skipped' || needs.publish-pypi.result == 'success') }}
     runs-on: "depot-ubuntu-latest-4"
     environment:
       name: release
@@ -364,33 +364,33 @@ jobs:
 
           gh release create "${NEEDS_PLAN_OUTPUTS_TAG}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
 
-  custom-publish-docs:
+  publish-docs:
     needs:
       - plan
-      - announce
-    # Use `always() && ...` so this job gates only on whether `announce`
+      - publish-github
+    # Use `always() && ...` so this job gates only on whether `publish-github`
     # completed successfully.
-    if: ${{ always() && needs.announce.result == 'success' }}
+    if: ${{ always() && needs.publish-github.result == 'success' }}
     uses: ./.github/workflows/publish-docs.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
 
-  custom-publish-versions:
+  publish-versions:
     needs:
       - plan
-      - announce
-    if: ${{ always() && needs.announce.result == 'success' }}
+      - publish-github
+    if: ${{ always() && needs.publish-github.result == 'success' }}
     uses: ./.github/workflows/publish-versions.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
 
-  custom-publish-mirror:
+  publish-mirror:
     needs:
       - plan
-      - announce
-    if: ${{ always() && needs.announce.result == 'success' }}
+      - publish-github
+    if: ${{ always() && needs.publish-github.result == 'success' }}
     uses: ./.github/workflows/publish-mirror.yml
     with:
       plan: ${{ needs.plan.outputs.val }}

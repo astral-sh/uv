@@ -15,6 +15,7 @@ fn add_shared_args(mut command: Command) -> Command {
         .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "50")
         .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "8")
+        .env(EnvVars::UV_CONCURRENT_CACHE_READS, "2")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env_remove(EnvVars::UV_PYTHON_DOWNLOADS);
 
@@ -60,6 +61,7 @@ fn pip_compile_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -216,6 +218,187 @@ fn pip_compile_baseline() {
     windows,
     ignore = "Configuration tests are not yet supported on Windows"
 )]
+fn publish_resolved_settings() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(indoc::indoc! {r#"
+        publish-url = "https://test.pypi.org/legacy/"
+        trusted-publishing = "never"
+        check-url = "https://check-user:check-secret@test.pypi.org/simple/"
+        keyring-provider = "subprocess"
+
+        [[index]]
+        name = "private"
+        url = "https://index-user:index-secret@test.pypi.org/simple/"
+    "#})?;
+
+    uv_snapshot!(context.filters(), add_shared_args(context.publish())
+        .arg("--show-settings")
+        .env(EnvVars::UV_PUBLISH_TOKEN, "publish-secret-token"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+            cache_reads: 2,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PublishSettings {
+        files: [
+            "dist/*",
+        ],
+        username: Some(
+            "__token__",
+        ),
+        password: Some(
+            "****",
+        ),
+        index: None,
+        dry_run: false,
+        no_attestations: false,
+        direct: false,
+        publish_url: DisplaySafeUrl {
+            scheme: "https",
+            cannot_be_a_base: false,
+            username: "",
+            password: None,
+            host: Some(
+                Domain(
+                    "test.pypi.org",
+                ),
+            ),
+            port: None,
+            path: "/legacy/",
+            query: None,
+            fragment: None,
+        },
+        trusted_publishing: Never,
+        keyring_provider: Subprocess,
+        check_url: Some(
+            Url(
+                VerbatimUrl {
+                    url: DisplaySafeUrl {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "check-user",
+                        password: Some(
+                            "****",
+                        ),
+                        host: Some(
+                            Domain(
+                                "test.pypi.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/simple/",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://check-user:****@test.pypi.org/simple/",
+                    ),
+                    expanded: false,
+                },
+            ),
+        ),
+        index_locations: IndexLocations {
+            indexes: [
+                Index {
+                    name: Some(
+                        IndexName(
+                            "private",
+                        ),
+                    ),
+                    url: Url(
+                        VerbatimUrl {
+                            url: DisplaySafeUrl {
+                                scheme: "https",
+                                cannot_be_a_base: false,
+                                username: "index-user",
+                                password: Some(
+                                    "****",
+                                ),
+                                host: Some(
+                                    Domain(
+                                        "test.pypi.org",
+                                    ),
+                                ),
+                                port: None,
+                                path: "/simple/",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "https://index-user:****@test.pypi.org/simple/",
+                            ),
+                            expanded: false,
+                        },
+                    ),
+                    explicit: false,
+                    default: false,
+                    origin: Some(
+                        Project,
+                    ),
+                    format: Simple,
+                    publish_url: None,
+                    authenticate: Auto,
+                    ignore_error_codes: None,
+                    cache_control: None,
+                    exclude_newer: None,
+                },
+            ],
+            flat_index: [],
+            no_index: false,
+        },
+    }
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
 fn pip_install_baseline() {
     let context = uv_test::test_context!("3.12");
 
@@ -247,6 +430,7 @@ fn pip_install_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -430,6 +614,7 @@ fn lock_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -552,6 +737,7 @@ fn version_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -689,6 +875,7 @@ fn tool_install_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {

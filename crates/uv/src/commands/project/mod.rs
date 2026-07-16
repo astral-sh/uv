@@ -33,7 +33,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{
-    BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind,
+    BrokenLink, ConfigDiscovery, EnvironmentPreference, Interpreter, InvalidEnvironmentKind,
     LenientImplementationName, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonSource, PythonVariant, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionRequest,
@@ -790,7 +790,7 @@ impl ScriptInterpreter {
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
         keep_incompatible: bool,
-        no_config: bool,
+        config_discovery: ConfigDiscovery,
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
@@ -802,7 +802,7 @@ impl ScriptInterpreter {
             source,
             python_request,
             requires_python,
-        } = ScriptPython::from_request(python_request, workspace, script, no_config).await?;
+        } = ScriptPython::from_request(python_request, workspace, script, config_discovery).await?;
 
         let root = Self::root(script, active, cache);
         match PythonEnvironment::from_root(&root, cache) {
@@ -1148,6 +1148,8 @@ pub(crate) fn centralized_environment_root(
     upgradeable: bool,
     cache: &Cache,
 ) -> PathBuf {
+    let workspace_path = fs_err::canonicalize(workspace.install_path())
+        .unwrap_or_else(|_| workspace.install_path().clone());
     let interpreter_key = interpreter.key();
     // Use the workspace path to isolate projects and the interpreter key to maximize intra-project
     // environment re-use while avoiding clashes with incompatible environments. Ignoring the patch
@@ -1158,12 +1160,12 @@ pub(crate) fn centralized_environment_root(
             .is_some_and(|link| link.exists())
     {
         (
-            cache_digest(&(workspace.install_path(), installation.minor_version_key())),
+            cache_digest(&(&workspace_path, installation.minor_version_key())),
             interpreter.python_minor_version(),
         )
     } else {
         (
-            cache_digest(&(workspace.install_path(), &interpreter_key)),
+            cache_digest(&(&workspace_path, &interpreter_key)),
             interpreter.python_version().clone(),
         )
     };
@@ -1173,8 +1175,7 @@ pub(crate) fn centralized_environment_root(
         .as_ref()
         .and_then(|project| cache_name(project.name.as_ref(), Some(100)))
         .or_else(|| {
-            workspace
-                .install_path()
+            workspace_path
                 .file_name()
                 .and_then(|name| name.to_str())
                 .and_then(|name| cache_name(name, Some(100)))
@@ -1466,7 +1467,7 @@ impl WorkspacePython {
         workspace: Option<&Workspace>,
         groups: &DependencyGroupsWithDefaults,
         project_dir: &Path,
-        no_config: bool,
+        config_discovery: ConfigDiscovery,
     ) -> Result<Self, ProjectError> {
         let requires_python = workspace
             .map(|workspace| find_requires_python(workspace, groups))
@@ -1484,7 +1485,7 @@ impl WorkspacePython {
             project_dir,
             &VersionFileDiscoveryOptions::default()
                 .with_stop_discovery_at(workspace_root.map(PathBuf::as_ref))
-                .with_no_config(no_config),
+                .with_config_discovery(config_discovery),
         )
         .await?
         .filter(|file| {
@@ -1547,7 +1548,7 @@ impl ScriptPython {
         python_request: Option<PythonRequest>,
         workspace: Option<&Workspace>,
         script: Pep723ItemRef<'_>,
-        no_config: bool,
+        config_discovery: ConfigDiscovery,
     ) -> Result<Self, ProjectError> {
         let script_requires_python = script
             .metadata()
@@ -1570,7 +1571,7 @@ impl ScriptPython {
             project_dir,
             &VersionFileDiscoveryOptions::default()
                 .with_stop_discovery_at(workspace_root.map(PathBuf::as_ref))
-                .with_no_config(no_config),
+                .with_config_discovery(config_discovery),
         )
         .await?
         .filter(|file| {
@@ -1674,7 +1675,7 @@ impl ProjectEnvironment {
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         no_sync: bool,
-        no_config: bool,
+        config_discovery: ConfigDiscovery,
         active: Option<bool>,
         cache: &Cache,
         dry_run: DryRun,
@@ -1697,7 +1698,7 @@ impl ProjectEnvironment {
             Some(workspace),
             groups,
             workspace.install_path().as_ref(),
-            no_config,
+            config_discovery,
         )
         .await?;
         let upgradeable = workspace_python
@@ -1808,7 +1809,7 @@ impl ProjectEnvironment {
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
                         ),
                         uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
-                        false,
+                        uv_virtualenv::Seed::Disabled,
                         upgradeable,
                     )?;
                     return Ok(if replace_environment {
@@ -1870,7 +1871,7 @@ impl ProjectEnvironment {
                         uv_virtualenv::RemovalReason::ManagedEnvironment,
                     ),
                     uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     upgradeable,
                 )?;
 
@@ -1961,7 +1962,7 @@ impl ScriptEnvironment {
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
         no_sync: bool,
-        no_config: bool,
+        config_discovery: ConfigDiscovery,
         active: Option<bool>,
         cache: &Cache,
         dry_run: DryRun,
@@ -1987,7 +1988,7 @@ impl ScriptEnvironment {
             python_downloads,
             install_mirrors,
             no_sync,
-            no_config,
+            config_discovery,
             active,
             cache,
             printer,
@@ -2024,7 +2025,7 @@ impl ScriptEnvironment {
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
                         ),
                         false,
-                        false,
+                        uv_virtualenv::Seed::Disabled,
                         upgradeable,
                     )?;
                     return Ok(if root.exists() {
@@ -2061,7 +2062,7 @@ impl ScriptEnvironment {
                         uv_virtualenv::RemovalReason::ManagedEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     upgradeable,
                 )?;
 
@@ -3024,7 +3025,7 @@ pub(crate) async fn init_script_python_requirement(
     no_pin_python: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     reporter: &PythonDownloadReporter,
@@ -3036,7 +3037,7 @@ pub(crate) async fn init_script_python_requirement(
         no_pin_python,
         PythonVersionFile::discover(
             directory,
-            &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+            &VersionFileDiscoveryOptions::default().with_config_discovery(config_discovery),
         )
         .await?
         .and_then(PythonVersionFile::into_version),
