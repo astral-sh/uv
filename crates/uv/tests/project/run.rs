@@ -1661,7 +1661,22 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
 /// search paths are available in these ephemeral environments.
 #[test]
 fn run_with_pyvenv_cfg_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_pyvenv_cfg_filters();
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_pyvenv_cfg_filters();
+
+    // This sets up to test for a regression where we escaped double quotes and backslashes.
+    // Windows paths don't allow double quotes and use backslash as a path separator so the path has
+    // to differ.
+    let parent_environment = context.temp_dir.child(if cfg!(windows) {
+        ".\\parent-environment"
+    } else {
+        "parent\"\\environment"
+    });
+    context
+        .venv()
+        .arg(parent_environment.path())
+        .assert()
+        .success();
+    let context = context.with_filtered_path(&parent_environment, "PARENT_VENV");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1691,7 +1706,12 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @"
+    uv_snapshot!(context.filters(), context.run()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, parent_environment.path())
+        .env(EnvVars::VIRTUAL_ENV, parent_environment.path())
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1700,7 +1720,7 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
     uv = [UV_VERSION]
     version_info = 3.12.[X]
     include-system-site-packages = false
-    extends-environment = [PARENT_VENV]
+    extends-environment = [PARENT_VENV]/
 
 
     ----- stderr -----
