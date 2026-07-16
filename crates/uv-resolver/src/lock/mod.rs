@@ -3879,13 +3879,18 @@ impl Package {
         }
 
         if !self.wheels.is_empty() {
-            let wheels = each_element_on_its_line_array(
-                self.wheels
-                    .iter()
-                    .map(Wheel::to_toml)
-                    .collect::<Result<Vec<_>, _>>()?
-                    .into_iter(),
-            );
+            // Avoid constructing and encoding an inline-table AST for every wheel. Large lockfiles
+            // can contain thousands of wheels, all of which share the same fixed schema.
+            let wheel_capacity = self.wheels.iter().map(Wheel::toml_capacity).sum();
+            let mut encoded = String::with_capacity(wheel_capacity);
+            encoded.push('\n');
+            for wheel in &self.wheels {
+                encoded.push_str("    ");
+                wheel.write_toml(&mut encoded)?;
+                encoded.push_str(",\n");
+            }
+            let mut wheels = Array::new();
+            wheels.set_trailing(encoded);
             table.insert("wheels", value(wheels));
         }
 
@@ -5760,46 +5765,87 @@ enum WheelWireSource {
 }
 
 impl Wheel {
-    /// Returns the TOML representation of this wheel.
-    fn to_toml(&self) -> Result<InlineTable, toml_edit::ser::Error> {
-        let mut table = InlineTable::new();
+    /// Returns a capacity estimate for the TOML representation of this wheel.
+    fn toml_capacity(&self) -> usize {
+        let location = match &self.url {
+            WheelWireSource::Url { url } => url.as_ref().len(),
+            WheelWireSource::Path { path } => path.as_os_str().len(),
+            WheelWireSource::Filename { filename } => filename.to_string().len(),
+        };
+        location + 192
+    }
+
+    /// Writes the TOML representation of this wheel directly to the lockfile buffer.
+    fn write_toml(&self, output: &mut String) -> Result<(), toml_edit::ser::Error> {
+        output.push_str("{ ");
         match &self.url {
             WheelWireSource::Url { url } => {
-                table.insert("url", Value::from(url.as_ref()));
+                output.push_str("url = ");
+                push_toml_string(output, url.as_ref());
             }
             WheelWireSource::Path { path } => {
-                table.insert("path", Value::from(PortablePath::from(path).to_string()));
+                output.push_str("path = ");
+                push_toml_string(output, &PortablePath::from(path).to_string());
             }
             WheelWireSource::Filename { filename } => {
-                table.insert("filename", Value::from(filename.to_string()));
+                output.push_str("filename = ");
+                push_toml_string(output, &filename.to_string());
             }
         }
         if let Some(ref hash) = self.hash {
-            table.insert("hash", Value::from(hash.to_string()));
+            output.push_str(", hash = ");
+            push_toml_string(output, &hash.to_string());
         }
         if let Some(size) = self.size {
-            table.insert(
-                "size",
-                toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
+            output.push_str(", size = ");
+            output.push_str(
+                &toml_edit::ser::ValueSerializer::new()
+                    .serialize_u64(size)?
+                    .to_string(),
             );
         }
         if let Some(upload_time) = self.upload_time {
-            table.insert("upload-time", Value::from(upload_time.to_string()));
+            output.push_str(", upload-time = ");
+            push_toml_string(output, &upload_time.to_string());
         }
         if let Some(zstd) = &self.zstd {
-            let mut inner = InlineTable::new();
+            output.push_str(", zstd = { ");
+            let mut first = true;
             if let Some(ref hash) = zstd.hash {
-                inner.insert("hash", Value::from(hash.to_string()));
+                output.push_str("hash = ");
+                push_toml_string(output, &hash.to_string());
+                first = false;
             }
             if let Some(size) = zstd.size {
-                inner.insert(
-                    "size",
-                    toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
+                if !first {
+                    output.push_str(", ");
+                }
+                output.push_str("size = ");
+                output.push_str(
+                    &toml_edit::ser::ValueSerializer::new()
+                        .serialize_u64(size)?
+                        .to_string(),
                 );
             }
-            table.insert("zstd", Value::from(inner));
+            output.push_str(" }");
         }
-        Ok(table)
+        output.push_str(" }");
+        Ok(())
+    }
+}
+
+/// Writes a TOML basic string, using the full encoder only when escaping is required.
+fn push_toml_string(output: &mut String, value: &str) {
+    if value
+        .as_bytes()
+        .iter()
+        .any(|byte| *byte < b' ' || *byte == b'"' || *byte == b'\\' || *byte == 0x7f)
+    {
+        output.push_str(&Value::from(value).to_string());
+    } else {
+        output.push('"');
+        output.push_str(value);
+        output.push('"');
     }
 }
 
@@ -7509,6 +7555,26 @@ mod tests {
             sys_platform: "darwin",
         })
         .expect("valid marker environment")
+    }
+
+    #[test]
+    fn fast_toml_string_matches_encoder() {
+        for value in [
+            "",
+            "https://example.com/packages/example-1.0.0-py3-none-any.whl",
+            "sha256:0123456789abcdef",
+            "it's valid",
+            "unicode-λ",
+            "contains\"quote",
+            r"contains\backslash",
+            "contains\ttab",
+            "contains\nnewline",
+            "contains\u{7f}delete",
+        ] {
+            let mut encoded = String::new();
+            push_toml_string(&mut encoded, value);
+            assert_eq!(encoded, Value::from(value).to_string());
+        }
     }
 
     #[test]
