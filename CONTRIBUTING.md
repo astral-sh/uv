@@ -345,10 +345,7 @@ Changelog entries and version bumps are automated. First, run:
 ```
 
 If release preparation detects a new workspace crate, add it to
-[`astral-sh/crates-policies`](https://github.com/astral-sh/crates-policies/blob/main/trusted-publishing/uv.json)
-and run its
-[`Apply` workflow](https://github.com/astral-sh/crates-policies/actions/workflows/apply.yml) with
-`confirm` enabled to bootstrap the crate before continuing.
+[`astral-sh/crates-policies`](https://github.com/astral-sh/crates-policies).
 
 Then, editorialize the `CHANGELOG.md` file to ensure entries are consistently styled.
 
