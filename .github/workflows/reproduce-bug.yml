@@ -17,6 +17,12 @@ on:
       result:
         description: "The bug reproduction result"
         value: ${{ jobs.reproduce.outputs.result }}
+      test-result:
+        description: "The integration-test creation result"
+        value: ${{ jobs.create-integration-test.outputs.result }}
+      pull-request:
+        description: "The draft integration-test pull request URL"
+        value: ${{ jobs.create-integration-test.outputs.pull-request }}
   workflow_dispatch:
     inputs:
       issue:
@@ -102,6 +108,9 @@ jobs:
       contents: read
       id-token: write # for the uv-dev credential broker
       issues: read
+    outputs:
+      result: ${{ steps.create-test.outputs.final-message }}
+      pull-request: ${{ steps.open-pr.outputs.url }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -146,6 +155,7 @@ jobs:
           safety-strategy: drop-sudo
           allow-users: "*"
           prompt-file: "agents/prompts/create-bug-test.md"
+          output-schema-file: "agents/schemas/create-bug-test.json"
 
       - name: "Commit integration test"
         id: commit-test
@@ -159,13 +169,22 @@ jobs:
           fi
 
           if git diff --cached --quiet; then
+            if [ "$CREATE_TEST_OUTCOME" != "not_created" ]; then
+              echo "Codex reported an integration test was created, but the checkout is unchanged."
+              exit 1
+            fi
             echo "Codex did not create a suitable integration test."
             echo "created=false" >> "$GITHUB_OUTPUT"
             {
               printf '%s\n\n' '### Integration test not created'
-              printf '%s\n' "$CREATE_TEST_RESULT"
+              printf '%s\n' "$CREATE_TEST_SUMMARY"
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
+          fi
+
+          if [ "$CREATE_TEST_OUTCOME" != "created" ]; then
+            echo "Codex changed integration-test files, but reported that no test was created."
+            exit 1
           fi
 
           git diff --cached --check
@@ -180,7 +199,8 @@ jobs:
           mv "$git_dir/config" "$RUNNER_TEMP/untrusted-git-config"
           echo "created=true" >> "$GITHUB_OUTPUT"
         env:
-          CREATE_TEST_RESULT: ${{ steps.create-test.outputs.final-message }}
+          CREATE_TEST_OUTCOME: ${{ fromJSON(steps.create-test.outputs.final-message).outcome }}
+          CREATE_TEST_SUMMARY: ${{ fromJSON(steps.create-test.outputs.final-message).summary }}
 
       - name: "Get uv-dev token"
         if: steps.commit-test.outputs.created == 'true'
@@ -196,20 +216,30 @@ jobs:
 
       - name: "Open draft pull request"
         if: steps.commit-test.outputs.created == 'true'
+        id: open-pr
         run: |
           issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
           branch="zb/reproduce-bug/${issue_number}"
           git -c core.hooksPath=/dev/null push \
             "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
             HEAD:"$branch"
-          gh pr create \
-            --repo astral-sh/uv-dev \
-            --base main \
-            --head "$branch" \
-            --draft \
-            --title "Add regression test for uv#${issue_number}" \
-            --body "Add a minimal integration test that reproduces astral-sh/uv#${issue_number}."
+          pull_request="$(
+            gh pr create \
+              --repo astral-sh/uv-dev \
+              --base main \
+              --head "$branch" \
+              --draft \
+              --title "Add regression test for uv#${issue_number}" \
+              --body "Add a minimal integration test that reproduces astral-sh/uv#${issue_number}."
+          )"
+          echo "url=$pull_request" >> "$GITHUB_OUTPUT"
+          {
+            printf '%s\n\n' '### Integration test created'
+            printf '%s\n\n' "$CREATE_TEST_SUMMARY"
+            printf 'Draft pull request: %s\n' "$pull_request"
+          } >> "$GITHUB_STEP_SUMMARY"
         env:
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           GH_TOKEN: ${{ steps.token.outputs.token }}
+          CREATE_TEST_SUMMARY: ${{ fromJSON(steps.create-test.outputs.final-message).summary }}

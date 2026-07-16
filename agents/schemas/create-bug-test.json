@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "outcome": {
+      "type": "string",
+      "enum": ["created", "not_created"]
+    },
+    "summary": { "type": "string", "minLength": 1 }
+  },
+  "required": ["outcome", "summary"]
+}
