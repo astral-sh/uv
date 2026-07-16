@@ -4382,8 +4382,7 @@ fn remove_registry() -> Result<()> {
 fn remove_ignores_extras_of_extraneous_packages() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -4441,8 +4440,7 @@ fn remove_ignores_extras_of_extraneous_packages() -> Result<()> {
 fn remove_subset_preserves_explicit_extras_on_installed_edges() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -4498,8 +4496,7 @@ fn remove_subset_preserves_explicit_extras_on_installed_edges() -> Result<()> {
 fn remove_subset_prunes_only_unshared_branches() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -4557,8 +4554,7 @@ fn remove_subset_prunes_only_unshared_branches() -> Result<()> {
 fn remove_subset_without_previous_lock() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -4607,8 +4603,7 @@ fn remove_subset_without_previous_lock() -> Result<()> {
 fn remove_subset_uses_active_environment_markers() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -4656,8 +4651,7 @@ fn remove_subset_uses_active_environment_markers() -> Result<()> {
 fn remove_subset_preserves_unselected_group_overlap() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -4705,8 +4699,7 @@ fn remove_subset_preserves_unselected_group_overlap() -> Result<()> {
 fn remove_subset_preserves_unselected_extra_overlap() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -4755,8 +4748,7 @@ fn remove_subset_preserves_unselected_extra_overlap() -> Result<()> {
 fn remove_subset_handles_cycles() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -4811,8 +4803,7 @@ fn remove_subset_handles_cycles() -> Result<()> {
 fn remove_subset_ignores_inactive_removed_roots() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -4862,8 +4853,7 @@ fn remove_subset_ignores_inactive_removed_roots() -> Result<()> {
 fn remove_subset_respects_workspace_target_reachability() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -4940,8 +4930,7 @@ fn remove_subset_respects_workspace_target_reachability() -> Result<()> {
 fn remove_subset_unions_conflicting_project_extras() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -4996,8 +4985,7 @@ fn remove_subset_unions_conflicting_project_extras() -> Result<()> {
 fn remove_subset_prunes_on_unreadable_external_metadata() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -5058,8 +5046,7 @@ fn remove_subset_prunes_on_unreadable_external_metadata() -> Result<()> {
 fn remove_subset_preserves_base_dependencies_with_edge_extras() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -5113,8 +5100,7 @@ fn remove_subset_preserves_base_dependencies_with_edge_extras() -> Result<()> {
 fn remove_subset_uses_previous_lock_for_removed_extra() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -5166,8 +5152,7 @@ fn remove_subset_uses_previous_lock_for_removed_extra() -> Result<()> {
 fn remove_subset_prunes_selected_optional_dependency() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -5224,8 +5209,7 @@ fn remove_subset_prunes_selected_optional_dependency() -> Result<()> {
 fn remove_subset_prunes_selected_group_dependency() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -5282,8 +5266,7 @@ fn remove_subset_prunes_selected_group_dependency() -> Result<()> {
 fn remove_subset_prunes_virtual_workspace_group() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -5333,8 +5316,7 @@ fn remove_subset_prunes_virtual_workspace_group() -> Result<()> {
 fn remove_subset_ignores_stale_previous_project_root() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -5390,8 +5372,7 @@ fn remove_subset_ignores_stale_previous_project_root() -> Result<()> {
 fn remove_subset_preserves_root_required_by_external_package() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -5442,8 +5423,7 @@ fn remove_subset_preserves_root_required_by_external_package() -> Result<()> {
 fn remove_subset_prunes_orphan_cycle() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -5490,8 +5470,7 @@ fn remove_subset_prunes_orphan_cycle() -> Result<()> {
 fn remove_subset_preserves_production_overlap() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -5539,8 +5518,7 @@ fn remove_subset_preserves_production_overlap() -> Result<()> {
 fn remove_subset_uses_markers_on_installed_edges() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
@@ -5590,8 +5568,7 @@ fn remove_subset_uses_markers_on_installed_edges() -> Result<()> {
 fn remove_subset_uses_installed_extra_without_previous_lock() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    let filters = context.filters();
 
     context
         .temp_dir
