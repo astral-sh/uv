@@ -1491,20 +1491,29 @@ fn filename_from_location(location: &FileLocation) -> Option<&str> {
     path.split(['?', '#']).next()?.rsplit('/').next()
 }
 
-/// A compact representation of the overwhelmingly common single SHA-256 hash.
+/// A compact representation of a single, canonical hash digest.
 #[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 enum CachedHashDigests {
     Sha256([u8; 32]),
     Other(HashDigests),
+    Md5([u8; 16]),
+    Blake2b([u8; 32]),
+    Sha384(Box<[u8; 48]>),
+    Sha512(Box<[u8; 64]>),
 }
 
 impl Debug for CachedHashDigests {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Sha256(digest) => f.debug_tuple("Sha256").field(&hex::encode(digest)).finish(),
-            Self::Other(hashes) => f.debug_tuple("Other").field(hashes).finish(),
-        }
+        let (name, digest) = match self {
+            Self::Md5(digest) => ("Md5", digest.as_slice()),
+            Self::Sha256(digest) => ("Sha256", digest.as_slice()),
+            Self::Blake2b(digest) => ("Blake2b", digest.as_slice()),
+            Self::Sha384(digest) => ("Sha384", digest.as_slice()),
+            Self::Sha512(digest) => ("Sha512", digest.as_slice()),
+            Self::Other(hashes) => return f.debug_tuple("Other").field(hashes).finish(),
+        };
+        f.debug_tuple(name).field(&hex::encode(digest)).finish()
     }
 }
 
@@ -1513,31 +1522,29 @@ impl From<HashDigests> for CachedHashDigests {
         let [hash] = hashes.as_slice() else {
             return Self::Other(hashes);
         };
-        if hash.algorithm != HashAlgorithm::Sha256 {
+        let cached = match hash.algorithm {
+            HashAlgorithm::Md5 => decode_digest(hash).map(Self::Md5),
+            HashAlgorithm::Sha256 => decode_digest(hash).map(Self::Sha256),
+            HashAlgorithm::Blake2b => decode_digest(hash).map(Self::Blake2b),
+            HashAlgorithm::Sha384 => {
+                decode_digest(hash).map(|digest| Self::Sha384(Box::new(digest)))
+            }
+            HashAlgorithm::Sha512 => {
+                decode_digest(hash).map(|digest| Self::Sha512(Box::new(digest)))
+            }
+        };
+        let Some(cached) = cached else {
             return Self::Other(hashes);
-        }
-        if hash.digest.len() != 64
-            || !hash
-                .digest
-                .as_bytes()
-                .iter()
-                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-        {
-            return Self::Other(hashes);
-        }
-        let mut digest = [0; 32];
-        if hex::decode_to_slice(hash.digest.as_bytes(), &mut digest).is_err() {
-            return Self::Other(hashes);
-        }
-        Self::Sha256(digest)
+        };
+        cached
     }
 }
 
 impl From<CachedHashDigests> for HashDigests {
     fn from(hashes: CachedHashDigests) -> Self {
         match hashes {
-            CachedHashDigests::Sha256(digest) => Self::from(sha256_digest(&digest)),
             CachedHashDigests::Other(hashes) => hashes,
+            hashes => Self::from(&hashes),
         }
     }
 }
@@ -1545,23 +1552,50 @@ impl From<CachedHashDigests> for HashDigests {
 impl From<&CachedHashDigests> for HashDigests {
     fn from(hashes: &CachedHashDigests) -> Self {
         match hashes {
-            CachedHashDigests::Sha256(digest) => Self::from(sha256_digest(digest)),
+            CachedHashDigests::Md5(digest) => Self::from(hash_digest(HashAlgorithm::Md5, digest)),
+            CachedHashDigests::Sha256(digest) => {
+                Self::from(hash_digest(HashAlgorithm::Sha256, digest))
+            }
+            CachedHashDigests::Blake2b(digest) => {
+                Self::from(hash_digest(HashAlgorithm::Blake2b, digest))
+            }
+            CachedHashDigests::Sha384(digest) => {
+                Self::from(hash_digest(HashAlgorithm::Sha384, digest.as_slice()))
+            }
+            CachedHashDigests::Sha512(digest) => {
+                Self::from(hash_digest(HashAlgorithm::Sha512, digest.as_slice()))
+            }
             CachedHashDigests::Other(hashes) => hashes.clone(),
         }
     }
 }
 
-fn sha256_digest(digest: &[u8; 32]) -> HashDigest {
-    let mut encoded = [0; 64];
-    let digest = if hex::encode_to_slice(digest, &mut encoded).is_ok() {
-        SmallString::from(String::from_utf8_lossy(&encoded))
+fn decode_digest<const N: usize>(hash: &HashDigest) -> Option<[u8; N]> {
+    if hash.digest.len() != N * 2
+        || !hash
+            .digest
+            .as_bytes()
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return None;
+    }
+    let mut digest = [0; N];
+    hex::decode_to_slice(hash.digest.as_bytes(), &mut digest).ok()?;
+    Some(digest)
+}
+
+fn hash_digest(algorithm: HashAlgorithm, digest: &[u8]) -> HashDigest {
+    let mut encoded = [0; 128];
+    let length = digest.len() * 2;
+    let digest = if let Some(encoded) = encoded.get_mut(..length)
+        && hex::encode_to_slice(digest, &mut *encoded).is_ok()
+    {
+        SmallString::from(String::from_utf8_lossy(encoded))
     } else {
         SmallString::from(hex::encode(digest))
     };
-    HashDigest {
-        algorithm: HashAlgorithm::Sha256,
-        digest,
-    }
+    HashDigest { algorithm, digest }
 }
 
 /// The list of projects available in a Simple API index.
@@ -1678,10 +1712,10 @@ impl SimpleDetailMetadata {
         for files in version_map.values_mut() {
             files
                 .wheels
-                .sort_unstable_by(|left, right| left.filename.cmp(&right.filename));
+                .sort_unstable_by(|left, right| left.filename().cmp(right.filename()));
             files
                 .source_dists
-                .sort_unstable_by(|left, right| left.filename.cmp(&right.filename));
+                .sort_unstable_by(|left, right| left.filename().cmp(right.filename()));
         }
 
         Self {
@@ -2332,17 +2366,71 @@ mod tests {
         };
         assert_eq!(File::from(file), expected);
 
-        for digest in [
-            "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
-            "not-a-valid-sha256",
+        for (algorithm, bytes) in [
+            (HashAlgorithm::Md5, 16),
+            (HashAlgorithm::Sha256, 32),
+            (HashAlgorithm::Blake2b, 32),
+            (HashAlgorithm::Sha384, 48),
+            (HashAlgorithm::Sha512, 64),
         ] {
             let file = File {
                 dist_info_metadata: false,
                 filename: SmallString::from("example-1.0.0.tar.gz"),
                 hashes: HashDigests::from(HashDigest {
-                    algorithm: HashAlgorithm::Sha256,
-                    digest: SmallString::from(digest),
+                    algorithm,
+                    digest: SmallString::from("01".repeat(bytes)),
                 }),
+                requires_python: None,
+                size: None,
+                upload_time_utc_ms: None,
+                url: FileLocation::new(
+                    SmallString::from("https://files.pythonhosted.org/example-1.0.0.tar.gz"),
+                    &base,
+                ),
+                yanked: None,
+                zstd: None,
+            };
+            let expected = file.clone();
+            let cached = super::CachedFile::from(file);
+            assert!(matches!(
+                (&cached.hashes, algorithm),
+                (super::CachedHashDigests::Md5(_), HashAlgorithm::Md5)
+                    | (super::CachedHashDigests::Sha256(_), HashAlgorithm::Sha256)
+                    | (super::CachedHashDigests::Blake2b(_), HashAlgorithm::Blake2b)
+                    | (super::CachedHashDigests::Sha384(_), HashAlgorithm::Sha384)
+                    | (super::CachedHashDigests::Sha512(_), HashAlgorithm::Sha512)
+            ));
+            assert_eq!(cached.hashes(), expected.hashes);
+
+            let files = super::VersionFiles {
+                wheels: Vec::new(),
+                source_dists: vec![cached],
+            };
+            let archive = super::OwnedArchive::from_unarchived(&files)?;
+            let mut files = super::OwnedArchive::deserialize(&archive);
+            let Some(file) = files.source_dists.pop() else {
+                return Err("missing cached source distribution".into());
+            };
+            assert_eq!(File::from(file), expected);
+        }
+
+        for (algorithm, digest) in [
+            (
+                HashAlgorithm::Sha256,
+                SmallString::from(
+                    "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
+                ),
+            ),
+            (
+                HashAlgorithm::Sha256,
+                SmallString::from("not-a-valid-sha256"),
+            ),
+            (HashAlgorithm::Blake2b, SmallString::from("01".repeat(64))),
+        ] {
+            let file = File {
+                dist_info_metadata: false,
+                filename: SmallString::from("example-1.0.0.tar.gz"),
+                hashes: HashDigests::from(HashDigest { algorithm, digest }),
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
@@ -2359,6 +2447,21 @@ mod tests {
             assert!(matches!(cached.hashes, super::CachedHashDigests::Other(_)));
             assert_eq!(File::from(cached), expected);
         }
+
+        let hashes = HashDigests::from(vec![
+            HashDigest {
+                algorithm: HashAlgorithm::Sha256,
+                digest: SmallString::from("01".repeat(32)),
+            },
+            HashDigest {
+                algorithm: HashAlgorithm::Blake2b,
+                digest: SmallString::from("23".repeat(32)),
+            },
+        ]);
+        let expected = hashes.clone();
+        let cached = super::CachedHashDigests::from(hashes);
+        assert!(matches!(cached, super::CachedHashDigests::Other(_)));
+        assert_eq!(HashDigests::from(cached), expected);
 
         assert_eq!(std::mem::size_of::<rkyv::Archived<super::CachedFile>>(), 96);
         assert_eq!(
