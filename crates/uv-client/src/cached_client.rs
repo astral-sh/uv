@@ -236,7 +236,7 @@ impl CachedClient {
     /// allowed to make subsequent requests, e.g. through the uncached client.
     #[instrument(skip_all)]
     async fn get_cacheable<
-        Payload: Cacheable,
+        Payload: Cacheable + 'static,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     >(
@@ -264,7 +264,13 @@ impl CachedClient {
             }
         };
         match cached_response {
-            CachedResponse::FreshCache(cached) => match Payload::from_aligned_bytes(cached.data) {
+            CachedResponse::FreshCache(cached) => match self
+                .0
+                .cache_read_runtime()
+                .spawn_blocking(move || Payload::from_aligned_bytes(cached.data))
+                .await
+                .expect("cache payload decoding task panicked")
+            {
                 Ok(payload) => Ok(payload),
                 Err(err) => {
                     warn!(
@@ -289,7 +295,13 @@ impl CachedClient {
                     write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
                         .await
                         .map_err(ErrorKind::CacheWrite)?;
-                    match Payload::from_aligned_bytes(cached.data) {
+                    match self
+                        .0
+                        .cache_read_runtime()
+                        .spawn_blocking(move || Payload::from_aligned_bytes(cached.data))
+                        .await
+                        .expect("cache payload decoding task panicked")
+                    {
                         Ok(payload) => Ok(payload),
                         Err(err) => {
                             warn!(
@@ -653,7 +665,7 @@ impl CachedClient {
     /// See: <https://github.com/TrueLayer/reqwest-middleware/blob/8a494c165734e24c62823714843e1c9347027e8a/reqwest-retry/src/middleware.rs#L137>
     #[instrument(skip_all)]
     pub(crate) async fn get_cacheable_with_retry<
-        Payload: Cacheable,
+        Payload: Cacheable + 'static,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     >(
