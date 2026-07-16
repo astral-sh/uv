@@ -847,7 +847,7 @@ pub(crate) async fn do_sync<'a>(
 
         return Ok(installation_plan.finish_noop(
             &resolution,
-            modifications,
+            &modifications,
             bytecode_compilation,
             logger.as_ref(),
             dry_run,
