@@ -135,6 +135,7 @@ jobs:
           repository: astral-sh/uv-dev
           permissions: |
             contents: write
+            workflows: write
 
       - name: Push rebased pull request
         env:
