@@ -511,6 +511,7 @@ fn installer_download_github_token<'a>(
 /// When [`UV_ASTRAL_MIRROR_URL`](EnvVars::UV_ASTRAL_MIRROR_URL) is set, the installer is also
 /// given `UV_DOWNLOAD_URL` pointing at the mirror's uv release directory so the installer itself
 /// fetches the uv archive from the mirror.
+#[expect(clippy::result_large_err)]
 async fn execute_official_installer(
     installer_path: &Path,
     install_prefix: &Path,
