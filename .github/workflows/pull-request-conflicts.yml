@@ -33,7 +33,38 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: ./scripts/find-conflicted-pull-requests.sh
+        run: |
+          pull_requests=$(./scripts/find-conflicted-pull-requests.sh)
+          conflicted=$(jq 'length' <<< "$pull_requests")
+          rebasable=$(jq '[.[] | select(.is_cross_repository | not)] | length' <<< "$pull_requests")
+          cross_repository=$(( conflicted - rebasable ))
+
+          if (( rebasable > 256 )); then
+            echo "Found $rebasable rebasable pull requests, which exceeds the GitHub Actions matrix limit of 256." >&2
+            exit 1
+          fi
+
+          matrix=$(jq --compact-output '{include: [.[] | select(.is_cross_repository | not) | {number, base_ref, head_ref, head_sha}]}' <<< "$pull_requests")
+          {
+            echo "matrix=$matrix"
+            echo "rebasable=$rebasable"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Conflicted pull requests"
+            echo
+            echo "Found $conflicted conflicted pull requests."
+
+            if (( cross_repository > 0 )); then
+              echo
+              echo "Skipping $cross_repository cross-repository pull requests that cannot be updated by the uv-dev app token."
+            fi
+
+            if (( conflicted > 0 )); then
+              echo
+              jq --raw-output '.[] | "- \(.url)"' <<< "$pull_requests"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   rebase:
     name: Rebase pull request #${{ matrix.number }}
@@ -73,37 +104,20 @@ jobs:
           fi
 
           git checkout --detach "$HEAD_SHA"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "astral-automations-bot[bot]"
+          git config user.email "305554984+astral-automations-bot[bot]@users.noreply.github.com"
           git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}" > /dev/null
 
-      - name: Start rebase
-        id: start-rebase
-        env:
-          BASE_REF: ${{ matrix.base_ref }}
-        run: |
-          if git rebase "refs/remotes/origin/$BASE_REF"; then
-            echo "conflicts=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
-            echo "Rebase failed without producing any conflicted files." >&2
-            exit 1
-          fi
-
-          echo "conflicts=true" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve rebase conflicts
-        if: steps.start-rebase.outputs.conflicts == 'true'
+      - name: Rebase pull request
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
         env:
+          BASE_REF: ${{ matrix.base_ref }}
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: gpt-5.6-sol
           codex-home: "${{ runner.temp }}/codex-home"
-          permission-profile: "rebase-pull-request"
+          permission-profile: "pull-request-rebase"
           safety-strategy: drop-sudo
           allow-bot-users: "astral-automations-bot[bot]"
           prompt-file: "${{ runner.temp }}/rebase-pull-request.md"
@@ -133,17 +147,20 @@ jobs:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
           repository: astral-sh/uv-dev
+          # `workflows: write` is required when a rebased pull request modifies workflow files.
           permissions: |
             contents: write
             workflows: write
 
       - name: Push rebased pull request
         env:
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_REF: ${{ matrix.head_ref }}
           HEAD_SHA: ${{ matrix.head_sha }}
         run: |
-          GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -c core.hooksPath=/dev/null push \
+          git -c core.hooksPath=/dev/null push \
             --force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA" \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             HEAD:"refs/heads/$HEAD_REF"
