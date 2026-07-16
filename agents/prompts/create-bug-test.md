@@ -23,4 +23,12 @@ setup, network, or snapshot-formatting error. Never build with the release profi
 changed Rust files with `cargo fmt --all`. Do not implement a fix or weaken the test to make it
 pass.
 
-Return a concise summary of the test added and the observed failure.
+It will not always be feasible or worthwhile to create an integration test. If the behavior depends
+on unavailable services, credentials, hardware, platform details, timing, or other state that cannot
+be represented faithfully with the existing test infrastructure, or if the test would add little
+meaningful coverage relative to its complexity and maintenance cost, leave the checkout unchanged
+and explain the limitation. Do not add a misleading, flaky, weakened, or low-value test merely to
+produce a change.
+
+Return a concise summary of the test added and the observed failure, or why a suitable integration
+test could not be created.

@@ -132,6 +132,7 @@ jobs:
           REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
 
       - name: "Create integration test"
+        id: create-test
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -147,6 +148,7 @@ jobs:
           prompt-file: "agents/prompts/create-bug-test.md"
 
       - name: "Commit integration test"
+        id: commit-test
         run: |
           git add -- crates/uv/tests/it crates/uv-client/tests/it
 
@@ -157,8 +159,13 @@ jobs:
           fi
 
           if git diff --cached --quiet; then
-            echo "Codex did not create an integration test."
-            exit 1
+            echo "Codex did not create a suitable integration test."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            {
+              printf '%s\n\n' '### Integration test not created'
+              printf '%s\n' "$CREATE_TEST_RESULT"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
 
           git diff --cached --check
@@ -171,8 +178,12 @@ jobs:
 
           git_dir="$(git rev-parse --absolute-git-dir)"
           mv "$git_dir/config" "$RUNNER_TEMP/untrusted-git-config"
+          echo "created=true" >> "$GITHUB_OUTPUT"
+        env:
+          CREATE_TEST_RESULT: ${{ steps.create-test.outputs.final-message }}
 
       - name: "Get uv-dev token"
+        if: steps.commit-test.outputs.created == 'true'
         id: token
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
         with:
@@ -184,6 +195,7 @@ jobs:
             pull_requests: write
 
       - name: "Open draft pull request"
+        if: steps.commit-test.outputs.created == 'true'
         run: |
           issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
           branch="zb/reproduce-bug/${issue_number}"
