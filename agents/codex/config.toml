@@ -45,6 +45,3 @@ extends = ":workspace"
 
 [permissions.pull-request-rebase.filesystem.":workspace_roots"]
 ".git" = "write"
-".git/config" = "read"
-".git/config.worktree" = "read"
-".git/hooks" = "read"
