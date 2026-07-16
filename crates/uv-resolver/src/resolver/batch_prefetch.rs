@@ -7,7 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use crate::candidate_selector::CandidateSelector;
+use crate::candidate_selector::{CandidateBatchMode, CandidateSelector};
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
 use crate::resolver::Request;
 use crate::{
@@ -17,22 +17,6 @@ use uv_distribution_types::{CompatibleDist, Identifier, IndexCapabilities, Index
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
-
-enum BatchPrefetchStrategy {
-    /// Go through the next versions assuming the existing selection and its constraints
-    /// remain.
-    Compatible {
-        compatible: Range<Version>,
-        previous: Version,
-    },
-    /// We encounter cases (botocore) where the above doesn't work: Say we previously selected
-    /// a==x.y.z, which depends on b==x.y.z. a==x.y.z is incompatible, but we don't know that
-    /// yet. We just selected b==x.y.z and want to prefetch, since for all versions of a we try,
-    /// we have to wait for the matching version of b. The exiting range gives us only one version
-    /// of b, so the compatible strategy doesn't prefetch any version. Instead, we try the next
-    /// heuristic where the next version of b will be x.y.(z-1) and so forth.
-    InOrder { previous: Version },
-}
 
 /// Prefetch a large number of versions if we already unsuccessfully tried many versions.
 ///
@@ -120,11 +104,6 @@ impl BatchPrefetcher {
                 .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
         };
 
-        let phase = BatchPrefetchStrategy::Compatible {
-            compatible: current_range.clone(),
-            previous: version.clone(),
-        };
-
         self.last_prefetch.insert(name.clone(), num_tried);
 
         self.prefetch_runner.send_prefetch(
@@ -132,7 +111,8 @@ impl BatchPrefetcher {
             unchangeable_constraints,
             total_prefetch,
             &versions_response,
-            phase,
+            current_range,
+            version,
             python_requirement,
             selector,
             env,
@@ -212,7 +192,8 @@ impl BatchPrefetcherRunner {
         unchangeable_constraints: Option<&Term<Range<Version>>>,
         total_prefetch: usize,
         versions_response: &Arc<VersionsResponse>,
-        mut phase: BatchPrefetchStrategy,
+        compatible: &Range<Version>,
+        previous: &Version,
         python_requirement: &PythonRequirement,
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
@@ -221,62 +202,47 @@ impl BatchPrefetcherRunner {
             return Ok(());
         };
 
-        let mut prefetch_count = 0;
-        for _ in 0..total_prefetch {
-            let candidate = match phase {
-                BatchPrefetchStrategy::Compatible {
-                    compatible,
-                    previous,
-                } => {
-                    if let Some(candidate) =
-                        selector.select_no_preference(name, &compatible, version_map, env)
-                    {
-                        let compatible = compatible.intersection(
-                            &Range::singleton(candidate.version().clone()).complement(),
-                        );
-                        phase = BatchPrefetchStrategy::Compatible {
-                            compatible,
-                            previous: candidate.version().clone(),
-                        };
-                        candidate
-                    } else {
-                        // We exhausted the compatible version, switch to ignoring the existing
-                        // constraints on the package and instead going through versions in order.
-                        phase = BatchPrefetchStrategy::InOrder { previous };
-                        continue;
-                    }
-                }
-                BatchPrefetchStrategy::InOrder { previous } => {
-                    let mut range = if selector.use_highest_version(name, env) {
-                        Range::strictly_lower_than(previous)
-                    } else {
-                        Range::strictly_higher_than(previous)
-                    };
-                    // If we have constraints from root, don't go beyond those. Example: We are
-                    // prefetching for foo 1.60 and have a dependency for `foo>=1.50`, so we should
-                    // only prefetch 1.60 to 1.50, knowing 1.49 will always be rejected.
-                    if let Some(unchangeable_constraints) = &unchangeable_constraints {
-                        range = match unchangeable_constraints {
-                            Term::Positive(constraints) => range.intersection(constraints),
-                            Term::Negative(negative_constraints) => {
-                                range.intersection(&negative_constraints.complement())
-                            }
-                        };
-                    }
-                    if let Some(candidate) =
-                        selector.select_no_preference(name, &range, version_map, env)
-                    {
-                        phase = BatchPrefetchStrategy::InOrder {
-                            previous: candidate.version().clone(),
-                        };
-                        candidate
-                    } else {
-                        // Both strategies exhausted their candidates.
-                        break;
-                    }
-                }
-            };
+        // First consider candidates compatible with the current constraints. Selecting the batch
+        // in one traversal avoids repeatedly intersecting singleton complements into `compatible`.
+        let mut candidates = selector.select_no_preference_batch(
+            name,
+            compatible,
+            version_map,
+            env,
+            CandidateBatchMode::Compatible(total_prefetch),
+        );
+        let compatible_count = candidates.len();
 
+        // If the compatible strategy is exhausted, use the remaining slots for versions in order.
+        // One slot is consumed by the transition, matching the original prefetch loop.
+        if compatible_count < total_prefetch {
+            let previous = candidates
+                .last()
+                .map_or(previous, |candidate| candidate.version());
+            let mut range = if selector.use_highest_version(name, env) {
+                Range::strictly_lower_than(previous.clone())
+            } else {
+                Range::strictly_higher_than(previous.clone())
+            };
+            if let Some(unchangeable_constraints) = unchangeable_constraints {
+                range = match unchangeable_constraints {
+                    Term::Positive(constraints) => range.intersection(constraints),
+                    Term::Negative(negative_constraints) => {
+                        range.intersection(&negative_constraints.complement())
+                    }
+                };
+            }
+            candidates.extend(selector.select_no_preference_batch(
+                name,
+                &range,
+                version_map,
+                env,
+                CandidateBatchMode::InOrder(total_prefetch - compatible_count - 1),
+            ));
+        }
+
+        let mut prefetch_count = 0;
+        for (candidate_index, candidate) in candidates.into_iter().enumerate() {
             let Some(dist) = candidate.compatible() else {
                 continue;
             };
@@ -305,9 +271,10 @@ impl BatchPrefetcherRunner {
             // Emit a request to fetch the metadata for this version.
             trace!(
                 "Prefetching {prefetch_count} ({}) {}",
-                match phase {
-                    BatchPrefetchStrategy::Compatible { .. } => "compatible",
-                    BatchPrefetchStrategy::InOrder { .. } => "in order",
+                if candidate_index < compatible_count {
+                    "compatible"
+                } else {
+                    "in order"
                 },
                 dist
             );

@@ -3,6 +3,7 @@ use std::ops::Bound;
 
 use either::Either;
 use itertools::Itertools;
+use rustc_hash::FxHashSet;
 use smallvec::SmallVec;
 use tracing::{debug, trace};
 
@@ -27,6 +28,15 @@ pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PrereleaseStrategy,
     index_strategy: IndexStrategy,
+}
+
+/// Controls how a batch advances through versions across multiple indexes.
+#[derive(Clone, Copy)]
+pub(crate) enum CandidateBatchMode {
+    /// Exhaust the current compatible range before moving to the next index.
+    Compatible(usize),
+    /// Move monotonically away from the previously selected version across indexes.
+    InOrder(usize),
 }
 
 impl CandidateSelector {
@@ -509,6 +519,120 @@ impl CandidateSelector {
         }
     }
 
+    /// Select up to `limit` candidates without checking for version preferences.
+    ///
+    /// This is equivalent to repeatedly calling [`Self::select_no_preference`] and removing the
+    /// selected version from `range`, but visits each version map once.
+    pub(crate) fn select_no_preference_batch<'a>(
+        &'a self,
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        version_maps: &'a [VersionMap],
+        env: &ResolverEnvironment,
+        mode: CandidateBatchMode,
+    ) -> Vec<Candidate<'a>> {
+        let (limit, in_order) = match mode {
+            CandidateBatchMode::Compatible(limit) => (limit, false),
+            CandidateBatchMode::InOrder(limit) => (limit, true),
+        };
+        if limit == 0 {
+            return Vec::new();
+        }
+
+        let highest = self.use_highest_version(package_name, env);
+        let allow_prerelease = match self.prerelease_strategy.allows(package_name, env) {
+            AllowPrerelease::Yes => true,
+            AllowPrerelease::No => false,
+            AllowPrerelease::IfNecessary => !version_maps.iter().any(VersionMap::stable),
+        };
+
+        let mut selected_versions = FxHashSet::default();
+        if self.index_strategy == IndexStrategy::UnsafeBestMatch {
+            let versions =
+                if highest {
+                    Either::Left(
+                        version_maps
+                            .iter()
+                            .enumerate()
+                            .map(|(map_index, version_map)| {
+                                version_map
+                                    .iter_included(range)
+                                    .rev()
+                                    .map(move |item| (map_index, item))
+                            })
+                            .kmerge_by(|(index1, (version1, _)), (index2, (version2, _))| {
+                                match version1.cmp(version2) {
+                                    std::cmp::Ordering::Equal => index1 < index2,
+                                    std::cmp::Ordering::Less => false,
+                                    std::cmp::Ordering::Greater => true,
+                                }
+                            })
+                            .map(|(_, item)| item),
+                    )
+                } else {
+                    Either::Right(
+                        version_maps
+                            .iter()
+                            .enumerate()
+                            .map(|(map_index, version_map)| {
+                                version_map
+                                    .iter_included(range)
+                                    .map(move |item| (map_index, item))
+                            })
+                            .kmerge_by(|(index1, (version1, _)), (index2, (version2, _))| {
+                                match version1.cmp(version2) {
+                                    std::cmp::Ordering::Equal => index1 < index2,
+                                    std::cmp::Ordering::Less => true,
+                                    std::cmp::Ordering::Greater => false,
+                                }
+                            })
+                            .map(|(_, item)| item),
+                    )
+                };
+            return Self::select_candidates(
+                versions,
+                package_name,
+                range,
+                allow_prerelease,
+                highest,
+                limit,
+                &mut selected_versions,
+            );
+        }
+
+        let mut candidates = Vec::with_capacity(limit);
+        let mut current_range = range.clone();
+        for version_map in version_maps {
+            let versions = if highest {
+                Either::Left(version_map.iter_included(&current_range).rev())
+            } else {
+                Either::Right(version_map.iter_included(&current_range))
+            };
+            candidates.extend(Self::select_candidates(
+                versions,
+                package_name,
+                &current_range,
+                allow_prerelease,
+                highest,
+                limit - candidates.len(),
+                &mut selected_versions,
+            ));
+            if candidates.len() == limit {
+                break;
+            }
+            if in_order && let Some(candidate) = candidates.last() {
+                let bound = if highest {
+                    Range::strictly_lower_than(candidate.version().clone())
+                } else {
+                    Range::strictly_higher_than(candidate.version().clone())
+                };
+                current_range = current_range.intersection(&bound);
+            }
+        }
+
+        candidates
+    }
+
     /// By default, we select the latest version, but we also allow using the lowest version instead
     /// to check the lower bounds.
     pub(crate) fn use_highest_version(
@@ -646,6 +770,101 @@ impl CandidateSelector {
         );
         None
     }
+
+    /// Collect the candidates selected from an ordered set of versions.
+    ///
+    /// For versions present in multiple indexes, the first compatible distribution wins. An
+    /// incompatible distribution is retained only if no index has a compatible distribution for
+    /// that version, matching [`Self::select_candidate`].
+    fn select_candidates<'a>(
+        versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        allow_prerelease: bool,
+        highest: bool,
+        limit: usize,
+        selected_versions: &mut FxHashSet<&'a Version>,
+    ) -> Vec<Candidate<'a>> {
+        let mut candidates = Vec::with_capacity(limit);
+        let segments = range.iter();
+        let segments = if highest {
+            Either::Left(segments.rev())
+        } else {
+            Either::Right(segments)
+        };
+        let Some(mut cursor) = RangeCursor::new(segments, highest) else {
+            return candidates;
+        };
+        let mut incompatible: Option<Candidate> = None;
+
+        for (version, maybe_dist) in versions {
+            if candidates.len() == limit {
+                break;
+            }
+            if selected_versions.contains(version) {
+                continue;
+            }
+
+            if incompatible
+                .as_ref()
+                .is_some_and(|candidate| candidate.version != version)
+            {
+                if let Some(candidate) = incompatible.take() {
+                    selected_versions.insert(candidate.version);
+                    candidates.push(candidate);
+                }
+                if candidates.len() == limit {
+                    break;
+                }
+            }
+
+            if version.any_prerelease() && !allow_prerelease {
+                continue;
+            }
+            if !cursor.contains(version) {
+                continue;
+            }
+            let Some(dist) = maybe_dist.prioritized_dist() else {
+                continue;
+            };
+            let candidate =
+                Candidate::new(package_name, version, dist, VersionChoiceKind::Compatible);
+
+            if matches!(
+                candidate.dist(),
+                CandidateDist::Incompatible {
+                    incompatible_dist: IncompatibleDist::Source(IncompatibleSource::ExcludeNewer(
+                        _
+                    )) | IncompatibleDist::Wheel(
+                        IncompatibleWheel::ExcludeNewer(_)
+                    ),
+                    ..
+                }
+            ) {
+                continue;
+            }
+
+            if matches!(candidate.dist(), CandidateDist::Incompatible { .. }) {
+                if incompatible.is_none() {
+                    incompatible = Some(candidate);
+                }
+                continue;
+            }
+
+            selected_versions.insert(version);
+            incompatible = None;
+            candidates.push(candidate);
+        }
+
+        if candidates.len() < limit
+            && let Some(candidate) = incompatible
+        {
+            selected_versions.insert(candidate.version);
+            candidates.push(candidate);
+        }
+
+        candidates
+    }
 }
 
 /// Tracks membership in a range while visiting versions monotonically.
@@ -720,6 +939,18 @@ fn is_after(version: &Version, bound: Bound<&Version>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use uv_distribution_filename::WheelFilename;
+    use uv_distribution_types::{
+        File, FileLocation, HashComparison, IndexUrl, RegistryBuiltWheel, WheelCompatibility,
+    };
+    use uv_platform_tags::IncompatibleTag;
+    use uv_pypi_types::HashDigests;
+    use uv_small_str::SmallString;
+
+    use crate::FlatDistributions;
+
     use super::*;
 
     fn version(value: &str) -> Version {
@@ -759,6 +990,203 @@ mod tests {
     #[test]
     fn range_cursor_descending() {
         assert_range_cursor(true, &["6", "5", "4", "3", "2.5", "2", "1"]);
+    }
+
+    #[derive(Clone, Copy)]
+    enum TestCompatibility {
+        Compatible,
+        Incompatible,
+        Excluded,
+    }
+
+    fn version_map(index: usize, entries: &[(&str, TestCompatibility)]) -> VersionMap {
+        let index_url = format!("https://index{index}.example/simple")
+            .parse::<IndexUrl>()
+            .expect("valid test index URL");
+        let base = SmallString::from(format!("https://index{index}.example/files/"));
+        let distributions = entries
+            .iter()
+            .map(|(value, compatibility)| {
+                let version = version(value);
+                let filename = format!("example-{version}-py3-none-any.whl")
+                    .parse::<WheelFilename>()
+                    .expect("valid test wheel filename");
+                let file = File {
+                    dist_info_metadata: true,
+                    filename: SmallString::from(filename.to_string()),
+                    hashes: HashDigests::empty(),
+                    requires_python: None,
+                    size: None,
+                    upload_time_utc_ms: None,
+                    url: FileLocation::new(SmallString::from(filename.to_string()), &base),
+                    yanked: None,
+                    zstd: None,
+                };
+                let wheel = RegistryBuiltWheel {
+                    filename,
+                    file: Box::new(file),
+                    index: index_url.clone(),
+                };
+                let compatibility = match compatibility {
+                    TestCompatibility::Compatible => {
+                        WheelCompatibility::Compatible(HashComparison::Matched, None, None)
+                    }
+                    TestCompatibility::Incompatible => WheelCompatibility::Incompatible(
+                        IncompatibleWheel::Tag(IncompatibleTag::Platform),
+                    ),
+                    TestCompatibility::Excluded => {
+                        WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(Some(1)))
+                    }
+                };
+                (
+                    version,
+                    PrioritizedDist::from_built(wheel, vec![], compatibility),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        VersionMap::from(FlatDistributions::from(distributions))
+    }
+
+    fn candidate_signature(candidate: &Candidate<'_>) -> (String, bool, String) {
+        let index = candidate
+            .prioritized()
+            .and_then(PrioritizedDist::best_wheel)
+            .map(|(wheel, _)| wheel.index.to_string())
+            .expect("test candidates have wheels");
+        (
+            candidate.version().to_string(),
+            candidate.compatible().is_some(),
+            index,
+        )
+    }
+
+    fn repeated_candidates(
+        selector: &CandidateSelector,
+        package_name: &PackageName,
+        range: &Range<Version>,
+        version_maps: &[VersionMap],
+        env: &ResolverEnvironment,
+        limit: usize,
+        in_order: bool,
+    ) -> Vec<(String, bool, String)> {
+        let mut range = range.clone();
+        let mut candidates = Vec::with_capacity(limit);
+        for _ in 0..limit {
+            let Some(candidate) =
+                selector.select_no_preference(package_name, &range, version_maps, env)
+            else {
+                break;
+            };
+            let selected = Range::singleton(candidate.version().clone());
+            range = if in_order {
+                let bound = if selector.use_highest_version(package_name, env) {
+                    Range::strictly_lower_than(candidate.version().clone())
+                } else {
+                    Range::strictly_higher_than(candidate.version().clone())
+                };
+                range.intersection(&bound)
+            } else {
+                range.intersection(&selected.complement())
+            };
+            candidates.push(candidate_signature(&candidate));
+        }
+        candidates
+    }
+
+    #[test]
+    fn batched_selector_matches_repeated_selection() {
+        use TestCompatibility::{Compatible, Excluded, Incompatible};
+
+        let version_maps = vec![
+            version_map(
+                0,
+                &[
+                    ("1", Compatible),
+                    ("2", Compatible),
+                    ("3", Incompatible),
+                    ("3.5a1", Compatible),
+                    ("4", Compatible),
+                    ("5", Compatible),
+                    ("6", Incompatible),
+                    ("7a1", Compatible),
+                    ("8", Excluded),
+                    ("9", Compatible),
+                ],
+            ),
+            version_map(
+                1,
+                &[
+                    ("1", Incompatible),
+                    ("3", Compatible),
+                    ("4", Incompatible),
+                    ("6", Compatible),
+                    ("7a1", Incompatible),
+                    ("8", Compatible),
+                    ("10", Compatible),
+                ],
+            ),
+        ];
+        let package_name = "example"
+            .parse::<PackageName>()
+            .expect("valid test package name");
+        let env = ResolverEnvironment::universal(vec![]);
+        let range = [
+            (Bound::Unbounded, Bound::Excluded(version("2"))),
+            (Bound::Included(version("3")), Bound::Included(version("4"))),
+            (Bound::Excluded(version("5")), Bound::Unbounded),
+        ]
+        .into_iter()
+        .collect::<Range<_>>();
+
+        for highest in [false, true] {
+            for index_strategy in [
+                IndexStrategy::FirstIndex,
+                IndexStrategy::UnsafeFirstMatch,
+                IndexStrategy::UnsafeBestMatch,
+            ] {
+                for prerelease_strategy in [
+                    PrereleaseStrategy::Disallow,
+                    PrereleaseStrategy::Allow,
+                    PrereleaseStrategy::IfNecessary,
+                ] {
+                    let selector = CandidateSelector {
+                        resolution_strategy: if highest {
+                            ResolutionStrategy::Highest
+                        } else {
+                            ResolutionStrategy::Lowest
+                        },
+                        prerelease_strategy,
+                        index_strategy,
+                    };
+                    for (in_order, mode) in [
+                        (false, CandidateBatchMode::Compatible(6)),
+                        (true, CandidateBatchMode::InOrder(6)),
+                    ] {
+                        let expected = repeated_candidates(
+                            &selector,
+                            &package_name,
+                            &range,
+                            &version_maps,
+                            &env,
+                            6,
+                            in_order,
+                        );
+                        let actual = selector
+                            .select_no_preference_batch(
+                                &package_name,
+                                &range,
+                                &version_maps,
+                                &env,
+                                mode,
+                            )
+                            .iter()
+                            .map(candidate_signature)
+                            .collect::<Vec<_>>();
+                        assert_eq!(actual, expected);
+                    }
+                }
+            }
+        }
     }
 }
 
