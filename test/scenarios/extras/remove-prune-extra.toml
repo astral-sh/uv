@@ -9,8 +9,8 @@ satisfiable = true
 
 [expected.packages]
 
-[resolver_options]
-test = "none"
+[testgen]
+disable = true
 
 [packages.candidate.versions."1.0.0"]
 
