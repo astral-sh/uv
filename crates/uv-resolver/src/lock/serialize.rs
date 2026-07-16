@@ -38,13 +38,13 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
     if lock.revision > 0 {
         writer.key_value("revision", lock.revision)?;
     }
-    writer.key_value_string("requires-python", &lock.requires_python.to_string())?;
+    writer.key_value("requires-python", lock.requires_python.to_string())?;
 
     if !lock.fork_markers.is_empty() {
         let markers = simplified_universal_markers(&lock.fork_markers, &lock.requires_python);
         if !markers.is_empty() {
-            writer.multiline_array("resolution-markers", markers, |writer, marker| {
-                writer.string(&marker)
+            writer.key_multiline_array("resolution-markers", markers, |writer, marker| {
+                writer.value(&marker)
             })?;
         }
     }
@@ -61,8 +61,8 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             .copied()
             .map(|marker| SimplifiedMarkerTree::new(&lock.requires_python, marker))
             .filter_map(SimplifiedMarkerTree::try_to_string);
-        writer.multiline_array("supported-markers", markers, |writer, marker| {
-            writer.string(&marker)
+        writer.key_multiline_array("supported-markers", markers, |writer, marker| {
+            writer.value(&marker)
         })?;
     }
 
@@ -73,8 +73,8 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             .copied()
             .map(|marker| SimplifiedMarkerTree::new(&lock.requires_python, marker))
             .filter_map(SimplifiedMarkerTree::try_to_string);
-        writer.multiline_array("required-markers", markers, |writer, marker| {
-            writer.string(&marker)
+        writer.key_multiline_array("required-markers", markers, |writer, marker| {
+            writer.value(&marker)
         })?;
     }
 
@@ -90,14 +90,14 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
                 writer.raw("    ");
                 let mut first = true;
                 writer.start_inline_table();
-                writer.inline_string(&mut first, "package", item.package().as_ref())?;
+                writer.inline_value(&mut first, "package", item.package().as_ref())?;
                 match item.kind() {
                     ConflictKind::Project => {}
                     ConflictKind::Extra(extra) => {
-                        writer.inline_string(&mut first, "extra", extra.as_ref())?;
+                        writer.inline_value(&mut first, "extra", extra.as_ref())?;
                     }
                     ConflictKind::Group(group) => {
-                        writer.inline_string(&mut first, "group", group.as_ref())?;
+                        writer.inline_value(&mut first, "group", group.as_ref())?;
                     }
                 }
                 writer.finish_inline_table(first);
@@ -145,24 +145,24 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
 
     writer.table(&["options"])?;
     if options.resolution_mode != ResolutionMode::default() {
-        writer.key_value_string("resolution-mode", &options.resolution_mode.to_string())?;
+        writer.key_value("resolution-mode", options.resolution_mode.to_string())?;
     }
     if options.prerelease_mode != PrereleaseMode::default() {
-        writer.key_value_string("prerelease-mode", &options.prerelease_mode.to_string())?;
+        writer.key_value("prerelease-mode", options.prerelease_mode.to_string())?;
     }
     if options.fork_strategy != ForkStrategy::default() {
-        writer.key_value_string("fork-strategy", &options.fork_strategy.to_string())?;
+        writer.key_value("fork-strategy", options.fork_strategy.to_string())?;
     }
 
     let exclude_newer = &options.exclude_newer;
     if let Some(global) = &exclude_newer.global {
         if let Some(span) = global.span() {
             writer.key_start("exclude-newer")?;
-            writer.string(ExcludeNewerValue::PLACEHOLDER)?;
+            writer.value(ExcludeNewerValue::PLACEHOLDER)?;
             writer.raw(" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.\n");
-            writer.key_value_string("exclude-newer-span", &span.to_string())?;
+            writer.key_value("exclude-newer-span", span.to_string())?;
         } else {
-            writer.key_value_string("exclude-newer", &global.to_string())?;
+            writer.key_value("exclude-newer", global.to_string())?;
         }
     }
 
@@ -175,16 +175,16 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
                         writer.key_start(name.as_ref())?;
                         let mut first = true;
                         writer.start_inline_table();
-                        writer.inline_string(
+                        writer.inline_value(
                             &mut first,
                             "timestamp",
                             ExcludeNewerValue::PLACEHOLDER,
                         )?;
-                        writer.inline_string(&mut first, "span", &span.to_string())?;
+                        writer.inline_value(&mut first, "span", span.to_string())?;
                         writer.finish_inline_table(first);
                         writer.raw("\n");
                     } else {
-                        writer.key_value_string(name.as_ref(), &value.to_string())?;
+                        writer.key_value(name.as_ref(), value.to_string())?;
                     }
                 }
                 ExcludeNewerOverride::Disabled => {
@@ -216,15 +216,15 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
 
     writer.table(&["manifest"])?;
     if !manifest.members.is_empty() {
-        writer.multiline_array("members", &manifest.members, |writer, member| {
-            writer.string(member.as_ref())
+        writer.key_multiline_array("members", &manifest.members, |writer, member| {
+            writer.value(member.as_ref())
         })?;
     }
-    write_serialized_array(writer, "requirements", &manifest.requirements)?;
-    write_serialized_array(writer, "constraints", &manifest.constraints)?;
-    write_serialized_array(writer, "overrides", &manifest.overrides)?;
-    write_serialized_array(writer, "excludes", &manifest.excludes)?;
-    write_serialized_array(writer, "build-constraints", &manifest.build_constraints)?;
+    write_serialized_non_empty_array(writer, "requirements", &manifest.requirements)?;
+    write_serialized_non_empty_array(writer, "constraints", &manifest.constraints)?;
+    write_serialized_non_empty_array(writer, "overrides", &manifest.overrides)?;
+    write_serialized_non_empty_array(writer, "excludes", &manifest.excludes)?;
+    write_serialized_non_empty_array(writer, "build-constraints", &manifest.build_constraints)?;
 
     if has_dependency_groups {
         writer.table(&["manifest", "dependency-groups"])?;
@@ -232,26 +232,26 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
             if requirements.is_empty() {
                 continue;
             }
-            write_serialized_array(writer, group.as_ref(), requirements)?;
+            write_serialized_non_empty_array(writer, group.as_ref(), requirements)?;
         }
     }
 
     for metadata in &manifest.dependency_metadata {
         writer.array_of_tables(&["manifest", "dependency-metadata"])?;
-        writer.key_value_string("name", metadata.name.as_ref())?;
+        writer.key_value("name", metadata.name.as_ref())?;
         if let Some(version) = metadata.version.as_ref() {
-            writer.key_value_string("version", &version.to_string())?;
+            writer.key_value("version", version.to_string())?;
         }
         if !metadata.requires_dist.is_empty() {
             let value = serialize_value(&metadata.requires_dist)?;
-            writer.key_value_raw("requires-dist", &value)?;
+            writer.key_value("requires-dist", value)?;
         }
         if let Some(requires_python) = metadata.requires_python.as_ref() {
-            writer.key_value_string("requires-python", &requires_python.to_string())?;
+            writer.key_value("requires-python", requires_python.to_string())?;
         }
         if !metadata.provides_extra.is_empty() {
             let value = serialize_value(&metadata.provides_extra)?;
-            writer.key_value_raw("provides-extras", &value)?;
+            writer.key_value("provides-extras", value)?;
         }
     }
 
@@ -266,19 +266,19 @@ fn write_package(
     dist_count_by_name: &FxHashMap<PackageName, u64>,
 ) -> Result<(), WriteError> {
     writer.array_of_tables(&["package"])?;
-    write_package_id(writer, &package.id, None)?;
+    write_package_id(writer, &package.id, None, PackageIdLocation::Table)?;
 
     if !package.fork_markers.is_empty() {
         let markers = simplified_universal_markers(&package.fork_markers, requires_python);
         if !markers.is_empty() {
-            writer.multiline_array("resolution-markers", markers, |writer, marker| {
-                writer.string(&marker)
+            writer.key_multiline_array("resolution-markers", markers, |writer, marker| {
+                writer.value(&marker)
             })?;
         }
     }
 
     if !package.dependencies.is_empty() {
-        writer.multiline_array(
+        writer.key_multiline_array(
             "dependencies",
             &package.dependencies,
             |writer, dependency| {
@@ -299,7 +299,7 @@ fn write_package(
     }
 
     if !package.wheels.is_empty() {
-        writer.multiline_array("wheels", &package.wheels, write_wheel_inline)?;
+        writer.key_multiline_array("wheels", &package.wheels, write_wheel_inline)?;
     }
 
     if package
@@ -312,7 +312,7 @@ fn write_package(
             if dependencies.is_empty() {
                 continue;
             }
-            writer.multiline_array(extra.as_ref(), dependencies, |writer, dependency| {
+            writer.key_multiline_array(extra.as_ref(), dependencies, |writer, dependency| {
                 write_dependency_inline(
                     writer,
                     dependency,
@@ -333,7 +333,7 @@ fn write_package(
             if dependencies.is_empty() {
                 continue;
             }
-            writer.multiline_array(group.as_ref(), dependencies, |writer, dependency| {
+            writer.key_multiline_array(group.as_ref(), dependencies, |writer, dependency| {
                 write_dependency_inline(
                     writer,
                     dependency,
@@ -350,11 +350,11 @@ fn write_package(
         || !metadata.provides_extra.is_empty();
     if has_metadata {
         writer.table(&["package", "metadata"])?;
-        write_serialized_array(writer, "requires-dist", &metadata.requires_dist)?;
+        write_serialized_non_empty_array(writer, "requires-dist", &metadata.requires_dist)?;
         if !metadata.provides_extra.is_empty() {
             writer.key_start("provides-extras")?;
-            writer.inline_array(&metadata.provides_extra, |writer, extra| {
-                writer.string(extra.as_ref())
+            writer.array(&metadata.provides_extra, |writer, extra| {
+                writer.value(extra.as_ref())
             })?;
             writer.raw("\n");
         }
@@ -362,7 +362,7 @@ fn write_package(
         if !metadata.dependency_groups.is_empty() {
             writer.table(&["package", "metadata", "requires-dev"])?;
             for (group, requirements) in &metadata.dependency_groups {
-                write_serialized_array_including_empty(writer, group.as_ref(), requirements)?;
+                write_serialized_array(writer, group.as_ref(), requirements)?;
             }
         }
     }
@@ -377,18 +377,58 @@ fn write_package_id(
     writer: &mut LockWriter,
     package_id: &PackageId,
     dist_count_by_name: Option<&FxHashMap<PackageName, u64>>,
+    mut location: PackageIdLocation<'_>,
 ) -> Result<(), WriteError> {
     let count = dist_count_by_name.and_then(|map| map.get(&package_id.name).copied());
-    writer.key_value_string("name", package_id.name.as_ref())?;
+    location.value(writer, "name", package_id.name.as_ref())?;
     if count.is_none_or(|count| count > 1) {
         if let Some(version) = &package_id.version {
-            writer.key_value_string("version", &version.to_string())?;
+            location.value(writer, "version", version.to_string())?;
         }
-        writer.key_start("source")?;
-        write_source_inline(writer, &package_id.source)?;
-        writer.raw("\n");
+        location.nested_value(writer, "source", |writer| {
+            write_source_inline(writer, &package_id.source)
+        })?;
     }
     Ok(())
+}
+
+enum PackageIdLocation<'a> {
+    Table,
+    Inline(&'a mut bool),
+}
+
+impl PackageIdLocation<'_> {
+    fn value(
+        &mut self,
+        writer: &mut LockWriter,
+        key: &str,
+        value: impl WriteTomlValue,
+    ) -> Result<(), WriteError> {
+        match self {
+            Self::Table => writer.key_value(key, value),
+            Self::Inline(first) => writer.inline_value(first, key, value),
+        }
+    }
+
+    fn nested_value(
+        &mut self,
+        writer: &mut LockWriter,
+        key: &str,
+        write_value: impl FnOnce(&mut LockWriter) -> Result<(), WriteError>,
+    ) -> Result<(), WriteError> {
+        match self {
+            Self::Table => {
+                writer.key_start(key)?;
+                write_value(writer)?;
+                writer.raw("\n");
+            }
+            Self::Inline(first) => {
+                writer.inline_key_start(first, key)?;
+                write_value(writer)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 fn write_source_inline(writer: &mut LockWriter, source: &Source) -> Result<(), WriteError> {
@@ -397,48 +437,44 @@ fn write_source_inline(writer: &mut LockWriter, source: &Source) -> Result<(), W
     match source {
         Source::Registry(source) => match source {
             RegistrySource::Url(url) => {
-                writer.inline_string(&mut first, "registry", url.as_ref())?;
+                writer.inline_value(&mut first, "registry", url.as_ref())?;
             }
             RegistrySource::Path(path) => {
-                writer.inline_string(
+                writer.inline_value(
                     &mut first,
                     "registry",
-                    &PortablePath::from(path).to_string(),
+                    PortablePath::from(path).to_string(),
                 )?;
             }
         },
         Source::Git(url, _) => {
-            writer.inline_string(&mut first, "git", url.as_ref())?;
+            writer.inline_value(&mut first, "git", url.as_ref())?;
         }
         Source::Direct(url, DirectSource { subdirectory }) => {
-            writer.inline_string(&mut first, "url", url.as_ref())?;
+            writer.inline_value(&mut first, "url", url.as_ref())?;
             if let Some(subdirectory) = subdirectory {
-                writer.inline_string(
+                writer.inline_value(
                     &mut first,
                     "subdirectory",
-                    &PortablePath::from(subdirectory).to_string(),
+                    PortablePath::from(subdirectory).to_string(),
                 )?;
             }
         }
         Source::Path(path) => {
-            writer.inline_string(&mut first, "path", &PortablePath::from(path).to_string())?;
+            writer.inline_value(&mut first, "path", PortablePath::from(path).to_string())?;
         }
         Source::Directory(path) => {
-            writer.inline_string(
+            writer.inline_value(
                 &mut first,
                 "directory",
-                &PortablePath::from(path).to_string(),
+                PortablePath::from(path).to_string(),
             )?;
         }
         Source::Editable(path) => {
-            writer.inline_string(
-                &mut first,
-                "editable",
-                &PortablePath::from(path).to_string(),
-            )?;
+            writer.inline_value(&mut first, "editable", PortablePath::from(path).to_string())?;
         }
         Source::Virtual(path) => {
-            writer.inline_string(&mut first, "virtual", &PortablePath::from(path).to_string())?;
+            writer.inline_value(&mut first, "virtual", PortablePath::from(path).to_string())?;
         }
     }
     writer.finish_inline_table(first);
@@ -454,20 +490,20 @@ fn write_source_dist_inline(
     match source_dist {
         SourceDist::Metadata { .. } => {}
         SourceDist::Url { url, .. } => {
-            writer.inline_string(&mut first, "url", url.as_ref())?;
+            writer.inline_value(&mut first, "url", url.as_ref())?;
         }
         SourceDist::Path { path, .. } => {
-            writer.inline_string(&mut first, "path", &PortablePath::from(path).to_string())?;
+            writer.inline_value(&mut first, "path", PortablePath::from(path).to_string())?;
         }
     }
     if let Some(hash) = source_dist.hash() {
-        writer.inline_string(&mut first, "hash", &hash.to_string())?;
+        writer.inline_value(&mut first, "hash", hash.to_string())?;
     }
     if let Some(size) = source_dist.size() {
         writer.inline_value(&mut first, "size", size)?;
     }
     if let Some(upload_time) = source_dist.upload_time() {
-        writer.inline_string(&mut first, "upload-time", &upload_time.to_string())?;
+        writer.inline_value(&mut first, "upload-time", upload_time.to_string())?;
     }
     writer.finish_inline_table(first);
     Ok(())
@@ -478,30 +514,30 @@ fn write_wheel_inline(writer: &mut LockWriter, wheel: &Wheel) -> Result<(), Writ
     writer.start_inline_table();
     match &wheel.url {
         WheelWireSource::Url { url } => {
-            writer.inline_string(&mut first, "url", url.as_ref())?;
+            writer.inline_value(&mut first, "url", url.as_ref())?;
         }
         WheelWireSource::Path { path } => {
-            writer.inline_string(&mut first, "path", &PortablePath::from(path).to_string())?;
+            writer.inline_value(&mut first, "path", PortablePath::from(path).to_string())?;
         }
         WheelWireSource::Filename { filename } => {
-            writer.inline_string(&mut first, "filename", &filename.to_string())?;
+            writer.inline_value(&mut first, "filename", filename.to_string())?;
         }
     }
     if let Some(hash) = &wheel.hash {
-        writer.inline_string(&mut first, "hash", &hash.to_string())?;
+        writer.inline_value(&mut first, "hash", hash.to_string())?;
     }
     if let Some(size) = wheel.size {
         writer.inline_value(&mut first, "size", size)?;
     }
     if let Some(upload_time) = wheel.upload_time {
-        writer.inline_string(&mut first, "upload-time", &upload_time.to_string())?;
+        writer.inline_value(&mut first, "upload-time", upload_time.to_string())?;
     }
     if let Some(zstd) = &wheel.zstd {
-        writer.inline_key(&mut first, "zstd")?;
+        writer.inline_key_start(&mut first, "zstd")?;
         let mut zstd_first = true;
         writer.start_inline_table();
         if let Some(hash) = &zstd.hash {
-            writer.inline_string(&mut zstd_first, "hash", &hash.to_string())?;
+            writer.inline_value(&mut zstd_first, "hash", hash.to_string())?;
         }
         if let Some(size) = zstd.size {
             writer.inline_value(&mut zstd_first, "size", size)?;
@@ -522,20 +558,17 @@ fn write_dependency_inline(
     let mut first = true;
     writer.start_inline_table();
 
-    let count = dist_count_by_name.get(&dependency.package_id.name).copied();
-    writer.inline_string(&mut first, "name", dependency.package_id.name.as_ref())?;
-    if count.is_none_or(|count| count > 1) {
-        if let Some(version) = &dependency.package_id.version {
-            writer.inline_string(&mut first, "version", &version.to_string())?;
-        }
-        writer.inline_key(&mut first, "source")?;
-        write_source_inline(writer, &dependency.package_id.source)?;
-    }
+    write_package_id(
+        writer,
+        &dependency.package_id,
+        Some(dist_count_by_name),
+        PackageIdLocation::Inline(&mut first),
+    )?;
 
     if !dependency.extra.is_empty() {
-        writer.inline_key(&mut first, "extra")?;
-        writer.inline_array(&dependency.extra, |writer, extra| {
-            writer.string(extra.as_ref())
+        writer.inline_key_start(&mut first, "extra")?;
+        writer.array(&dependency.extra, |writer, extra| {
+            writer.value(extra.as_ref())
         })?;
     }
 
@@ -546,7 +579,7 @@ fn write_dependency_inline(
         .restrict(simplified_environment)
         .try_to_string()
     {
-        writer.inline_string(&mut first, "marker", &marker)?;
+        writer.inline_value(&mut first, "marker", &marker)?;
     }
 
     writer.finish_inline_table(first);
@@ -554,7 +587,7 @@ fn write_dependency_inline(
 }
 
 /// Writes a Serde-backed array, omitting the key when the array is empty.
-fn write_serialized_array<T: Serialize>(
+fn write_serialized_non_empty_array<T: Serialize>(
     writer: &mut LockWriter,
     key: &str,
     values: &BTreeSet<T>,
@@ -562,14 +595,14 @@ fn write_serialized_array<T: Serialize>(
     if values.is_empty() {
         return Ok(());
     }
-    write_serialized_array_including_empty(writer, key, values)
+    write_serialized_array(writer, key, values)
 }
 
 /// Writes a Serde-backed array using the canonical layout for its cardinality.
 ///
 /// Empty and single-element arrays stay on one line, while larger arrays place each element on
-/// its own line. Unlike [`write_serialized_array`], this retains empty dependency groups.
-fn write_serialized_array_including_empty<T: Serialize>(
+/// its own line. Unlike [`write_serialized_non_empty_array`], this retains empty dependency groups.
+fn write_serialized_array<T: Serialize>(
     writer: &mut LockWriter,
     key: &str,
     values: &BTreeSet<T>,
@@ -577,24 +610,31 @@ fn write_serialized_array_including_empty<T: Serialize>(
     writer.key_start(key)?;
     let write_value = |writer: &mut LockWriter, value: &T| {
         let value = serialize_value(value)?;
-        writer.raw_value(&value);
-        Ok(())
+        writer.value(value)
     };
     if values.len() <= 1 {
-        writer.inline_array(values, write_value)?;
+        writer.array(values, write_value)?;
         writer.raw("\n");
     } else {
-        writer.multiline_array_values(values, write_value)?;
+        writer.multiline_array(values, write_value)?;
     }
     Ok(())
 }
 
-/// Converts values without native `toml_writer` support through Serde's TOML value serializer.
-fn serialize_value<T: Serialize + ?Sized>(value: &T) -> Result<Value, WriteError> {
-    Ok(Serialize::serialize(
+/// Adapts values without native `toml_writer` support through Serde's TOML value serializer.
+struct SerializedValue(Value);
+
+impl WriteTomlValue for SerializedValue {
+    fn write_toml_value<W: TomlWrite + ?Sized>(&self, writer: &mut W) -> fmt::Result {
+        writer.write_str(&self.0.to_string())
+    }
+}
+
+fn serialize_value<T: Serialize + ?Sized>(value: &T) -> Result<SerializedValue, WriteError> {
+    Ok(SerializedValue(Serialize::serialize(
         value,
         toml_edit::ser::ValueSerializer::new(),
-    )?)
+    )?))
 }
 
 #[derive(Debug)]
@@ -626,15 +666,11 @@ impl LockWriter {
         self.output.push_str(value);
     }
 
-    fn raw_value(&mut self, value: &Value) {
-        self.output.push_str(&value.to_string());
-    }
-
     fn key(&mut self, key: &str) -> fmt::Result {
         self.output.key(key)
     }
 
-    fn string(&mut self, value: &str) -> Result<(), WriteError> {
+    fn value(&mut self, value: impl WriteTomlValue) -> Result<(), WriteError> {
         self.output.value(value)?;
         Ok(())
     }
@@ -647,21 +683,7 @@ impl LockWriter {
 
     fn key_value(&mut self, key: &str, value: impl WriteTomlValue) -> Result<(), WriteError> {
         self.key_start(key)?;
-        self.output.value(value)?;
-        self.raw("\n");
-        Ok(())
-    }
-
-    fn key_value_string(&mut self, key: &str, value: &str) -> Result<(), WriteError> {
-        self.key_start(key)?;
-        self.string(value)?;
-        self.raw("\n");
-        Ok(())
-    }
-
-    fn key_value_raw(&mut self, key: &str, value: &Value) -> Result<(), WriteError> {
-        self.key_start(key)?;
-        self.raw_value(value);
+        self.value(value)?;
         self.raw("\n");
         Ok(())
     }
@@ -696,7 +718,7 @@ impl LockWriter {
         Ok(())
     }
 
-    fn multiline_array<I, T, F>(
+    fn key_multiline_array<I, T, F>(
         &mut self,
         key: &str,
         values: I,
@@ -707,14 +729,10 @@ impl LockWriter {
         F: FnMut(&mut Self, T) -> Result<(), WriteError>,
     {
         self.key_start(key)?;
-        self.multiline_array_values(values, write_value)
+        self.multiline_array(values, write_value)
     }
 
-    fn multiline_array_values<I, T, F>(
-        &mut self,
-        values: I,
-        mut write_value: F,
-    ) -> Result<(), WriteError>
+    fn multiline_array<I, T, F>(&mut self, values: I, mut write_value: F) -> Result<(), WriteError>
     where
         I: IntoIterator<Item = T>,
         F: FnMut(&mut Self, T) -> Result<(), WriteError>,
@@ -729,7 +747,7 @@ impl LockWriter {
         Ok(())
     }
 
-    fn inline_array<I, T, F>(&mut self, values: I, mut write_value: F) -> Result<(), WriteError>
+    fn array<I, T, F>(&mut self, values: I, mut write_value: F) -> Result<(), WriteError>
     where
         I: IntoIterator<Item = T>,
         F: FnMut(&mut Self, T) -> Result<(), WriteError>,
@@ -757,7 +775,7 @@ impl LockWriter {
     }
 
     /// Writes the separator and key for the next inline-table entry.
-    fn inline_key(&mut self, first: &mut bool, key: &str) -> Result<(), WriteError> {
+    fn inline_key_start(&mut self, first: &mut bool, key: &str) -> Result<(), WriteError> {
         if *first {
             self.raw(" ");
             *first = false;
@@ -773,19 +791,8 @@ impl LockWriter {
         key: &str,
         value: impl WriteTomlValue,
     ) -> Result<(), WriteError> {
-        self.inline_key(first, key)?;
-        self.output.value(value)?;
-        Ok(())
-    }
-
-    fn inline_string(
-        &mut self,
-        first: &mut bool,
-        key: &str,
-        value: &str,
-    ) -> Result<(), WriteError> {
-        self.inline_key(first, key)?;
-        self.string(value)
+        self.inline_key_start(first, key)?;
+        self.value(value)
     }
 }
 
@@ -807,7 +814,7 @@ mod tests {
             "contains\u{7f}delete",
         ] {
             let mut writer = LockWriter::default();
-            writer.string(value).expect("writing to a string succeeds");
+            writer.value(value).expect("writing to a string succeeds");
             assert_eq!(writer.output, Value::from(value).to_string());
         }
     }
