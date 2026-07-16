@@ -13,7 +13,7 @@ use crate::generate_cli_reference::Args as GenerateCliReferenceArgs;
 use crate::generate_env_vars_reference::Args as GenerateEnvVarsReferenceArgs;
 use crate::generate_json_schema::Args as GenerateJsonSchemaArgs;
 use crate::generate_options_reference::Args as GenerateOptionsReferenceArgs;
-use crate::generate_scenarios::Args as GenerateScenarioTestsArgs;
+use crate::generate_scenarios::{Args as GenerateScenarioTestsArgs, RenderScenarioArgs};
 use crate::generate_sysconfig_mappings::Args as GenerateSysconfigMetadataArgs;
 use crate::list_packages::ListPackagesArgs;
 #[cfg(feature = "render")]
@@ -61,6 +61,8 @@ enum Cli {
     GenerateEnvVarsReference(GenerateEnvVarsReferenceArgs),
     /// Generate the Packse scenario integration tests.
     GenerateScenarioTests(GenerateScenarioTestsArgs),
+    /// Render a Packse scenario dependency tree as Markdown.
+    RenderScenario(RenderScenarioArgs),
     /// Generate the sysconfig metadata from derived targets.
     GenerateSysconfigMetadata(GenerateSysconfigMetadataArgs),
     #[cfg(feature = "render")]
@@ -87,6 +89,7 @@ pub async fn run() -> Result<()> {
         Cli::GenerateCliReference(args) => generate_cli_reference::main(&args)?,
         Cli::GenerateEnvVarsReference(args) => generate_env_vars_reference::main(&args)?,
         Cli::GenerateScenarioTests(args) => generate_scenarios::main(&args)?,
+        Cli::RenderScenario(args) => generate_scenarios::render_scenario(&args)?,
         Cli::GenerateSysconfigMetadata(args) => generate_sysconfig_mappings::main(&args).await?,
         #[cfg(feature = "render")]
         Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
@@ -106,5 +109,6 @@ mod tests {
 
         assert!(command.find_subcommand("generate-scenario-tests").is_some());
         assert!(command.find_subcommand("generate-scenarios").is_none());
+        assert!(command.find_subcommand("render-scenario").is_some());
     }
 }
