@@ -452,6 +452,11 @@ inherits = "dev"
 debug = 0
 strip = "debuginfo"
 
+# Profile for fast development builds with aborting panics.
+[profile.no-debug-nightly]
+inherits = "no-debug"
+panic = "abort"
+
 # Profile to build a minimally sized binary for uv-build
 [profile.minimal-size]
 inherits = "release"
