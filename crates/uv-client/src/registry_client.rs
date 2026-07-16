@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,16 +20,17 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name, RegistryBuiltWheel,
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
+    RegistryBuiltWheel, Zstd,
 };
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_pypi_types::ProjectStatus;
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, ProjectStatus, Yanked};
 use uv_pypi_types::{
     PypiSimpleDetail, PypiSimpleIndex, PyxSimpleDetail, PyxSimpleIndex, ResolutionMetadata,
 };
@@ -1381,12 +1382,13 @@ type FlatIndexSlot = Arc<Mutex<Option<FlatIndexEntriesByPackage>>>;
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct VersionFiles {
-    pub wheels: Vec<File>,
-    pub source_dists: Vec<File>,
+    pub wheels: Vec<CachedFile>,
+    pub source_dists: Vec<CachedFile>,
 }
 
 impl VersionFiles {
     fn push(&mut self, filename: &DistFilename, file: File) {
+        let file = CachedFile::from(file);
         match filename {
             DistFilename::WheelFilename(_) => self.wheels.push(file),
             DistFilename::SourceDistFilename(_) => self.source_dists.push(file),
@@ -1398,9 +1400,167 @@ impl VersionFiles {
             .into_iter()
             .chain(self.wheels)
             .filter_map(|file| {
+                let file = File::from(file);
                 let filename = DistFilename::try_from_filename(&file.filename, package_name)?;
                 Some((filename, file))
             })
+    }
+}
+
+/// A compact representation of a registry file in the Simple API cache.
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+pub struct CachedFile {
+    size: u64,
+    pub upload_time_utc_ms: i64,
+    hashes: CachedHashDigests,
+    url: FileLocation,
+    requires_python: Option<Arc<VersionSpecifiers>>,
+    #[rkyv(with = rkyv::with::Niche)]
+    filename: Option<Box<SmallString>>,
+    #[rkyv(with = rkyv::with::Niche)]
+    yanked: Option<Box<Yanked>>,
+    #[rkyv(with = rkyv::with::Niche)]
+    zstd: Option<Box<Zstd>>,
+    pub dist_info_metadata: bool,
+    has_size: bool,
+    pub has_upload_time: bool,
+}
+
+impl CachedFile {
+    /// Return the filename, reconstructing it from the URL when it was elided.
+    pub fn filename(&self) -> &str {
+        self.filename
+            .as_deref()
+            .map(SmallString::as_ref)
+            .or_else(|| filename_from_location(&self.url))
+            .unwrap_or_default()
+    }
+
+    /// Return the hashes associated with this file.
+    pub fn hashes(&self) -> HashDigests {
+        HashDigests::from(&self.hashes)
+    }
+}
+
+impl From<File> for CachedFile {
+    fn from(file: File) -> Self {
+        let filename = filename_from_location(&file.url)
+            .is_none_or(|filename| filename != file.filename.as_ref())
+            .then(|| Box::new(file.filename));
+        let has_size = file.size.is_some();
+        let has_upload_time = file.upload_time_utc_ms.is_some();
+        Self {
+            dist_info_metadata: file.dist_info_metadata,
+            filename,
+            hashes: CachedHashDigests::from(file.hashes),
+            requires_python: file.requires_python,
+            size: file.size.unwrap_or_default(),
+            upload_time_utc_ms: file.upload_time_utc_ms.unwrap_or_default(),
+            has_size,
+            has_upload_time,
+            url: file.url,
+            yanked: file.yanked.filter(|yanked| yanked.is_yanked()),
+            zstd: file.zstd,
+        }
+    }
+}
+
+impl From<CachedFile> for File {
+    fn from(file: CachedFile) -> Self {
+        let filename = SmallString::from(file.filename());
+        Self {
+            dist_info_metadata: file.dist_info_metadata,
+            filename,
+            hashes: HashDigests::from(file.hashes),
+            requires_python: file.requires_python,
+            size: file.has_size.then_some(file.size),
+            upload_time_utc_ms: file.has_upload_time.then_some(file.upload_time_utc_ms),
+            url: file.url,
+            yanked: file.yanked,
+            zstd: file.zstd,
+        }
+    }
+}
+
+fn filename_from_location(location: &FileLocation) -> Option<&str> {
+    let path = match location {
+        FileLocation::RelativeUrl(_, path) => path.as_ref(),
+        FileLocation::AbsoluteUrl(url) => url.as_ref(),
+    };
+    path.split(['?', '#']).next()?.rsplit('/').next()
+}
+
+/// A compact representation of the overwhelmingly common single SHA-256 hash.
+#[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+enum CachedHashDigests {
+    Sha256([u8; 32]),
+    Other(HashDigests),
+}
+
+impl Debug for CachedHashDigests {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Sha256(digest) => f.debug_tuple("Sha256").field(&hex::encode(digest)).finish(),
+            Self::Other(hashes) => f.debug_tuple("Other").field(hashes).finish(),
+        }
+    }
+}
+
+impl From<HashDigests> for CachedHashDigests {
+    fn from(hashes: HashDigests) -> Self {
+        let [hash] = hashes.as_slice() else {
+            return Self::Other(hashes);
+        };
+        if hash.algorithm != HashAlgorithm::Sha256 {
+            return Self::Other(hashes);
+        }
+        if hash.digest.len() != 64
+            || !hash
+                .digest
+                .as_bytes()
+                .iter()
+                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+        {
+            return Self::Other(hashes);
+        }
+        let mut digest = [0; 32];
+        if hex::decode_to_slice(hash.digest.as_bytes(), &mut digest).is_err() {
+            return Self::Other(hashes);
+        }
+        Self::Sha256(digest)
+    }
+}
+
+impl From<CachedHashDigests> for HashDigests {
+    fn from(hashes: CachedHashDigests) -> Self {
+        match hashes {
+            CachedHashDigests::Sha256(digest) => Self::from(sha256_digest(&digest)),
+            CachedHashDigests::Other(hashes) => hashes,
+        }
+    }
+}
+
+impl From<&CachedHashDigests> for HashDigests {
+    fn from(hashes: &CachedHashDigests) -> Self {
+        match hashes {
+            CachedHashDigests::Sha256(digest) => Self::from(sha256_digest(digest)),
+            CachedHashDigests::Other(hashes) => hashes.clone(),
+        }
+    }
+}
+
+fn sha256_digest(digest: &[u8; 32]) -> HashDigest {
+    let mut encoded = [0; 64];
+    let digest = if hex::encode_to_slice(digest, &mut encoded).is_ok() {
+        SmallString::from(String::from_utf8_lossy(&encoded))
+    } else {
+        SmallString::from(hex::encode(digest))
+    };
+    HashDigest {
+        algorithm: HashAlgorithm::Sha256,
+        digest,
     }
 }
 
@@ -1461,7 +1621,8 @@ pub struct SimpleDetailMetadata {
 pub struct SimpleDetailMetadatum {
     pub version: Version,
     pub files: VersionFiles,
-    pub metadata: Option<ResolutionMetadata>,
+    #[rkyv(with = rkyv::with::Niche)]
+    pub metadata: Option<Box<ResolutionMetadata>>,
 }
 
 impl SimpleDetailMetadata {
@@ -1585,17 +1746,16 @@ impl SimpleDetailMetadata {
             versions: version_map
                 .into_iter()
                 .map(|(version, files)| {
-                    let metadata =
-                        core_metadata
-                            .remove(&version)
-                            .map(|metadata| ResolutionMetadata {
-                                name: package_name.clone(),
-                                version: version.clone(),
-                                requires_dist: metadata.requires_dist,
-                                requires_python: metadata.requires_python,
-                                provides_extra: metadata.provides_extra,
-                                dynamic: false,
-                            });
+                    let metadata = core_metadata.remove(&version).map(|metadata| {
+                        Box::new(ResolutionMetadata {
+                            name: package_name.clone(),
+                            version: version.clone(),
+                            requires_dist: metadata.requires_dist,
+                            requires_python: metadata.requires_python,
+                            provides_extra: metadata.provides_extra,
+                            dynamic: false,
+                        })
+                    });
                     SimpleDetailMetadatum {
                         version,
                         files,
@@ -1741,9 +1901,10 @@ mod tests {
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
-        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-        IndexUrl, ToUrlError,
+        File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
+        IndexMetadataRef, IndexUrl, ToUrlError,
     };
+    use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, Yanked};
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -2129,6 +2290,85 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn cached_file_round_trip() -> Result<(), Error> {
+        let base = SmallString::from("https://pypi.org/simple/example/");
+        let file = File {
+            dist_info_metadata: true,
+            filename: SmallString::from("example-1.0.0-py3-none-any.whl"),
+            hashes: HashDigests::from(HashDigest {
+                algorithm: HashAlgorithm::Sha256,
+                digest: SmallString::from(
+                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                ),
+            }),
+            requires_python: None,
+            size: Some(0),
+            upload_time_utc_ms: Some(0),
+            url: FileLocation::new(
+                SmallString::from(
+                    "https://files.pythonhosted.org/example-1.0.0-py3-none-any.whl?download=1",
+                ),
+                &base,
+            ),
+            yanked: Some(Box::new(Yanked::Bool(false))),
+            zstd: None,
+        };
+        let mut expected = file.clone();
+        expected.yanked = None;
+        let cached = super::CachedFile::from(file);
+        assert!(cached.filename.is_none());
+        assert!(matches!(cached.hashes, super::CachedHashDigests::Sha256(_)));
+        assert!(cached.yanked.is_none());
+
+        let files = super::VersionFiles {
+            wheels: vec![cached],
+            source_dists: Vec::new(),
+        };
+        let archive = super::OwnedArchive::from_unarchived(&files)?;
+        let mut files = super::OwnedArchive::deserialize(&archive);
+        let Some(file) = files.wheels.pop() else {
+            return Err("missing cached wheel".into());
+        };
+        assert_eq!(File::from(file), expected);
+
+        for digest in [
+            "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
+            "not-a-valid-sha256",
+        ] {
+            let file = File {
+                dist_info_metadata: false,
+                filename: SmallString::from("example-1.0.0.tar.gz"),
+                hashes: HashDigests::from(HashDigest {
+                    algorithm: HashAlgorithm::Sha256,
+                    digest: SmallString::from(digest),
+                }),
+                requires_python: None,
+                size: None,
+                upload_time_utc_ms: None,
+                url: FileLocation::new(
+                    SmallString::from("https://files.pythonhosted.org/renamed.tar.gz#download"),
+                    &base,
+                ),
+                yanked: Some(Box::new(Yanked::Reason(SmallString::from("broken")))),
+                zstd: None,
+            };
+            let expected = file.clone();
+            let cached = super::CachedFile::from(file);
+            assert!(cached.filename.is_some());
+            assert!(matches!(cached.hashes, super::CachedHashDigests::Other(_)));
+            assert_eq!(File::from(cached), expected);
+        }
+
+        assert_eq!(std::mem::size_of::<rkyv::Archived<super::CachedFile>>(), 96);
+        assert_eq!(
+            std::mem::size_of::<rkyv::Archived<SimpleDetailMetadatum>>(),
+            48
+        );
+
+        Ok(())
+    }
+
     /// Test for project statuses from PyPI's JSON detail response.
     #[test]
     fn project_status_pypi_json() {
@@ -2187,16 +2427,16 @@ mod tests {
                     files: VersionFiles {
                         wheels: [],
                         source_dists: [
-                            File {
-                                dist_info_metadata: false,
-                                filename: "pepy-2.1.1.tar.gz",
-                                hashes: HashDigests(
-                                    [
-                                        HashDigest {
-                                            algorithm: Sha256,
-                                            digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
-                                        },
-                                    ],
+                            CachedFile {
+                                size: 15399,
+                                upload_time_utc_ms: 1668446093935,
+                                hashes: Sha256(
+                                    "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                ),
+                                url: AbsoluteUrl(
+                                    UrlString(
+                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
+                                    ),
                                 ),
                                 requires_python: Some(
                                     VersionSpecifiers(
@@ -2208,23 +2448,12 @@ mod tests {
                                         ],
                                     ),
                                 ),
-                                size: Some(
-                                    15399,
-                                ),
-                                upload_time_utc_ms: Some(
-                                    1668446093935,
-                                ),
-                                url: AbsoluteUrl(
-                                    UrlString(
-                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
-                                    ),
-                                ),
-                                yanked: Some(
-                                    Bool(
-                                        false,
-                                    ),
-                                ),
+                                filename: None,
+                                yanked: None,
                                 zstd: None,
+                                dist_info_metadata: false,
+                                has_size: true,
+                                has_upload_time: true,
                             },
                         ],
                     },
@@ -2270,16 +2499,16 @@ mod tests {
                     files: VersionFiles {
                         wheels: [],
                         source_dists: [
-                            File {
-                                dist_info_metadata: false,
-                                filename: "pepy-2.1.1.tar.gz",
-                                hashes: HashDigests(
-                                    [
-                                        HashDigest {
-                                            algorithm: Sha256,
-                                            digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
-                                        },
-                                    ],
+                            CachedFile {
+                                size: 0,
+                                upload_time_utc_ms: 0,
+                                hashes: Sha256(
+                                    "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                ),
+                                url: AbsoluteUrl(
+                                    UrlString(
+                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
+                                    ),
                                 ),
                                 requires_python: Some(
                                     VersionSpecifiers(
@@ -2291,15 +2520,12 @@ mod tests {
                                         ],
                                     ),
                                 ),
-                                size: None,
-                                upload_time_utc_ms: None,
-                                url: AbsoluteUrl(
-                                    UrlString(
-                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
-                                    ),
-                                ),
+                                filename: None,
                                 yanked: None,
                                 zstd: None,
+                                dist_info_metadata: false,
+                                has_size: false,
+                                has_upload_time: false,
                             },
                         ],
                     },
