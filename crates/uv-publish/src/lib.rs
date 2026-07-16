@@ -2,7 +2,6 @@ mod trusted_publishing;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::Arc;
 use std::{fmt, io};
 
@@ -31,9 +30,7 @@ use uv_client::{
     RegistryClientBuilder, RequestBuilder, RetryParsingError, RetryState,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
-use uv_distribution_filename::{
-    DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
-};
+use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{ProgressReader, Simplified};
@@ -1004,18 +1001,14 @@ pub async fn check_url(
         return Ok(false);
     };
 
-    let archived_file =
-        match filename {
-            DistFilename::SourceDistFilename(source_dist) => metadatum
-                .files
-                .source_dists
-                .iter()
-                .find(|entry| &entry.name == source_dist)
-                .map(|entry| &entry.file),
-            DistFilename::WheelFilename(wheel) => metadatum.files.wheels.iter().find(|file| {
-                WheelFilename::from_str(&file.filename).is_ok_and(|name| &name == wheel)
-            }),
-        };
+    let archived_files = match filename {
+        DistFilename::SourceDistFilename(_) => &metadatum.files.source_dists,
+        DistFilename::WheelFilename(_) => &metadatum.files.wheels,
+    };
+    let archived_file = archived_files.iter().find(|file| {
+        DistFilename::try_from_filename_with_reason(&file.filename, filename.name())
+            .is_ok_and(|candidate| &candidate == filename)
+    });
     let Some(archived_file) = archived_file else {
         return Ok(false);
     };

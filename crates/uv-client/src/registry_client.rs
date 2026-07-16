@@ -18,7 +18,7 @@ use uv_auth::{CredentialsCache, Indexes, PyxTokenStore};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
-use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
+use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
     IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name, RegistryBuiltWheel,
@@ -1382,37 +1382,28 @@ type FlatIndexSlot = Arc<Mutex<Option<FlatIndexEntriesByPackage>>>;
 #[rkyv(derive(Debug))]
 pub struct VersionFiles {
     pub wheels: Vec<File>,
-    pub source_dists: Vec<VersionSourceDist>,
+    pub source_dists: Vec<File>,
 }
 
 impl VersionFiles {
     fn push(&mut self, filename: DistFilename, file: File) {
         match filename {
             DistFilename::WheelFilename(_) => self.wheels.push(file),
-            DistFilename::SourceDistFilename(name) => {
-                self.source_dists.push(VersionSourceDist { name, file });
-            }
+            DistFilename::SourceDistFilename(_) => self.source_dists.push(file),
         }
     }
 
     pub fn all(self, package_name: &PackageName) -> impl Iterator<Item = (DistFilename, File)> {
         self.source_dists
             .into_iter()
-            .map(|VersionSourceDist { name, file }| (DistFilename::SourceDistFilename(name), file))
-            .chain(self.wheels.into_iter().filter_map(|file| {
+            .chain(self.wheels)
+            .filter_map(|file| {
                 let filename =
                     DistFilename::try_from_filename_with_reason(&file.filename, package_name)
                         .ok()?;
                 Some((filename, file))
-            }))
+            })
     }
-}
-
-#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
-pub struct VersionSourceDist {
-    pub name: SourceDistFilename,
-    pub file: File,
 }
 
 /// The list of projects available in a Simple API index.
@@ -1531,7 +1522,7 @@ impl SimpleDetailMetadata {
                 .sort_unstable_by(|left, right| left.filename.cmp(&right.filename));
             files
                 .source_dists
-                .sort_unstable_by(|left, right| left.file.filename.cmp(&right.file.filename));
+                .sort_unstable_by(|left, right| left.filename.cmp(&right.filename));
         }
 
         Self {
@@ -2097,26 +2088,26 @@ mod tests {
     }
 
     #[test]
-    fn wheel_files_round_trip() -> Result<(), Error> {
+    fn distribution_files_round_trip() -> Result<(), Error> {
         let response = r#"
         {
             "files": [
                 {
-                    "filename": "example-1.0.0-py3-none-any.whl",
+                    "filename": "example_1-1.0.0-py3-none-any.whl",
                     "hashes": {},
-                    "url": "https://files.pythonhosted.org/example-1.0.0-py3-none-any.whl"
+                    "url": "https://files.pythonhosted.org/example_1-1.0.0-py3-none-any.whl"
                 },
                 {
-                    "filename": "example-1.0.0.tar.gz",
+                    "filename": "example-1-1.0.0.tar.gz",
                     "hashes": {},
-                    "url": "https://files.pythonhosted.org/example-1.0.0.tar.gz"
+                    "url": "https://files.pythonhosted.org/example-1-1.0.0.tar.gz"
                 }
             ]
         }
         "#;
-        let package_name = PackageName::from_str("example")?;
+        let package_name = PackageName::from_str("example-1")?;
         let data: PypiSimpleDetail = serde_json::from_str(response)?;
-        let base = DisplaySafeUrl::parse("https://pypi.org/simple/example/")?;
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/example-1/")?;
         let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &package_name,
@@ -2134,7 +2125,7 @@ mod tests {
             .collect();
         assert_eq!(
             filenames,
-            ["example-1.0.0.tar.gz", "example-1.0.0-py3-none-any.whl"]
+            ["example_1-1.0.0.tar.gz", "example_1-1.0.0-py3-none-any.whl"]
         );
 
         Ok(())
@@ -2198,53 +2189,44 @@ mod tests {
                     files: VersionFiles {
                         wheels: [],
                         source_dists: [
-                            VersionSourceDist {
-                                name: SourceDistFilename {
-                                    name: PackageName(
-                                        "pepy",
-                                    ),
-                                    version: "2.1.1",
-                                    extension: TarGz,
-                                },
-                                file: File {
-                                    dist_info_metadata: false,
-                                    filename: "pepy-2.1.1.tar.gz",
-                                    hashes: HashDigests(
+                            File {
+                                dist_info_metadata: false,
+                                filename: "pepy-2.1.1.tar.gz",
+                                hashes: HashDigests(
+                                    [
+                                        HashDigest {
+                                            algorithm: Sha256,
+                                            digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                        },
+                                    ],
+                                ),
+                                requires_python: Some(
+                                    VersionSpecifiers(
                                         [
-                                            HashDigest {
-                                                algorithm: Sha256,
-                                                digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                            VersionSpecifier {
+                                                operator: GreaterThanEqual,
+                                                version: "3.7",
                                             },
                                         ],
                                     ),
-                                    requires_python: Some(
-                                        VersionSpecifiers(
-                                            [
-                                                VersionSpecifier {
-                                                    operator: GreaterThanEqual,
-                                                    version: "3.7",
-                                                },
-                                            ],
-                                        ),
+                                ),
+                                size: Some(
+                                    15399,
+                                ),
+                                upload_time_utc_ms: Some(
+                                    1668446093935,
+                                ),
+                                url: AbsoluteUrl(
+                                    UrlString(
+                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
                                     ),
-                                    size: Some(
-                                        15399,
+                                ),
+                                yanked: Some(
+                                    Bool(
+                                        false,
                                     ),
-                                    upload_time_utc_ms: Some(
-                                        1668446093935,
-                                    ),
-                                    url: AbsoluteUrl(
-                                        UrlString(
-                                            "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
-                                        ),
-                                    ),
-                                    yanked: Some(
-                                        Bool(
-                                            false,
-                                        ),
-                                    ),
-                                    zstd: None,
-                                },
+                                ),
+                                zstd: None,
                             },
                         ],
                     },
@@ -2290,45 +2272,36 @@ mod tests {
                     files: VersionFiles {
                         wheels: [],
                         source_dists: [
-                            VersionSourceDist {
-                                name: SourceDistFilename {
-                                    name: PackageName(
-                                        "pepy",
-                                    ),
-                                    version: "2.1.1",
-                                    extension: TarGz,
-                                },
-                                file: File {
-                                    dist_info_metadata: false,
-                                    filename: "pepy-2.1.1.tar.gz",
-                                    hashes: HashDigests(
+                            File {
+                                dist_info_metadata: false,
+                                filename: "pepy-2.1.1.tar.gz",
+                                hashes: HashDigests(
+                                    [
+                                        HashDigest {
+                                            algorithm: Sha256,
+                                            digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                        },
+                                    ],
+                                ),
+                                requires_python: Some(
+                                    VersionSpecifiers(
                                         [
-                                            HashDigest {
-                                                algorithm: Sha256,
-                                                digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                            VersionSpecifier {
+                                                operator: GreaterThanEqual,
+                                                version: "3.7",
                                             },
                                         ],
                                     ),
-                                    requires_python: Some(
-                                        VersionSpecifiers(
-                                            [
-                                                VersionSpecifier {
-                                                    operator: GreaterThanEqual,
-                                                    version: "3.7",
-                                                },
-                                            ],
-                                        ),
+                                ),
+                                size: None,
+                                upload_time_utc_ms: None,
+                                url: AbsoluteUrl(
+                                    UrlString(
+                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
                                     ),
-                                    size: None,
-                                    upload_time_utc_ms: None,
-                                    url: AbsoluteUrl(
-                                        UrlString(
-                                            "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
-                                        ),
-                                    ),
-                                    yanked: None,
-                                    zstd: None,
-                                },
+                                ),
+                                yanked: None,
+                                zstd: None,
                             },
                         ],
                     },

@@ -573,7 +573,7 @@ impl VersionMapLazy {
         files
             .wheels
             .iter()
-            .chain(files.source_dists.iter().map(|sdist| &sdist.file))
+            .chain(files.source_dists.iter())
             .any(|file| {
                 let upload_time = file.upload_time_utc_ms.as_ref().map(|t| t.to_native());
                 let excluded = if let Some(cutoff) = &self.included_version_cutoff {
@@ -606,7 +606,7 @@ impl VersionMapLazy {
             .files
             .wheels
             .iter()
-            .chain(datum.files.source_dists.iter().map(|sdist| &sdist.file))
+            .chain(datum.files.source_dists.iter())
             .any(|file| {
                 file.upload_time_utc_ms
                     .as_ref()
