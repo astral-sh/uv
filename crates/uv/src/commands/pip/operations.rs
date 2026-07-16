@@ -722,13 +722,13 @@ impl InstallationPlan {
     pub(crate) fn finish_noop(
         self,
         resolution: &Resolution,
-        modifications: Modifications,
+        modifications: &Modifications,
         compile: Option<BytecodeCompilation>,
         logger: &dyn InstallLogger,
         dry_run: DryRun,
         printer: Printer,
     ) -> Result<Changelog, Error> {
-        debug_assert!(self.is_noop(&modifications, compile, dry_run));
+        debug_assert!(self.is_noop(modifications, compile, dry_run));
 
         let (mut plan, start) = self.into_parts();
         modifications.apply(&mut plan);
