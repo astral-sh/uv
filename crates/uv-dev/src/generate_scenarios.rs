@@ -1,10 +1,10 @@
 //! Generate the Packse scenario integration tests.
 
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use anstream::println;
+use anstream::{print, println};
 use anyhow::{Context, Result, bail};
 use clap::ValueEnum;
 use itertools::Itertools;
@@ -34,6 +34,12 @@ pub(crate) struct Args {
     /// Skip `cargo insta test --accept` after refreshing generated Rust files.
     #[arg(long)]
     no_snapshot_update: bool,
+}
+
+#[derive(clap::Args)]
+pub(crate) struct RenderScenarioArgs {
+    /// Path to a Packse scenario, relative to `test/scenarios` or absolute.
+    path: PathBuf,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -107,6 +113,17 @@ pub(crate) fn main(args: &Args) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+pub(crate) fn render_scenario(args: &RenderScenarioArgs) -> Result<()> {
+    let path = if args.path.is_absolute() {
+        args.path.clone()
+    } else {
+        Path::new(ROOT_DIR).join(GENERATED_FROM).join(&args.path)
+    };
+    let scenario = Scenario::from_path(&path)?;
+    print!("{}", render_scenario_markdown(&scenario)?);
     Ok(())
 }
 
@@ -692,6 +709,27 @@ fn render_case_docs(output: &mut String, scenario: &Scenario) -> Result<()> {
     Ok(())
 }
 
+fn render_scenario_markdown(scenario: &Scenario) -> Result<String> {
+    let mut output = String::new();
+    output.push_str("<!-- Generated with `cargo dev render-scenario` -->\n\n");
+    output.push_str("# ");
+    output.push_str(&scenario.name);
+    output.push_str("\n\n");
+    if let Some(description) = &scenario.description {
+        output.push_str(description);
+        output.push_str("\n\n");
+    }
+    output.push_str("```text\n");
+    output.push_str(&scenario.name);
+    output.push('\n');
+    for line in pretty_tree(scenario)? {
+        output.push_str(&line);
+        output.push('\n');
+    }
+    output.push_str("```\n");
+    Ok(output)
+}
+
 fn pretty_tree(scenario: &Scenario) -> Result<Vec<String>> {
     const SPACE: &str = "    ";
     const BRANCH: &str = "│   ";
@@ -930,8 +968,8 @@ fn requirement_specifiers(requirement: &Requirement) -> Option<&uv_pep440::Versi
 #[cfg(test)]
 mod tests {
     use super::{
-        TemplateKind, check_generated_file, compile_requirements, load_scenarios,
-        load_scenarios_from, module_name, render, scenarios_for_template,
+        Scenario, TemplateKind, check_generated_file, compile_requirements, load_scenarios,
+        load_scenarios_from, module_name, render, render_scenario_markdown, scenarios_for_template,
     };
 
     #[test]
@@ -1036,6 +1074,70 @@ kind = "compile"
         ] {
             assert!(scenarios_for_template(template, &scenarios).is_empty());
         }
+    }
+
+    #[test]
+    fn scenario_can_render_as_markdown() {
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        let path = temporary_directory.path().join("scenario.toml");
+        fs_err::write(
+            &path,
+            r#"
+name = "rendered-scenario"
+description = "A scenario with base and optional dependencies."
+
+[root]
+requires = ["a[extra]"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+requires = ["b>=2"]
+
+[packages.a.versions."1.0.0".extras]
+extra = ["c"]
+
+[packages.b.versions."2.0.0"]
+
+[packages.c.versions."1.0.0"]
+"#,
+        )
+        .expect("scenario should be written");
+        let scenario = Scenario::from_path(&path).expect("scenario should parse");
+
+        insta::assert_snapshot!(
+            render_scenario_markdown(&scenario).expect("scenario should render"),
+            @r"
+        <!-- Generated with `cargo dev render-scenario` -->
+
+        # rendered-scenario
+
+        A scenario with base and optional dependencies.
+
+        ```text
+        rendered-scenario
+        ├── environment
+        │   └── python3.12
+        ├── root
+        │   └── requires a[extra]
+        │       ├── satisfied by a-1.0.0
+        │       └── satisfied by a-1.0.0[extra]
+        ├── a
+        │   ├── a-1.0.0
+        │   │   └── requires b>=2
+        │   │       └── satisfied by b-2.0.0
+        │   └── a-1.0.0[extra]
+        │       └── requires c
+        │           └── satisfied by c-1.0.0
+        ├── b
+        │   └── b-2.0.0
+        └── c
+            └── c-1.0.0
+        ```
+        "
+        );
     }
 
     #[test]
