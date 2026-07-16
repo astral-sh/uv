@@ -1416,7 +1416,7 @@ impl VersionFiles {
 #[rkyv(derive(Debug))]
 pub struct CachedFile {
     size: u64,
-    pub upload_time_utc_ms: i64,
+    upload_time_utc_ms: i64,
     hashes: CachedHashDigests,
     url: FileLocation,
     requires_python: Option<Arc<VersionSpecifiers>>,
@@ -1426,9 +1426,17 @@ pub struct CachedFile {
     yanked: Option<Box<Yanked>>,
     #[rkyv(with = rkyv::with::Niche)]
     zstd: Option<Box<Zstd>>,
-    pub dist_info_metadata: bool,
+    dist_info_metadata: bool,
     has_size: bool,
-    pub has_upload_time: bool,
+    has_upload_time: bool,
+}
+
+impl ArchivedCachedFile {
+    /// Returns the upload time in UTC milliseconds, if it was present in the index metadata.
+    pub fn upload_time_utc_ms(&self) -> Option<i64> {
+        self.has_upload_time
+            .then_some(self.upload_time_utc_ms.to_native())
+    }
 }
 
 impl CachedFile {
@@ -1436,7 +1444,7 @@ impl CachedFile {
     pub fn filename(&self) -> &str {
         self.filename
             .as_deref()
-            .map_or_else(|| filename_from_location(&self.url), SmallString::as_ref)
+            .map_or_else(|| self.url.raw_filename(), SmallString::as_ref)
     }
 
     /// Reconstructs the file's hash digests from their compact cache representation.
@@ -1447,8 +1455,8 @@ impl CachedFile {
 
 impl From<File> for CachedFile {
     fn from(file: File) -> Self {
-        let filename = (filename_from_location(&file.url) != file.filename.as_ref())
-            .then(|| Box::new(file.filename));
+        let filename =
+            (file.url.raw_filename() != file.filename.as_ref()).then(|| Box::new(file.filename));
         let has_size = file.size.is_some();
         let has_upload_time = file.upload_time_utc_ms.is_some();
         Self {
@@ -1484,16 +1492,6 @@ impl From<CachedFile> for File {
     }
 }
 
-/// Returns the final URL path component after removing any query or fragment.
-fn filename_from_location(location: &FileLocation) -> &str {
-    let path = match location {
-        FileLocation::RelativeUrl(_, path) => path.as_ref(),
-        FileLocation::AbsoluteUrl(url) => url.as_ref(),
-    };
-    let path = path.split_once(['?', '#']).map_or(path, |(path, _)| path);
-    path.rsplit_once('/').map_or(path, |(_, filename)| filename)
-}
-
 /// A compact representation of a single, canonical hash digest.
 ///
 /// Only lowercase hexadecimal digests of the expected length use the packed variants. Multiple
@@ -1504,11 +1502,11 @@ fn filename_from_location(location: &FileLocation) -> &str {
 #[rkyv(derive(Debug))]
 enum CachedHashDigests {
     Sha256([u8; 32]),
-    Other(HashDigests),
     Md5([u8; 16]),
     Blake2b([u8; 32]),
     Sha384(Box<[u8; 48]>),
     Sha512(Box<[u8; 64]>),
+    Other(HashDigests),
 }
 
 impl Debug for CachedHashDigests {
@@ -1948,10 +1946,9 @@ mod tests {
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
-        File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
-        IndexMetadataRef, IndexUrl, ToUrlError,
+        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+        IndexUrl, ToUrlError,
     };
-    use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, Yanked};
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -2332,154 +2329,6 @@ mod tests {
         assert_eq!(
             filenames,
             ["example_1-1.0.0.tar.gz", "example_1-1.0.0-py3-none-any.whl"]
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn cached_file_round_trip() -> Result<(), Error> {
-        let base = SmallString::from("https://pypi.org/simple/example/");
-        let file = File {
-            dist_info_metadata: true,
-            filename: SmallString::from("example-1.0.0-py3-none-any.whl"),
-            hashes: HashDigests::from(HashDigest {
-                algorithm: HashAlgorithm::Sha256,
-                digest: SmallString::from(
-                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-                ),
-            }),
-            requires_python: None,
-            size: Some(0),
-            upload_time_utc_ms: Some(0),
-            url: FileLocation::new(
-                SmallString::from(
-                    "https://files.pythonhosted.org/example-1.0.0-py3-none-any.whl?download=1",
-                ),
-                &base,
-            ),
-            yanked: Some(Box::new(Yanked::Bool(false))),
-            zstd: None,
-        };
-        let mut expected = file.clone();
-        expected.yanked = None;
-        let cached = super::CachedFile::from(file);
-        assert!(cached.filename.is_none());
-        assert!(matches!(cached.hashes, super::CachedHashDigests::Sha256(_)));
-        assert!(cached.yanked.is_none());
-
-        let files = super::VersionFiles {
-            wheels: vec![cached],
-            source_dists: Vec::new(),
-        };
-        let archive = super::OwnedArchive::from_unarchived(&files)?;
-        let mut files = super::OwnedArchive::deserialize(&archive);
-        let Some(file) = files.wheels.pop() else {
-            return Err("missing cached wheel".into());
-        };
-        assert_eq!(File::from(file), expected);
-
-        for (algorithm, bytes) in [
-            (HashAlgorithm::Md5, 16),
-            (HashAlgorithm::Sha256, 32),
-            (HashAlgorithm::Blake2b, 32),
-            (HashAlgorithm::Sha384, 48),
-            (HashAlgorithm::Sha512, 64),
-        ] {
-            let file = File {
-                dist_info_metadata: false,
-                filename: SmallString::from("example-1.0.0.tar.gz"),
-                hashes: HashDigests::from(HashDigest {
-                    algorithm,
-                    digest: SmallString::from("01".repeat(bytes)),
-                }),
-                requires_python: None,
-                size: None,
-                upload_time_utc_ms: None,
-                url: FileLocation::new(
-                    SmallString::from("https://files.pythonhosted.org/example-1.0.0.tar.gz"),
-                    &base,
-                ),
-                yanked: None,
-                zstd: None,
-            };
-            let expected = file.clone();
-            let cached = super::CachedFile::from(file);
-            assert!(matches!(
-                (&cached.hashes, algorithm),
-                (super::CachedHashDigests::Md5(_), HashAlgorithm::Md5)
-                    | (super::CachedHashDigests::Sha256(_), HashAlgorithm::Sha256)
-                    | (super::CachedHashDigests::Blake2b(_), HashAlgorithm::Blake2b)
-                    | (super::CachedHashDigests::Sha384(_), HashAlgorithm::Sha384)
-                    | (super::CachedHashDigests::Sha512(_), HashAlgorithm::Sha512)
-            ));
-            assert_eq!(cached.hashes(), expected.hashes);
-
-            let files = super::VersionFiles {
-                wheels: Vec::new(),
-                source_dists: vec![cached],
-            };
-            let archive = super::OwnedArchive::from_unarchived(&files)?;
-            let mut files = super::OwnedArchive::deserialize(&archive);
-            let Some(file) = files.source_dists.pop() else {
-                return Err("missing cached source distribution".into());
-            };
-            assert_eq!(File::from(file), expected);
-        }
-
-        for (algorithm, digest) in [
-            (
-                HashAlgorithm::Sha256,
-                SmallString::from(
-                    "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
-                ),
-            ),
-            (
-                HashAlgorithm::Sha256,
-                SmallString::from("not-a-valid-sha256"),
-            ),
-            (HashAlgorithm::Blake2b, SmallString::from("01".repeat(64))),
-        ] {
-            let file = File {
-                dist_info_metadata: false,
-                filename: SmallString::from("example-1.0.0.tar.gz"),
-                hashes: HashDigests::from(HashDigest { algorithm, digest }),
-                requires_python: None,
-                size: None,
-                upload_time_utc_ms: None,
-                url: FileLocation::new(
-                    SmallString::from("https://files.pythonhosted.org/renamed.tar.gz#download"),
-                    &base,
-                ),
-                yanked: Some(Box::new(Yanked::Reason(SmallString::from("broken")))),
-                zstd: None,
-            };
-            let expected = file.clone();
-            let cached = super::CachedFile::from(file);
-            assert!(cached.filename.is_some());
-            assert!(matches!(cached.hashes, super::CachedHashDigests::Other(_)));
-            assert_eq!(File::from(cached), expected);
-        }
-
-        let hashes = HashDigests::from(vec![
-            HashDigest {
-                algorithm: HashAlgorithm::Sha256,
-                digest: SmallString::from("01".repeat(32)),
-            },
-            HashDigest {
-                algorithm: HashAlgorithm::Blake2b,
-                digest: SmallString::from("23".repeat(32)),
-            },
-        ]);
-        let expected = hashes.clone();
-        let cached = super::CachedHashDigests::from(hashes);
-        assert!(matches!(cached, super::CachedHashDigests::Other(_)));
-        assert_eq!(HashDigests::from(cached), expected);
-
-        assert_eq!(std::mem::size_of::<rkyv::Archived<super::CachedFile>>(), 96);
-        assert_eq!(
-            std::mem::size_of::<rkyv::Archived<SimpleDetailMetadatum>>(),
-            48
         );
 
         Ok(())

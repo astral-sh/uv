@@ -575,9 +575,7 @@ impl VersionMapLazy {
             .iter()
             .chain(files.source_dists.iter())
             .any(|file| {
-                let upload_time = file
-                    .has_upload_time
-                    .then_some(file.upload_time_utc_ms.to_native());
+                let upload_time = file.upload_time_utc_ms();
                 let excluded = if let Some(cutoff) = &self.included_version_cutoff {
                     upload_time.is_none_or(|t| t >= cutoff.as_millisecond())
                 } else if let Some(cutoff) = &self.available_version_cutoff {
@@ -610,8 +608,8 @@ impl VersionMapLazy {
             .iter()
             .chain(datum.files.source_dists.iter())
             .any(|file| {
-                !file.has_upload_time
-                    || file.upload_time_utc_ms.to_native() < cutoff.as_millisecond()
+                file.upload_time_utc_ms()
+                    .is_none_or(|upload_time| upload_time < cutoff.as_millisecond())
             })
     }
 
