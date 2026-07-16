@@ -16,6 +16,7 @@ jobs:
     name: Sync uv-dev
     if: github.repository == 'astral-sh/uv'
     runs-on: ubuntu-latest
+    environment: automations
     permissions:
       id-token: write # for the credential broker
     steps:
@@ -23,8 +24,8 @@ jobs:
         id: token
         uses: open-security-tools/ost-simple-sts@7261a2f062dc43a7b496c38da6ec48380f7e1a1a
         with:
-          exchange-url: https://jgfdc240oh.execute-api.us-east-2.amazonaws.com/exchange
-          audience: https://jgfdc240oh.execute-api.us-east-2.amazonaws.com
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
 
       - name: Sync main
         env:
