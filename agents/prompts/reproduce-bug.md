@@ -19,7 +19,11 @@ Set `reproduction` to exactly one of these values and explain the result in `rea
   commands, relevant environment details, and observed result.
 - `not_reproducible` when the report contains enough information for a targeted reproduction but the
   reported behavior cannot be reproduced. Include what was tried, the observed result, and the
-  additional information needed to reproduce the reported behavior.
+  additional information needed to reproduce the reported behavior. Search the existing tests for
+  the reported behavior, prioritizing `crates/uv/tests/it/` and `crates/uv-client/tests/it/`. If a
+  test already covers it, include the repository-relative path, test name, and behavior it covers in
+  `reason`. Read the test setup and assertions before claiming coverage; a similar name or command
+  alone is not sufficient.
 - `needs_more_information` when the report does not contain enough information to construct a
   meaningful reproduction. Identify the specific commands, configuration, versions, platform
   details, or input data needed.
