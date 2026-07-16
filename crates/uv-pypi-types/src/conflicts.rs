@@ -200,11 +200,10 @@ impl Conflicts {
         }
 
         // Add all newly discovered conflict sets (excluding the originals already in self.0)
-        for set in conflict_sets {
-            if !self.0.contains(&set) {
-                self.0.push(set);
-            }
+        for set in &self.0 {
+            conflict_sets.remove(set);
         }
+        self.0.extend(conflict_sets);
     }
 }
 
@@ -835,4 +834,57 @@ impl From<SchemaConflictItem> for ConflictItemWire {
 pub struct Inference {
     pub included: bool,
     pub item: ConflictItem,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use anyhow::Result;
+    use rustc_hash::FxHashSet;
+    use uv_normalize::{GroupName, PackageName};
+
+    use super::{ConflictItem, ConflictSet, Conflicts};
+    use crate::DependencyGroups;
+
+    fn conflict_set(package: &PackageName, left: &str, right: &str) -> Result<ConflictSet> {
+        Ok(ConflictSet::try_from(vec![
+            ConflictItem::from((package.clone(), GroupName::from_str(left)?)),
+            ConflictItem::from((package.clone(), GroupName::from_str(right)?)),
+        ])?)
+    }
+
+    #[test]
+    fn expand_transitive_group_includes_preserves_original_sets() -> Result<()> {
+        let package = PackageName::from_str("project")?;
+        let original_sets = vec![
+            conflict_set(&package, "inner-a", "inner-b")?,
+            conflict_set(&package, "outer-a", "inner-b")?,
+        ];
+        let groups: DependencyGroups = serde_json::from_value(serde_json::json!({
+            "inner-a": [],
+            "inner-b": [],
+            "outer-a": [{ "include-group": "inner-a" }],
+            "outer-b": [{ "include-group": "inner-b" }],
+        }))?;
+        let mut conflicts = Conflicts(original_sets.clone());
+
+        conflicts.expand_transitive_group_includes(&package, &groups);
+
+        assert_eq!(&conflicts.0[..original_sets.len()], original_sets);
+        assert_eq!(conflicts.0.len(), 4);
+        assert_eq!(
+            conflicts.0.into_iter().collect::<FxHashSet<_>>(),
+            [
+                conflict_set(&package, "inner-a", "inner-b")?,
+                conflict_set(&package, "outer-a", "inner-b")?,
+                conflict_set(&package, "inner-a", "outer-b")?,
+                conflict_set(&package, "outer-a", "outer-b")?,
+            ]
+            .into_iter()
+            .collect::<FxHashSet<_>>(),
+        );
+
+        Ok(())
+    }
 }
