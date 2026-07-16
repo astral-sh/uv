@@ -11,11 +11,8 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> Verba
             subdirectory,
         }) => {
             let Some(new_git_url) = git.precise(git_url.clone()) else {
-                if cfg!(debug_assertions) {
-                    panic!("Unresolved Git URL: {}, {git_url:?}", url.verbatim);
-                } else {
-                    return url;
-                }
+                debug_assert!(false, "Unresolved Git URL: {}, {git_url:?}", url.verbatim);
+                return url;
             };
 
             let new_parsed_url = ParsedGitDirectoryUrl {
@@ -35,11 +32,8 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> Verba
             ext,
         }) => {
             let Some(new_git_url) = git.precise(git_url.clone()) else {
-                if cfg!(debug_assertions) {
-                    panic!("Unresolved Git URL: {}, {git_url:?}", url.verbatim);
-                } else {
-                    return url;
-                }
+                debug_assert!(false, "Unresolved Git URL: {}, {git_url:?}", url.verbatim);
+                return url;
             };
 
             let new_parsed_url = ParsedGitPathUrl {

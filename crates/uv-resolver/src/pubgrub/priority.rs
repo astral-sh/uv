@@ -133,27 +133,23 @@ impl PubGrubPriorities {
                 // To ensure deterministic resolution, each (virtual) package needs to be registered
                 // on discovery (as dependency of another package), before we query it for
                 // prioritization.
-                let package_priority = match self.package_priority.get(name) {
-                    Some(priority) => *priority,
-                    None => {
-                        if cfg!(debug_assertions) {
-                            panic!("Package not known: `{name}` from `{package}`")
-                        } else {
-                            PubGrubPriority::Unspecified(Reverse(usize::MAX))
-                        }
-                    }
+                let package_priority = if let Some(priority) = self.package_priority.get(name) {
+                    *priority
+                } else {
+                    debug_assert!(false, "Package not known: `{name}` from `{package}`");
+                    PubGrubPriority::Unspecified(Reverse(usize::MAX))
                 };
 
-                let package_tiebreaker = match self.virtual_package_tiebreaker.get(package) {
-                    Some(tiebreaker) => *tiebreaker,
-                    None => {
-                        if cfg!(debug_assertions) {
-                            panic!("Package not registered in prioritization: `{package:?}`")
-                        } else {
-                            PubGrubTiebreaker(Reverse(u32::MAX))
-                        }
-                    }
-                };
+                let package_tiebreaker =
+                    if let Some(tiebreaker) = self.virtual_package_tiebreaker.get(package) {
+                        *tiebreaker
+                    } else {
+                        debug_assert!(
+                            false,
+                            "Package not registered in prioritization: `{package:?}`"
+                        );
+                        PubGrubTiebreaker(Reverse(u32::MAX))
+                    };
 
                 (package_priority, package_tiebreaker)
             }
@@ -168,11 +164,11 @@ impl PubGrubPriorities {
     pub(crate) fn mark_conflict_early(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
             // Not a correctness bug
-            if cfg!(debug_assertions) {
-                panic!("URL packages must not be involved in conflict handling")
-            } else {
-                return false;
-            }
+            debug_assert!(
+                false,
+                "URL packages must not be involved in conflict handling"
+            );
+            return false;
         };
 
         let len = self.package_priority.len();
@@ -201,11 +197,11 @@ impl PubGrubPriorities {
     pub(crate) fn mark_conflict_late(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
             // Not a correctness bug
-            if cfg!(debug_assertions) {
-                panic!("URL packages must not be involved in conflict handling")
-            } else {
-                return false;
-            }
+            debug_assert!(
+                false,
+                "URL packages must not be involved in conflict handling"
+            );
+            return false;
         };
 
         let len = self.package_priority.len();
