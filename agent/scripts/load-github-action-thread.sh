@@ -162,7 +162,16 @@ for rollout in "${rollouts[@]}"; do
 
     thread_id="$(jq -r '.result.thread.id // empty' <<<"$fork_response")"
     source_id="$(jq -r '.result.thread.forkedFromId // empty' <<<"$fork_response")"
+    thread_title="$(jq -r '(.result.thread.preview // "") | split("\n")[0] | sub("\r$"; "")' <<<"$fork_response")"
     [[ -n "$thread_id" ]] || fail "Codex app-server returned no thread ID for $rollout"
+
+    if [[ -n "$thread_title" ]]; then
+        request_id=$((request_id + 1))
+        set_name_request="$(jq -cn --argjson id "$request_id" --arg thread_id "$thread_id" --arg name "$thread_title" '{id: $id, method: "thread/name/set", params: {threadId: $thread_id, name: $name}}')"
+        printf '%s\n' "$set_name_request" >&"$server_input"
+        set_name_response="$(read_response "$request_id")" || exit 1
+        check_response "$set_name_response" "set the title for $thread_id" || exit 1
+    fi
 
     printf 'Loaded Codex thread %s' "$thread_id"
     if [[ -n "$source_id" ]]; then
