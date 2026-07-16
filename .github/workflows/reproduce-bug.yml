@@ -88,6 +88,6 @@ jobs:
     permissions: {}
     steps:
       - name: "Write reproduction summary"
-        run: printf '%s\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        run: printf '```json\n%s\n```\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
         env:
           REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}

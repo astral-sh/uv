@@ -72,6 +72,6 @@ jobs:
     permissions: {}
     steps:
       - name: "Write triage summary"
-        run: printf '%s\n' "$TRIAGE_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        run: printf '```json\n%s\n```\n' "$TRIAGE_RESULT" >> "$GITHUB_STEP_SUMMARY"
         env:
           TRIAGE_RESULT: ${{ needs.triage.outputs.result }}
