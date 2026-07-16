@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::fmt::Display;
+use std::sync::Arc;
 
 use uv_distribution::Metadata;
 use uv_distribution_types::{
@@ -9,7 +11,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pypi_types::HashDigests;
 
-use crate::UniversalMarker;
+use crate::{MetadataResponse, UniversalMarker};
 
 /// The part of a package represented by a resolver graph node.
 #[derive(Debug, Clone, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -53,7 +55,8 @@ pub struct AnnotatedDist {
     pub version: Version,
     pub kind: PackageNodeKind,
     pub hashes: HashDigests,
-    pub metadata: Option<Metadata>,
+    pub metadata: Option<Arc<MetadataResponse>>,
+    pub is_workspace_member: bool,
     /// The "full" marker for this distribution. It precisely describes all
     /// marker environments for which this distribution _can_ be installed.
     /// That is, when doing a traversal over all of the distributions in a
@@ -63,6 +66,32 @@ pub struct AnnotatedDist {
 }
 
 impl AnnotatedDist {
+    /// Returns the resolved metadata for this distribution, if available.
+    pub fn metadata(&self) -> Option<&Metadata> {
+        self.metadata.as_deref().and_then(|response| {
+            if let MetadataResponse::Found(archive) = response {
+                Some(&archive.metadata)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Returns the resolved metadata with local path preferences preserved for lock serialization.
+    pub fn metadata_for_lock(&self) -> Option<Cow<'_, Metadata>> {
+        let metadata = self.metadata()?;
+
+        // We normally write dependency paths relative to the lockfile. For the current project and
+        // workspace members, preserve the user's choice of relative or absolute paths instead.
+        // Metadata from `tool.uv.dependency-metadata` already preserves that choice.
+        // Only change this copy, not shared metadata.
+        if self.is_workspace_member {
+            Some(Cow::Owned(metadata.clone().with_force_relative(false)))
+        } else {
+            Some(Cow::Borrowed(metadata))
+        }
+    }
+
     /// Returns `true` if the [`AnnotatedDist`] is a base package (i.e., not an extra or a
     /// dependency group).
     pub(crate) fn is_base(&self) -> bool {
