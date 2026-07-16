@@ -26,6 +26,8 @@ jobs:
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: contents:write
 
       - name: Sync main
         env:
