@@ -276,6 +276,17 @@ impl CachePolicy {
 }
 
 impl ArchivedCachePolicy {
+    /// Returns whether this cached response can be used for a request that permits stale data.
+    ///
+    /// Unlike [`Self::before_request`], this does not determine freshness or prepare a
+    /// revalidation request. A stale response can be reused as long as it is storable and the
+    /// request URI and method are supported.
+    pub(crate) fn matches_stale_request(&self, request: &reqwest::Request) -> bool {
+        self.is_storable()
+            && self.request.uri == request.url().as_str()
+            && (request.method() == http::Method::GET || request.method() == http::Method::HEAD)
+    }
+
     /// Determines what caching behavior is correct given an existing
     /// `CachePolicy` and a new HTTP request for the resource managed by this
     /// cache policy. This is done as per [RFC 9111 S4].
@@ -1438,5 +1449,75 @@ mod tests {
         let now = SystemTime::now() + Duration::from_secs(5);
         assert_eq!(archived.age(now), Duration::from_secs(u64::MAX));
         assert!(!archived.is_fresh(now, &request));
+    }
+
+    #[test]
+    fn stale_request_ignores_freshness_and_vary() {
+        let mut original =
+            reqwest::Request::new(http::Method::GET, "https://example.com/".parse().unwrap());
+        original
+            .headers_mut()
+            .insert(http::header::ACCEPT, "application/json".parse().unwrap());
+        let http_response = http::Response::builder()
+            .status(http::StatusCode::OK)
+            .header(http::header::CACHE_CONTROL, "no-cache")
+            .header(http::header::VARY, "accept")
+            .body(Vec::new())
+            .unwrap();
+        let response = reqwest::Response::from(http_response);
+        let archived = CachePolicyBuilder::new(&original)
+            .build(&response)
+            .to_archived();
+
+        let mut request =
+            reqwest::Request::new(http::Method::GET, "https://example.com/".parse().unwrap());
+        request
+            .headers_mut()
+            .insert(http::header::ACCEPT, "text/html".parse().unwrap());
+
+        assert!(archived.matches_stale_request(&request));
+        assert!(matches!(
+            archived.before_request(&mut request),
+            BeforeRequest::Stale(_)
+        ));
+
+        let request =
+            reqwest::Request::new(http::Method::HEAD, "https://example.com/".parse().unwrap());
+        assert!(archived.matches_stale_request(&request));
+    }
+
+    #[test]
+    fn stale_request_rejects_non_matching_cache_entries() {
+        let original =
+            reqwest::Request::new(http::Method::GET, "https://example.com/".parse().unwrap());
+        let http_response = http::Response::builder()
+            .status(http::StatusCode::OK)
+            .body(Vec::new())
+            .unwrap();
+        let response = reqwest::Response::from(http_response);
+        let archived = CachePolicyBuilder::new(&original)
+            .build(&response)
+            .to_archived();
+
+        let different_uri = reqwest::Request::new(
+            http::Method::GET,
+            "https://example.com/other".parse().unwrap(),
+        );
+        assert!(!archived.matches_stale_request(&different_uri));
+
+        let unsupported_method =
+            reqwest::Request::new(http::Method::POST, "https://example.com/".parse().unwrap());
+        assert!(!archived.matches_stale_request(&unsupported_method));
+
+        let http_response = http::Response::builder()
+            .status(http::StatusCode::OK)
+            .header(http::header::CACHE_CONTROL, "no-store")
+            .body(Vec::new())
+            .unwrap();
+        let response = reqwest::Response::from(http_response);
+        let unstorable = CachePolicyBuilder::new(&original)
+            .build(&response)
+            .to_archived();
+        assert!(!unstorable.matches_stale_request(&original));
     }
 }
