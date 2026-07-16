@@ -440,6 +440,11 @@ opt-level = 1
 debug = 0
 strip = "debuginfo"
 
+# Profile for fast test execution with nightly's panic-abort-tests feature.
+[profile.fast-build-nightly]
+inherits = "fast-build"
+panic = "abort"
+
 # Profile for faster builds: Skip debug info generation, for faster
 # builds of smaller binaries.
 [profile.no-debug]

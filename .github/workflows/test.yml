@@ -107,8 +107,7 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           cargo +nightly-2026-07-13 nextest run \
-            --cargo-profile fast-build \
-            --config 'profile.fast-build.panic="abort"' \
+            --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
             --features test-python-patch,test-universal,native-auth,secret-service \
@@ -189,8 +188,7 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           cargo +nightly-2026-07-13 nextest run \
-            --cargo-profile fast-build \
-            --config 'profile.fast-build.panic="abort"' \
+            --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
             --no-default-features \
@@ -245,16 +243,20 @@ jobs:
       - name: "Install required Python versions"
         run: uv python install
 
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup toolchain install nightly-2026-07-13 --profile minimal
+
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
+          prefix-key: v1-rust-workspace
           workspaces: ${{ env.UV_WORKSPACE }}
+          cache-workspace-crates: "true"
           # Use the same cache entry across the partitions
           add-job-id-key: false
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-
-      - name: "Install Rust toolchain"
-        working-directory: ${{ env.UV_WORKSPACE }}
-        run: rustup show
 
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
@@ -286,8 +288,10 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          cargo nextest run \
-            --cargo-profile fast-build \
+          cargo +nightly-2026-07-13 nextest run \
+            --cargo-profile fast-build-nightly \
+            -Z panic-abort-tests \
+            -Z checksum-freshness \
             --no-default-features \
             --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
             --workspace \
