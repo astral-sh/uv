@@ -1094,9 +1094,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if indexes.contains_key(name) {
                 continue;
             }
-            // Unit propagation often leaves a package's range unchanged. Although prefetching the
-            // same package and range is idempotent, selecting its candidate is not free.
-            if pre_visited.get(&id) == Some(range) {
+            // Candidate selection is not free, and the initial prefetch already brings the most
+            // likely distribution metadata into the in-memory cache for this fork.
+            if pre_visited.contains_key(&id) {
                 continue;
             }
             pre_visited.insert(id, range.clone());
