@@ -56,19 +56,15 @@ jobs:
   reproduce-bug:
     needs: triage
     if: needs.triage.outputs.result != '' && fromJSON(needs.triage.outputs.result).type == 'bug'
-    runs-on: ubuntu-latest
     permissions:
-      actions: write
-    steps:
-      - name: "Dispatch bug reproduction"
-        run: |
-          gh workflow run reproduce-bug.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --field issue="$ISSUE" \
-            --field runner=ubuntu-latest
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+      contents: read
+      id-token: write
+      issues: read
+    uses: ./.github/workflows/reproduce-bug.yml
+    with:
+      issue: ${{ inputs.issue || github.event.issue.number }}
+      runner: ubuntu-latest
+    secrets: inherit # zizmor: ignore[secrets-inherit] -- protected environment secrets are needed for reproduction
 
   report:
     needs: triage
