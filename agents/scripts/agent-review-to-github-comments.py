@@ -5,7 +5,7 @@
 # dependencies = []
 # ///
 
-"""Convert a structured agent review into a GitHub pull request review payload."""
+"""Convert a structured agent review into GitHub pull request review comment payloads."""
 
 from __future__ import annotations
 
@@ -67,6 +67,7 @@ def review_payload(review: dict[str, Any], commit_id: str) -> dict[str, Any]:
 
         title = re.sub(r"^(?:\[P[0-3]\]\s*)+", "", finding["title"])
         comment: dict[str, Any] = {
+            "commit_id": commit_id,
             "path": str(path),
             "line": end,
             "side": side,
@@ -79,12 +80,7 @@ def review_payload(review: dict[str, Any], commit_id: str) -> dict[str, Any]:
             comment["start_side"] = side
         comments.append(comment)
 
-    return {
-        "commit_id": commit_id,
-        "event": "COMMENT",
-        "body": "**Automated security review**",
-        "comments": comments,
-    }
+    return {"comments": comments}
 
 
 def main(stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout) -> None:

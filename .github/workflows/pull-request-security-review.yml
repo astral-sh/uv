@@ -139,10 +139,15 @@ jobs:
             exit 0
           fi
 
-          gh api \
-            --method POST \
-            "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/reviews" \
-            --input "$RUNNER_TEMP/review.json"
+          jq --compact-output '.comments[]' "$RUNNER_TEMP/review.json" |
+          while IFS= read -r comment; do
+            printf '%s\n' "$comment" |
+              gh api \
+                --method POST \
+                "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments" \
+                --input - \
+                --silent
+          done
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
