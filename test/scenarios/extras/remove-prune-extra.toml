@@ -9,6 +9,9 @@ satisfiable = true
 
 [expected.packages]
 
+[resolver_options]
+test = "none"
+
 [packages.candidate.versions."1.0.0"]
 
 [packages.orphan-leaf.versions."1.0.0"]
