@@ -2721,7 +2721,7 @@ impl VersionRequest {
         Self::Range(specifiers, variant)
     }
 
-    /// Replace the variant on a concrete or ranged version request.
+    /// Replace the variant on the version request.
     #[must_use]
     fn with_variant(self, variant: PythonVariant) -> Self {
         match self {
