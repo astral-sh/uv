@@ -1,0 +1,40 @@
+name: Sync uv-dev
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: sync-uv-dev-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync uv-dev
+    if: github.repository == 'astral-sh/uv'
+    runs-on: ubuntu-slim
+    environment: automations
+    permissions:
+      id-token: write # for the credential broker
+    steps:
+      - name: Get uv-dev token
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: |
+            contents: write
+
+      - name: Sync main
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          gh api \
+            --method POST \
+            repos/astral-sh/uv-dev/merge-upstream \
+            --field branch=main
