@@ -75,7 +75,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      id-token: write
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -137,8 +136,61 @@ jobs:
             exit 1
           fi
 
-          git_dir=$(git rev-parse --absolute-git-dir)
-          mv "$git_dir/config" "$RUNNER_TEMP/untrusted-git-config"
+          git bundle create "$RUNNER_TEMP/rebased.bundle" "refs/remotes/origin/$BASE_REF..HEAD"
+
+      - name: Upload rebased pull request
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rebased-pull-request-${{ matrix.number }}-${{ matrix.head_sha }}
+          path: ${{ runner.temp }}/rebased.bundle
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  push:
+    name: Push rebased pull request #${{ matrix.number }}
+    needs: [identify, rebase]
+    if: needs.identify.outputs.rebasable != '0'
+    runs-on: ubuntu-slim
+    environment: automations
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.identify.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download rebased pull request
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rebased-pull-request-${{ matrix.number }}-${{ matrix.head_sha }}
+          path: ${{ runner.temp }}/rebased-pull-request
+
+      - name: Import rebased pull request
+        id: import
+        env:
+          BASE_REF: ${{ matrix.base_ref }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+        run: |
+          bundle="$RUNNER_TEMP/rebased-pull-request/rebased.bundle"
+          git bundle verify "$bundle"
+          git -c core.hooksPath=/dev/null fetch --no-tags "$bundle" HEAD
+          rebased_head=$(git rev-parse 'FETCH_HEAD^{commit}')
+
+          if ! git merge-base --is-ancestor "refs/remotes/origin/$BASE_REF" "$rebased_head"; then
+            echo "The rebased pull request does not contain its base; refusing to push." >&2
+            exit 1
+          fi
+
+          echo "head_sha=$rebased_head" >> "$GITHUB_OUTPUT"
 
       - name: Get uv-dev token
         id: token
@@ -159,8 +211,9 @@ jobs:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_REF: ${{ matrix.head_ref }}
           HEAD_SHA: ${{ matrix.head_sha }}
+          REBASED_HEAD: ${{ steps.import.outputs.head_sha }}
         run: |
           git -c core.hooksPath=/dev/null push \
             --force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA" \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            HEAD:"refs/heads/$HEAD_REF"
+            "${REBASED_HEAD}:refs/heads/$HEAD_REF"
