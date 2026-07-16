@@ -9,7 +9,7 @@
     "reason": { "type": "string" },
     "dockerfile": {
       "type": ["string", "null"],
-      "description": "A minimal, self-contained Dockerfile for a reproducible Linux-specific bug, or null when not applicable."
+      "description": "A minimal, self-contained Dockerfile that demonstrates the result of a Linux-specific reproduction attempt, or null when not applicable."
     }
   },
   "required": ["reproduction", "reason", "dockerfile"]
