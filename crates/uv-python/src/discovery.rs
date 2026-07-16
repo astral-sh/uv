@@ -2722,6 +2722,8 @@ impl VersionRequest {
     }
 
     /// Replace the variant on the version request.
+    ///
+    /// If `Any` or `Default`, the request is returned unchanged.
     #[must_use]
     fn with_variant(self, variant: PythonVariant) -> Self {
         match self {
