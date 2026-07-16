@@ -61,6 +61,14 @@ jobs:
           prompt-file: "agents/prompts/editorialize-changelog.md"
           output-file: "${{ runner.temp }}/changelog-section.md"
 
+      - name: "Upload Codex thread"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-release-prepare-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ~/.codex/sessions
+          if-no-files-found: warn
+
       - name: "Apply changelog rewrite"
         run: |
           uv run scripts/update-latest-changelog-section.py \
