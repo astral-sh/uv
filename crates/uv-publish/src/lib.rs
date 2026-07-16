@@ -1006,8 +1006,8 @@ pub async fn check_url(
         DistFilename::WheelFilename(_) => &metadatum.files.wheels,
     };
     let archived_file = archived_files.iter().find(|file| {
-        DistFilename::try_from_filename_with_reason(&file.filename, filename.name())
-            .is_ok_and(|candidate| &candidate == filename)
+        DistFilename::try_from_filename(&file.filename, filename.name())
+            .is_some_and(|candidate| &candidate == filename)
     });
     let Some(archived_file) = archived_file else {
         return Ok(false);

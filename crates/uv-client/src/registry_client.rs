@@ -1398,9 +1398,7 @@ impl VersionFiles {
             .into_iter()
             .chain(self.wheels)
             .filter_map(|file| {
-                let filename =
-                    DistFilename::try_from_filename_with_reason(&file.filename, package_name)
-                        .ok()?;
+                let filename = DistFilename::try_from_filename(&file.filename, package_name)?;
                 Some((filename, file))
             })
     }
