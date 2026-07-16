@@ -163,6 +163,7 @@ fn scenarios_for_template(
     scenarios
         .iter()
         .filter(|case| match case.scenario.resolver_options.test {
+            Some(ScenarioTest::None) => false,
             Some(ScenarioTest::Install) => template == TemplateKind::Install,
             Some(ScenarioTest::Compile) => template == TemplateKind::Compile,
             Some(ScenarioTest::Lock) => template == TemplateKind::Lock,
@@ -997,6 +998,39 @@ mod tests {
         let scenarios = load_scenarios().expect("vendored scenarios should parse");
 
         assert!(!scenarios.is_empty());
+    }
+
+    #[test]
+    fn scenario_can_skip_generated_tests() {
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        fs_err::write(
+            temporary_directory.path().join("skip.toml"),
+            r#"
+name = "skip"
+
+[root]
+requires = []
+
+[expected]
+satisfiable = true
+
+[resolver_options]
+test = "none"
+"#,
+        )
+        .expect("scenario should be written");
+
+        let scenarios =
+            load_scenarios_from(temporary_directory.path()).expect("scenario should parse");
+        assert_eq!(scenarios.len(), 1);
+        for template in [
+            TemplateKind::Install,
+            TemplateKind::Compile,
+            TemplateKind::Lock,
+        ] {
+            assert!(scenarios_for_template(template, &scenarios).is_empty());
+        }
     }
 
     #[test]

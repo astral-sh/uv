@@ -251,6 +251,8 @@ pub struct ResolverOptions {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum ScenarioTest {
+    /// Do not generate a test for this scenario.
+    None,
     Install,
     Compile,
     Lock,
