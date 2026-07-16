@@ -49,6 +49,11 @@ jobs:
           gh pr diff "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             > .pull-request-review.diff
+
+          {
+            printf 'Pull request security review automation for #%s\n\n' "$PULL_REQUEST_NUMBER"
+            cat agents/prompts/pull-request-security-review.md
+          } > "$RUNNER_TEMP/pull-request-security-review-prompt.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
@@ -65,7 +70,7 @@ jobs:
           codex-home: "agents/codex"
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
-          prompt-file: "agents/prompts/pull-request-security-review.md"
+          prompt-file: "${{ runner.temp }}/pull-request-security-review-prompt.md"
           output-schema-file: "agents/schemas/pull-request-security-review.json"
 
       - name: "Upload Codex thread"

@@ -52,9 +52,9 @@ Run the repository utility with the GitHub Actions run URL:
 ```
 
 The utility downloads every matching `codex-thread-*` artifact, finds its saved rollouts, and forks
-each rollout into an interactive local Codex thread. Forking is required because `codex-action` uses
-`codex exec`; copying an `exec` rollout into `~/.codex/sessions` alone does not make it visible in
-the Codex app.
+each rollout into an interactive local Codex thread, using the first line of its preview as the task
+title. Forking is required because `codex-action` uses `codex exec`; copying an `exec` rollout into
+`~/.codex/sessions` alone does not make it visible in the Codex app.
 
 For a numeric run ID, pass the repository when it cannot be inferred from the current checkout:
 

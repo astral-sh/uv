@@ -35,6 +35,11 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author \
             > .issue-triage-event.json
+
+          {
+            printf 'Issue triage automation for #%s\n\n' "$(jq -r '.number' .issue-triage-event.json)"
+            cat agents/prompts/triage-issue.md
+          } > "$RUNNER_TEMP/triage-issue-prompt.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
@@ -50,7 +55,7 @@ jobs:
           permission-profile: "issue-triage"
           safety-strategy: drop-sudo
           allow-users: "*"
-          prompt-file: "agents/prompts/triage-issue.md"
+          prompt-file: "${{ runner.temp }}/triage-issue-prompt.md"
           output-schema-file: "agents/schemas/issue-triage.json"
 
       - name: "Upload Codex thread"
