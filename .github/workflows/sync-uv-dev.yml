@@ -27,8 +27,10 @@ jobs:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
           repository: astral-sh/uv-dev
+          # Workflow permission is required to sync changes to `.github/workflows`.
           permissions: |
             contents: write
+            workflows: write
 
       - name: Sync main
         env:
