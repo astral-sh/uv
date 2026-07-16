@@ -3,10 +3,35 @@ name: load-github-action-thread
 description:
   Download retained Codex GitHub Action thread artifacts and load their rollout history into the
   local Codex app. Use when asked to open, load, import, resume, or inspect a Codex automation
-  thread from a GitHub Actions run URL or run ID.
+  thread from a GitHub Actions run or a related GitHub issue.
 ---
 
 # Load GitHub Action Thread
+
+When given an issue instead of a run, find the related issue-triage run first. Resolve the issue
+title and number, then match the run display title:
+
+```bash
+repository=astral-sh/uv
+issue=20477
+issue_title="$(gh issue view "$issue" --repo "$repository" --json title --jq '.title')"
+issue_number="$(gh issue view "$issue" --repo "$repository" --json number --jq '.number')"
+
+gh run list --repo "$repository" --workflow issue-triage.yml --limit 500 \
+  --json databaseId,displayTitle,event,status,conclusion,createdAt,url \
+  | jq -c --arg title "$issue_title" '.[] | select(.displayTitle == $title)'
+```
+
+Use the newest matching run. An issue-triage run can contain both the triage and bug-reproduction
+threads. Also check for directly dispatched bug-reproduction runs; their display title does not
+include the issue title. If the issue title changed or a run was manually dispatched, list recent
+candidates and confirm them from their logs:
+
+```bash
+gh run list --repo "$repository" --workflow reproduce-bug.yml --limit 100 \
+  --json databaseId,event,status,conclusion,createdAt,url
+gh run view <run-id> --repo "$repository" --log | rg -m 2 "ISSUE: $issue_number|issue: $issue_number"
+```
 
 Run the repository utility with the GitHub Actions run URL:
 
@@ -37,11 +62,13 @@ imported history to a different local checkout:
 
 The utility requires `gh`, `jq`, and `codex`. It prints a `codex://threads/<id>` link for every
 imported task and automatically opens the Codex app when exactly one task is imported on macOS. For
-multiple tasks, return a clickable link for each task without repeatedly switching the app:
+multiple tasks, return a Markdown list with a clickable link labeled by the corresponding artifact
+type without repeatedly switching the app:
 
 ```markdown
-[Open imported task](codex://threads/<id>)
+- [Issue triage](codex://threads/<id>)
+- [Bug reproduction](codex://threads/<id>)
 ```
 
-Treat downloaded rollouts as sensitive because they can contain prompts, tool inputs, and tool
-output; do not paste their contents into a chat or post them to GitHub.
+Use **Pull request security review** for `codex-thread-pull-request-security-review-*` and **Release
+preparation** for `codex-thread-release-prepare-*`.
