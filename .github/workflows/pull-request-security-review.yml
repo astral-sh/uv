@@ -102,12 +102,23 @@ jobs:
 
   report:
     needs: prepare
-    if: needs.prepare.outputs.result != ''
+    if: needs.prepare.outputs.result != '' && fromJSON(needs.prepare.outputs.result).comments[0] != null
     runs-on: ubuntu-latest
+    environment: automations
     timeout-minutes: 5
     permissions:
-      pull-requests: write
+      id-token: write # for the credential broker
     steps:
+      - name: "Get uv token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv
+          permissions: |
+            pull_requests: write
+
       - name: "Publish review findings"
         run: |
           printf '%s\n' "$REVIEW_RESULT" > "$RUNNER_TEMP/review.json"
@@ -133,7 +144,7 @@ jobs:
             "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/reviews" \
             --input "$RUNNER_TEMP/review.json"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           REVIEW_RESULT: ${{ needs.prepare.outputs.result }}
