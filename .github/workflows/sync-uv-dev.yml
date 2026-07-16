@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Get uv-dev token
         id: token
-        uses: open-security-tools/ost-simple-sts@7261a2f062dc43a7b496c38da6ec48380f7e1a1a
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
