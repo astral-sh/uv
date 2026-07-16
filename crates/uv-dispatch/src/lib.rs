@@ -3,6 +3,7 @@
 //! implementing [`BuildContext`].
 
 use std::ffi::{OsStr, OsString};
+use std::future::{self, Future};
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -209,8 +210,8 @@ impl<'a> BuildDispatch<'a> {
 impl BuildContext for BuildDispatch<'_> {
     type SourceDistBuilder = SourceBuild;
 
-    async fn interpreter(&self) -> &Interpreter {
-        self.interpreter
+    fn interpreter(&self) -> impl Future<Output = &Interpreter> + '_ {
+        future::ready(self.interpreter)
     }
 
     fn cache(&self) -> &Cache {

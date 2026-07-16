@@ -136,7 +136,7 @@ impl TrustedPublishingService for PyxPublishingService<'_> {
                     Err(TrustedPublishingError::TokenRejected(
                         status,
                         String::from_utf8_lossy(&body).to_string(),
-                        claims,
+                        claims.into(),
                     ))
                 }
                 None => {
