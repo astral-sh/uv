@@ -422,6 +422,71 @@ pub(crate) enum Modifications {
     },
 }
 
+impl Modifications {
+    pub(crate) fn prepare(self, site_packages: &SitePackages, venv: &PythonEnvironment) -> Self {
+        let Self::Prune {
+            roots,
+            mut candidates,
+            retained,
+        } = self
+        else {
+            return self;
+        };
+
+        let markers = venv.interpreter().to_resolver_marker_environment();
+        let removed_reachability = site_packages.reachable_packages(
+            roots.iter().map(|root| (&root.name, root.extras.as_ref())),
+            &markers,
+        );
+        candidates.extend(removed_reachability.packages().iter().cloned());
+        if !removed_reachability.incomplete().is_empty() {
+            debug!(
+                packages = %removed_reachability.incomplete().iter().join(", "),
+                "Unable to read complete dependency metadata; pruning based on available metadata"
+            );
+        }
+
+        let managed = candidates
+            .iter()
+            .chain(&retained)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let external_reachability = site_packages.reachable_packages(
+            site_packages
+                .iter()
+                .filter(|distribution| !managed.contains(distribution.name()))
+                .map(|distribution| (distribution.name(), &[] as &[ExtraName])),
+            &markers,
+        );
+
+        if !external_reachability.incomplete().is_empty() {
+            debug!(
+                packages = %external_reachability.incomplete().iter().join(", "),
+                "Unable to read complete dependency metadata; pruning based on available metadata"
+            );
+        }
+        candidates.retain(|candidate| {
+            !retained.contains(candidate) && !external_reachability.packages().contains(candidate)
+        });
+
+        Self::Prune {
+            roots,
+            candidates,
+            retained,
+        }
+    }
+
+    fn apply(&self, plan: &mut Plan) {
+        match self {
+            Self::Sufficient => plan.extraneous.clear(),
+            Self::Exact => {}
+            Self::Prune { candidates, .. } => plan
+                .extraneous
+                .retain(|distribution| candidates.contains(distribution.name())),
+        }
+    }
+}
+
 /// A direct dependency removed from the project.
 #[derive(Debug, Clone)]
 pub(crate) struct RemovalRoot {
@@ -632,15 +697,24 @@ impl InstallationPlan {
     /// Returns `true` if executing the plan would not modify the environment.
     pub(crate) fn is_noop(
         &self,
-        modifications: Modifications,
+        modifications: &Modifications,
         compile: Option<BytecodeCompilation>,
         dry_run: DryRun,
     ) -> bool {
         self.plan.cached.is_empty()
             && self.plan.remote.is_empty()
             && self.plan.reinstalls.is_empty()
-            && (self.plan.extraneous.is_empty()
-                || matches!(modifications, Modifications::Sufficient))
+            && self
+                .plan
+                .extraneous
+                .iter()
+                .all(|distribution| match modifications {
+                    Modifications::Sufficient => true,
+                    Modifications::Exact => false,
+                    Modifications::Prune { candidates, .. } => {
+                        !candidates.contains(distribution.name())
+                    }
+                })
             && (compile.is_none() || dry_run.enabled())
     }
 
@@ -654,19 +728,12 @@ impl InstallationPlan {
         dry_run: DryRun,
         printer: Printer,
     ) -> Result<Changelog, Error> {
-        debug_assert!(self.is_noop(modifications, compile, dry_run));
+        debug_assert!(self.is_noop(&modifications, compile, dry_run));
 
-        let (plan, start) = self.into_parts();
+        let (mut plan, start) = self.into_parts();
+        modifications.apply(&mut plan);
         if dry_run.enabled() {
-            report_dry_run(
-                dry_run,
-                resolution,
-                plan,
-                modifications,
-                start,
-                logger,
-                printer,
-            )
+            report_dry_run(dry_run, resolution, plan, start, logger, printer)
         } else {
             logger.on_check(resolution.len(), start, printer, dry_run)?;
             Ok(Changelog::default())
@@ -706,57 +773,7 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
 ) -> Result<Changelog, Error> {
-    let modifications = match modifications {
-        Modifications::Prune {
-            roots,
-            mut candidates,
-            retained,
-        } => {
-            let markers = venv.interpreter().to_resolver_marker_environment();
-            let removed_reachability = site_packages.reachable_packages(
-                roots.iter().map(|root| (&root.name, root.extras.as_ref())),
-                &markers,
-            );
-            candidates.extend(removed_reachability.packages().iter().cloned());
-            if !removed_reachability.incomplete().is_empty() {
-                debug!(
-                    packages = %removed_reachability.incomplete().iter().join(", "),
-                    "Unable to read complete dependency metadata; pruning based on available metadata"
-                );
-            }
-
-            let managed = candidates
-                .iter()
-                .chain(&retained)
-                .cloned()
-                .collect::<BTreeSet<_>>();
-            let external_reachability = site_packages.reachable_packages(
-                site_packages
-                    .iter()
-                    .filter(|distribution| !managed.contains(distribution.name()))
-                    .map(|distribution| (distribution.name(), &[] as &[ExtraName])),
-                &markers,
-            );
-
-            if !external_reachability.incomplete().is_empty() {
-                debug!(
-                    packages = %external_reachability.incomplete().iter().join(", "),
-                    "Unable to read complete dependency metadata; pruning based on available metadata"
-                );
-            }
-            candidates.retain(|candidate| {
-                !retained.contains(candidate)
-                    && !external_reachability.packages().contains(candidate)
-            });
-
-            Modifications::Prune {
-                roots,
-                candidates,
-                retained,
-            }
-        }
-        modifications => modifications,
-    };
+    let modifications = modifications.prepare(&site_packages, venv);
 
     let plan = InstallationPlan::build(
         resolution,
@@ -822,23 +839,10 @@ impl InstallationPlan {
         preview: Preview,
     ) -> Result<Changelog, Error> {
         let (mut plan, start) = self.into_parts();
-        match &modifications {
-            Modifications::Sufficient => plan.extraneous.clear(),
-            Modifications::Exact => {}
-            Modifications::Prune { candidates, .. } => plan
-                .extraneous
-                .retain(|distribution| candidates.contains(distribution.name())),
-        }
+        modifications.apply(&mut plan);
 
         if dry_run.enabled() {
-            return report_dry_run(
-                dry_run,
-                resolution,
-                plan,
-                start,
-                logger.as_ref(),
-                printer,
-            );
+            return report_dry_run(dry_run, resolution, plan, start, logger.as_ref(), printer);
         }
 
         let Plan {
