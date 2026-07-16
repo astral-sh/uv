@@ -28,6 +28,23 @@ enabled = true
 "github.com" = "allow"
 "pypi.org" = "allow"
 
+[permissions.create-bug-test]
+description = "Bug integration-test creation with workspace and dependency-registry access."
+extends = ":workspace"
+
+[permissions.create-bug-test.network]
+enabled = true
+
+[permissions.create-bug-test.network.domains]
+"api.github.com" = "allow"
+"crates.io" = "allow"
+"files.pythonhosted.org" = "allow"
+"github.com" = "allow"
+"index.crates.io" = "allow"
+"pypi.org" = "allow"
+"static.crates.io" = "allow"
+"static.rust-lang.org" = "allow"
+
 [permissions.pull-request-review]
 description = "Pull request review with workspace and GitHub API access."
 extends = ":workspace"

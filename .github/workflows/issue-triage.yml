@@ -56,14 +56,19 @@ jobs:
   reproduce-bug:
     needs: triage
     if: needs.triage.outputs.result != '' && fromJSON(needs.triage.outputs.result).type == 'bug'
-    uses: ./.github/workflows/reproduce-bug.yml
-    secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
-    with:
-      issue: ${{ inputs.issue || github.event.issue.number }}
-      runner: ubuntu-latest
+    runs-on: ubuntu-latest
     permissions:
-      contents: read
-      issues: read
+      actions: write
+    steps:
+      - name: "Dispatch bug reproduction"
+        run: |
+          gh workflow run reproduce-bug.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --field issue="$ISSUE" \
+            --field runner=ubuntu-latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
 
   report:
     needs: triage
