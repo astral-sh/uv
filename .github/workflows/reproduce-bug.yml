@@ -65,7 +65,7 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: ${{ matrix.variant == 'optimized' && 'nightly-2026-07-13' || '1.97.0' }}
         with:
-          prefix-key: v0-uv-clippy-workspace-cache-${{ inputs.target }}-20260715a
+          prefix-key: v0-uv-clippy-workspace-cache-${{ inputs.target }}-20260715b
           shared-key: ${{ matrix.variant }}
           workspaces: ${{ env.UV_WORKSPACE || github.workspace }} -> target-${{ matrix.variant }}
           cache-workspace-crates: ${{ matrix.variant == 'optimized' }}
@@ -131,7 +131,7 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: ${{ matrix.variant == 'optimized' && 'nightly-2026-07-13' || '1.97.0' }}
         with:
-          prefix-key: v0-uv-clippy-workspace-cache-${{ inputs.target }}-20260715a
+          prefix-key: v0-uv-clippy-workspace-cache-${{ inputs.target }}-20260715b
           shared-key: ${{ matrix.variant }}
           workspaces: ${{ env.UV_WORKSPACE || github.workspace }} -> target-${{ matrix.variant }}
           cache-workspace-crates: ${{ matrix.variant == 'optimized' }}
