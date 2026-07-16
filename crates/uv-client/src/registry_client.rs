@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
+use std::hash::BuildHasherDefault;
+use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -9,7 +11,7 @@ use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHasher};
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
@@ -26,6 +28,7 @@ use uv_distribution_types::{
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
+use uv_once_map::OnceMap;
 use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
@@ -203,6 +206,7 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             read_timeout,
             flat_indexes: Arc::default(),
+            wheel_metadata_bundles: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
         })
     }
@@ -227,6 +231,8 @@ pub struct RegistryClient {
     read_timeout: Duration,
     /// The flat index entries for each `--find-links`-style index URL, with one slot per index.
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
+    /// The optional, per-package wheel metadata bundles used by offline resolutions.
+    wheel_metadata_bundles: Arc<WheelMetadataBundles>,
     /// The pyx token store to use for persistent credentials.
     // TODO(charlie): The token store is only needed for `is_known_url`; can we avoid storing it here?
     pyx_token_store: Option<PyxTokenStore>,
@@ -1101,6 +1107,13 @@ impl RegistryClient {
                 WheelCache::Index(index).wheel_dir(filename.name.as_ref()),
                 format!("{}.msgpack", filename.cache_key()),
             );
+            if self.connectivity == Connectivity::Offline
+                && let Some(metadata) = self
+                    .wheel_metadata_bundle(&cache_entry, filename, &url)
+                    .await
+            {
+                return Ok(metadata);
+            }
             let cache_control = match self.connectivity {
                 Connectivity::Online
                     if let Some(header) = self.indexes.artifact_cache_control_for(index) =>
@@ -1177,6 +1190,13 @@ impl RegistryClient {
             cache_shard.wheel_dir(filename.name.as_ref()),
             format!("{}.msgpack", filename.cache_key()),
         );
+        if self.connectivity == Connectivity::Offline
+            && let Some(metadata) = self
+                .wheel_metadata_bundle(&cache_entry, filename, url)
+                .await
+        {
+            return Ok(metadata);
+        }
         let cache_control = match self.connectivity {
             Connectivity::Online
                 if let Some(index) = index
@@ -1323,6 +1343,64 @@ impl RegistryClient {
             .map_err(crate::Error::from)
     }
 
+    /// Read wheel metadata from the optional per-package bundle.
+    async fn wheel_metadata_bundle(
+        &self,
+        cache_entry: &CacheEntry,
+        filename: &WheelFilename,
+        url: &DisplaySafeUrl,
+    ) -> Option<ResolutionMetadata> {
+        let bundle = if let Some(bundle) = self.wheel_metadata_bundles.get(cache_entry.dir()) {
+            bundle
+        } else {
+            let directory = cache_entry.dir().to_path_buf();
+            if let Some(bundle) = self
+                .wheel_metadata_bundles
+                .register_or_wait(&directory)
+                .await
+            {
+                bundle
+            } else {
+                let bundle_path = directory.join("metadata.bundle.msgpack");
+                let bundle = match fs_err::tokio::read(&bundle_path).await {
+                    Ok(bytes) => {
+                        if let Some(bundle) = WheelMetadataBundle::parse(bytes) {
+                            Some(bundle)
+                        } else {
+                            debug!(
+                                "Ignoring invalid wheel metadata bundle: {}",
+                                bundle_path.display()
+                            );
+                            None
+                        }
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(err) => {
+                        debug!(
+                            "Failed to read wheel metadata bundle at {}: {err}",
+                            bundle_path.display()
+                        );
+                        None
+                    }
+                };
+                let bundle = Arc::new(bundle);
+                self.wheel_metadata_bundles
+                    .done(directory, Arc::clone(&bundle));
+                bundle
+            }
+        };
+        let bundle = bundle.as_ref().as_ref()?;
+        let key = cache_entry.path().file_stem()?.to_str()?;
+        let entry = bundle.entries.get(key)?;
+        if bundle.bytes.get(entry.url.clone())? != url.as_str().as_bytes() {
+            return None;
+        }
+        let metadata =
+            rmp_serde::from_slice::<ResolutionMetadata>(bundle.bytes.get(entry.payload.clone())?)
+                .ok()?;
+        (metadata.name == filename.name && metadata.version == filename.version).then_some(metadata)
+    }
+
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> std::io::Error {
         if err.is_timeout() {
@@ -1377,6 +1455,67 @@ impl FlatIndexCache {
 
 type FlatIndexEntriesByPackage = FxHashMap<PackageName, Vec<FlatIndexEntry>>;
 type FlatIndexSlot = Arc<Mutex<Option<FlatIndexEntriesByPackage>>>;
+
+type WheelMetadataBundles =
+    OnceMap<PathBuf, Arc<Option<WheelMetadataBundle>>, BuildHasherDefault<FxHasher>>;
+
+#[derive(Debug)]
+struct WheelMetadataBundle {
+    bytes: Vec<u8>,
+    entries: FxHashMap<String, WheelMetadataBundleEntry>,
+}
+
+#[derive(Debug)]
+struct WheelMetadataBundleEntry {
+    url: Range<usize>,
+    payload: Range<usize>,
+}
+
+impl WheelMetadataBundle {
+    /// Parse a compact sequence of wheel filename keys, request URLs, and `MsgPack` payloads.
+    fn parse(bytes: Vec<u8>) -> Option<Self> {
+        let mut cursor = bytes.strip_prefix(b"uv-wheel-metadata-bundle-v1\0")?;
+        let count = usize::try_from(u32::from_le_bytes(
+            take_bundle_bytes(&mut cursor, 4)?.try_into().ok()?,
+        ))
+        .ok()?;
+        let mut entries = FxHashMap::default();
+        entries.try_reserve(count).ok()?;
+
+        for _ in 0..count {
+            let key_length = usize::from(u16::from_le_bytes(
+                take_bundle_bytes(&mut cursor, 2)?.try_into().ok()?,
+            ));
+            let url_length = usize::from(u16::from_le_bytes(
+                take_bundle_bytes(&mut cursor, 2)?.try_into().ok()?,
+            ));
+            let payload_length = usize::try_from(u32::from_le_bytes(
+                take_bundle_bytes(&mut cursor, 4)?.try_into().ok()?,
+            ))
+            .ok()?;
+            let key = std::str::from_utf8(take_bundle_bytes(&mut cursor, key_length)?).ok()?;
+            let url_start = bytes.len().checked_sub(cursor.len())?;
+            std::str::from_utf8(take_bundle_bytes(&mut cursor, url_length)?).ok()?;
+            let payload_start = bytes.len().checked_sub(cursor.len())?;
+            take_bundle_bytes(&mut cursor, payload_length)?;
+            entries.insert(
+                key.to_owned(),
+                WheelMetadataBundleEntry {
+                    url: url_start..url_start.checked_add(url_length)?,
+                    payload: payload_start..payload_start.checked_add(payload_length)?,
+                },
+            );
+        }
+
+        cursor.is_empty().then_some(Self { bytes, entries })
+    }
+}
+
+fn take_bundle_bytes<'a>(cursor: &mut &'a [u8], length: usize) -> Option<&'a [u8]> {
+    let bytes = cursor.get(..length)?;
+    *cursor = cursor.get(length..)?;
+    Some(bytes)
+}
 
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
@@ -2126,6 +2265,34 @@ mod tests {
             ["example_1-1.0.0.tar.gz", "example_1-1.0.0-py3-none-any.whl"]
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn wheel_metadata_bundle_round_trip() -> Result<(), Error> {
+        let key = b"1.0.0-py3-none-any";
+        let url = b"https://files.example/example-1.0.0-py3-none-any.whl.metadata";
+        let payload = b"metadata";
+        let mut bytes = Vec::from(&b"uv-wheel-metadata-bundle-v1\0"[..]);
+        bytes.extend_from_slice(&1_u32.to_le_bytes());
+        bytes.extend_from_slice(&u16::try_from(key.len())?.to_le_bytes());
+        bytes.extend_from_slice(&u16::try_from(url.len())?.to_le_bytes());
+        bytes.extend_from_slice(&u32::try_from(payload.len())?.to_le_bytes());
+        bytes.extend_from_slice(key);
+        bytes.extend_from_slice(url);
+        bytes.extend_from_slice(payload);
+
+        let Some(bundle) = super::WheelMetadataBundle::parse(bytes.clone()) else {
+            return Err("valid wheel metadata bundle was rejected".into());
+        };
+        let Some(entry) = bundle.entries.get("1.0.0-py3-none-any") else {
+            return Err("wheel metadata bundle entry was missing".into());
+        };
+        assert_eq!(bundle.bytes.get(entry.url.clone()), Some(&url[..]));
+        assert_eq!(bundle.bytes.get(entry.payload.clone()), Some(&payload[..]));
+
+        bytes.pop();
+        assert!(super::WheelMetadataBundle::parse(bytes).is_none());
         Ok(())
     }
 
