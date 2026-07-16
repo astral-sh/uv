@@ -88,6 +88,7 @@ cleanup() {
         wait "$server_pid" 2>/dev/null || true
     fi
 
+    # Only remove the per-run download directory created by this script.
     if [[ "$download_directory" == "$scratch_root"/load-github-action-thread.* ]]; then
         rm -rf -- "$download_directory"
     fi
@@ -107,6 +108,7 @@ done < <(find "$download_directory" -type f \( -name 'rollout-*.jsonl' -o -name 
 ((${#rollouts[@]})) || fail "no Codex rollout files were found in the downloaded artifacts"
 
 server_log="$download_directory/app-server.stderr"
+# Keep stdin open while waiting for responses; closing it makes app-server exit before the fork.
 coproc app_server { codex app-server --stdio 2>"$server_log"; }
 server_pid="$!"
 exec {server_input}>&"${app_server[1]}"
@@ -116,6 +118,7 @@ read_response() {
     local expected_id="$1"
     local response response_id
 
+    # Ignore asynchronous notifications until the response for this request arrives.
     while IFS= read -r -t 120 response <&"$server_output"; do
         response_id="$(jq -r '.id // empty' <<<"$response" 2>/dev/null || true)"
         if [[ "$response_id" == "$expected_id" ]]; then
@@ -150,6 +153,8 @@ printf '%s\n' '{"method":"initialized","params":{}}' >&"$server_input"
 request_id=2
 thread_ids=()
 for rollout in "${rollouts[@]}"; do
+    # Forking turns the saved `exec` rollout into an interactive local thread. `excludeTurns`
+    # keeps the response small; the complete history is still copied into the new rollout.
     fork_request="$(jq -cn --argjson id "$request_id" --arg path "$rollout" --arg cwd "$working_directory" '{id: $id, method: "thread/fork", params: {threadId: "ignored", path: $path, cwd: $cwd, excludeTurns: true}}')"
     printf '%s\n' "$fork_request" >&"$server_input"
     fork_response="$(read_response "$request_id")" || exit 1
@@ -171,6 +176,7 @@ done
 
 printf 'Loaded %s Codex thread(s) for %s.\n' "${#rollouts[@]}" "$working_directory"
 
+# Avoid repeatedly switching the app when a run contains multiple Codex threads.
 if ((${#thread_ids[@]} == 1)) && [[ "$(uname -s)" == Darwin ]] && command -v open >/dev/null 2>&1; then
     thread_url="codex://threads/${thread_ids[0]}"
     if open "$thread_url" >/dev/null 2>&1; then

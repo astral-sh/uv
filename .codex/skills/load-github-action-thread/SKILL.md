@@ -3,7 +3,7 @@ name: load-github-action-thread
 description:
   Download retained Codex GitHub Action thread artifacts and load their rollout history into the
   local Codex app. Use when asked to open, load, import, resume, or inspect a Codex automation
-  thread from a GitHub Actions run or a related GitHub issue.
+  thread from a GitHub Actions run or a related GitHub issue or pull request.
 ---
 
 # Load GitHub Action Thread
@@ -32,6 +32,18 @@ gh run list --repo "$repository" --workflow reproduce-bug.yml --limit 100 \
   --json databaseId,event,status,conclusion,createdAt,url
 gh run view <run-id> --repo "$repository" --log | rg -m 2 "ISSUE: $issue_number|issue: $issue_number"
 ```
+
+When given a pull request, find its security-review run from the pull request checks. The check link
+contains the Actions run URL and can be passed directly to the loader:
+
+```bash
+pull_request=20482
+gh pr checks "$pull_request" --repo "$repository" --json name,workflow,state,link \
+  --jq '.[] | select(.name | test("review"; "i"))'
+```
+
+The security-review job only runs for eligible same-repository pull requests; a skipped review has
+no thread artifact to load.
 
 Run the repository utility with the GitHub Actions run URL:
 
