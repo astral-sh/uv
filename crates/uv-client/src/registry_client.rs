@@ -1407,7 +1407,11 @@ impl VersionFiles {
     }
 }
 
-/// A compact representation of a registry file in the Simple API cache.
+/// A compact, cache-local representation of a registry file from the Simple API.
+///
+/// Filenames recoverable from the URL and false `yanked` markers are omitted, while optional
+/// scalar values use presence bits. Converting back to [`File`] restores equivalent Simple API
+/// metadata.
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct CachedFile {
@@ -1428,16 +1432,14 @@ pub struct CachedFile {
 }
 
 impl CachedFile {
-    /// Return the filename, reconstructing it from the URL when it was elided.
+    /// Returns the stored filename or reconstructs it from the file URL.
     pub fn filename(&self) -> &str {
         self.filename
             .as_deref()
-            .map(SmallString::as_ref)
-            .or_else(|| filename_from_location(&self.url))
-            .unwrap_or_default()
+            .map_or_else(|| filename_from_location(&self.url), SmallString::as_ref)
     }
 
-    /// Return the hashes associated with this file.
+    /// Reconstructs the file's hash digests from their compact cache representation.
     pub fn hashes(&self) -> HashDigests {
         HashDigests::from(&self.hashes)
     }
@@ -1445,8 +1447,7 @@ impl CachedFile {
 
 impl From<File> for CachedFile {
     fn from(file: File) -> Self {
-        let filename = filename_from_location(&file.url)
-            .is_none_or(|filename| filename != file.filename.as_ref())
+        let filename = (filename_from_location(&file.url) != file.filename.as_ref())
             .then(|| Box::new(file.filename));
         let has_size = file.size.is_some();
         let has_upload_time = file.upload_time_utc_ms.is_some();
@@ -1483,15 +1484,22 @@ impl From<CachedFile> for File {
     }
 }
 
-fn filename_from_location(location: &FileLocation) -> Option<&str> {
+/// Returns the final URL path component after removing any query or fragment.
+fn filename_from_location(location: &FileLocation) -> &str {
     let path = match location {
         FileLocation::RelativeUrl(_, path) => path.as_ref(),
         FileLocation::AbsoluteUrl(url) => url.as_ref(),
     };
-    path.split(['?', '#']).next()?.rsplit('/').next()
+    let path = path.split_once(['?', '#']).map_or(path, |(path, _)| path);
+    path.rsplit_once('/').map_or(path, |(_, filename)| filename)
 }
 
 /// A compact representation of a single, canonical hash digest.
+///
+/// Only lowercase hexadecimal digests of the expected length use the packed variants. Multiple
+/// hashes and non-canonical spellings remain in [`Self::Other`] so conversion back to
+/// [`HashDigests`] is lossless. The larger digests are boxed to keep the common archived layout
+/// small.
 #[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 enum CachedHashDigests {
@@ -1570,6 +1578,10 @@ impl From<&CachedHashDigests> for HashDigests {
     }
 }
 
+/// Decodes a lowercase hexadecimal digest of exactly `N` bytes.
+///
+/// Rejecting non-canonical spellings lets [`CachedHashDigests::Other`] preserve their original
+/// text.
 fn decode_digest<const N: usize>(hash: &HashDigest) -> Option<[u8; N]> {
     if hash.digest.len() != N * 2
         || !hash
@@ -1585,6 +1597,7 @@ fn decode_digest<const N: usize>(hash: &HashDigest) -> Option<[u8; N]> {
     Some(digest)
 }
 
+/// Reconstructs the canonical lowercase spelling of a packed digest.
 fn hash_digest(algorithm: HashAlgorithm, digest: &[u8]) -> HashDigest {
     let mut encoded = [0; 128];
     let length = digest.len() * 2;
