@@ -4378,6 +4378,7 @@ fn remove_registry() -> Result<()> {
 }
 
 /// Removing a dependency should ignore extras previously requested for an extraneous package.
+/// See `test/scenarios/extras/remove-prune-extra.md` for the rendered dependency graph.
 #[test]
 fn remove_ignores_extras_of_extraneous_packages() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
