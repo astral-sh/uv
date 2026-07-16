@@ -622,11 +622,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 self.on_progress(next_package, &version);
 
-                if !state
+                if state
                     .added_dependencies
-                    .entry(next_id)
-                    .or_default()
-                    .insert(version.clone())
+                    .get(&next_id)
+                    .is_some_and(|versions| versions.contains(&version))
                 {
                     // `dep_incompats` are already in `incompatibilities` so we know there are not satisfied
                     // terms and can add the decision directly.
@@ -662,6 +661,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             ));
                     }
                     ForkedDependencies::Unforked(dependencies) => {
+                        state
+                            .added_dependencies
+                            .entry(next_id)
+                            .or_default()
+                            .insert(version.clone());
+
                         // Enrich the state with any URLs, etc.
                         state
                             .visit_package_version_dependencies(
@@ -697,6 +702,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         mut forks,
                         diverging_packages,
                     } => {
+                        state
+                            .added_dependencies
+                            .entry(next_id)
+                            .or_default()
+                            .insert(version.clone());
+
                         debug!(
                             "Pre-fork {} took {:.3}s",
                             state.env,
