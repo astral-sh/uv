@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::path::Path;
 use std::sync::Arc;
@@ -17,6 +16,7 @@ use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
+use uv_types::{DependencyReachability, DependencyTraversal};
 use uv_workspace::pyproject::DependencyType;
 
 use crate::lock::{
@@ -38,29 +38,46 @@ fn newly_activated_extras<'lock>(
         .collect()
 }
 
-/// Record another condition under which a locked package and optional extra are reachable.
+impl DependencyReachability for UniversalMarker {
+    fn merge(&mut self, other: Self) -> bool {
+        let previous = *self;
+        self.or(other);
+        *self != previous
+    }
+}
+
+/// Resolver traversals that must be seeded from the same package and extra states.
 ///
-/// Returns `true` when the combined reachability changed.
-fn add_reachability<'lock>(
-    reachability: &mut FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), UniversalMarker>,
-    key: (&'lock PackageId, Option<&'lock ExtraName>),
-    marker: UniversalMarker,
-) -> bool {
-    match reachability.entry(key) {
-        Entry::Occupied(mut entry) => {
-            let mut combined = *entry.get();
-            combined.or(marker);
-            if combined == *entry.get() {
-                false
-            } else {
-                entry.insert(combined);
-                true
-            }
+/// Materialization visits each state once, while conflict reachability revisits a state whenever
+/// its accumulated marker grows.
+#[derive(Debug, Default)]
+struct ResolutionTraversals<'lock> {
+    materialization: DependencyTraversal<&'lock PackageId, &'lock ExtraName>,
+    conflict_reachability: DependencyTraversal<&'lock PackageId, &'lock ExtraName, UniversalMarker>,
+}
+
+impl<'lock> ResolutionTraversals<'lock> {
+    fn enqueue_package(
+        &mut self,
+        package_id: &'lock PackageId,
+        extras: impl IntoIterator<Item = &'lock ExtraName>,
+        reachability: UniversalMarker,
+    ) {
+        self.enqueue_state(package_id, None, reachability);
+        for extra in extras {
+            self.enqueue_state(package_id, Some(extra), reachability);
         }
-        Entry::Vacant(entry) => {
-            entry.insert(marker);
-            true
-        }
+    }
+
+    fn enqueue_state(
+        &mut self,
+        package_id: &'lock PackageId,
+        extra: Option<&'lock ExtraName>,
+        reachability: UniversalMarker,
+    ) {
+        self.materialization.enqueue(package_id, extra);
+        self.conflict_reachability
+            .enqueue_reachable(package_id, extra, reachability);
     }
 }
 
@@ -187,23 +204,10 @@ pub trait Installable<'lock> {
     }
 }
 
-fn enqueue_reachability_state<'lock>(
-    queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-    seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
-    package: &'lock Package,
-    extra: Option<&'lock ExtraName>,
-) {
-    if seen.insert((&package.id, extra)) {
-        queue.push_back((package, extra));
-    }
-}
-
 fn enqueue_reachable_dependency<'lock>(
-    lock: &'lock Lock,
     dependency: &'lock Dependency,
     marker_environment: &ResolverMarkerEnvironment,
-    queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-    seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+    traversal: &mut DependencyTraversal<&'lock PackageId, &'lock ExtraName>,
 ) {
     if !dependency
         .complexified_marker
@@ -212,19 +216,14 @@ fn enqueue_reachable_dependency<'lock>(
     {
         return;
     }
-    let package = lock.find_by_id(&dependency.package_id);
-    enqueue_reachability_state(queue, seen, package, None);
-    for extra in &dependency.extra {
-        enqueue_reachability_state(queue, seen, package, Some(extra));
-    }
+    traversal.enqueue_package(&dependency.package_id, dependency.extra.iter());
 }
 
 fn enqueue_reachable_requirement<'lock>(
     lock: &'lock Lock,
     requirement: &'lock uv_distribution_types::Requirement,
     marker_environment: &ResolverMarkerEnvironment,
-    queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-    seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+    traversal: &mut DependencyTraversal<&'lock PackageId, &'lock ExtraName>,
 ) {
     for package in lock
         .packages()
@@ -237,21 +236,18 @@ fn enqueue_reachable_requirement<'lock>(
         {
             continue;
         }
-        enqueue_reachability_state(queue, seen, package, None);
-        for extra in &requirement.extras {
-            enqueue_reachability_state(queue, seen, package, Some(extra));
-        }
+        traversal.enqueue_package(&package.id, requirement.extras.iter());
     }
 }
 
 fn walk_reachable_names<'lock>(
     lock: &'lock Lock,
     marker_environment: &ResolverMarkerEnvironment,
-    mut queue: VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-    mut seen: FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+    traversal: DependencyTraversal<&'lock PackageId, &'lock ExtraName>,
 ) -> BTreeSet<PackageName> {
     let mut names = BTreeSet::new();
-    while let Some((package, extra)) = queue.pop_front() {
+    traversal.walk(|package_id, extra, traversal| {
+        let package = lock.find_by_id(package_id);
         names.insert(package.name().clone());
         let dependencies = if let Some(extra) = extra {
             Either::Left(
@@ -265,15 +261,9 @@ fn walk_reachable_names<'lock>(
             Either::Right(package.dependencies().iter())
         };
         for dependency in dependencies {
-            enqueue_reachable_dependency(
-                lock,
-                dependency,
-                marker_environment,
-                &mut queue,
-                &mut seen,
-            );
+            enqueue_reachable_dependency(dependency, marker_environment, traversal);
         }
-    }
+    });
     names
 }
 
@@ -288,8 +278,7 @@ pub fn reachable_declared_package_names<'lock>(
     marker_environment: &ResolverMarkerEnvironment,
 ) -> Result<BTreeSet<PackageName>, LockError> {
     let lock = target.lock();
-    let mut queue = VecDeque::new();
-    let mut seen = FxHashSet::default();
+    let mut traversal = DependencyTraversal::default();
 
     for root_name in target.roots() {
         let root = lock
@@ -300,18 +289,9 @@ pub fn reachable_declared_package_names<'lock>(
             .ok_or_else(|| LockErrorKind::MissingRootPackage {
                 name: root_name.clone(),
             })?;
-        enqueue_reachability_state(&mut queue, &mut seen, root, None);
-        for extra in root.optional_dependencies().keys() {
-            enqueue_reachability_state(&mut queue, &mut seen, root, Some(extra));
-        }
+        traversal.enqueue_package(&root.id, root.optional_dependencies().keys());
         for dependency in root.resolved_dependency_groups().values().flatten() {
-            enqueue_reachable_dependency(
-                lock,
-                dependency,
-                marker_environment,
-                &mut queue,
-                &mut seen,
-            );
+            enqueue_reachable_dependency(dependency, marker_environment, &mut traversal);
         }
     }
     for requirement in lock
@@ -319,10 +299,10 @@ pub fn reachable_declared_package_names<'lock>(
         .iter()
         .chain(lock.dependency_groups().values().flatten())
     {
-        enqueue_reachable_requirement(lock, requirement, marker_environment, &mut queue, &mut seen);
+        enqueue_reachable_requirement(lock, requirement, marker_environment, &mut traversal);
     }
 
-    Ok(walk_reachable_names(lock, marker_environment, queue, seen))
+    Ok(walk_reachable_names(lock, marker_environment, traversal))
 }
 
 /// Return package names required by the named direct dependencies in one project section.
@@ -333,8 +313,7 @@ pub fn reachable_direct_dependency_names<'lock>(
     names: &BTreeSet<PackageName>,
 ) -> Result<BTreeSet<PackageName>, LockError> {
     let lock = target.lock();
-    let mut queue = VecDeque::new();
-    let mut seen = FxHashSet::default();
+    let mut traversal = DependencyTraversal::default();
 
     if let Some(project_name) = target.project_name() {
         let project = lock
@@ -367,13 +346,7 @@ pub fn reachable_direct_dependency_names<'lock>(
             .iter()
             .filter(|dependency| names.contains(&dependency.package_id.name))
         {
-            enqueue_reachable_dependency(
-                lock,
-                dependency,
-                marker_environment,
-                &mut queue,
-                &mut seen,
-            );
+            enqueue_reachable_dependency(dependency, marker_environment, &mut traversal);
         }
     } else {
         let requirements = match dependency_type {
@@ -387,17 +360,11 @@ pub fn reachable_direct_dependency_names<'lock>(
             .flatten()
             .filter(|requirement| names.contains(&requirement.name))
         {
-            enqueue_reachable_requirement(
-                lock,
-                requirement,
-                marker_environment,
-                &mut queue,
-                &mut seen,
-            );
+            enqueue_reachable_requirement(lock, requirement, marker_environment, &mut traversal);
         }
     }
 
-    Ok(walk_reachable_names(lock, marker_environment, queue, seen))
+    Ok(walk_reachable_names(lock, marker_environment, traversal))
 }
 
 /// Internal lock-to-resolution implementation shared by [`Installable`] and [`Lock`].
@@ -422,9 +389,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
         let mut petgraph = Graph::with_capacity(size_guess, size_guess);
         let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
 
-        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
-        let mut seen = FxHashSet::default();
-        let mut conflict_reachability = FxHashMap::default();
+        let mut resolution_traversals = ResolutionTraversals::default();
         let mut activated_projects: Vec<&PackageName> = vec![];
         let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
         let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
@@ -494,20 +459,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
         for (dist, index) in initialized_roots {
             if groups.prod() {
                 // Push its dependencies onto the queue.
-                queue.push_back((dist, None));
-                add_reachability(
-                    &mut conflict_reachability,
-                    (&dist.id, None),
+                resolution_traversals.enqueue_package(
+                    &dist.id,
+                    extras.extra_names(dist.optional_dependencies.keys()),
                     UniversalMarker::TRUE,
                 );
-                for extra in extras.extra_names(dist.optional_dependencies.keys()) {
-                    queue.push_back((dist, Some(extra)));
-                    add_reachability(
-                        &mut conflict_reachability,
-                        (&dist.id, Some(extra)),
-                        UniversalMarker::TRUE,
-                    );
-                }
             }
 
             // Add any dev dependencies.
@@ -584,24 +540,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 );
 
                 // Push its dependencies on the queue.
-                add_reachability(
-                    &mut conflict_reachability,
-                    (&dep.package_id, None),
+                resolution_traversals.enqueue_package(
+                    &dep.package_id,
+                    dep.extra.iter(),
                     dep.complexified_marker,
                 );
-                if seen.insert((&dep.package_id, None)) {
-                    queue.push_back((dep_dist, None));
-                }
-                for extra in &dep.extra {
-                    add_reachability(
-                        &mut conflict_reachability,
-                        (&dep.package_id, Some(extra)),
-                        dep.complexified_marker,
-                    );
-                    if seen.insert((&dep.package_id, Some(extra))) {
-                        queue.push_back((dep_dist, Some(extra)));
-                    }
-                }
             }
         }
 
@@ -636,24 +579,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 petgraph.add_edge(root, index, Edge::Prod);
 
                 // Push its dependencies on the queue.
-                add_reachability(
-                    &mut conflict_reachability,
-                    (&dist.id, None),
+                resolution_traversals.enqueue_package(
+                    &dist.id,
+                    dependency.extras.iter(),
                     UniversalMarker::TRUE,
                 );
-                if seen.insert((&dist.id, None)) {
-                    queue.push_back((dist, None));
-                }
-                for extra in &dependency.extras {
-                    add_reachability(
-                        &mut conflict_reachability,
-                        (&dist.id, Some(extra)),
-                        UniversalMarker::TRUE,
-                    );
-                    if seen.insert((&dist.id, Some(extra))) {
-                        queue.push_back((dist, Some(extra)));
-                    }
-                }
             }
 
             // Add any dependency groups that are exclusive to the workspace root (e.g., dev
@@ -722,26 +652,18 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 petgraph.add_edge(root, index, Edge::Dev(group.clone()));
 
                 // Push its dependencies on the queue.
-                add_reachability(
-                    &mut conflict_reachability,
-                    (&dist.id, None),
+                resolution_traversals.enqueue_package(
+                    &dist.id,
+                    dependency.extras.iter(),
                     UniversalMarker::TRUE,
                 );
-                if seen.insert((&dist.id, None)) {
-                    queue.push_back((dist, None));
-                }
-                for extra in &dependency.extras {
-                    add_reachability(
-                        &mut conflict_reachability,
-                        (&dist.id, Some(extra)),
-                        UniversalMarker::TRUE,
-                    );
-                    if seen.insert((&dist.id, Some(extra))) {
-                        queue.push_back((dist, Some(extra)));
-                    }
-                }
             }
         }
+
+        let ResolutionTraversals {
+            materialization: materialization_traversal,
+            conflict_reachability: conflict_traversal,
+        } = resolution_traversals;
 
         // Below, we traverse the dependency graph in a breadth first manner
         // twice. It's only in the second traversal that we actually build
@@ -774,72 +696,57 @@ trait InstallableExt<'lock>: Installable<'lock> {
         if has_conflicts {
             let mut activated_extras_set: BTreeSet<(&PackageName, &ExtraName)> =
                 activated_extras.iter().copied().collect();
-            let mut queue = queue.clone();
-            let mut reachability = conflict_reachability;
-            while let Some((package, extra)) = queue.pop_front() {
-                let Some(parent_reachability) = reachability.get(&(&package.id, extra)).copied()
-                else {
-                    continue;
-                };
-                let deps = if let Some(extra) = extra {
-                    Either::Left(
-                        package
-                            .optional_dependencies
-                            .get(extra)
-                            .into_iter()
-                            .flatten(),
-                    )
-                } else {
-                    Either::Right(package.dependencies.iter())
-                };
-                for dep in deps {
-                    let mut dep_reachability = dep.complexified_marker;
-                    dep_reachability.and(parent_reachability);
-                    let additional_activated_extras =
-                        newly_activated_extras(dep, &activated_extras);
-                    if !dep_reachability.evaluate(
-                        marker_env,
-                        activated_projects.iter().copied(),
-                        activated_extras
-                            .iter()
-                            .chain(additional_activated_extras.iter())
-                            .copied(),
-                        activated_groups.iter().copied(),
-                    ) {
-                        continue;
-                    }
-                    // The dependency can still be visited provisionally before all activated
-                    // extras are known. The second traversal below will exclude it once those
-                    // extras are available. Crucially, `dep_reachability` includes the conditions
-                    // required to reach the parent package: dependency markers may have been
-                    // simplified under those conditions and cannot stand alone during this
-                    // preliminary traversal. Otherwise, an unreachable package could activate an
-                    // extra and cause the conflict check below to report a false positive.
-
-                    for key in additional_activated_extras {
-                        activated_extras_set.insert(key);
-                        activated_extras.push(key);
-                    }
-                    let dep_dist = self.lock().find_by_id(&dep.package_id);
-                    // Push its dependencies on the queue.
-                    if add_reachability(
-                        &mut reachability,
-                        (&dep.package_id, None),
-                        dep_reachability,
-                    ) {
-                        queue.push_back((dep_dist, None));
-                    }
-                    for extra in &dep.extra {
-                        if add_reachability(
-                            &mut reachability,
-                            (&dep.package_id, Some(extra)),
-                            dep_reachability,
+            conflict_traversal.walk_reachable(
+                |package_id, extra, parent_reachability, traversal| {
+                    let package = self.lock().find_by_id(package_id);
+                    let deps = if let Some(extra) = extra {
+                        Either::Left(
+                            package
+                                .optional_dependencies
+                                .get(extra)
+                                .into_iter()
+                                .flatten(),
+                        )
+                    } else {
+                        Either::Right(package.dependencies.iter())
+                    };
+                    for dep in deps {
+                        let mut dep_reachability = dep.complexified_marker;
+                        dep_reachability.and(parent_reachability);
+                        let additional_activated_extras =
+                            newly_activated_extras(dep, &activated_extras);
+                        if !dep_reachability.evaluate(
+                            marker_env,
+                            activated_projects.iter().copied(),
+                            activated_extras
+                                .iter()
+                                .chain(additional_activated_extras.iter())
+                                .copied(),
+                            activated_groups.iter().copied(),
                         ) {
-                            queue.push_back((dep_dist, Some(extra)));
+                            continue;
                         }
+                        // The dependency can still be visited provisionally before all activated
+                        // extras are known. The second traversal below will exclude it once those
+                        // extras are available. Crucially, `dep_reachability` includes the conditions
+                        // required to reach the parent package: dependency markers may have been
+                        // simplified under those conditions and cannot stand alone during this
+                        // preliminary traversal. Otherwise, an unreachable package could activate an
+                        // extra and cause the conflict check below to report a false positive.
+
+                        for key in additional_activated_extras {
+                            activated_extras_set.insert(key);
+                            activated_extras.push(key);
+                        }
+                        // Push its dependencies on the queue.
+                        traversal.enqueue_reachable_package(
+                            &dep.package_id,
+                            dep.extra.iter(),
+                            &dep_reachability,
+                        );
                     }
-                }
-            }
+                },
+            );
             // At time of writing, it's somewhat expected that the set of
             // conflicting extras is pretty small. With that said, the
             // time complexity of the following routine is pretty gross.
@@ -868,72 +775,69 @@ trait InstallableExt<'lock>: Installable<'lock> {
             }
         }
 
-        while let Some((package, extra)) = queue.pop_front() {
-            let deps = if let Some(extra) = extra {
-                Either::Left(
-                    package
-                        .optional_dependencies
-                        .get(extra)
-                        .into_iter()
-                        .flatten(),
-                )
-            } else {
-                Either::Right(package.dependencies.iter())
-            };
-            for dep in deps {
-                if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
-                    dependencies_for_conflict_validation.push((package, dep));
-                }
-                if !dep.complexified_marker.evaluate(
-                    marker_env,
-                    activated_projects.iter().copied(),
-                    activated_extras.iter().copied(),
-                    activated_groups.iter().copied(),
-                ) {
-                    continue;
-                }
-
-                let dep_dist = self.lock().find_by_id(&dep.package_id);
-
-                // Add the dependency to the graph.
-                let dep_index = match inverse.entry(&dep.package_id) {
-                    Entry::Vacant(entry) => {
-                        let index = petgraph.add_node(self.package_to_node(
-                            dep_dist,
-                            tags,
-                            build_options,
-                            install_options,
-                            marker_env,
-                        )?);
-                        entry.insert(index);
-                        index
-                    }
-                    Entry::Occupied(entry) => *entry.get(),
+        materialization_traversal.try_walk(
+            |package_id, extra, traversal| -> Result<(), LockError> {
+                let package = self.lock().find_by_id(package_id);
+                let deps = if let Some(extra) = extra {
+                    Either::Left(
+                        package
+                            .optional_dependencies
+                            .get(extra)
+                            .into_iter()
+                            .flatten(),
+                    )
+                } else {
+                    Either::Right(package.dependencies.iter())
                 };
-
-                // Add the edge.
-                let index = inverse[&package.id];
-                petgraph.add_edge(
-                    index,
-                    dep_index,
-                    if let Some(extra) = extra {
-                        Edge::Optional(extra.clone())
-                    } else {
-                        Edge::Prod
-                    },
-                );
-
-                // Push its dependencies on the queue.
-                if seen.insert((&dep.package_id, None)) {
-                    queue.push_back((dep_dist, None));
-                }
-                for extra in &dep.extra {
-                    if seen.insert((&dep.package_id, Some(extra))) {
-                        queue.push_back((dep_dist, Some(extra)));
+                for dep in deps {
+                    if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
+                        dependencies_for_conflict_validation.push((package, dep));
                     }
+                    if !dep.complexified_marker.evaluate(
+                        marker_env,
+                        activated_projects.iter().copied(),
+                        activated_extras.iter().copied(),
+                        activated_groups.iter().copied(),
+                    ) {
+                        continue;
+                    }
+
+                    let dep_dist = self.lock().find_by_id(&dep.package_id);
+
+                    // Add the dependency to the graph.
+                    let dep_index = match inverse.entry(&dep.package_id) {
+                        Entry::Vacant(entry) => {
+                            let index = petgraph.add_node(self.package_to_node(
+                                dep_dist,
+                                tags,
+                                build_options,
+                                install_options,
+                                marker_env,
+                            )?);
+                            entry.insert(index);
+                            index
+                        }
+                        Entry::Occupied(entry) => *entry.get(),
+                    };
+
+                    // Add the edge.
+                    let index = inverse[&package.id];
+                    petgraph.add_edge(
+                        index,
+                        dep_index,
+                        if let Some(extra) = extra {
+                            Edge::Optional(extra.clone())
+                        } else {
+                            Edge::Prod
+                        },
+                    );
+
+                    // Push its dependencies on the queue.
+                    traversal.enqueue_package(&dep.package_id, dep.extra.iter());
                 }
-            }
-        }
+                Ok(())
+            },
+        )?;
 
         // Evaluate conflict markers from concrete roots, not from workspace members that depend on
         // them. Reject markers that still depend on conflict items outside the resulting subgraph.
@@ -1277,6 +1181,31 @@ sdist = { url = "https://example.com/unrelated-1.0.0.tar.gz", hash = "sha256:888
         .expect("valid lock")
     }
 
+    fn cycle_lock() -> Lock {
+        toml::from_str(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.11"
+
+[[package]]
+name = "cycle-a"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+dependencies = [{ name = "cycle-root" }]
+sdist = { url = "https://example.com/cycle_a-1.0.0.tar.gz", hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111" }
+
+[[package]]
+name = "cycle-root"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+dependencies = [{ name = "cycle-a" }]
+sdist = { url = "https://example.com/cycle_root-1.0.0.tar.gz", hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222" }
+"#,
+        )
+        .expect("valid lock")
+    }
+
     fn conflict_lock() -> Lock {
         toml::from_str(
             r#"
@@ -1610,6 +1539,35 @@ provides-extras = ["cli"]
             ],
         )
             "#);
+        });
+    }
+
+    #[test]
+    fn materializes_cycle_without_duplicate_edges() {
+        let lock = cycle_lock();
+        let resolution = materialize(
+            &lock,
+            &[package(&lock, "cycle-root", "1.0.0")],
+            &DARWIN_MARKERS,
+        );
+
+        insta::with_settings!({
+            filters => [(r"sha256:[0-9a-f]{64}", "sha256:[HASH]")],
+        }, {
+            insta::assert_debug_snapshot!(graph_snapshot(&resolution), @r#"
+        (
+            [
+                "cycle-a==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "cycle-root==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "root",
+            ],
+            [
+                "cycle-a==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> cycle-root==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "cycle-root==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> cycle-a==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "root --Prod--> cycle-root==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+        )
+        "#);
         });
     }
 
