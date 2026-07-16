@@ -148,6 +148,7 @@ check_response "$initialize_response" "initialize" || exit 1
 printf '%s\n' '{"method":"initialized","params":{}}' >&"$server_input"
 
 request_id=2
+thread_ids=()
 for rollout in "${rollouts[@]}"; do
     fork_request="$(jq -cn --argjson id "$request_id" --arg path "$rollout" --arg cwd "$working_directory" '{id: $id, method: "thread/fork", params: {threadId: "ignored", path: $path, cwd: $cwd, excludeTurns: true}}')"
     printf '%s\n' "$fork_request" >&"$server_input"
@@ -162,9 +163,19 @@ for rollout in "${rollouts[@]}"; do
     if [[ -n "$source_id" ]]; then
         printf ' (forked from %s)' "$source_id"
     fi
-    printf '\n'
+    printf '\nOpen in Codex: codex://threads/%s\n' "$thread_id"
+    thread_ids+=("$thread_id")
 
     request_id=$((request_id + 1))
 done
 
 printf 'Loaded %s Codex thread(s) for %s.\n' "${#rollouts[@]}" "$working_directory"
+
+if ((${#thread_ids[@]} == 1)) && [[ "$(uname -s)" == Darwin ]] && command -v open >/dev/null 2>&1; then
+    thread_url="codex://threads/${thread_ids[0]}"
+    if open "$thread_url" >/dev/null 2>&1; then
+        printf 'Opened %s in Codex.\n' "$thread_url"
+    else
+        printf 'warning: could not open %s in Codex\n' "$thread_url" >&2
+    fi
+fi

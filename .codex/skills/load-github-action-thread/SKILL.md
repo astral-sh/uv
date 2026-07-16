@@ -35,6 +35,13 @@ imported history to a different local checkout:
   --cwd /path/to/uv
 ```
 
-The utility requires `gh`, `jq`, and `codex`. It prints the new local thread IDs after import. Treat
-downloaded rollouts as sensitive because they can contain prompts, tool inputs, and tool output; do
-not paste their contents into a chat or post them to GitHub.
+The utility requires `gh`, `jq`, and `codex`. It prints a `codex://threads/<id>` link for every
+imported task and automatically opens the Codex app when exactly one task is imported on macOS. For
+multiple tasks, return a clickable link for each task without repeatedly switching the app:
+
+```markdown
+[Open imported task](codex://threads/<id>)
+```
+
+Treat downloaded rollouts as sensitive because they can contain prompts, tool inputs, and tool
+output; do not paste their contents into a chat or post them to GitHub.

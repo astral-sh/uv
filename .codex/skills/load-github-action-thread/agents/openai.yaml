@@ -1,4 +1,4 @@
 interface:
   display_name: "Load GitHub Action Thread"
   short_description: "Download and load a Codex Action thread"
-  default_prompt: "Use $load-github-action-thread to download a Codex GitHub Action thread and load it into the Codex app."
+  default_prompt: "Use $load-github-action-thread to download a Codex GitHub Action thread, load it into the Codex app, and return links to the imported tasks."
