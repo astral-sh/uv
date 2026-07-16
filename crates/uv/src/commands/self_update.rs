@@ -511,14 +511,13 @@ fn installer_download_github_token<'a>(
 /// When [`UV_ASTRAL_MIRROR_URL`](EnvVars::UV_ASTRAL_MIRROR_URL) is set, the installer is also
 /// given `UV_DOWNLOAD_URL` pointing at the mirror's uv release directory so the installer itself
 /// fetches the uv archive from the mirror.
-#[expect(clippy::result_large_err)]
 async fn execute_official_installer(
     installer_path: &Path,
     install_prefix: &Path,
     modify_path: bool,
     target_version: &Pep440Version,
     astral_mirror_url: Option<&str>,
-) -> Result<(), AxoupdateError> {
+) -> Result<(), Box<AxoupdateError>> {
     let mut command = if cfg!(windows) {
         let mut command = Command::new("powershell");
         command.arg("-ExecutionPolicy").arg("ByPass");
@@ -529,11 +528,11 @@ async fn execute_official_installer(
     };
 
     let to_restore = if cfg!(windows) {
-        let old_path = std::env::current_exe()?;
+        let old_path = std::env::current_exe().map_err(AxoupdateError::from)?;
         let mut previous_path = old_path.as_os_str().to_os_string();
         previous_path.push(".previous.exe");
         let previous_path = PathBuf::from(previous_path);
-        fs_err::rename(&old_path, &previous_path)?;
+        fs_err::rename(&old_path, &previous_path).map_err(AxoupdateError::from)?;
         Some((previous_path, old_path))
     } else {
         None
@@ -557,7 +556,7 @@ async fn execute_official_installer(
 
     if let Some((previous_path, old_path)) = to_restore.as_ref() {
         if failed {
-            fs_err::rename(previous_path, old_path)?;
+            fs_err::rename(previous_path, old_path).map_err(AxoupdateError::from)?;
         } else {
             #[cfg(windows)]
             self_replace::self_delete_at(previous_path)
@@ -565,7 +564,7 @@ async fn execute_official_installer(
         }
     }
 
-    let output = result?;
+    let output = result.map_err(AxoupdateError::from)?;
     if output.status.success() {
         return Ok(());
     }
@@ -578,7 +577,8 @@ async fn execute_official_installer(
         status: output.status.code(),
         stdout,
         stderr,
-    })
+    }
+    .into())
 }
 
 /// Read whether the existing standalone install opted out of PATH modification.
@@ -1173,7 +1173,7 @@ mod tests {
             status,
             stdout,
             stderr,
-        } = err
+        } = *err
         else {
             panic!("expected InstallFailed error");
         };
