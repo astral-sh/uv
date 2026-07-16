@@ -1386,7 +1386,7 @@ pub struct VersionFiles {
 }
 
 impl VersionFiles {
-    fn push(&mut self, filename: DistFilename, file: File) {
+    fn push(&mut self, filename: &DistFilename, file: File) {
         match filename {
             DistFilename::WheelFilename(_) => self.wheels.push(file),
             DistFilename::SourceDistFilename(_) => self.source_dists.push(file),
@@ -1503,11 +1503,11 @@ impl SimpleDetailMetadata {
             };
             match version_map.entry(filename.version().clone()) {
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
-                    entry.get_mut().push(filename, file);
+                    entry.get_mut().push(&filename, file);
                 }
                 std::collections::btree_map::Entry::Vacant(entry) => {
                     let mut files = VersionFiles::default();
-                    files.push(filename, file);
+                    files.push(&filename, file);
                     entry.insert(files);
                 }
             }
@@ -1571,11 +1571,11 @@ impl SimpleDetailMetadata {
                 };
             match version_map.entry(filename.version().clone()) {
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
-                    entry.get_mut().push(filename, file);
+                    entry.get_mut().push(&filename, file);
                 }
                 std::collections::btree_map::Entry::Vacant(entry) => {
                     let mut files = VersionFiles::default();
-                    files.push(filename, file);
+                    files.push(&filename, file);
                     entry.insert(files);
                 }
             }
