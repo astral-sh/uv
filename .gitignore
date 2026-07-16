@@ -56,4 +56,6 @@ profile.json.gz
 .codex/*
 !.codex/hooks.json
 !.codex/skills/
-!.codex/skills/**
+.codex/skills/*
+!.codex/skills/load-github-action-thread/
+!.codex/skills/load-github-action-thread/**
