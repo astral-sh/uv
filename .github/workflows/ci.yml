@@ -159,8 +159,9 @@ jobs:
     secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
     permissions:
       contents: read
+      id-token: write
       issues: read
-      pull-requests: write
+      pull-requests: read
 
   check-lint:
     needs: plan

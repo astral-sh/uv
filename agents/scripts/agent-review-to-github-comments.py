@@ -5,7 +5,7 @@
 # dependencies = []
 # ///
 
-"""Convert a structured agent review into a GitHub pull request review payload."""
+"""Convert a structured agent review into GitHub pull request review comment payloads."""
 
 from __future__ import annotations
 
@@ -65,14 +65,14 @@ def review_payload(review: dict[str, Any], commit_id: str) -> dict[str, Any]:
             msg = f"invalid line range: {start}-{end}"
             raise ValueError(msg)
 
+        title = re.sub(r"^(?:\[P[0-3]\]\s*)+", "", finding["title"])
         comment: dict[str, Any] = {
+            "commit_id": commit_id,
             "path": str(path),
             "line": end,
             "side": side,
             "body": without_mentions(
-                f"**[P{finding['priority']}] {finding['title']}**\n\n"
-                f"{finding['body']}\n\n"
-                f"Confidence: {finding['confidence_score']}"
+                f"**[P{finding['priority']}] {title}**\n\n{finding['body']}"
             ),
         }
         if start != end:
@@ -80,12 +80,7 @@ def review_payload(review: dict[str, Any], commit_id: str) -> dict[str, Any]:
             comment["start_side"] = side
         comments.append(comment)
 
-    return {
-        "commit_id": commit_id,
-        "event": "COMMENT",
-        "body": without_mentions(f"**Automated review**\n\n{review['summary']}"),
-        "comments": comments,
-    }
+    return {"comments": comments}
 
 
 def main(stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout) -> None:
