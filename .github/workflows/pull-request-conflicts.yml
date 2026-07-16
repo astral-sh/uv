@@ -1,0 +1,148 @@
+name: Rebase conflicted pull requests
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: pull-request-conflicts-main
+  cancel-in-progress: true
+
+jobs:
+  identify:
+    name: Identify conflicted pull requests
+    if: github.repository == 'astral-sh/uv-dev'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      matrix: ${{ steps.identify.outputs.matrix }}
+      rebasable: ${{ steps.identify.outputs.rebasable }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Identify conflicted pull requests
+        id: identify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: ./scripts/find-conflicted-pull-requests.sh
+
+  rebase:
+    name: Rebase pull request #${{ matrix.number }}
+    needs: identify
+    if: needs.identify.outputs.rebasable != '0'
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.identify.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare pull request branch
+        env:
+          BASE_REF: ${{ matrix.base_ref }}
+          HEAD_REF: ${{ matrix.head_ref }}
+          HEAD_SHA: ${{ matrix.head_sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/codex-home"
+          cp agents/codex/config.toml "$RUNNER_TEMP/codex-home/config.toml"
+          cp agents/prompts/rebase-pull-request.md "$RUNNER_TEMP/rebase-pull-request.md"
+
+          git fetch --no-tags origin "refs/heads/$HEAD_REF"
+          current_head=$(git rev-parse 'FETCH_HEAD^{commit}')
+          if [ "$current_head" != "$HEAD_SHA" ]; then
+            echo "The pull request head changed; refusing to rebase a stale revision." >&2
+            exit 1
+          fi
+
+          git checkout --detach "$HEAD_SHA"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}" > /dev/null
+
+      - name: Start rebase
+        id: start-rebase
+        env:
+          BASE_REF: ${{ matrix.base_ref }}
+        run: |
+          if git rebase "refs/remotes/origin/$BASE_REF"; then
+            echo "conflicts=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
+            echo "Rebase failed without producing any conflicted files." >&2
+            exit 1
+          fi
+
+          echo "conflicts=true" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve rebase conflicts
+        if: steps.start-rebase.outputs.conflicts == 'true'
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          TMPDIR: ${{ runner.temp }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-5.6-sol
+          codex-home: "${{ runner.temp }}/codex-home"
+          permission-profile: "rebase-pull-request"
+          safety-strategy: drop-sudo
+          allow-bot-users: "astral-automations-bot[bot]"
+          prompt-file: "${{ runner.temp }}/rebase-pull-request.md"
+
+      - name: Verify rebased pull request
+        env:
+          BASE_REF: ${{ matrix.base_ref }}
+        run: |
+          if [ -d "$(git rev-parse --git-path rebase-merge)" ] || [ -d "$(git rev-parse --git-path rebase-apply)" ]; then
+            echo "The rebase is still in progress; refusing to push." >&2
+            exit 1
+          fi
+
+          git diff --check "refs/remotes/origin/$BASE_REF...HEAD"
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The worktree is not clean after the rebase; refusing to push." >&2
+            exit 1
+          fi
+
+          git_dir=$(git rev-parse --absolute-git-dir)
+          mv "$git_dir/config" "$RUNNER_TEMP/untrusted-git-config"
+
+      - name: Get uv-dev token
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: |
+            contents: write
+
+      - name: Push rebased pull request
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          HEAD_REF: ${{ matrix.head_ref }}
+          HEAD_SHA: ${{ matrix.head_sha }}
+        run: |
+          GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -c core.hooksPath=/dev/null push \
+            --force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA" \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            HEAD:"refs/heads/$HEAD_REF"
