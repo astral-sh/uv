@@ -443,14 +443,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 self.options.resolution_mode,
                                 ResolutionMode::Lowest | ResolutionMode::Highest
                             ) {
+                                let marker = resolution
+                                    .env
+                                    .try_universal_markers()
+                                    .unwrap_or(UniversalMarker::TRUE);
                                 for (package, version) in &resolution.nodes {
                                     preferences.insert(
                                         package.name.clone(),
                                         package.index.clone(),
-                                        resolution
-                                            .env
-                                            .try_universal_markers()
-                                            .unwrap_or(UniversalMarker::TRUE),
+                                        marker,
                                         version.clone(),
                                         PreferenceSource::Resolver,
                                     );
