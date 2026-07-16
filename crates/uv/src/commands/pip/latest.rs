@@ -154,7 +154,7 @@ impl LatestClient<'_> {
                             rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)
                                 .expect("archived version files always deserializes");
 
-                        for (filename, file) in files.all() {
+                        for (filename, file) in files.all(package) {
                             if self.consider_candidate(&filename, &file, exclude_newer.as_ref()) {
                                 update_latest(filename);
                             }

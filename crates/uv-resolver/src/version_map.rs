@@ -94,6 +94,7 @@ impl VersionMap {
         }
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
+                package_name: package_name.clone(),
                 map,
                 stable,
                 local,
@@ -490,6 +491,8 @@ impl VersionMapLazyIndex {
 /// provide substantial savings in some cases.
 #[derive(Debug)]
 struct VersionMapLazy {
+    /// The normalized package name used to reconstruct cached wheel filenames.
+    package_name: PackageName,
     /// An immutable archive-order index from version to possibly-initialized distribution.
     map: VersionMapLazyIndex,
     /// Whether the version map contains at least one stable (non-pre-release) version.
@@ -570,7 +573,6 @@ impl VersionMapLazy {
         files
             .wheels
             .iter()
-            .map(|wheel| &wheel.file)
             .chain(files.source_dists.iter().map(|sdist| &sdist.file))
             .any(|file| {
                 let upload_time = file.upload_time_utc_ms.as_ref().map(|t| t.to_native());
@@ -604,7 +606,6 @@ impl VersionMapLazy {
             .files
             .wheels
             .iter()
-            .map(|wheel| &wheel.file)
             .chain(datum.files.source_dists.iter().map(|sdist| &sdist.file))
             .any(|file| {
                 file.upload_time_utc_ms
@@ -646,7 +647,7 @@ impl VersionMapLazy {
             )
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
-            for (filename, file) in files.all() {
+            for (filename, file) in files.all(&self.package_name) {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =

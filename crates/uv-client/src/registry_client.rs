@@ -1381,37 +1381,31 @@ type FlatIndexSlot = Arc<Mutex<Option<FlatIndexEntriesByPackage>>>;
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct VersionFiles {
-    pub wheels: Vec<VersionWheel>,
+    pub wheels: Vec<File>,
     pub source_dists: Vec<VersionSourceDist>,
 }
 
 impl VersionFiles {
     fn push(&mut self, filename: DistFilename, file: File) {
         match filename {
-            DistFilename::WheelFilename(name) => self.wheels.push(VersionWheel { name, file }),
+            DistFilename::WheelFilename(_) => self.wheels.push(file),
             DistFilename::SourceDistFilename(name) => {
                 self.source_dists.push(VersionSourceDist { name, file });
             }
         }
     }
 
-    pub fn all(self) -> impl Iterator<Item = (DistFilename, File)> {
+    pub fn all(self, package_name: &PackageName) -> impl Iterator<Item = (DistFilename, File)> {
         self.source_dists
             .into_iter()
             .map(|VersionSourceDist { name, file }| (DistFilename::SourceDistFilename(name), file))
-            .chain(
-                self.wheels
-                    .into_iter()
-                    .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file)),
-            )
+            .chain(self.wheels.into_iter().filter_map(|file| {
+                let filename =
+                    DistFilename::try_from_filename_with_reason(&file.filename, package_name)
+                        .ok()?;
+                Some((filename, file))
+            }))
     }
-}
-
-#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
-pub struct VersionWheel {
-    pub name: WheelFilename,
-    pub file: File,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
@@ -1534,7 +1528,7 @@ impl SimpleDetailMetadata {
         for files in version_map.values_mut() {
             files
                 .wheels
-                .sort_unstable_by(|left, right| left.file.filename.cmp(&right.file.filename));
+                .sort_unstable_by(|left, right| left.filename.cmp(&right.filename));
             files
                 .source_dists
                 .sort_unstable_by(|left, right| left.file.filename.cmp(&right.file.filename));
@@ -2100,6 +2094,50 @@ mod tests {
             .map(|SimpleDetailMetadatum { version, .. }| version.to_string())
             .collect();
         assert_eq!(versions, ["1.7.8".to_string()]);
+    }
+
+    #[test]
+    fn wheel_files_round_trip() -> Result<(), Error> {
+        let response = r#"
+        {
+            "files": [
+                {
+                    "filename": "example-1.0.0-py3-none-any.whl",
+                    "hashes": {},
+                    "url": "https://files.pythonhosted.org/example-1.0.0-py3-none-any.whl"
+                },
+                {
+                    "filename": "example-1.0.0.tar.gz",
+                    "hashes": {},
+                    "url": "https://files.pythonhosted.org/example-1.0.0.tar.gz"
+                }
+            ]
+        }
+        "#;
+        let package_name = PackageName::from_str("example")?;
+        let data: PypiSimpleDetail = serde_json::from_str(response)?;
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/example/")?;
+        let simple_metadata = SimpleDetailMetadata::from_pypi_files(
+            data.files,
+            &package_name,
+            data.project_status,
+            &base,
+        );
+        let archived = super::OwnedArchive::from_unarchived(&simple_metadata)?;
+        let simple_metadata = super::OwnedArchive::deserialize(&archived);
+
+        let filenames: Vec<_> = simple_metadata
+            .versions
+            .into_iter()
+            .flat_map(|datum| datum.files.all(&package_name))
+            .map(|(filename, _)| filename.to_string())
+            .collect();
+        assert_eq!(
+            filenames,
+            ["example-1.0.0.tar.gz", "example-1.0.0-py3-none-any.whl"]
+        );
+
+        Ok(())
     }
 
     /// Test for project statuses from PyPI's JSON detail response.
