@@ -108,7 +108,7 @@ docs = [
   "mdformat-admon>=2.0.2",
 ]
 docker = [
-  "cargo-zigbuild>=0.19.8",
+  "cargo-zigbuild>=0.23.0",
 ]
 release = [
   "rooster==0.1.1",

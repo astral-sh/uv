@@ -128,19 +128,20 @@ wheels = [
 
 [[package]]
 name = "cargo-zigbuild"
-version = "0.22.3"
+version = "0.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ziglang" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/94/7a351597a84d173ca259c57ecda6ef86152d875774003585e0d7b7504668/cargo_zigbuild-0.22.3-py3-none-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:429bd3c789f4e1771fa1e8fc1fed4efdcdd0d540110b4a04cc27ab9600ead887", size = 2913539, upload-time = "2026-04-26T03:15:42.548Z" },
-    { url = "https://files.pythonhosted.org/packages/ef/8e/5e5953118fe87790ef18a6d1ac6369bf49d9a634cc0593add1e8a8ca98d8/cargo_zigbuild-0.22.3-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3ec32ef02a87bf4b836a043ebc70839ec63654c53f43ea16ef0d8eacef4f7f82", size = 1478132, upload-time = "2026-04-26T03:15:41.274Z" },
-    { url = "https://files.pythonhosted.org/packages/b4/ed/c9f020dc8b658b07c2f6ff3e266cc9b4f2e538522d400da81974386ce4cd/cargo_zigbuild-0.22.3-py3-none-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:d567df9f55c6eba1d6edfe0fa7240ced5cbcb0e6222b5ab7ea7c7932e8f708c4", size = 1607159, upload-time = "2026-04-26T03:15:39.854Z" },
-    { url = "https://files.pythonhosted.org/packages/23/34/7dc4ed9aed1069cad8be5b1d7b4669a8fe96a219ad8d0c2b17f64fdd85fd/cargo_zigbuild-0.22.3-py3-none-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:1684d9405a3c505f97a652dddcccf4cddf6e99e1520c93b694f22c4b061d3f73", size = 1595191, upload-time = "2026-04-26T03:15:35.571Z" },
-    { url = "https://files.pythonhosted.org/packages/5e/23/5f84d7b49d3dfcde6506cff6c59bced1ad996c3833bdc6c13eb0a7365b34/cargo_zigbuild-0.22.3-py3-none-win32.whl", hash = "sha256:f4d657a0d54ab543166549e1b9515f48ea983696b92fe3a805abfbf7d0c48273", size = 1326098, upload-time = "2026-04-26T03:15:37.345Z" },
-    { url = "https://files.pythonhosted.org/packages/69/59/b1027f9c7710e303338a642f6efdffe87ddc0bbabdd20a557ee9a6faacb8/cargo_zigbuild-0.22.3-py3-none-win_amd64.whl", hash = "sha256:b8d093235ff94cb0a05612598689027b2cb5388c21984e29dbb44e6cc0b9937f", size = 1476196, upload-time = "2026-04-26T03:15:44.376Z" },
-    { url = "https://files.pythonhosted.org/packages/a0/79/76312a591ff6cddcfa405d5ca46b88bdc99dcebfaadd6fd5f4d29a031e8c/cargo_zigbuild-0.22.3-py3-none-win_arm64.whl", hash = "sha256:f0667e9f181368e1e0ec74cd3a7f5e1162522a5bd292d9d93fcadc20f0fc50c4", size = 1405317, upload-time = "2026-04-26T03:15:38.784Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/9a/74bde207d36fb5d37e270359d233c2a3c959b6c2ba4a6465eba153d12098/cargo_zigbuild-0.23.0-py3-none-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:5ba093cd9d08f8c40efc2211ef64db4c63fb616513a2bbe26f80adf23cf82afb", size = 2904882, upload-time = "2026-06-18T07:01:15.195Z" },
+    { url = "https://files.pythonhosted.org/packages/55/a8/484359ae59fcb696fd031a9ed986b54faadbd1204cd55d76d4c38e2ec283/cargo_zigbuild-0.23.0-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d984af93da7a230606452ef5f6df47e6a081b12dcead8a3e8e5ff024728c94f0", size = 1487435, upload-time = "2026-06-18T07:01:13.761Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/13/81a4cd75b92c90b0f669624eed41c23c699f796de909a8e5699ebbedb809/cargo_zigbuild-0.23.0-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:be4e371ebd151a11080e4d1c4c6b0fda3f45a41f58a00c709e771307db4a6a00", size = 1427734, upload-time = "2026-06-18T07:01:20.976Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/90/22ce5c3826fb60c178e394e10fffafcecf43cc687154ae5fd7049529f103/cargo_zigbuild-0.23.0-py3-none-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:0404ba70c7b0e9034e19a453fdb0d09cff4c105ab2d7604e2bd49f4bafd24ac7", size = 1609725, upload-time = "2026-06-18T07:01:19.433Z" },
+    { url = "https://files.pythonhosted.org/packages/36/0f/215889165d22e2c8203264ac478aa412077b6cb1aa0c29f06af1807c3560/cargo_zigbuild-0.23.0-py3-none-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:3a2e021435a5e3c8b3a70bfc490580a3af6952185aa5ffb722b005d1fbe000c9", size = 1601044, upload-time = "2026-06-18T07:01:16.874Z" },
+    { url = "https://files.pythonhosted.org/packages/89/fc/4883d4d9fad8760051e999a4278ec9fdc2c616aca62198069a61eed9b995/cargo_zigbuild-0.23.0-py3-none-win32.whl", hash = "sha256:37d2946f0e029b60715784ff45af55e3948b296299cc3ccccfa883a8cf1429c8", size = 1322964, upload-time = "2026-06-18T07:01:18.353Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/a6/f6e3635ef3e80609e95c6625d4d38a002f3f71b4179c028aba71d6656be6/cargo_zigbuild-0.23.0-py3-none-win_amd64.whl", hash = "sha256:a2a66e1fbd0e67045bb1cb4d3afff4337ea56a7ecfd324dab0f7e9578be045b0", size = 1469871, upload-time = "2026-06-18T07:01:12.446Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/d9/95ee594a2d5cc40825afacf819cdd38a8d114d62d4a66587aa4e49c9fcef/cargo_zigbuild-0.23.0-py3-none-win_arm64.whl", hash = "sha256:16a08fef38742a7f2310f53d61600a100ad08acd8102bbcdc8566f21346d98a1", size = 1400969, upload-time = "2026-06-18T07:01:10.714Z" },
 ]
 
 [[package]]
@@ -1569,7 +1570,7 @@ release = [
 [package.metadata]
 
 [package.metadata.requires-dev]
-docker = [{ name = "cargo-zigbuild", marker = "python_full_version >= '3.12'", specifier = ">=0.19.8" }]
+docker = [{ name = "cargo-zigbuild", marker = "python_full_version >= '3.12'", specifier = ">=0.23.0" }]
 docs = [
     { name = "black", marker = "python_full_version >= '3.12'", specifier = ">=23.10.0" },
     { name = "mdformat", marker = "python_full_version >= '3.12'", specifier = ">=0.7.17" },
