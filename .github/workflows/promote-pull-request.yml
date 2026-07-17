@@ -1,9 +1,7 @@
 name: Promote pull request
 
 on:
-  pull_request:
-    types: [ready_for_review]
-  workflow_dispatch:
+  workflow_call:
     inputs:
       pull_request:
         description: "The uv-dev pull request number"
@@ -16,40 +14,10 @@ on:
 
 permissions: {}
 
-concurrency:
-  group: promote-pull-request-${{ inputs.pull_request || github.event.pull_request.number }}
-  cancel-in-progress: false
-
 jobs:
-  dispatch:
-    name: Dispatch pull request promotion
-    if: github.event_name == 'pull_request' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == 'astral-sh/uv-dev'
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    steps:
-      - name: Dispatch pull request promotion
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          # The credential broker only accepts `workflow_dispatch` from `main`; a reusable
-          # workflow would retain the `pull_request` event and ref and could not exchange a token.
-          jq --null-input \
-            --arg head_sha "$HEAD_SHA" \
-            --arg pull_request "$PULL_REQUEST_NUMBER" \
-            '{ref: "main", inputs: {head_sha: $head_sha, pull_request: $pull_request}}' |
-            gh api \
-              --method POST \
-              "repos/$GITHUB_REPOSITORY/actions/workflows/promote-pull-request.yml/dispatches" \
-              --input - \
-              --silent
-
   promote:
     name: "Promote pull request #${{ inputs.pull_request }}"
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'astral-sh/uv-dev'
+    if: github.event_name == 'pull_request' && github.event.action == 'ready_for_review' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == 'astral-sh/uv-dev'
     runs-on: ubuntu-slim
     environment: automations
     timeout-minutes: 10
@@ -60,17 +28,23 @@ jobs:
       - name: Verify pull request
         id: verify
         env:
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ github.token }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
         run: |
+          expected_head_sha=${EXPECTED_HEAD_SHA:-$EVENT_HEAD_SHA}
+          if [ "$PULL_REQUEST_NUMBER" != "$EVENT_PULL_REQUEST_NUMBER" ] || [ "$expected_head_sha" != "$EVENT_HEAD_SHA" ]; then
+            echo "The requested uv-dev pull request does not match the ready-for-review event; refusing to promote it." >&2
+            exit 1
+          fi
+
           gh pr view "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,state,isDraft,baseRefName,headRefName,headRefOid,isCrossRepository \
             > "$RUNNER_TEMP/pull-request.json"
 
-          head_sha=$(jq --raw-output '.headRefOid' "$RUNNER_TEMP/pull-request.json")
-          expected_head_sha=${EXPECTED_HEAD_SHA:-$head_sha}
           if ! jq --exit-status \
             --arg expected_head_sha "$expected_head_sha" \
             '.state == "OPEN" and (.isDraft | not) and (.isCrossRepository | not) and .headRefOid == $expected_head_sha' \

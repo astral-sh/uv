@@ -1,0 +1,24 @@
+name: Promote ready pull request
+
+on:
+  pull_request:
+    types: [ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: promote-pull-request-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: "Promote pull request #${{ github.event.pull_request.number }}"
+    if: github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == 'astral-sh/uv-dev'
+    permissions:
+      id-token: write # for the credential broker in the called workflow
+      pull-requests: write # to close the uv-dev pull request
+    uses: astral-sh/uv-dev/.github/workflows/promote-pull-request.yml@main # zizmor: ignore[unpinned-uses] trusted base workflow required for the credential broker
+    secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
+    with:
+      pull_request: ${{ github.event.pull_request.number }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
