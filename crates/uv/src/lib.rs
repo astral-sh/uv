@@ -3043,31 +3043,58 @@ where
         cli.top_level.global_args.no_progress,
     );
 
-    // See `min_stack_size` doc comment about `main2`
-    let min_stack_size = min_stack_size();
-    let main2 = move || {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .thread_stack_size(min_stack_size)
-            .build()
-            .expect("Failed building the Runtime");
-        // Box the large main future to avoid stack overflows.
-        let result = runtime.block_on(Box::pin(run(cli, GlobalInitialization::Initialize)));
-        // Avoid waiting for pending tasks to complete.
-        //
-        // The resolver may have kicked off HTTP requests during resolution that
-        // turned out to be unnecessary. Waiting for those to complete can cause
-        // the CLI to hang before exiting.
-        runtime.shutdown_background();
-        result
+    // These command arms, and the configuration paths selected here, do not perform async I/O.
+    // Avoid creating a Tokio runtime and its dedicated thread for them.
+    let synchronous = matches!(
+        &*cli.command,
+        Commands::Self_(SelfNamespace {
+            command: SelfCommand::Version { .. },
+        }) | Commands::Tool(ToolNamespace {
+            command: ToolCommand::Dir(_),
+        })
+    ) || ((cli.top_level.no_config || cli.top_level.config_file.is_some())
+        && matches!(
+            &*cli.command,
+            Commands::Auth(AuthNamespace {
+                command: AuthCommand::Dir(_),
+            }) | Commands::Help(_)
+                | Commands::Cache(CacheNamespace {
+                    command: CacheCommand::Dir | CacheCommand::Size(_),
+                })
+                | Commands::Python(PythonNamespace {
+                    command: PythonCommand::Dir(_),
+                })
+        ));
+
+    let result = if synchronous {
+        futures::executor::block_on(Box::pin(run(cli, GlobalInitialization::Initialize)))
+    } else {
+        // See `min_stack_size` doc comment about `main2`.
+        let min_stack_size = min_stack_size();
+        let main2 = move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .thread_stack_size(min_stack_size)
+                .build()
+                .expect("Failed building the Runtime");
+            // Box the large main future to avoid stack overflows.
+            let result = runtime.block_on(Box::pin(run(cli, GlobalInitialization::Initialize)));
+            // Avoid waiting for pending tasks to complete.
+            //
+            // The resolver may have kicked off HTTP requests during resolution that
+            // turned out to be unnecessary. Waiting for those to complete can cause
+            // the CLI to hang before exiting.
+            runtime.shutdown_background();
+            result
+        };
+        std::thread::Builder::new()
+            .name("main2".to_owned())
+            .stack_size(min_stack_size)
+            .spawn(main2)
+            .expect("Tokio executor failed, was there a panic?")
+            .join()
+            .expect("Tokio executor failed, was there a panic?")
     };
-    let result = std::thread::Builder::new()
-        .name("main2".to_owned())
-        .stack_size(min_stack_size)
-        .spawn(main2)
-        .expect("Tokio executor failed, was there a panic?")
-        .join()
-        .expect("Tokio executor failed, was there a panic?");
 
     match result {
         Ok(code) => code.into(),

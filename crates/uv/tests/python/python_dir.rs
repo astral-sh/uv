@@ -18,4 +18,15 @@ fn python_dir() {
 
     ----- stderr -----
     ");
+
+    uv_snapshot!(context.filters(), context.python_dir()
+    .arg("--no-config")
+    .env(EnvVars::UV_PYTHON_INSTALL_DIR, python_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/python
+
+    ----- stderr -----
+    ");
 }

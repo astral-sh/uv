@@ -2375,6 +2375,26 @@ fn self_version_short() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn self_version_required_version() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((uv_version::version(), "[UV_VERSION]"));
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str("required-version = \">=9999\"\n")?;
+
+    uv_snapshot!(context.filters(), context.self_version()
+        .arg("--config-file").arg(uv_toml.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Required uv version `>=9999` does not match the running version `[UV_VERSION]`
+    ");
+
+    Ok(())
+}
+
 // `uv self version --output-format json`
 // (also setup a honeypot project and make sure it's not used)
 #[test]
