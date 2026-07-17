@@ -52,7 +52,7 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
 use itertools::{Either, Itertools};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
 use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
@@ -429,6 +429,48 @@ impl InternerGuard<'_> {
         self.state.cache.insert((xi, yi), node);
 
         node
+    }
+
+    /// Simplify a marker under the assumption that known incompatibilities cannot occur.
+    pub(crate) fn simplify_exclusions(
+        &mut self,
+        node: NodeId,
+        left: NodeId,
+        right: NodeId,
+    ) -> NodeId {
+        if matches!(node, NodeId::TRUE | NodeId::FALSE)
+            || matches!(left, NodeId::TRUE | NodeId::FALSE)
+            || matches!(right, NodeId::TRUE | NodeId::FALSE)
+            || !self.shared.node(node).var.is_conflicting_variable()
+            || !self.shared.node(left).var.is_conflicting_variable()
+            || !self.shared.node(right).var.is_conflicting_variable()
+        {
+            return node;
+        }
+        let exclusions = self.exclusions();
+        let restricted = self.restrict(node, exclusions.not());
+        // Restricting can introduce decisions from the assumption. Keep the original marker when
+        // that would make the decision diagram larger.
+        if self.node_count(restricted) < self.node_count(node) {
+            restricted
+        } else {
+            node
+        }
+    }
+
+    /// Returns the number of unique decision nodes reachable from `node`.
+    fn node_count(&self, node: NodeId) -> usize {
+        let mut seen = FxHashSet::default();
+        let mut pending = vec![node];
+        while let Some(node) = pending.pop() {
+            if matches!(node, NodeId::TRUE | NodeId::FALSE) {
+                continue;
+            }
+            if seen.insert(node.index()) {
+                pending.extend(self.shared.node(node).children.nodes());
+            }
+        }
+        seen.len()
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,

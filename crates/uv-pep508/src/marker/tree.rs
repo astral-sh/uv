@@ -841,12 +841,16 @@ impl MarkerTree {
 
     /// Combine this marker tree with the one given via a conjunction.
     pub fn and(&mut self, tree: Self) {
-        self.0 = INTERNER.lock().and(self.0, tree.0);
+        let mut interner = INTERNER.lock();
+        let node = interner.and(self.0, tree.0);
+        self.0 = interner.simplify_exclusions(node, self.0, tree.0);
     }
 
     /// Combine this marker tree with the one given via a disjunction.
     pub fn or(&mut self, tree: Self) {
-        self.0 = INTERNER.lock().or(self.0, tree.0);
+        let mut interner = INTERNER.lock();
+        let node = interner.or(self.0, tree.0);
+        self.0 = interner.simplify_exclusions(node, self.0, tree.0);
     }
 
     /// Sets this to a marker equivalent to the implication of this one and the
@@ -3034,6 +3038,36 @@ mod test {
             "(os_name == 'nt' and sys_platform == 'win32') or (os_name != 'nt' and (sys_platform == 'win32' or sys_platform == 'win64'))",
             "(os_name != 'nt' and sys_platform == 'win64') or sys_platform == 'win32'",
         );
+    }
+
+    #[test]
+    fn test_marker_exclusion_domain() {
+        assert_simplifies(
+            "os_name == 'nt' and sys_platform != 'linux'",
+            "os_name == 'nt'",
+        );
+        assert_true("os_name != 'nt' or sys_platform != 'linux'");
+        assert_true("sys_platform != 'linux' or platform_system != 'FreeBSD'");
+
+        let mut marker = m("os_name == 'nt'");
+        marker.and(m(
+            "(platform_machine != 'aarch64' and sys_platform == 'linux') or \
+             (sys_platform != 'darwin' and sys_platform != 'linux')",
+        ));
+
+        assert_eq!(marker, m("os_name == 'nt'"));
+        let serialized = marker.try_to_string().unwrap();
+        assert_eq!(marker, m(&serialized));
+        assert_eq!(marker.negate(), m("os_name != 'nt'"));
+
+        let mut marker = m("os_name != 'nt'");
+        marker.or(m(
+            "(platform_machine == 'aarch64' or sys_platform != 'linux') and \
+             (sys_platform == 'darwin' or sys_platform == 'linux')",
+        ));
+        assert_eq!(marker, m("os_name != 'nt'"));
+        let serialized = marker.try_to_string().unwrap();
+        assert_eq!(marker, m(&serialized));
     }
 
     #[test]
