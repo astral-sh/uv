@@ -2333,55 +2333,37 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // universe for this package. Reuse it instead of rescanning every archived file.
         let versions = state.known_versions.get(name)?;
         let position = versions.binary_search(version).ok()?;
-        let mut lower = position;
-        let mut upper = position;
 
         // PubGrub already merges identical incompatibilities for versions that were tried in an
         // earlier iteration. Only inspect the direction in which the resolver can select its next
         // candidate, so those already-tried neighbors do not consume the coalescing budget.
-        if self.selector.use_highest_version(name, &state.env) {
-            for (offset, candidate_version) in versions[..position]
-                .iter()
-                .rev()
-                .take(DEPENDENCY_COALESCE_LIMIT)
-                .enumerate()
-            {
-                if !self.has_same_prefetched_dependencies(
-                    name,
-                    version,
-                    current_metadata,
-                    candidate_version,
-                    version_map,
-                    current_index,
-                    state,
-                ) {
-                    break;
-                }
-                lower = position - offset - 1;
-            }
+        let use_highest_version = self.selector.use_highest_version(name, &state.env);
+        let candidates = if use_highest_version {
+            Either::Left(versions[..position].iter().rev())
         } else {
-            for (offset, candidate_version) in versions[position + 1..]
-                .iter()
-                .take(DEPENDENCY_COALESCE_LIMIT)
-                .enumerate()
-            {
-                if !self.has_same_prefetched_dependencies(
+            Either::Right(versions[position + 1..].iter())
+        };
+        let coalesced = candidates
+            .take(DEPENDENCY_COALESCE_LIMIT)
+            .take_while(|candidate_version| {
+                self.has_same_prefetched_dependencies(
                     name,
                     version,
                     current_metadata,
                     candidate_version,
                     version_map,
-                    current_index,
                     state,
-                ) {
-                    break;
-                }
-                upper = position + offset + 1;
-            }
-        }
-        if lower == position && upper == position {
+                )
+            })
+            .count();
+        if coalesced == 0 {
             return None;
         }
+        let (lower, upper) = if use_highest_version {
+            (position - coalesced, position)
+        } else {
+            (position, position + coalesced)
+        };
 
         // These candidates now share the selected version's dependency incompatibility, so a
         // rejection really did try all of them. Keep batch prefetch moving past the coalesced
@@ -2405,7 +2387,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         current: &ArchiveMetadata,
         candidate_version: &Version,
         version_map: &VersionMap,
-        current_index: Option<&IndexUrl>,
         state: &ForkState,
     ) -> bool {
         if !self.hasher.allows_package(name, candidate_version) {
@@ -2420,7 +2401,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return false;
         };
         if dist.wheel().is_none()
-            || dist.for_resolution().index() != current_index
+            || dist.for_resolution().index() != version_map.index()
             || Self::check_requires_python(&dist, &state.python_requirement).is_some()
         {
             return false;
@@ -3239,26 +3220,19 @@ mod tests {
     use std::collections::BTreeMap;
 
     use uv_configuration::{ExcludeDependency, Excludes, Override, Overrides};
-    use uv_distribution_types::{Requirement, RequirementSource};
+    use uv_distribution_types::Requirement;
     use uv_normalize::{GroupName, PackageName};
     use uv_pep440::Version;
-    use uv_pep508::MarkerTree;
+    use uv_pep508::Requirement as Pep508Requirement;
+    use uv_pypi_types::VerbatimParsedUrl;
 
     use super::scoped_dependency_effects_match;
 
-    fn requirement(name: &str, specifier: &str) -> Requirement {
-        Requirement {
-            name: name.parse().expect("valid package name"),
-            extras: Box::default(),
-            groups: Box::default(),
-            marker: MarkerTree::TRUE,
-            source: RequirementSource::Registry {
-                specifier: specifier.parse().expect("valid version specifier"),
-                index: None,
-                conflict: None,
-            },
-            origin: None,
-        }
+    fn requirement(requirement: &str) -> Requirement {
+        requirement
+            .parse::<Pep508Requirement<VerbatimParsedUrl>>()
+            .expect("valid requirement")
+            .into()
     }
 
     #[test]
@@ -3266,10 +3240,10 @@ mod tests {
         let name: PackageName = "parent".parse().expect("valid package name");
         let version = Version::new([1]);
         let candidate_version = Version::new([2]);
-        let requires_dist = [requirement("leaf", ">=1")];
+        let requires_dist = [requirement("leaf>=1")];
         let dependency_groups = BTreeMap::from([(
             "dev".parse::<GroupName>().expect("valid group name"),
-            vec![requirement("group-leaf", ">=1")].into_boxed_slice(),
+            vec![requirement("group-leaf>=1")].into_boxed_slice(),
         )]);
 
         assert!(scoped_dependency_effects_match(
@@ -3571,6 +3545,9 @@ impl ForkState {
     }
 
     /// Adds the dependencies for the selected version of the current package.
+    ///
+    /// When `dependency_versions` is provided, every version in the range must have the same
+    /// dependencies as the selected version so they can share its incompatibilities.
     ///
     /// For registry packages, the depending version is widened across gaps containing no other
     /// known version before its incompatibilities are added. Packages without a complete registry

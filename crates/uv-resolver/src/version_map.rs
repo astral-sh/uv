@@ -152,7 +152,7 @@ impl VersionMap {
         }
     }
 
-    /// Return a distribution only if it has already been materialized.
+    /// Return a distribution without materializing a lazy registry entry.
     pub(crate) fn get_initialized(&self, version: &Version) -> Option<&PrioritizedDist> {
         match self.inner {
             VersionMapInner::Eager(ref eager) => eager.map.get(version),

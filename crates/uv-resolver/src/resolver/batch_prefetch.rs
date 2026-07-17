@@ -159,7 +159,7 @@ impl BatchPrefetcher {
             .insert(version.clone());
     }
 
-    /// Returns the number of versions already tried for a base package.
+    /// Returns the number of distinct versions already tried for a base package.
     pub(crate) fn versions_tried(&self, package: &PubGrubPackage) -> usize {
         let PubGrubPackageInner::Package {
             name,
