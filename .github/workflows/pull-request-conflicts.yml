@@ -9,6 +9,7 @@ permissions: {}
 
 concurrency:
   group: pull-request-conflicts-main
+  # Let an in-progress rebase finish; newer pushes replace the single pending run.
   cancel-in-progress: false
 
 jobs:
