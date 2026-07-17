@@ -1,7 +1,7 @@
 name: Promote pull request
 
-on: # zizmor: ignore[dangerous-triggers] only dispatches trusted `main`; pull request content is never checked out or executed
-  pull_request_target:
+on:
+  pull_request:
     types: [ready_for_review]
   workflow_dispatch:
     inputs:
@@ -23,7 +23,7 @@ concurrency:
 jobs:
   dispatch:
     name: Dispatch pull request promotion
-    if: github.event_name == 'pull_request_target' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == 'astral-sh/uv-dev'
+    if: github.event_name == 'pull_request' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == 'astral-sh/uv-dev'
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
