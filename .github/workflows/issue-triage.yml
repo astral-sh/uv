@@ -37,7 +37,9 @@ jobs:
             > .issue-triage-event.json
 
           {
-            printf 'Issue triage automation for #%s\n\n' "$(jq -r '.number' .issue-triage-event.json)"
+            printf 'Issue triage for #%s: %s\n\n' \
+              "$(jq -r '.number' .issue-triage-event.json)" \
+              "$(jq -r '.title | gsub("[\r\n]+"; " ")' .issue-triage-event.json)"
             cat agents/prompts/triage-issue.md
           } > "$RUNNER_TEMP/triage-issue-prompt.md"
         env:
