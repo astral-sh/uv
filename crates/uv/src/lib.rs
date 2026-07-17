@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Write;
-use std::io::stdout;
+use std::io::{Write as _, stdout};
 #[cfg(feature = "self-update")]
 use std::ops::Bound;
 use std::path::Path;
@@ -3012,6 +3012,29 @@ where
 {
     #[cfg(windows)]
     uv_windows::install_unhandled_exception_handler();
+
+    // Avoid constructing the complete command tree for the common version-only invocation.
+    let mut args = args.into_iter();
+    let executable = args.next();
+    let first = args.next();
+    let second = args.next();
+    if second.is_none()
+        && first.as_ref().is_some_and(|arg| {
+            let arg: OsString = arg.clone().into();
+            arg == "-V" || arg == "--version"
+        })
+    {
+        return if writeln!(stdout().lock(), "uv {}", uv_cli::version::uv_self_version()).is_ok() {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        };
+    }
+    let args = executable
+        .into_iter()
+        .chain(first)
+        .chain(second)
+        .chain(args);
 
     // Set the `UV` variable to the current executable so it is implicitly propagated to all child
     // processes, e.g., in `uv run`.

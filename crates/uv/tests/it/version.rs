@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -6,6 +8,29 @@ use insta::assert_snapshot;
 
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
+
+#[test]
+fn version_flag() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(context.filters(), Command::new(uv_test::get_bin!()).arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    uv [VERSION] ([COMMIT] DATE)
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), Command::new(uv_test::get_bin!()).arg("-V"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    uv [VERSION] ([COMMIT] DATE)
+
+    ----- stderr -----
+    ");
+}
 
 // Print the version
 #[test]
