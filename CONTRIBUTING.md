@@ -344,6 +344,9 @@ Changelog entries and version bumps are automated. First, run:
 ./scripts/release.sh
 ```
 
+If release preparation detects a new workspace crate, add it to
+[`astral-sh/crates-policies`](https://github.com/astral-sh/crates-policies).
+
 Then, editorialize the `CHANGELOG.md` file to ensure entries are consistently styled.
 
 Then, open a pull request, e.g., `Bump version to ...`.
