@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       head_sha:
-        description: "The expected uv-dev pull request head SHA"
+        description: "The uv-dev pull request head SHA at dispatch time"
         required: false
         type: string
 
@@ -32,21 +32,18 @@ jobs:
       - name: Verify pull request
         id: verify
         env:
-          EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ github.token }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
         run: |
           gh pr view "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,state,isDraft,baseRefName,headRefName,headRefOid,isCrossRepository \
+            --json number,title,body,state,isDraft,baseRefName,headRefName,isCrossRepository \
             > "$RUNNER_TEMP/pull-request.json"
 
-          expected_head_sha=${EXPECTED_HEAD_SHA:-$(jq --raw-output '.headRefOid' "$RUNNER_TEMP/pull-request.json")}
           if ! jq --exit-status \
-            --arg expected_head_sha "$expected_head_sha" \
-            '.state == "OPEN" and (.isDraft | not) and (.isCrossRepository | not) and .headRefOid == $expected_head_sha' \
+            '.state == "OPEN" and (.isDraft | not) and (.isCrossRepository | not)' \
             "$RUNNER_TEMP/pull-request.json" > /dev/null; then
-            echo "The uv-dev pull request is no longer ready at the expected head; refusing to promote it." >&2
+            echo "The uv-dev pull request is no longer ready; refusing to promote it." >&2
             exit 1
           fi
 
@@ -58,7 +55,6 @@ jobs:
           {
             echo "base_ref=$base_ref"
             echo "head_ref=$head_ref"
-            echo "head_sha=$expected_head_sha"
           } >> "$GITHUB_OUTPUT"
 
       - name: Get promotion token
@@ -82,17 +78,15 @@ jobs:
           BASE_REF: ${{ steps.verify.outputs.base_ref }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_REF: ${{ steps.verify.outputs.head_ref }}
-          HEAD_SHA: ${{ steps.verify.outputs.head_sha }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
         run: |
           source_pull_request=$(gh api --method GET "repos/astral-sh/uv-dev/pulls/$PULL_REQUEST_NUMBER")
           if ! jq --exit-status \
             --arg base_ref "$BASE_REF" \
             --arg head_ref "$HEAD_REF" \
-            --arg head_sha "$HEAD_SHA" \
-            '.state == "open" and (.draft | not) and .base.ref == $base_ref and .head.ref == $head_ref and .head.sha == $head_sha and .base.repo.id == 1302176231 and .head.repo.id == 1302176231' \
+            '.state == "open" and (.draft | not) and .base.ref == $base_ref and .head.ref == $head_ref and .base.repo.id == 1302176231 and .head.repo.id == 1302176231' \
             <<< "$source_pull_request" > /dev/null; then
-            echo "The uv-dev pull request changed; refusing to promote a stale revision." >&2
+            echo "The uv-dev pull request is no longer ready on the expected branch; refusing to promote it." >&2
             exit 1
           fi
 
@@ -119,8 +113,7 @@ jobs:
             if ! jq --exit-status \
               --arg base_ref "$BASE_REF" \
               --arg head_ref "$HEAD_REF" \
-              --arg head_sha "$HEAD_SHA" \
-              '.[0].state == "open" and .[0].base.ref == $base_ref and .[0].head.ref == $head_ref and .[0].head.sha == $head_sha and .[0].base.repo.id == 699532645 and .[0].head.repo.id == 1302176231' \
+              '.[0].state == "open" and .[0].base.ref == $base_ref and .[0].head.ref == $head_ref and .[0].base.repo.id == 699532645 and .[0].head.repo.id == 1302176231' \
               <<< "$existing_pull_requests" > /dev/null; then
               echo "An upstream pull request already exists with a different state, base, or head; refusing to promote." >&2
               exit 1
@@ -147,16 +140,14 @@ jobs:
       - name: Close uv-dev pull request
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ steps.verify.outputs.head_sha }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
           UPSTREAM_NUMBER: ${{ steps.promote.outputs.number }}
         run: |
-          pull_request=$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,isDraft,headRefOid)
+          pull_request=$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,isDraft)
           if ! jq --exit-status \
-            --arg head_sha "$HEAD_SHA" \
-            '.state == "OPEN" and (.isDraft | not) and .headRefOid == $head_sha' \
+            '.state == "OPEN" and (.isDraft | not)' \
             <<< "$pull_request" > /dev/null; then
-            echo "The uv-dev pull request changed during promotion; refusing to close it." >&2
+            echo "The uv-dev pull request is no longer ready; refusing to close it." >&2
             exit 1
           fi
 
