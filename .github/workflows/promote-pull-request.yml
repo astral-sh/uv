@@ -11,7 +11,7 @@ on:
         type: string
       head_sha:
         description: "The expected uv-dev pull request head SHA"
-        required: true
+        required: false
         type: string
 
 permissions: {}
@@ -35,6 +35,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          # The credential broker only accepts `workflow_dispatch` from `main`; a reusable
+          # workflow would retain the `pull_request` event and ref and could not exchange a token.
           jq --null-input \
             --arg head_sha "$HEAD_SHA" \
             --arg pull_request "$PULL_REQUEST_NUMBER" \
@@ -46,7 +48,7 @@ jobs:
               --silent
 
   promote:
-    name: Promote pull request #${{ inputs.pull_request }}
+    name: "Promote pull request #${{ inputs.pull_request }}"
     if: github.event_name == 'workflow_dispatch' && github.repository == 'astral-sh/uv-dev'
     runs-on: ubuntu-slim
     environment: automations
@@ -67,8 +69,10 @@ jobs:
             --json number,title,body,state,isDraft,baseRefName,headRefName,headRefOid,isCrossRepository \
             > "$RUNNER_TEMP/pull-request.json"
 
+          head_sha=$(jq --raw-output '.headRefOid' "$RUNNER_TEMP/pull-request.json")
+          expected_head_sha=${EXPECTED_HEAD_SHA:-$head_sha}
           if ! jq --exit-status \
-            --arg expected_head_sha "$EXPECTED_HEAD_SHA" \
+            --arg expected_head_sha "$expected_head_sha" \
             '.state == "OPEN" and (.isDraft | not) and (.isCrossRepository | not) and .headRefOid == $expected_head_sha' \
             "$RUNNER_TEMP/pull-request.json" > /dev/null; then
             echo "The uv-dev pull request is no longer ready at the expected head; refusing to promote it." >&2
@@ -83,6 +87,7 @@ jobs:
           {
             echo "base_ref=$base_ref"
             echo "head_ref=$head_ref"
+            echo "head_sha=$expected_head_sha"
           } >> "$GITHUB_OUTPUT"
 
       - name: Get uv token
@@ -108,7 +113,7 @@ jobs:
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           HEAD_REF: ${{ steps.verify.outputs.head_ref }}
-          HEAD_SHA: ${{ inputs.head_sha }}
+          HEAD_SHA: ${{ steps.verify.outputs.head_sha }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
         run: |
           promoted_ref="uv-dev/pull-request-$PULL_REQUEST_NUMBER"
@@ -204,7 +209,7 @@ jobs:
       - name: Close uv-dev pull request
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ inputs.head_sha }}
+          HEAD_SHA: ${{ steps.verify.outputs.head_sha }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
           UPSTREAM_NUMBER: ${{ steps.promote.outputs.number }}
           UPSTREAM_URL: ${{ steps.promote.outputs.url }}
