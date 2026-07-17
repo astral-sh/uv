@@ -9,7 +9,7 @@ permissions: {}
 
 concurrency:
   group: pull-request-conflicts-main
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   identify:
