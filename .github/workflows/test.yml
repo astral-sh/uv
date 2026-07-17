@@ -40,8 +40,6 @@ jobs:
         run: rustup toolchain install nightly-2026-07-13 --profile minimal
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -106,7 +104,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo +nightly-2026-07-13 nextest run \
+          cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -148,8 +146,6 @@ jobs:
         run: rustup toolchain install nightly-2026-07-13 --profile minimal
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -197,7 +193,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo +nightly-2026-07-13 nextest run \
+          cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -258,8 +254,6 @@ jobs:
         run: rustup toolchain install nightly-2026-07-13 --profile minimal
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           workspaces: ${{ env.UV_WORKSPACE }}
@@ -298,7 +292,7 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          cargo +nightly-2026-07-13 nextest run \
+          cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \

@@ -1347,7 +1347,7 @@ impl EnvVars {
     pub const UV_GIT_LFS: &'static str = "UV_GIT_LFS";
 
     /// Number of times that `uv run` has been recursively invoked. Used to guard against infinite
-    /// recursion, e.g., when `uv run`` is used in a script shebang.
+    /// recursion, e.g., when `uv run` is used in a script shebang.
     #[attr_hidden]
     #[attr_added_in("0.5.31")]
     pub const UV_RUN_RECURSION_DEPTH: &'static str = "UV_RUN_RECURSION_DEPTH";
