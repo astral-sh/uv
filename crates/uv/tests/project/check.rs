@@ -1590,7 +1590,7 @@ fn check_isolated_no_project() -> Result<()> {
         .filters()
         .into_iter()
         .chain([(
-            r"info:   4\. \[CACHE_DIR\]/builds-v0/\[TMP\]/site-packages \(site-packages\)\n",
+            r"info:   4\. \[CACHE_DIR\]/builds-v0/\[TMP\]/lib64/python\d+\.\d+/site-packages \(site-packages\)\n",
             "",
         )])
         .collect::<Vec<_>>();
@@ -1617,7 +1617,7 @@ fn check_isolated_no_project() -> Result<()> {
     info: Searched in the following paths during module resolution:
     info:   1. [TEMP_DIR]/ (first-party code)
     info:   2. vendored://stdlib (stdlib typeshed stubs vendored by ty)
-    info:   3. [CACHE_DIR]/builds-v0/[TMP]/site-packages (site-packages)
+    info:   3. [CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages (site-packages)
     info: make sure your Python environment is properly configured: https://docs.astral.sh/ty/modules/#python-environment
     info: rule `unresolved-import` is enabled by default
 
