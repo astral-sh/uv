@@ -1,0 +1,220 @@
+name: Rebase conflicted pull requests
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: pull-request-conflicts-main
+  # Let an in-progress rebase finish; newer pushes replace the single pending run.
+  cancel-in-progress: false
+
+jobs:
+  identify:
+    name: Identify conflicted pull requests
+    if: github.repository == 'astral-sh/uv-dev'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      matrix: ${{ steps.identify.outputs.matrix }}
+      rebasable: ${{ steps.identify.outputs.rebasable }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Identify conflicted pull requests
+        id: identify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          pull_requests=$(./scripts/find-conflicted-pull-requests.sh)
+          conflicted=$(jq 'length' <<< "$pull_requests")
+          rebasable=$(jq '[.[] | select(.is_cross_repository | not)] | length' <<< "$pull_requests")
+          cross_repository=$(( conflicted - rebasable ))
+
+          if (( rebasable > 256 )); then
+            echo "Found $rebasable rebasable pull requests, which exceeds the GitHub Actions matrix limit of 256." >&2
+            exit 1
+          fi
+
+          matrix=$(jq --compact-output '{include: [.[] | select(.is_cross_repository | not) | {number, base_ref, head_ref, head_sha}]}' <<< "$pull_requests")
+          {
+            echo "matrix=$matrix"
+            echo "rebasable=$rebasable"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Conflicted pull requests"
+            echo
+            echo "Found $conflicted conflicted pull requests."
+
+            if (( cross_repository > 0 )); then
+              echo
+              echo "Skipping $cross_repository cross-repository pull requests that cannot be updated by the uv-dev app token."
+            fi
+
+            if (( conflicted > 0 )); then
+              echo
+              jq --raw-output '.[] | "- \(.url)"' <<< "$pull_requests"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  rebase:
+    name: Rebase pull request #${{ matrix.number }}
+    needs: identify
+    if: needs.identify.outputs.rebasable != '0'
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.identify.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare pull request branch
+        env:
+          BASE_REF: ${{ matrix.base_ref }}
+          HEAD_REF: ${{ matrix.head_ref }}
+          HEAD_SHA: ${{ matrix.head_sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/codex-home"
+          cp agents/codex/config.toml "$RUNNER_TEMP/codex-home/config.toml"
+          cp agents/prompts/rebase-pull-request.md "$RUNNER_TEMP/rebase-pull-request.md"
+
+          git fetch --no-tags origin "refs/heads/$HEAD_REF"
+          current_head=$(git rev-parse 'FETCH_HEAD^{commit}')
+          if [ "$current_head" != "$HEAD_SHA" ]; then
+            echo "The pull request head changed; refusing to rebase a stale revision." >&2
+            exit 1
+          fi
+
+          git checkout --detach "$HEAD_SHA"
+          git config user.name "astral-automations-bot[bot]"
+          git config user.email "305554984+astral-automations-bot[bot]@users.noreply.github.com"
+          git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}" > /dev/null
+
+      - name: Rebase pull request
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          BASE_REF: ${{ matrix.base_ref }}
+          TMPDIR: ${{ runner.temp }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-5.6-sol
+          codex-home: "${{ runner.temp }}/codex-home"
+          permission-profile: "pull-request-rebase"
+          safety-strategy: drop-sudo
+          allow-bot-users: "astral-automations-bot[bot]"
+          prompt-file: "${{ runner.temp }}/rebase-pull-request.md"
+
+      - name: Verify rebased pull request
+        env:
+          BASE_REF: ${{ matrix.base_ref }}
+        run: |
+          if [ -d "$(git rev-parse --git-path rebase-merge)" ] || [ -d "$(git rev-parse --git-path rebase-apply)" ]; then
+            echo "The rebase is still in progress; refusing to push." >&2
+            exit 1
+          fi
+
+          git diff --check "refs/remotes/origin/$BASE_REF...HEAD"
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The worktree is not clean after the rebase; refusing to push." >&2
+            exit 1
+          fi
+
+          git bundle create "$RUNNER_TEMP/rebased.bundle" "refs/remotes/origin/$BASE_REF..HEAD"
+
+      - name: Upload rebased pull request
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rebased-pull-request-${{ matrix.number }}-${{ matrix.head_sha }}
+          path: ${{ runner.temp }}/rebased.bundle
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  push:
+    name: Push rebased pull request #${{ matrix.number }}
+    needs: [identify, rebase]
+    if: needs.identify.outputs.rebasable != '0'
+    runs-on: ubuntu-slim
+    environment: automations
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.identify.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download rebased pull request
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rebased-pull-request-${{ matrix.number }}-${{ matrix.head_sha }}
+          path: ${{ runner.temp }}/rebased-pull-request
+
+      - name: Import rebased pull request
+        id: import
+        env:
+          BASE_REF: ${{ matrix.base_ref }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+        run: |
+          bundle="$RUNNER_TEMP/rebased-pull-request/rebased.bundle"
+          git bundle verify "$bundle"
+          git -c core.hooksPath=/dev/null fetch --no-tags "$bundle" HEAD
+          rebased_head=$(git rev-parse 'FETCH_HEAD^{commit}')
+
+          if ! git merge-base --is-ancestor "refs/remotes/origin/$BASE_REF" "$rebased_head"; then
+            echo "The rebased pull request does not contain its base; refusing to push." >&2
+            exit 1
+          fi
+
+          echo "head_sha=$rebased_head" >> "$GITHUB_OUTPUT"
+
+      - name: Get uv-dev token
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          # `workflows: write` is required when a rebased pull request modifies workflow files.
+          permissions: |
+            contents: write
+            workflows: write
+
+      - name: Push rebased pull request
+        env:
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          HEAD_REF: ${{ matrix.head_ref }}
+          HEAD_SHA: ${{ matrix.head_sha }}
+          REBASED_HEAD: ${{ steps.import.outputs.head_sha }}
+        run: |
+          git -c core.hooksPath=/dev/null push \
+            --force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA" \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "${REBASED_HEAD}:refs/heads/$HEAD_REF"
