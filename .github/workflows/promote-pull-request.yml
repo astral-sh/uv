@@ -41,8 +41,7 @@ jobs:
             --json number,title,body,state,isDraft,baseRefName,headRefName,headRefOid,isCrossRepository \
             > "$RUNNER_TEMP/pull-request.json"
 
-          head_sha=$(jq --raw-output '.headRefOid' "$RUNNER_TEMP/pull-request.json")
-          expected_head_sha=${EXPECTED_HEAD_SHA:-$head_sha}
+          expected_head_sha=${EXPECTED_HEAD_SHA:-$(jq --raw-output '.headRefOid' "$RUNNER_TEMP/pull-request.json")}
           if ! jq --exit-status \
             --arg expected_head_sha "$expected_head_sha" \
             '.state == "OPEN" and (.isDraft | not) and (.isCrossRepository | not) and .headRefOid == $expected_head_sha' \
@@ -130,13 +129,10 @@ jobs:
               exit 1
             fi
 
-            upstream_base=$(
-              git -C "$promotion_directory" -c core.hooksPath=/dev/null ls-remote \
-                "$upstream_url" \
-                "refs/heads/$BASE_REF" |
-                cut -f1
-            )
-            if [ -z "$upstream_base" ]; then
+            if ! git -C "$promotion_directory" -c core.hooksPath=/dev/null ls-remote \
+              --exit-code \
+              "$upstream_url" \
+              "refs/heads/$BASE_REF" > /dev/null; then
               echo "The upstream base branch $BASE_REF does not exist; refusing to promote." >&2
               exit 1
             fi
@@ -152,11 +148,10 @@ jobs:
               exit 1
             fi
 
-            if [ -z "$upstream_head" ]; then
-              git -C "$promotion_directory" -c core.hooksPath=/dev/null push \
-                "$upstream_url" \
-                "$HEAD_SHA:refs/heads/$promoted_ref"
-            fi
+            git -C "$promotion_directory" -c core.hooksPath=/dev/null push \
+              --force-with-lease="refs/heads/$promoted_ref:$upstream_head" \
+              "$upstream_url" \
+              "$HEAD_SHA:refs/heads/$promoted_ref"
 
             upstream_pull_request=$(
               jq \
@@ -172,11 +167,7 @@ jobs:
           fi
 
           upstream_number=$(jq --exit-status --raw-output '.number | select(type == "number")' <<< "$upstream_pull_request")
-          upstream_html_url=$(jq --exit-status --raw-output '.html_url | select(type == "string" and length > 0)' <<< "$upstream_pull_request")
-          {
-            echo "number=$upstream_number"
-            echo "url=$upstream_html_url"
-          } >> "$GITHUB_OUTPUT"
+          echo "number=$upstream_number" >> "$GITHUB_OUTPUT"
 
       - name: Close uv-dev pull request
         env:
@@ -184,7 +175,6 @@ jobs:
           HEAD_SHA: ${{ steps.verify.outputs.head_sha }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
           UPSTREAM_NUMBER: ${{ steps.promote.outputs.number }}
-          UPSTREAM_URL: ${{ steps.promote.outputs.url }}
         run: |
           pull_request=$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,isDraft,headRefOid)
           if ! jq --exit-status \
@@ -195,8 +185,9 @@ jobs:
             exit 1
           fi
 
+          upstream_url="https://github.com/astral-sh/uv/pull/$UPSTREAM_NUMBER"
           gh pr close "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
-            --comment "Promoted to [#$UPSTREAM_NUMBER]($UPSTREAM_URL)."
+            --comment "Promoted to [#$UPSTREAM_NUMBER]($upstream_url)."
 
-          echo "Promoted uv-dev pull request #$PULL_REQUEST_NUMBER to [#$UPSTREAM_NUMBER]($UPSTREAM_URL)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Promoted uv-dev pull request #$PULL_REQUEST_NUMBER to [#$UPSTREAM_NUMBER]($upstream_url)." >> "$GITHUB_STEP_SUMMARY"
