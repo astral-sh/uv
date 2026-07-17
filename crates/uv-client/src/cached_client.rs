@@ -507,7 +507,10 @@ impl CachedClient {
         }
     }
 
-    /// Read, validate, and decode an entry that may be stale in one blocking task.
+    /// Reads and decodes an allowed-stale cache entry in one blocking task.
+    ///
+    /// The task returns the request it owns while checking the policy. `Ok(None)` means the entry
+    /// belongs to a different request; errors indicate a broken entry for the caller to remove.
     #[instrument(name = "read_and_decode_stale_cache", skip_all, fields(file = %cache_entry.path().display()))]
     async fn read_and_decode_stale_cache<Payload: Cacheable + 'static>(
         &self,
@@ -518,14 +521,14 @@ impl CachedClient {
         self.0
             .cache_read_runtime()
             .spawn_blocking(move || {
-                let cached = match DataWithCachePolicy::from_path_sync(&path) {
-                    Ok(cached) => cached,
-                    Err(err) => return (req, Err(err)),
-                };
-                if !cached.cache_policy.matches_stale_request(&req) {
-                    return (req, Ok(None));
-                }
-                (req, Payload::from_aligned_bytes(cached.data).map(Some))
+                let cached = DataWithCachePolicy::from_path_sync(&path).and_then(|cached| {
+                    if cached.cache_policy.matches_stale_request(&req) {
+                        Payload::from_aligned_bytes(cached.data).map(Some)
+                    } else {
+                        Ok(None)
+                    }
+                });
+                (req, cached)
             })
             .await
             .expect("cache read and payload decoding task panicked")
