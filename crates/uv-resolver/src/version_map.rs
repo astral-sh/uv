@@ -152,6 +152,14 @@ impl VersionMap {
         }
     }
 
+    /// Return a distribution only if it has already been materialized.
+    pub(crate) fn get_initialized(&self, version: &Version) -> Option<&PrioritizedDist> {
+        match self.inner {
+            VersionMapInner::Eager(ref eager) => eager.map.get(version),
+            VersionMapInner::Lazy(ref lazy) => lazy.get_initialized(version),
+        }
+    }
+
     /// Return an iterator over the versions in this map.
     pub(crate) fn versions(&self) -> impl DoubleEndedIterator<Item = &Version> {
         match &self.inner {
@@ -542,6 +550,16 @@ impl VersionMapLazy {
     /// Returns the distribution for the given version, if it exists.
     fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
         self.get_lazy(&self.map.get(version)?.dist)
+    }
+
+    /// Return a distribution without initializing a lazy registry entry.
+    fn get_initialized(&self, version: &Version) -> Option<&PrioritizedDist> {
+        let dist = &self.map.get(version)?.dist;
+        match (&dist.flat, &dist.simple) {
+            (_, Some(simple)) => simple.dist.get()?.as_ref(),
+            (Some(flat), None) => Some(flat),
+            (None, None) => None,
+        }
     }
 
     /// Returns an iterator over the versions with at least one file within the exclude-newer
