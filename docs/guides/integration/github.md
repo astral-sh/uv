@@ -47,7 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           # Install a specific version of uv.
-          version: "0.11.25"
+          version: "0.11.29"
 ```
 
 ## Setting up Python
@@ -230,7 +230,7 @@ jobs:
       # ... setup up Python and uv ...
 
       - name: Restore uv cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /tmp/.uv-cache
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}

@@ -6,7 +6,6 @@
 //!
 //! Then lowers them into a dependency specification.
 
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
@@ -94,24 +93,21 @@ impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
     #[instrument("toml::from_str workspace", skip_all, fields(path = %_path.as_ref().display()))]
     pub fn from_string(raw: String, _path: impl AsRef<Path>) -> Result<Self, PyprojectTomlError> {
-        let sources_wire =
-            toml::from_str::<PyProjectTomlSourcesWire>(&raw).map_err(PyprojectTomlError::Toml)?;
-        let sources = sources_wire
-            .tool
-            .and_then(|tool| tool.uv)
-            .and_then(|uv| uv.sources)
-            .map(ToolUvSources::try_from)
-            .transpose()?;
-
-        let mut pyproject: Self = toml::from_str(&raw).map_err(PyprojectTomlError::Toml)?;
-        if let Some(sources) = sources {
-            let tool_uv = pyproject
-                .tool
-                .as_mut()
-                .and_then(|tool| tool.uv.as_mut())
-                .expect("tool.uv must exist when tool.uv.sources is present");
-            tool_uv.sources = Some(sources);
-        }
+        let pyproject: Self = match toml::from_str(&raw) {
+            Ok(pyproject) => pyproject,
+            Err(error) => {
+                // Preserve the more specific source error if both parses would fail.
+                let sources = toml::from_str::<PyProjectTomlSourcesWire>(&raw)
+                    .map_err(PyprojectTomlError::Toml)?
+                    .tool
+                    .and_then(|tool| tool.uv)
+                    .and_then(|uv| uv.sources);
+                if let Some(sources) = sources {
+                    ToolUvSources::try_from(sources)?;
+                }
+                return Err(PyprojectTomlError::Toml(error));
+            }
+        };
 
         Ok(Self { raw, ..pyproject })
     }
@@ -316,7 +312,6 @@ pub struct ToolUv {
             pydantic = { path = "/path/to/pydantic", editable = true }
         "#
     )]
-    #[serde(default, deserialize_with = "ignore_tool_uv_sources")]
     pub sources: Option<ToolUvSources>,
 
     /// The indexes to use when resolving dependencies.
@@ -711,14 +706,6 @@ pub struct ToolUv {
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUvSources(BTreeMap<PackageName, Sources>);
-
-fn ignore_tool_uv_sources<'de, D>(deserializer: D) -> Result<Option<ToolUvSources>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    serde::de::IgnoredAny::deserialize(deserializer)?;
-    Ok(None)
-}
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
@@ -1765,18 +1752,15 @@ impl Source {
             RequirementSource::Registry { index: Some(_), .. } => {
                 return Ok(None);
             }
-            RequirementSource::Registry { index: None, .. } => {
-                if let Some(index) = index {
-                    Self::Registry {
-                        index,
-                        marker: MarkerTree::TRUE,
-                        extra: None,
-                        group: None,
-                    }
-                } else {
-                    return Ok(None);
+            RequirementSource::Registry { index: None, .. } if let Some(index) = index => {
+                Self::Registry {
+                    index,
+                    marker: MarkerTree::TRUE,
+                    extra: None,
+                    group: None,
                 }
             }
+            RequirementSource::Registry { index: None, .. } => return Ok(None),
             RequirementSource::Path { install_path, .. } => Self::Path {
                 editable: None,
                 package: None,
@@ -1950,14 +1934,14 @@ pub enum DependencyType {
 
 impl DependencyType {
     /// Return the TOML table name(s) for this dependency type.
-    pub fn toml_table_name(&self) -> String {
+    pub fn toml_table_name(&self) -> Cow<'_, str> {
         match self {
-            Self::Production => "`project.dependencies`".to_string(),
+            Self::Production => Cow::Borrowed("`project.dependencies`"),
             Self::Dev => {
-                "`tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`".to_string()
+                Cow::Borrowed("`tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`")
             }
-            Self::Optional(extra) => format!("`project.optional-dependencies.{extra}`"),
-            Self::Group(group) => format!("`dependency-groups.{group}`"),
+            Self::Optional(extra) => Cow::Owned(format!("`project.optional-dependencies.{extra}`")),
+            Self::Group(group) => Cow::Owned(format!("`dependency-groups.{group}`")),
         }
     }
 }

@@ -1,8 +1,9 @@
 use std::borrow::Cow;
+#[cfg(any(test, feature = "testing"))]
+use std::ops::BitOr;
 use std::sync::{Mutex, OnceLock};
 use std::{
     fmt::{Debug, Display, Formatter},
-    ops::BitOr,
     str::FromStr,
 };
 
@@ -261,6 +262,7 @@ pub enum PreviewFeature {
     CentralizedProjectEnvs = 1 << 35,
     ToolInstallLocks = 1 << 36,
     WorkspaceListScripts = 1 << 37,
+    NoDistutilsPatch = 1 << 38,
 }
 
 impl PreviewFeature {
@@ -305,6 +307,7 @@ impl PreviewFeature {
             Self::CentralizedProjectEnvs => "centralized-project-envs",
             Self::ToolInstallLocks => "tool-install-locks",
             Self::WorkspaceListScripts => "workspace-list-scripts",
+            Self::NoDistutilsPatch => "no-distutils-patch",
         }
     }
 }
@@ -362,6 +365,7 @@ impl FromStr for PreviewFeature {
             "centralized-project-envs" => Self::CentralizedProjectEnvs,
             "tool-install-locks" => Self::ToolInstallLocks,
             "workspace-list-scripts" => Self::WorkspaceListScripts,
+            "no-distutils-patch" => Self::NoDistutilsPatch,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -444,7 +448,8 @@ impl Debug for Preview {
 }
 
 impl Preview {
-    pub fn new(flags: &[PreviewFeature]) -> Self {
+    #[cfg(any(test, feature = "testing"))]
+    fn new(flags: &[PreviewFeature]) -> Self {
         Self {
             flags: flags.iter().copied().fold(BitFlags::empty(), BitOr::bitor),
         }
@@ -667,6 +672,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::WorkspaceListScripts.as_str(),
             "workspace-list-scripts"
+        );
+        assert_eq!(
+            PreviewFeature::NoDistutilsPatch.as_str(),
+            "no-distutils-patch"
         );
     }
 

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "delivery_ttl_seconds": 1209600,
+  "rules": [
+    {
+      "event": "pull_request",
+      "action": "ready_for_review",
+      "repository": "astral-sh/uv-dev",
+      "repository_id": 1302176231,
+      "conditions": {
+        "/pull_request/draft": false,
+        "/pull_request/state": "open",
+        "/pull_request/base/repo/id": 1302176231,
+        "/pull_request/head/repo/id": 1302176231
+      },
+      "verify_pull_request": true,
+      "workflow": {
+        "repository": "astral-sh/uv-dev",
+        "repository_id": 1302176231,
+        "path": ".github/workflows/promote-pull-request.yml",
+        "ref": "main",
+        "inputs": {
+          "pull_request": "/pull_request/number",
+          "head_sha": "/pull_request/head/sha"
+        }
+      }
+    }
+  ]
+}

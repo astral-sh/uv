@@ -1,0 +1,169 @@
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  review:
+    name: "security review"
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.review.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Checkout Codex Security plugin"
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: openai/plugins
+          ref: 11c74d6ba24d3a6d48f54a194cd00ef3beea18f9
+          path: .codex-security-plugin
+          sparse-checkout: |
+            .agents/plugins
+            plugins/codex-security
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.28"
+
+      - name: "Install Codex Security plugin"
+        run: ./agents/scripts/install-codex-security.sh
+
+      - name: "Collect pull request context"
+        run: |
+          gh pr view "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,isDraft,labels,files,additions,deletions,changedFiles \
+            > .pull-request-review-event.json
+
+          gh pr diff "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            > .pull-request-review.diff
+
+          {
+            printf 'Pull request security review automation for #%s\n\n' "$PULL_REQUEST_NUMBER"
+            cat agents/prompts/pull-request-security-review.md
+          } > "$RUNNER_TEMP/pull-request-security-review-prompt.md"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+
+      - name: "Review pull request"
+        id: review
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMPDIR: ${{ runner.temp }}/codex-security
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.144.4"
+          codex-home: "agents/codex"
+          permission-profile: "pull-request-review"
+          safety-strategy: drop-sudo
+          allow-bot-users: "astral-automations-bot[bot]"
+          prompt-file: "${{ runner.temp }}/pull-request-security-review-prompt.md"
+          output-schema-file: "agents/schemas/pull-request-security-review.json"
+
+      - name: "Upload Codex thread"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-pull-request-security-review-${{ github.run_id }}-${{ github.run_attempt }}
+          path: agents/codex/sessions
+          if-no-files-found: warn
+
+  prepare:
+    needs: review
+    if: needs.review.outputs.result != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      result: ${{ steps.comments.outputs.result }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.28"
+
+      - name: "Prepare review findings"
+        id: comments
+        run: |
+          delimiter="review-$(openssl rand -hex 16)"
+          {
+            printf 'result<<%s\n' "$delimiter"
+            printf '%s\n' "$REVIEW_RESULT" \
+              | ./agents/scripts/agent-review-to-github-comments.py --commit-id "$HEAD_SHA"
+            printf '%s\n' "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_RESULT: ${{ needs.review.outputs.result }}
+
+  report:
+    needs: prepare
+    if: needs.prepare.outputs.result != '' && fromJSON(needs.prepare.outputs.result).comments[0] != null
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 5
+    permissions:
+      id-token: write # for the credential broker
+    steps:
+      - name: "Get uv token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv
+          permissions: |
+            pull_requests: write
+
+      - name: "Publish review findings"
+        run: |
+          printf '%s\n' "$REVIEW_RESULT" > "$RUNNER_TEMP/review.json"
+
+          if jq --exit-status '.comments | length == 0' "$RUNNER_TEMP/review.json" > /dev/null; then
+            echo "No actionable findings to publish."
+            exit 0
+          fi
+
+          current_head_sha="$(
+            gh pr view "$PULL_REQUEST_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json headRefOid \
+              --jq '.headRefOid'
+          )"
+          if [ "$current_head_sha" != "$HEAD_SHA" ]; then
+            echo "The pull request head changed; skipping stale review findings."
+            exit 0
+          fi
+
+          jq --compact-output '.comments[]' "$RUNNER_TEMP/review.json" |
+          while IFS= read -r comment; do
+            printf '%s\n' "$comment" |
+              gh api \
+                --method POST \
+                "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments" \
+                --input - \
+                --silent
+          done
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEW_RESULT: ${{ needs.prepare.outputs.result }}

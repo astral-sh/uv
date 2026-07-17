@@ -1,0 +1,90 @@
+# Analyze newly opened issues without modifying them.
+name: "issue-triage"
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "An issue URL or number"
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  triage:
+    if: github.repository == 'astral-sh/uv'
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      result: ${{ steps.triage.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Collect issue context"
+        run: |
+          gh issue view "$ISSUE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author \
+            > .issue-triage-event.json
+
+          {
+            printf 'Issue triage automation for #%s\n\n' "$(jq -r '.number' .issue-triage-event.json)"
+            cat agents/prompts/triage-issue.md
+          } > "$RUNNER_TEMP/triage-issue-prompt.md"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+
+      - name: "Triage issue"
+        id: triage
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: "agents/codex"
+          permission-profile: "issue-triage"
+          safety-strategy: drop-sudo
+          allow-users: "*"
+          prompt-file: "${{ runner.temp }}/triage-issue-prompt.md"
+          output-schema-file: "agents/schemas/issue-triage.json"
+
+      - name: "Upload Codex thread"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-issue-triage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: agents/codex/sessions
+          if-no-files-found: warn
+
+  reproduce-bug:
+    needs: triage
+    if: needs.triage.outputs.result != '' && fromJSON(needs.triage.outputs.result).type == 'bug'
+    uses: ./.github/workflows/reproduce-bug.yml
+    secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
+    with:
+      issue: ${{ inputs.issue || github.event.issue.number }}
+      runner: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+
+  report:
+    needs: triage
+    if: needs.triage.outputs.result != ''
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: "Write triage summary"
+        run: printf '```json\n%s\n```\n' "$TRIAGE_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          TRIAGE_RESULT: ${{ needs.triage.outputs.result }}

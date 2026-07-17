@@ -248,6 +248,7 @@ impl uv_errors::Hint for Error {
                 ));
                 hints
             }
+            Self::Client(err) => uv_errors::Hint::hints(err),
             Self::MetadataLowering(err) => err.hints(),
             _ => uv_errors::Hints::none(),
         }

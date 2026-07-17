@@ -32,7 +32,8 @@ use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonVersion};
+use uv_redacted::DisplaySafeUrl;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -56,13 +57,14 @@ pub(crate) async fn audit(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
     output_format: AuditOutputFormat,
     service: VulnerabilityServiceFormat,
-    service_url: Option<String>,
+    service_url: Option<DisplaySafeUrl>,
     ignore: Vec<VulnerabilityID>,
     ignore_until_fixed: Vec<VulnerabilityID>,
 ) -> Result<ExitStatus> {
@@ -82,7 +84,6 @@ pub(crate) async fn audit(
         );
     }
 
-    let workspace_cache = WorkspaceCache::default();
     let workspace;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
@@ -91,7 +92,7 @@ pub(crate) async fn audit(
             project_dir,
             &DiscoveryOptions::default(),
             &cache,
-            &workspace_cache,
+            workspace_cache,
         )
         .await?;
         LockTarget::Workspace(&workspace)
@@ -127,7 +128,7 @@ pub(crate) async fn audit(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
+                config_discovery,
                 Some(false),
                 &cache,
                 printer,
@@ -140,7 +141,7 @@ pub(crate) async fn audit(
                     Some(workspace),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
@@ -187,7 +188,7 @@ pub(crate) async fn audit(
             Box::new(DefaultResolveLogger),
             &concurrency,
             &cache,
-            &WorkspaceCache::default(),
+            workspace_cache,
             printer,
             preview,
         )
@@ -197,11 +198,9 @@ pub(crate) async fn audit(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -250,12 +249,8 @@ pub(crate) async fn audit(
     let osv_future = async {
         match service {
             VulnerabilityServiceFormat::Osv => {
-                let osv_url = service_url
-                    .as_deref()
-                    .map(|url| url.parse().expect("invalid OSV service URL"))
-                    .unwrap_or_else(|| osv::API_BASE.clone());
                 let client = CachedClient::new(base_client);
-                let service = osv::Osv::new(client, Some(osv_url), concurrency, cache.clone());
+                let service = osv::Osv::new(client, service_url, concurrency, cache.clone());
                 trace!("Auditing {n} dependencies against OSV", n = auditable.len());
                 service.query_batch(&dependencies, osv::Filter::All).await
             }

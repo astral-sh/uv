@@ -1,8 +1,60 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 
+use uv_static::EnvVars;
 use uv_test::{copy_dir_ignore, uv_snapshot};
+
+/// The workspace discovered while resolving settings is reused when the resolved cache root is
+/// unchanged, but not when constructing the resolved cache creates a new root.
+#[test]
+fn workspace_list_reuses_settings_discovery() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str("[tool.uv.workspace]\nmembers = [\"packages/*\"]\n")?;
+    let member = context.temp_dir.child("packages/member");
+    member.create_dir_all()?;
+    member
+        .child("pyproject.toml")
+        .write_str("[project]\nname = \"member\"\nversion = \"0.1.0\"\n")?;
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    member
+
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `packages/member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    ");
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--no-cache")
+        .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    member
+
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `packages/member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `packages/member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    ");
+
+    Ok(())
+}
 
 /// Test basic list output for a simple workspace with one member.
 #[test]
@@ -251,8 +303,12 @@ fn workspace_list_scripts() -> Result<()> {
     project.child("scripts/nested.py").write_str(script)?;
     project.child(".github/hidden.py").write_str(script)?;
 
-    // Extensionless scripts are not discovered.
-    project.child("tool").write_str(script)?;
+    project
+        .child("tool")
+        .write_str(&format!("#!/usr/bin/env python\n{script}"))?;
+
+    // Extensionless files without a shebang aren't scanned, even if they're ASCII.
+    project.child("no-shebang").write_str(script)?;
 
     // PEP 723 examples in documentation are not Python scripts.
     project
@@ -287,6 +343,7 @@ fn workspace_list_scripts() -> Result<()> {
     .github/hidden.py
     script.py
     scripts/nested.py
+    tool
 
     ----- stderr -----
     warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
@@ -303,6 +360,7 @@ fn workspace_list_scripts() -> Result<()> {
     .github/hidden.py
     script.py
     scripts/nested.py
+    tool
 
     ----- stderr -----
     ");
@@ -317,6 +375,7 @@ fn workspace_list_scripts() -> Result<()> {
     .github/hidden.py
     script.py
     scripts/nested.py
+    tool
 
     ----- stderr -----
     warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
@@ -335,6 +394,7 @@ fn workspace_list_scripts() -> Result<()> {
     .github/hidden.py
     script.py
     scripts/nested.py
+    tool
 
     ----- stderr -----
     warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.

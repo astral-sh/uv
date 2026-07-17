@@ -14,15 +14,15 @@ use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 
 use super::algebra::{Edges, INTERNER, NodeId, Variable};
 use super::simplify;
+#[cfg(test)]
+use crate::Pep508ErrorSource;
+#[cfg(test)]
 use crate::cursor::Cursor;
 use crate::marker::lowering::{
     CanonicalMarkerListPair, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
 use crate::marker::parse;
-use crate::{
-    CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, Pep508ErrorSource, Reporter,
-    TracingReporter,
-};
+use crate::{CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, Reporter, TracingReporter};
 
 /// Ways in which marker evaluation can fail
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -149,7 +149,7 @@ impl Display for MarkerValueList {
 ///
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub enum MarkerValue {
+pub(crate) enum MarkerValue {
     /// Those environment markers with a PEP 440 version as value such as `python_version`
     MarkerEnvVersion(MarkerValueVersion),
     /// Those environment markers with an arbitrary string as value such as `sys_platform`
@@ -629,6 +629,7 @@ impl Display for ContainerOperator {
 
 impl MarkerExpression {
     /// Parse a [`MarkerExpression`] from a string with the given reporter.
+    #[cfg(test)]
     fn parse_reporter(s: &str, reporter: &mut impl Reporter) -> Result<Option<Self>, Pep508Error> {
         let mut chars = Cursor::new(s);
         let expression = parse::parse_marker_key_op_value(&mut chars, reporter)?;
@@ -652,8 +653,8 @@ impl MarkerExpression {
     ///
     /// Returns `None` if the expression consists entirely of meaningless expressions
     /// that are ignored, such as `os_name ~= 'foo'`.
-    #[expect(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Result<Option<Self>, Pep508Error> {
+    #[cfg(test)]
+    pub(crate) fn from_str(s: &str) -> Result<Option<Self>, Pep508Error> {
         Self::parse_reporter(s, &mut TracingReporter)
     }
 
@@ -684,10 +685,7 @@ impl Display for MarkerExpression {
                 key,
                 versions,
                 operator,
-            } => {
-                let versions = versions.iter().map(ToString::to_string).join(" ");
-                write!(f, "{key} {operator} '{versions}'")
-            }
+            } => write!(f, "{key} {operator} '{}'", versions.iter().format(" ")),
             Self::String {
                 key,
                 operator,
@@ -1324,8 +1322,9 @@ impl MarkerTree {
     /// For example, if `dev` is a provided extra, given `sys_platform
     /// == 'linux' and extra != 'dev'`, the marker will be simplified to
     /// `sys_platform == 'linux'`.
+    #[cfg(test)]
     #[must_use]
-    pub fn simplify_not_extras(self, extras: &[ExtraName]) -> Self {
+    fn simplify_not_extras(self, extras: &[ExtraName]) -> Self {
         self.simplify_not_extras_with(|name| extras.contains(name))
     }
 
@@ -1789,30 +1788,21 @@ impl Display for MarkerTreeContents {
 
         // Write the output in DNF form.
         let dnf = self.0.to_dnf();
-        let format_conjunction = |conjunction: &Vec<MarkerExpression>| {
-            conjunction
-                .iter()
-                .map(MarkerExpression::to_string)
-                .collect::<Vec<String>>()
-                .join(" and ")
+        let [conjunction] = &dnf[..] else {
+            for (index, conjunction) in dnf.iter().enumerate() {
+                if index > 0 {
+                    f.write_str(" or ")?;
+                }
+                if conjunction.len() == 1 {
+                    write!(f, "{}", conjunction.iter().format(" and "))?;
+                } else {
+                    write!(f, "({})", conjunction.iter().format(" and "))?;
+                }
+            }
+            return Ok(());
         };
 
-        let expr = match &dnf[..] {
-            [conjunction] => format_conjunction(conjunction),
-            _ => dnf
-                .iter()
-                .map(|conjunction| {
-                    if conjunction.len() == 1 {
-                        format_conjunction(conjunction)
-                    } else {
-                        format!("({})", format_conjunction(conjunction))
-                    }
-                })
-                .collect::<Vec<String>>()
-                .join(" or "),
-        };
-
-        f.write_str(&expr)
+        write!(f, "{}", conjunction.iter().format(" and "))
     }
 }
 

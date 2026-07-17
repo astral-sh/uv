@@ -42,17 +42,16 @@ pub(crate) fn wrap_text(
     width: Option<usize>,
     initial_indent: &str,
     subsequent_indent: &str,
+    authored_line_indent: &str,
 ) -> String {
-    let Some(width) = width else {
-        return format!("{initial_indent}{text}");
-    };
-
-    let options = textwrap::Options::new(width)
-        .initial_indent(initial_indent)
-        .subsequent_indent(subsequent_indent)
-        .break_words(false)
-        .word_separator(textwrap::WordSeparator::AsciiSpace)
-        .word_splitter(textwrap::WordSplitter::NoHyphenation);
+    let options = width.map(|width| {
+        textwrap::Options::new(width)
+            .initial_indent(initial_indent)
+            .subsequent_indent(subsequent_indent)
+            .break_words(false)
+            .word_separator(textwrap::WordSeparator::AsciiSpace)
+            .word_splitter(textwrap::WordSplitter::NoHyphenation)
+    });
 
     let mut wrapped = String::with_capacity(text.len());
 
@@ -65,16 +64,22 @@ pub(crate) fn wrap_text(
             continue;
         }
 
-        // Preserve authored line breaks and wrap each line independently. Hanging indentation is
-        // only for continuation lines created by wrapping, not for lines already in the message.
-        wrapped.push_str(&textwrap::fill(
-            line,
-            if index == 0 {
-                options.clone()
-            } else {
-                options.clone().initial_indent("")
-            },
-        ));
+        let line_indent = if index == 0 {
+            initial_indent
+        } else {
+            authored_line_indent
+        };
+        if let Some(options) = &options {
+            // Preserve authored line breaks and wrap each line independently. A caller may
+            // separately indent authored lines to keep nested diagnostic content aligned.
+            wrapped.push_str(&textwrap::fill(
+                line,
+                options.clone().initial_indent(line_indent),
+            ));
+        } else {
+            wrapped.push_str(line_indent);
+            wrapped.push_str(line);
+        }
     }
 
     wrapped

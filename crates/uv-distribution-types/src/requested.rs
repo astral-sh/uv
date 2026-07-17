@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 use crate::{
-    Dist, DistributionId, DistributionMetadata, File, Identifier, InstalledDist, Name, ResourceId,
+    Dist, DistributionId, DistributionMetadata, Identifier, InstalledDist, Name, ResourceId,
     VersionId, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
@@ -23,14 +23,6 @@ impl RequestedDist {
         match self {
             Self::Installed(dist) => Some(dist.version()),
             Self::Installable(dist) => dist.version(),
-        }
-    }
-
-    /// Returns the [`File`] instance, if this dist is from a registry with simple json api support.
-    pub fn file(&self) -> Option<&File> {
-        match self {
-            Self::Installed(_) => None,
-            Self::Installable(dist) => dist.file(),
         }
     }
 }

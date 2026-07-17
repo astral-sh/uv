@@ -112,8 +112,11 @@ impl DisplaySafeUrl {
     fn reject_ambiguous_credentials(input: &str, url: &Url) -> Result<(), DisplaySafeUrlError> {
         // `git://`, `http://`, and `https://` URLs may carry credentials, while `file://` URLs
         // on Windows may contain both sigils, but it's always safe, e.g.
-        // `file://C:/Users/ferris/project@home/workspace`.
-        if url.scheme() == "file" {
+        // `file://C:/Users/ferris/project@home/workspace`. The same holds for VCS URLs that use a
+        // file transport, such as `git+file://C:/Users/ferris/repo.git@v1.0`, which likewise carry
+        // no network credentials but can pair a drive-letter `:` with an `@` revision.
+        let scheme = url.scheme();
+        if scheme == "file" || scheme.ends_with("+file") {
             return Ok(());
         }
 
@@ -224,6 +227,14 @@ impl DisplaySafeUrl {
     #[inline]
     pub fn displayable_with_credentials(&self) -> impl Display {
         &self.0
+    }
+
+    /// Redact all occurrences of this URL in a message.
+    ///
+    /// This is useful for errors from external tools, which may include the credentialed URL in
+    /// their command or output instead of using the URL's [`Display`] implementation.
+    pub fn redact_in(&self, message: &str) -> String {
+        message.replace(self.0.as_str(), &self.to_string())
     }
 }
 
@@ -493,6 +504,35 @@ mod tests {
     }
 
     #[test]
+    fn redact_url_in_message() {
+        let url = DisplaySafeUrl::parse("https://user:pass@example.com/org/repo.git").unwrap();
+        let message = format!(
+            "process didn't exit successfully: `git fetch '{}'`\n--- stderr\nfatal: Authentication failed for '{}'",
+            url.as_str(),
+            url.as_str()
+        );
+
+        assert_eq!(
+            url.redact_in(&message),
+            "process didn't exit successfully: `git fetch 'https://user:****@example.com/org/repo.git'`\n--- stderr\nfatal: Authentication failed for 'https://user:****@example.com/org/repo.git'"
+        );
+    }
+
+    #[test]
+    fn redact_presigned_url_in_message() {
+        let url = DisplaySafeUrl::parse(
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz%2DSignature=signature&X-Amz-Credential=credential&X-Amz-Security-Token=token&safe=value",
+        )
+        .unwrap();
+        let message = format!("failed to fetch '{}'", url.as_str());
+
+        assert_eq!(
+            url.redact_in(&message),
+            "failed to fetch 'https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Signature=****&X-Amz-Credential=****&X-Amz-Security-Token=****&safe=value'"
+        );
+    }
+
+    #[test]
     fn redact_aws_presigned_query_values() {
         let log_safe_url = DisplaySafeUrl::parse(
             "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=credential&X-Amz-Date=20260424T120000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=signature&X-Amz-Security-Token=token",
@@ -634,6 +674,12 @@ mod tests {
             "git+https://githubproxy.cc/https://github.com/user/repo.git@branch",
             "git+https://proxy.example.com/https://github.com/org/project@v1.0.0",
             "git+https://proxy.example.com/https://github.com/org/project@refs/heads/main",
+            // https://github.com/astral-sh/uv/issues/19887
+            // Windows `git+file://` URLs pair a drive-letter `:` with an `@` revision, but use a
+            // file transport and so carry no credentials.
+            "git+file:///C:/Users/ferris/repo.git@v1.0",
+            "git+file:///C:/Users/ferris/repo.git@10c049896212932ad5f7b19456d90bc604eeca53",
+            "hg+file:///C:/Users/ferris/repo@default",
         ] {
             DisplaySafeUrl::parse(url).unwrap();
         }

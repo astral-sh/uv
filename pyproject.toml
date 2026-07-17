@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.11.25"
+version = "0.11.29"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -63,7 +63,7 @@ include = [
 changelog-contributors = false  # We exclude contributors from the CHANGELOG file
 major-labels = []  # We do not use the major version number yet
 minor-labels = ["breaking"]
-ignore-labels = ["internal", "ci", "testing"]
+ignore-labels = ["internal", "ci", "testing", "automations"]
 version_files = [
   "README.md",
   "pyproject.toml",

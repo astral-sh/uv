@@ -15,7 +15,7 @@ use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement, VerbatimUrl, VersionOrUrl};
 use uv_preview::Preview;
 use uv_pypi_types::{PyProjectToml, ResolutionMetadata, VerbatimParsedUrl};
-use uv_python::{PythonDownloads, PythonPreference};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::MetadataResponse;
 use uv_settings::PythonInstallMirrors;
@@ -42,7 +42,7 @@ pub(crate) async fn upgrade(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -72,7 +72,8 @@ pub(crate) async fn upgrade(
     };
     let (requirement_text, requirement) = select_requirement(&project, &package)?;
 
-    let relaxed_requirement = into_verbatim_requirement(relax_requirement(&requirement), &package)?;
+    let relaxed_requirement =
+        into_verbatim_requirement(relax_requirement(requirement.clone()), &package)?;
 
     let mut pyproject = PyProjectTomlMut::from_toml(
         &project.current_project().pyproject_toml().raw,
@@ -117,7 +118,7 @@ pub(crate) async fn upgrade(
         Some(project.workspace()),
         &groups,
         project_dir,
-        no_config,
+        config_discovery,
     )
     .await?;
     let interpreter = ProjectInterpreter::discover(
@@ -166,11 +167,9 @@ pub(crate) async fn upgrade(
     {
         Ok(result) => result,
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -499,11 +498,10 @@ fn increment_version_at_precision(version: &Version, precision: usize) -> Result
 
 /// Remove upper and exact constraints while retaining lower bounds and exclusions.
 fn relax_requirement(
-    requirement: &Requirement<VerbatimParsedUrl>,
+    mut requirement: Requirement<VerbatimParsedUrl>,
 ) -> Requirement<VerbatimParsedUrl> {
-    let mut relaxed = requirement.clone();
     let Some(VersionOrUrl::VersionSpecifier(specifiers)) = &requirement.version_or_url else {
-        return relaxed;
+        return requirement;
     };
 
     let specifiers = specifiers
@@ -524,12 +522,12 @@ fn relax_requirement(
         })
         .collect::<VersionSpecifiers>();
 
-    relaxed.version_or_url = if specifiers.is_empty() {
+    requirement.version_or_url = if specifiers.is_empty() {
         None
     } else {
         Some(VersionOrUrl::VersionSpecifier(specifiers))
     };
-    relaxed
+    requirement
 }
 
 #[cfg(test)]
@@ -721,7 +719,7 @@ mod tests {
         )
         .expect("valid requirement");
 
-        let relaxed = relax_requirement(&requirement);
+        let relaxed = relax_requirement(requirement);
 
         assert_eq!(relaxed.to_string(), "requests>=1,>1.5,!=2,!=2.1.*");
     }
@@ -731,7 +729,7 @@ mod tests {
         let requirement = Requirement::<VerbatimParsedUrl>::from_str("requests~=2.32.1")
             .expect("valid requirement");
 
-        let relaxed = relax_requirement(&requirement);
+        let relaxed = relax_requirement(requirement);
 
         assert_eq!(relaxed.to_string(), "requests>=2.32.1");
     }
@@ -748,7 +746,7 @@ mod tests {
             let requirement =
                 Requirement::<VerbatimParsedUrl>::from_str(requirement).expect("valid requirement");
 
-            let relaxed = relax_requirement(&requirement);
+            let relaxed = relax_requirement(requirement);
 
             assert_eq!(relaxed.to_string(), "requests");
         }
@@ -761,7 +759,7 @@ mod tests {
         )
         .expect("valid requirement");
 
-        let relaxed = relax_requirement(&requirement);
+        let relaxed = relax_requirement(requirement);
 
         assert_eq!(
             relaxed.to_string(),

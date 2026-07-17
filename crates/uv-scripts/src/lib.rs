@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -98,29 +99,38 @@ impl Pep723ItemRef<'_> {
     /// Collect any `tool.uv.index` from the script.
     pub fn indexes(&self, source_strategy: &NoSources) -> &[uv_distribution_types::Index] {
         match source_strategy {
-            NoSources::None => self
+            NoSources::None | NoSources::Packages(_) => self
                 .metadata()
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.top_level.index.as_deref())
                 .unwrap_or(&[]),
-            NoSources::All | NoSources::Packages(_) => &[],
+            NoSources::All => &[],
         }
     }
 
     /// Collect any `tool.uv.sources` from the script.
-    pub fn sources(&self, source_strategy: &NoSources) -> &BTreeMap<PackageName, Sources> {
+    pub fn sources(&self, source_strategy: &NoSources) -> Cow<'_, BTreeMap<PackageName, Sources>> {
         static EMPTY: BTreeMap<PackageName, Sources> = BTreeMap::new();
+        let sources = self
+            .metadata()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .unwrap_or(&EMPTY);
+
         match source_strategy {
-            NoSources::None => self
-                .metadata()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.sources.as_ref())
-                .unwrap_or(&EMPTY),
-            NoSources::All | NoSources::Packages(_) => &EMPTY,
+            NoSources::None => Cow::Borrowed(sources),
+            NoSources::All => Cow::Borrowed(&EMPTY),
+            NoSources::Packages(packages) => Cow::Owned(
+                sources
+                    .iter()
+                    .filter(|(name, _)| !packages.contains(name))
+                    .map(|(name, sources)| (name.clone(), sources.clone()))
+                    .collect(),
+            ),
         }
     }
 }

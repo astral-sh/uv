@@ -1,0 +1,47 @@
+default_permissions = ":read-only"
+
+[permissions.issue-triage]
+description = "Read-only issue triage with GitHub API access."
+extends = ":read-only"
+
+[permissions.issue-triage.network]
+enabled = true
+
+[permissions.issue-triage.network.domains]
+"api.github.com" = "allow"
+"github.com" = "allow"
+
+[permissions.reproduce-bug]
+description = "Bug reproduction with temporary filesystem and GitHub API access."
+extends = ":read-only"
+
+[permissions.reproduce-bug.filesystem]
+":tmpdir" = "write"
+":slash_tmp" = "write"
+
+[permissions.reproduce-bug.network]
+enabled = true
+
+[permissions.reproduce-bug.network.domains]
+"api.github.com" = "allow"
+"files.pythonhosted.org" = "allow"
+"github.com" = "allow"
+"pypi.org" = "allow"
+
+[permissions.pull-request-review]
+description = "Pull request review with workspace and GitHub API access."
+extends = ":workspace"
+
+[permissions.pull-request-review.network]
+enabled = true
+
+[permissions.pull-request-review.network.domains]
+"api.github.com" = "allow"
+"github.com" = "allow"
+
+[permissions.pull-request-rebase]
+description = "Pull request rebase with workspace and Git metadata access."
+extends = ":workspace"
+
+[permissions.pull-request-rebase.filesystem.":workspace_roots"]
+".git" = "write"

@@ -30,9 +30,7 @@ use crate::resolution::AnnotatedDist;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::{
-    InMemoryIndex, MetadataResponse, Options, PythonRequirement, ResolveError, VersionsResponse,
-};
+use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
 
 /// The output of a successful resolution.
 ///
@@ -125,13 +123,13 @@ impl ResolverOutput {
     /// Create a new [`ResolverOutput`] from the resolved PubGrub state.
     pub(crate) fn from_state(
         resolutions: &[Resolution],
-        requirements: &[Requirement],
-        constraints: &Constraints,
-        overrides: &Overrides,
+        requirements: Vec<Requirement>,
+        constraints: Constraints,
+        overrides: Overrides,
         preferences: &Preferences,
         index: &InMemoryIndex,
         git: &GitResolver,
-        python: &PythonRequirement,
+        requires_python: RequiresPython,
         conflicts: &Conflicts,
         resolution_strategy: &ResolutionStrategy,
         options: Options,
@@ -184,9 +182,6 @@ impl ResolverOutput {
             }
         }
 
-        // Extract the `Requires-Python` range, if provided.
-        let requires_python = python.target().clone();
-
         let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions {
             // In the case of a singleton marker, we only include it if it's not
             // always true. Otherwise, we keep our `fork_markers` empty as there
@@ -226,18 +221,18 @@ impl ResolverOutput {
         graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
-            report_missing_lower_bounds(&graph, &mut diagnostics, constraints, overrides);
+            report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &overrides);
         }
 
         let output = Self {
             graph,
             requires_python,
-            diagnostics,
-            requirements: requirements.to_vec(),
-            constraints: constraints.clone(),
-            overrides: overrides.clone(),
-            options,
             fork_markers,
+            diagnostics,
+            requirements,
+            constraints,
+            overrides,
+            options,
         };
 
         // We only do conflicting distribution detection when no

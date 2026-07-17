@@ -31,6 +31,7 @@ pub(crate) async fn format(
     show_version: bool,
     client_builder: BaseClientBuilder<'_>,
     cache: Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
     no_project: bool,
@@ -43,7 +44,6 @@ pub(crate) async fn format(
         );
     }
 
-    let workspace_cache = WorkspaceCache::default();
     // If `no_project` is provided, we use the provided directory
     // Otherwise, we discover the project and use the project root.
     let target_dir = if no_project {
@@ -53,7 +53,7 @@ pub(crate) async fn format(
             project_dir,
             &DiscoveryOptions::default(),
             &cache,
-            &workspace_cache,
+            workspace_cache,
         )
         .await
         {

@@ -139,7 +139,7 @@ impl GitUrl {
             }
         }
         Ok(Self {
-            repository: RepositoryUrl::new(&url),
+            repository: RepositoryUrl::new(url.clone()),
             url,
             reference,
             precise,

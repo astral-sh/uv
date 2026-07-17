@@ -10,8 +10,7 @@ use uv_distribution_types::{
 };
 use uv_errors::{Hint, Hints};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
-use uv_resolver::SentinelRange;
+use uv_pep440::{Version, strip_local_version_sentinels};
 
 use crate::commands::pip;
 use crate::commands::pip::install::ExternallyManagedError;
@@ -22,6 +21,7 @@ use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
 use crate::commands::tool::common::NoExecutablesError;
 use crate::commands::tool::run::ToolRunScriptError;
+use crate::printer::Printer;
 
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
     let suggestions: Vec<(String, String)> =
@@ -43,22 +43,11 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
 pub(crate) struct OperationDiagnostic {
     /// Caller-provided hints to render after the error output.
     hints: Vec<String>,
-    /// Whether system certificates are being used.
-    system_certs: bool,
     /// The context to display to the user upon resolution failure.
     context: Option<&'static str>,
 }
 
 impl OperationDiagnostic {
-    /// Create an [`OperationDiagnostic`] with the given system certificates setting.
-    #[must_use]
-    pub(crate) fn with_system_certs(system_certs: bool) -> Self {
-        Self {
-            system_certs,
-            ..Default::default()
-        }
-    }
-
     /// Add a hint to display to the user upon resolution failure.
     #[must_use]
     pub(crate) fn with_hint(mut self, hint: String) -> Self {
@@ -115,21 +104,14 @@ impl OperationDiagnostic {
                 dist_error(kind, dist, &chain, Arc::new(*err));
                 None
             }
-            pip::operations::Error::Requirements(err) => {
-                if let Some(context) = self.context {
-                    let err = miette::Report::msg(format!("{err}"))
-                        .context(format!("Failed to resolve {context} requirement"));
-                    anstream::eprint!("{err:?}");
-                    None
-                } else {
-                    Some(pip::operations::Error::Requirements(err))
-                }
-            }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
-                if !self.system_certs && err.is_ssl() =>
-            {
-                system_certs_hint(err);
+            pip::operations::Error::Requirements(err) if let Some(context) = self.context => {
+                let err = miette::Report::msg(format!("{err}"))
+                    .context(format!("Failed to resolve {context} requirement"));
+                anstream::eprint!("{err:?}");
                 None
+            }
+            pip::operations::Error::Requirements(err) => {
+                Some(pip::operations::Error::Requirements(err))
             }
             err @ pip::operations::Error::OutdatedEnvironment(..) => {
                 anstream::eprintln!("{}", err);
@@ -229,10 +211,11 @@ fn dependencies_error(
 
 /// Render a [`uv_resolver::NoSolutionError`].
 fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>) {
+    let header = uv_resolver::NoSolutionHeader::new(err.environment().clone());
     let header = if let Some(context) = context {
-        err.header().with_context(context)
+        header.with_context(context)
     } else {
-        err.header()
+        header
     };
     let report = miette::Report::msg(err.report().to_string()).context(header);
     anstream::eprint!("{report:?}");
@@ -240,41 +223,13 @@ fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>
     anstream::eprint!("{hints}");
 }
 
-/// Render a TLS error with a hint to enable native TLS.
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-fn system_certs_hint(err: uv_client::Error) {
-    #[derive(Debug, miette::Diagnostic)]
-    #[diagnostic()]
-    struct Error {
-        /// The underlying error.
-        err: uv_client::Error,
-
-        /// The help message to display.
-        #[help]
-        help: String,
-    }
-
-    impl std::fmt::Display for Error {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.err)
-        }
-    }
-
-    impl std::error::Error for Error {
-        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-            self.err.source()
-        }
-    }
-
-    let report = miette::Report::new(Error {
-        err,
-        help: format!(
-            "Consider enabling use of system TLS certificates with the `{}` command-line flag",
-            "--system-certs".green()
-        ),
-    });
-    anstream::eprint!("{report:?}");
+/// Format an error chain with the default user-facing hints and output settings.
+pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::fmt::Result {
+    uv_errors::write_error_chain_with_options(
+        err.as_ref(),
+        hints_for_error(err),
+        uv_errors::ErrorOptions::default().with_stream(printer.stderr_important()),
+    )
 }
 
 /// Walk an error chain and collect hint strings from all known error types.
@@ -298,6 +253,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<NoExecutablesError>(cause, &mut hints);
         collect_hint::<ExternallyManagedError>(cause, &mut hints);
         collect_hint::<MissingProjectVersionError>(cause, &mut hints);
+        collect_hint::<crate::commands::build_frontend::Error>(cause, &mut hints);
         collect_hint::<uv_build_backend::Error>(cause, &mut hints);
         collect_hint::<uv_build_frontend::Error>(cause, &mut hints);
         collect_hint::<uv_python::Error>(cause, &mut hints);
@@ -309,6 +265,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_workspace::pyproject::SourceError>(cause, &mut hints);
         collect_hint::<uv_distribution::LoweringError>(cause, &mut hints);
         collect_hint::<uv_virtualenv::Error>(cause, &mut hints);
+        collect_hint::<uv_client::Error>(cause, &mut hints);
         #[cfg(not(feature = "self-update"))]
         collect_hint::<crate::ExternallyInstalledError>(cause, &mut hints);
     }
@@ -455,7 +412,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
         } else {
             message = format!("{message} {} depends on", format_step(step, range));
         }
-        range = Some(SentinelRange::from(&step.range).strip());
+        range = Some(strip_local_version_sentinels(&step.range));
     }
     if let Some(range) = range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
     {

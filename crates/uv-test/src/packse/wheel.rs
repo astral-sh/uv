@@ -164,7 +164,7 @@ fn build_metadata(
     }
     for (extra_name, extra_requirements) in extras {
         for requirement in extra_requirements {
-            let requirement = requirement.clone().with_extra_marker(extra_name);
+            let requirement = requirement.clone().with_extra_marker(extra_name.clone());
             writeln!(&mut metadata, "Requires-Dist: {requirement}")
                 .expect("writing metadata into a string should succeed");
         }

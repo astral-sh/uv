@@ -25,7 +25,7 @@ pub fn astral_mirror_url_from_env() -> Option<String> {
 /// Return the effective Astral mirror base URL, using the default mirror when unset.
 pub fn astral_mirror_base_url(astral_mirror_url: Option<&str>) -> Cow<'_, str> {
     custom_astral_mirror_url(astral_mirror_url)
-        .map(|url| Cow::Owned(url.trim_end_matches('/').to_string()))
+        .map(|url| Cow::Borrowed(url.trim_end_matches('/')))
         .unwrap_or(Cow::Borrowed(ASTRAL_MIRROR_BASE_URL))
 }
 

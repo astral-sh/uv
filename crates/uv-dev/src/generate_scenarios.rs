@@ -14,7 +14,7 @@ use walkdir::WalkDir;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Requirement, VersionOrUrl};
-use uv_test::packse::scenario::{Package, PackageMetadata, Scenario};
+use uv_test::packse::scenario::{Package, PackageMetadata, Scenario, ScenarioTest};
 
 use crate::ROOT_DIR;
 use crate::generate_all::Mode;
@@ -58,6 +58,13 @@ impl TemplateKind {
         match self {
             Self::Install => "pip_install_scenarios",
             Self::Compile => "pip_compile_scenarios",
+            Self::Lock => "lock_scenarios",
+        }
+    }
+
+    fn test_target(self) -> &'static str {
+        match self {
+            Self::Install | Self::Compile => "pip",
             Self::Lock => "lock_scenarios",
         }
     }
@@ -155,16 +162,26 @@ fn scenarios_for_template(
 ) -> Vec<&ScenarioCase> {
     scenarios
         .iter()
-        .filter(|case| match template {
-            TemplateKind::Install => {
-                !case.scenario.resolver_options.universal
-                    && case.scenario.resolver_options.python.is_none()
+        .filter(|case| {
+            if case.scenario.testgen.disable {
+                return false;
             }
-            TemplateKind::Compile => {
-                !case.scenario.resolver_options.universal
-                    && case.scenario.resolver_options.python.is_some()
+            match case.scenario.testgen.kind {
+                Some(ScenarioTest::Install) => template == TemplateKind::Install,
+                Some(ScenarioTest::Compile) => template == TemplateKind::Compile,
+                Some(ScenarioTest::Lock) => template == TemplateKind::Lock,
+                None => match template {
+                    TemplateKind::Install => {
+                        !case.scenario.resolver_options.universal
+                            && case.scenario.resolver_options.python.is_none()
+                    }
+                    TemplateKind::Compile => {
+                        !case.scenario.resolver_options.universal
+                            && case.scenario.resolver_options.python.is_some()
+                    }
+                    TemplateKind::Lock => case.scenario.resolver_options.universal,
+                },
             }
-            TemplateKind::Lock => case.scenario.resolver_options.universal,
         })
         .collect()
 }
@@ -277,7 +294,7 @@ fn update_snapshots(template: TemplateKind) -> Result<()> {
             "--test-runner",
             "nextest",
             "--test",
-            "it",
+            template.test_target(),
             "--",
             template.test_name(),
         ])
@@ -387,6 +404,7 @@ fn render_compile(output: &mut String, cases: &[&ScenarioCase]) -> Result<()> {
     output.push_str("        .arg(\"--index-url\")\n");
     output.push_str("        .arg(server.index_url());\n");
     output.push_str("    context.add_shared_options(&mut command, true);\n");
+    output.push_str("    command.env_remove(EnvVars::UV_DEFAULT_INDEX);\n");
     output.push_str("    command.env_remove(EnvVars::UV_EXCLUDE_NEWER);\n");
     output.push_str("    command.env(EnvVars::UV_PYTHON_SEARCH_PATH, python_path);\n\n");
     output.push_str("    command\n");
@@ -402,6 +420,9 @@ fn render_compile_case(output: &mut String, case: &ScenarioCase) -> Result<()> {
     render_case_docs(output, &case.scenario)?;
     if case.scenario.name.contains("patch") {
         output.push_str("#[cfg(feature = \"test-python-patch\")]\n");
+    }
+    if case.scenario.resolver_options.universal {
+        output.push_str("#[cfg(feature = \"test-universal\")]\n");
     }
     output.push_str("#[test]\n");
     writeln!(
@@ -579,6 +600,9 @@ fn render_resolver_args(
     scenario: &Scenario,
     command: ScenarioCommand,
 ) -> Result<()> {
+    if let Some(resolution) = scenario.resolver_options.resolution {
+        writeln!(output, "        .arg(\"--resolution={resolution}\")").unwrap();
+    }
     if scenario.resolver_options.prereleases {
         output.push_str("        .arg(\"--prerelease=allow\")\n");
     }
@@ -605,6 +629,9 @@ fn render_resolver_args(
         && let Some(python) = &scenario.resolver_options.python
     {
         writeln!(output, "        .arg(\"--python-version={python}\")").unwrap();
+    }
+    if matches!(command, ScenarioCommand::Compile) && scenario.resolver_options.universal {
+        output.push_str("        .arg(\"--universal\")\n");
     }
     if matches!(command, ScenarioCommand::Install) {
         for requirement in &scenario.root.requires {
@@ -904,7 +931,7 @@ fn requirement_specifiers(requirement: &Requirement) -> Option<&uv_pep440::Versi
 mod tests {
     use super::{
         TemplateKind, check_generated_file, compile_requirements, load_scenarios,
-        load_scenarios_from, render,
+        load_scenarios_from, module_name, render, scenarios_for_template,
     };
 
     #[test]
@@ -943,6 +970,26 @@ mod tests {
     }
 
     #[test]
+    fn universal_compile_scenarios_are_feature_gated() {
+        let scenarios = load_scenarios().expect("vendored scenarios should parse");
+        let cases = scenarios_for_template(TemplateKind::Compile, &scenarios);
+        let output =
+            render(TemplateKind::Compile, &cases).expect("compile scenario suite should render");
+        let mut universal_cases = cases
+            .into_iter()
+            .filter(|case| case.scenario.resolver_options.universal)
+            .peekable();
+
+        assert!(universal_cases.peek().is_some());
+        for case in universal_cases {
+            assert!(output.contains(&format!(
+                "#[cfg(feature = \"test-universal\")]\n#[test]\nfn {}()",
+                module_name(&case.scenario.name)
+            )));
+        }
+    }
+
+    #[test]
     fn missing_scenarios_directory_is_an_error() {
         let temp_dir = tempfile::tempdir().expect("temporary directory should be created");
         let directory = temp_dir.path().join("missing");
@@ -955,6 +1002,40 @@ mod tests {
         let scenarios = load_scenarios().expect("vendored scenarios should parse");
 
         assert!(!scenarios.is_empty());
+    }
+
+    #[test]
+    fn scenario_can_skip_generated_tests() {
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        fs_err::write(
+            temporary_directory.path().join("skip.toml"),
+            r#"
+name = "skip"
+
+[root]
+requires = []
+
+[expected]
+satisfiable = true
+
+[testgen]
+disable = true
+kind = "compile"
+"#,
+        )
+        .expect("scenario should be written");
+
+        let scenarios =
+            load_scenarios_from(temporary_directory.path()).expect("scenario should parse");
+        assert_eq!(scenarios.len(), 1);
+        for template in [
+            TemplateKind::Install,
+            TemplateKind::Compile,
+            TemplateKind::Lock,
+        ] {
+            assert!(scenarios_for_template(template, &scenarios).is_empty());
+        }
     }
 
     #[test]

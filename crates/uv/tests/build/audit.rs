@@ -6,7 +6,74 @@ use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use uv_static::EnvVars;
+use uv_test::packse::PackseServer;
 use uv_test::uv_snapshot;
+
+#[test]
+fn audit_invalid_service_url() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--service-url")
+        .arg("not-a-url"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'not-a-url' for '--service-url <SERVICE_URL>': relative URL without a base
+
+    For more information, try '--help'.
+    ");
+}
+
+/// The workspace discovered while resolving settings is reused by `uv audit`.
+#[test]
+fn audit_reuses_settings_workspace_discovery() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.workspace]
+            members = ["member"]
+        "#})?;
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member
+        .child("pyproject.toml")
+        .write_str("[project]\nname = \"member\"\nversion = \"0.1.0\"\n")?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/member`
+    Resolved 2 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 0 packages
+    ");
+
+    Ok(())
+}
 
 fn write_audit_output_project(project_dir: &impl PathChild, index_url: &str) {
     let pyproject_toml = project_dir.child("pyproject.toml");
@@ -231,6 +298,10 @@ async fn audit_vulnerability_found() {
             "modified": "2026-01-01T00:00:00Z",
             "summary": "A test vulnerability in iniconfig",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -550,6 +621,10 @@ async fn audit_multiple_vulnerabilities_same_package() {
             "modified": "2026-01-01T00:00:00Z",
             "summary": "First vulnerability",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -573,6 +648,10 @@ async fn audit_multiple_vulnerabilities_same_package() {
             "modified": "2026-01-02T00:00:00Z",
             "summary": "Second vulnerability",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -891,6 +970,10 @@ async fn audit_ignore_by_id() {
             "modified": "2026-01-01T00:00:00Z",
             "summary": "A test vulnerability in iniconfig",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -1101,6 +1184,10 @@ async fn audit_ignore_until_fixed_with_fix() {
             "modified": "2026-01-01T00:00:00Z",
             "summary": "A test vulnerability in iniconfig",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -1143,6 +1230,104 @@ async fn audit_ignore_until_fixed_with_fix() {
     ");
 }
 
+/// `--ignore-until-fixed` ignores fixes for other or missing packages in the same OSV record.
+#[tokio::test]
+async fn audit_ignore_until_fixed_with_fix_for_other_package() {
+    let index = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+    "#})
+        .unwrap();
+
+    context
+        .lock()
+        .arg("--index")
+        .arg(index.index_url())
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "PYSEC-2023-0001"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2023-0001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2023-0001",
+            "modified": "2026-01-01T00:00:00Z",
+            "summary": "A test vulnerability in multiple packages",
+            "affected": [
+                {
+                    "package": {
+                        "ecosystem": "PyPI",
+                        "name": "a"
+                    },
+                    "ranges": [{
+                        "type": "ECOSYSTEM",
+                        "events": [{"introduced": "0"}]
+                    }]
+                },
+                {
+                    "package": {
+                        "ecosystem": "PyPI",
+                        "name": "other-package"
+                    },
+                    "ranges": [{
+                        "type": "ECOSYSTEM",
+                        "events": [
+                            {"introduced": "0"},
+                            {"fixed": "2.1.0"}
+                        ]
+                    }]
+                },
+                {
+                    "ranges": [{
+                        "type": "ECOSYSTEM",
+                        "events": [
+                            {"introduced": "0"},
+                            {"fixed": "9.9.9"}
+                        ]
+                    }]
+                }
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--index")
+        .arg(index.index_url())
+        .arg("--ignore-until-fixed")
+        .arg("PYSEC-2023-0001")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
 /// `[tool.uv.audit]` config supports `ignore`.
 #[tokio::test]
 async fn audit_ignore_config() {
@@ -1181,6 +1366,10 @@ async fn audit_ignore_config() {
             "modified": "2026-01-01T00:00:00Z",
             "summary": "A test vulnerability in iniconfig",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -1303,6 +1492,10 @@ async fn audit_ignore_partial() {
             "modified": "2026-01-01T00:00:00Z",
             "summary": "First vulnerability",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -1322,6 +1515,10 @@ async fn audit_ignore_partial() {
             "modified": "2026-01-02T00:00:00Z",
             "summary": "Second vulnerability",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -1495,6 +1692,10 @@ async fn audit_ignore_mixed_matched_unmatched() {
             "modified": "2026-01-01T00:00:00Z",
             "summary": "A test vulnerability in iniconfig",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -1659,6 +1860,10 @@ async fn audit_script_vulnerability_found() {
             "modified": "2026-01-01T00:00:00Z",
             "summary": "A test vulnerability in iniconfig",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -2212,6 +2417,10 @@ async fn audit_vulnerability_and_project_status() {
             "modified": "2026-01-01T00:00:00Z",
             "summary": "A test vulnerability in iniconfig",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -2279,6 +2488,10 @@ async fn audit_json_vulnerability_and_project_status() {
             "modified": "2026-01-01T00:00:00Z",
             "summary": "A test vulnerability in iniconfig",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -2376,6 +2589,10 @@ async fn audit_sarif_vulnerability_and_project_status() -> Result<()> {
             "summary": "A test vulnerability in iniconfig",
             "details": "A longer description of the test vulnerability.",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
@@ -2569,6 +2786,10 @@ async fn audit_sarif_project_artifact_uri() -> Result<()> {
             "id": "PYSEC-2023-0001",
             "modified": "2026-01-01T00:00:00Z",
             "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "iniconfig"
+                },
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [{"introduced": "0"}]

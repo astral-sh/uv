@@ -15,6 +15,7 @@ fn add_shared_args(mut command: Command) -> Command {
         .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "50")
         .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "8")
+        .env(EnvVars::UV_CONCURRENT_CACHE_READS, "2")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env_remove(EnvVars::UV_PYTHON_DOWNLOADS);
 
@@ -60,6 +61,7 @@ fn pip_compile_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -216,6 +218,187 @@ fn pip_compile_baseline() {
     windows,
     ignore = "Configuration tests are not yet supported on Windows"
 )]
+fn publish_resolved_settings() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(indoc::indoc! {r#"
+        publish-url = "https://test.pypi.org/legacy/"
+        trusted-publishing = "never"
+        check-url = "https://check-user:check-secret@test.pypi.org/simple/"
+        keyring-provider = "subprocess"
+
+        [[index]]
+        name = "private"
+        url = "https://index-user:index-secret@test.pypi.org/simple/"
+    "#})?;
+
+    uv_snapshot!(context.filters(), add_shared_args(context.publish())
+        .arg("--show-settings")
+        .env(EnvVars::UV_PUBLISH_TOKEN, "publish-secret-token"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+            cache_reads: 2,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PublishSettings {
+        files: [
+            "dist/*",
+        ],
+        username: Some(
+            "__token__",
+        ),
+        password: Some(
+            "****",
+        ),
+        index: None,
+        dry_run: false,
+        no_attestations: false,
+        direct: false,
+        publish_url: DisplaySafeUrl {
+            scheme: "https",
+            cannot_be_a_base: false,
+            username: "",
+            password: None,
+            host: Some(
+                Domain(
+                    "test.pypi.org",
+                ),
+            ),
+            port: None,
+            path: "/legacy/",
+            query: None,
+            fragment: None,
+        },
+        trusted_publishing: Never,
+        keyring_provider: Subprocess,
+        check_url: Some(
+            Url(
+                VerbatimUrl {
+                    url: DisplaySafeUrl {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "check-user",
+                        password: Some(
+                            "****",
+                        ),
+                        host: Some(
+                            Domain(
+                                "test.pypi.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/simple/",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://check-user:****@test.pypi.org/simple/",
+                    ),
+                    expanded: false,
+                },
+            ),
+        ),
+        index_locations: IndexLocations {
+            indexes: [
+                Index {
+                    name: Some(
+                        IndexName(
+                            "private",
+                        ),
+                    ),
+                    url: Url(
+                        VerbatimUrl {
+                            url: DisplaySafeUrl {
+                                scheme: "https",
+                                cannot_be_a_base: false,
+                                username: "index-user",
+                                password: Some(
+                                    "****",
+                                ),
+                                host: Some(
+                                    Domain(
+                                        "test.pypi.org",
+                                    ),
+                                ),
+                                port: None,
+                                path: "/simple/",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "https://index-user:****@test.pypi.org/simple/",
+                            ),
+                            expanded: false,
+                        },
+                    ),
+                    explicit: false,
+                    default: false,
+                    origin: Some(
+                        Project,
+                    ),
+                    format: Simple,
+                    publish_url: None,
+                    authenticate: Auto,
+                    ignore_error_codes: None,
+                    cache_control: None,
+                    exclude_newer: None,
+                },
+            ],
+            flat_index: [],
+            no_index: false,
+        },
+    }
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
 fn pip_install_baseline() {
     let context = uv_test::test_context!("3.12");
 
@@ -247,6 +430,7 @@ fn pip_install_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -430,6 +614,7 @@ fn lock_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -552,6 +737,7 @@ fn version_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -689,6 +875,7 @@ fn tool_install_baseline() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            cache_reads: 2,
         },
         show_settings: true,
         preview: Preview {
@@ -2236,10 +2423,10 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 7, column 13
-      |
-    7 | conflicts = [
-      |             ^
-    Each set of conflicts must have at least two entries, but found only one
+          |
+        7 | conflicts = [
+          |             ^
+        Each set of conflicts must have at least two entries, but found only one
     "
     );
 
@@ -2263,10 +2450,10 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 7, column 13
-      |
-    7 | conflicts = [[]]
-      |             ^^^^
-    Each set of conflicts must have at least two entries, but found none
+          |
+        7 | conflicts = [[]]
+          |             ^^^^
+        Each set of conflicts must have at least two entries, but found none
     "
     );
 
@@ -2292,10 +2479,10 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 7, column 13
-      |
-    7 | conflicts = [
-      |             ^
-    Each set of conflicts must have at least two entries, but found only one
+          |
+        7 | conflicts = [
+          |             ^
+        Each set of conflicts must have at least two entries, but found only one
     "
     );
 
@@ -2490,10 +2677,10 @@ fn resolve_config_file() -> anyhow::Result<()> {
     ----- stderr -----
     error: Failed to parse: `[CACHE_DIR]/uv.toml`
       Caused by: TOML parse error at line 1, column 2
-      |
-    1 | [project]
-      |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+          |
+        1 | [project]
+          |  ^^^^^^^
+        unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -2525,10 +2712,10 @@ fn resolve_config_file() -> anyhow::Result<()> {
     warning: The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.
     error: Failed to parse: `[CACHE_DIR]/pyproject.toml`
       Caused by: TOML parse error at line 9, column 3
-      |
-    9 | ""
-      |   ^
-    key with no value, expected `=`
+          |
+        9 | ""
+          |   ^
+        key with no value, expected `=`
     "#
     );
 
@@ -3056,6 +3243,7 @@ fn preview_features() {
     +            CentralizedProjectEnvs,
     +            ToolInstallLocks,
     +            WorkspaceListScripts,
+    +            NoDistutilsPatch,
     +        ],
          },
          python_preference: Managed,
@@ -3561,7 +3749,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     config.write_str(r#"preview-features = ["  "]"#)?;
 
     // Empty preview feature names should be rejected.
-    uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @"
+    uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3569,11 +3757,11 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: TOML parse error at line 1, column 20
-      |
-    1 | preview-features = [\"  \"]
-      |                    ^^^^^^
-    preview feature name cannot be empty
-    ");
+          |
+        1 | preview-features = ["  "]
+          |                    ^^^^^^
+        preview feature name cannot be empty
+    "#);
 
     config.write_str("preview-features = 123")?;
 
@@ -3586,10 +3774,10 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: TOML parse error at line 1, column 20
-      |
-    1 | preview-features = 123
-      |                    ^^^
-    invalid type: integer `123`, expected a boolean or a list of preview feature names
+          |
+        1 | preview-features = 123
+          |                    ^^^
+        invalid type: integer `123`, expected a boolean or a list of preview feature names
     ");
 
     Ok(())
@@ -4011,9 +4199,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    // `--no-upgrade` overrides `--upgrade-package`.
-    // TODO(charlie): This should mark `sniffio` for upgrade, but it doesn't.
-    let no_upgrade = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // `--upgrade-package` takes precedence over `--no-upgrade`.
+    let upgrade_package = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--no-upgrade")
         .arg("--upgrade-package")
         .arg("sniffio")
@@ -4047,10 +4234,10 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "})?;
 
     // Despite `upgrade = false` in the configuration file, we should mark `idna` for upgrade.
-    // Compare against output before adding `upgrade = false`, with `--no-upgrade --upgrade-package sniffio`.
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
     diff_uv_snapshot!(
         context.filters(),
-        &no_upgrade,
+        &upgrade_package,
         add_shared_args(context.pip_compile())
             .arg("--upgrade-package")
             .arg("idna")
@@ -4058,21 +4245,14 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("requirements.in"),
         @r#"
     ...
-                 Verify,
-             ),
-             upgrade: Upgrade {
-    -            strategy: Some(
-    -                {
-    -                    PackageName(
+                 strategy: Some(
+                     {
+                         PackageName(
     -                        "sniffio",
-    -                    ),
-    -                },
-    -                {},
-    -            ),
-    +            strategy: None,
-                 constraints: {},
-             },
-             reinstall: None,
+    +                        "idna",
+                         ),
+                     },
+                     {},
     ...
     "#
     );
@@ -4085,8 +4265,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "})?;
 
     // Despite `--upgrade-package idna` in the command line, we should upgrade all packages.
-    // Compare against output before adding `upgrade = true`, with `--no-upgrade --upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.pip_compile())
             .arg("--upgrade-package")
             .arg("idna")
             .arg("--show-settings")
@@ -4118,46 +4298,60 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should disable upgrades.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.pip_compile())
             .arg("--no-upgrade")
             .arg("--show-settings")
             .arg("requirements.in"), @r#"
     ...
-                 strategy: Some(
-                     {
-                         PackageName(
+                 Verify,
+             ),
+             upgrade: Upgrade {
+    -            strategy: Some(
+    -                {
+    -                    PackageName(
     -                        "sniffio",
-    +                        "idna",
-                         ),
-                     },
-                     {},
+    -                    ),
+    -                },
+    -                {},
+    -            ),
+    +            strategy: None,
+                 constraints: {},
+             },
+             reinstall: None,
     ...
     "#
     );
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should enable all upgrades.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade --upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.pip_compile())
             .arg("--upgrade")
             .arg("--show-settings")
             .arg("requirements.in"), @r#"
     ...
-                 strategy: Some(
-                     {
-                         PackageName(
+                 Verify,
+             ),
+             upgrade: Upgrade {
+    -            strategy: Some(
+    -                {
+    -                    PackageName(
     -                        "sniffio",
-    +                        "idna",
-                         ),
-                     },
-                     {},
+    -                    ),
+    -                },
+    -                {},
+    -            ),
+    +            strategy: All,
+                 constraints: {},
+             },
+             reinstall: None,
     ...
     "#
     );
 
     // Mark both `sniffio` and `idna` for upgrade.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.pip_compile())
             .arg("--upgrade-package")
             .arg("sniffio")
             .arg("--show-settings")
@@ -4202,9 +4396,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         dependencies = ["anyio>3.0.0"]
     "#})?;
 
-    // `--no-upgrade` overrides `--upgrade-package`.
-    // TODO(charlie): This should mark `sniffio` for upgrade, but it doesn't.
-    let no_upgrade = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.lock())
+    // `--upgrade-package` takes precedence over `--no-upgrade`.
+    let upgrade_package = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.lock())
         .arg("--no-upgrade")
         .arg("--upgrade-package")
         .arg("sniffio")
@@ -4241,31 +4434,24 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade = false` in the configuration file, we should mark `idna` for upgrade.
-    // Compare against output before adding `upgrade = false`, with `--no-upgrade --upgrade-package sniffio`.
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
     diff_uv_snapshot!(
         context.filters(),
-        &no_upgrade,
+        &upgrade_package,
         add_shared_args(context.lock())
             .arg("--upgrade-package")
             .arg("idna")
             .arg("--show-settings"),
         @r#"
     ...
-             cuda_driver_version: None,
-             amd_gpu_architecture: None,
-             upgrade: Upgrade {
-    -            strategy: Some(
-    -                {
-    -                    PackageName(
+                 strategy: Some(
+                     {
+                         PackageName(
     -                        "sniffio",
-    -                    ),
-    -                },
-    -                {},
-    -            ),
-    +            strategy: None,
-                 constraints: {},
-             },
-         },
+    +                        "idna",
+                         ),
+                     },
+                     {},
     ...
     "#
     );
@@ -4282,8 +4468,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `--upgrade-package idna` on the CLI, we should upgrade all packages.
-    // Compare against output before adding `upgrade = true`, with `--no-upgrade --upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.lock())
             .arg("--upgrade-package")
             .arg("idna")
             .arg("--show-settings"), @r#"
@@ -4318,44 +4504,58 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should disable upgrades.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.lock())
             .arg("--no-upgrade")
             .arg("--show-settings"), @r#"
     ...
-                 strategy: Some(
-                     {
-                         PackageName(
+             cuda_driver_version: None,
+             amd_gpu_architecture: None,
+             upgrade: Upgrade {
+    -            strategy: Some(
+    -                {
+    -                    PackageName(
     -                        "sniffio",
-    +                        "idna",
-                         ),
-                     },
-                     {},
+    -                    ),
+    -                },
+    -                {},
+    -            ),
+    +            strategy: None,
+                 constraints: {},
+             },
+         },
     ...
     "#
     );
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should enable all upgrades.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade --upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.lock())
             .arg("--upgrade")
             .arg("--show-settings"), @r#"
     ...
-                 strategy: Some(
-                     {
-                         PackageName(
+             cuda_driver_version: None,
+             amd_gpu_architecture: None,
+             upgrade: Upgrade {
+    -            strategy: Some(
+    -                {
+    -                    PackageName(
     -                        "sniffio",
-    +                        "idna",
-                         ),
-                     },
-                     {},
+    -                    ),
+    -                },
+    -                {},
+    -            ),
+    +            strategy: All,
+                 constraints: {},
+             },
+         },
     ...
     "#
     );
 
     // Mark both `sniffio` and `idna` for upgrade.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.lock())
             .arg("--upgrade-package")
             .arg("sniffio")
             .arg("--show-settings"), @r#"

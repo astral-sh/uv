@@ -1,0 +1,19 @@
+name = "post-greater-than-post-prerelease-ordering"
+description = "A greater-than post-release constraint should exclude locals of the specified release but include development releases of later post-releases."
+
+[root]
+requires = ["a>1.2.3.post0"]
+
+[expected]
+satisfiable = true
+explanation = "The local version has the same public version as the lower bound, while the development release belongs to a later post-release."
+
+[expected.packages]
+a = "1.2.3.post1.dev0"
+
+[packages.a.versions."1.2.3.post0+local"]
+
+[packages.a.versions."1.2.3.post1.dev0"]
+
+[resolver_options]
+prereleases = true

@@ -9,14 +9,19 @@ use itertools::Itertools;
 use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::ExtrasSpecificationWithDefaults;
-use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
+use uv_configuration::{
+    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, InstallOptions,
+};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 
-use crate::lock::{Dependency, HashedDist, LockErrorKind, Package, PackageId, TagPolicy};
+use crate::lock::{
+    Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, PackageId,
+    SelectedDependency, TagPolicy,
+};
 use crate::{Lock, LockError, UniversalMarker};
 
 fn newly_activated_extras<'lock>(
@@ -101,6 +106,7 @@ pub trait Installable<'lock> {
             self,
             &roots,
             true,
+            DependencySelectionContext::None,
             marker_env,
             tags,
             extras,
@@ -190,6 +196,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
         &self,
         roots: &[&Package],
         include_manifest: bool,
+        selection_context: DependencySelectionContext<'lock>,
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecificationWithDefaults,
@@ -212,6 +219,16 @@ trait InstallableExt<'lock>: Installable<'lock> {
         let mut dependencies_for_conflict_validation = vec![];
 
         let root = petgraph.add_node(Node::Root);
+
+        match selection_context {
+            DependencySelectionContext::None => {}
+            DependencySelectionContext::Production(project) => {
+                activated_projects.push(project);
+            }
+            DependencySelectionContext::Group(project, group) => {
+                activated_groups.push((project, group));
+            }
+        }
 
         // Determine the set of activated extras and groups, from the root.
         //
@@ -711,6 +728,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 .keys()
                 .map(|package_id| &package_id.name)
                 .collect::<FxHashSet<_>>();
+            let selection_context_package = selection_context.package();
 
             // The environment and conflict state are shared by every dependency, so repeated
             // markers have the same result.
@@ -721,7 +739,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 }
                 let mut marker = dependency.complexified_marker;
                 for item in self.lock().conflicts().iter().flat_map(ConflictSet::iter) {
-                    if !subgraph_packages.contains(item.package()) {
+                    if selection_context_package != Some(item.package())
+                        && !subgraph_packages.contains(item.package())
+                    {
                         continue;
                     }
 
@@ -786,6 +806,56 @@ impl<'lock> Installable<'lock> for LockedPackages<'lock> {
 }
 
 impl Lock {
+    /// Materialize a direct dependency selection from this lock.
+    ///
+    /// Like [`Self::to_resolution`], this materializes the selected dependency's subgraph. It also
+    /// preserves the extras activated by the direct edge and the project production or group
+    /// context used to select a conflict fork.
+    pub fn to_resolution_from_dependency<'lock>(
+        &'lock self,
+        install_path: &'lock Path,
+        dependency: &SelectedDependency<'lock>,
+        project_name: Option<&'lock PackageName>,
+        marker_env: &ResolverMarkerEnvironment,
+        tags: &Tags,
+        build_options: &BuildOptions,
+        install_options: &InstallOptions,
+    ) -> Result<Resolution, LockError> {
+        let selected_package = dependency.package();
+        let Some(index) = self.by_id.get(&selected_package.id) else {
+            return Err(LockErrorKind::RootPackageMissingFromLock {
+                id: selected_package.id.clone(),
+            }
+            .into());
+        };
+        let Some(package) = self.packages.get(*index) else {
+            return Err(LockErrorKind::RootPackageMissingFromLock {
+                id: selected_package.id.clone(),
+            }
+            .into());
+        };
+        let extras = ExtrasSpecification::from_extra(dependency.extras().cloned().collect())
+            .with_defaults(DefaultExtras::default());
+        let groups = DependencyGroupsWithDefaults::none();
+
+        LockedPackages {
+            lock: self,
+            install_path,
+            project_name,
+        }
+        .to_resolution_from_packages(
+            &[package],
+            false,
+            dependency.context(),
+            marker_env,
+            tags,
+            &extras,
+            &groups,
+            build_options,
+            install_options,
+        )
+    }
+
     /// Materialize the exact dependency subgraph reachable from concrete locked `roots`.
     ///
     /// Each root must be a [`Package`] from this lock. Unlike [`Installable::to_resolution`], this
@@ -840,6 +910,7 @@ impl Lock {
         .to_resolution_from_packages(
             &concrete_roots,
             false,
+            DependencySelectionContext::None,
             marker_env,
             tags,
             extras,
@@ -853,6 +924,7 @@ impl Lock {
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
+    use std::str::FromStr;
     use std::sync::LazyLock;
 
     use petgraph::visit::EdgeRef;
@@ -867,7 +939,7 @@ mod tests {
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
         Tags::from_env(
-            &Platform::new(
+            Platform::new(
                 Os::Macos {
                     major: 14,
                     minor: 0,
@@ -1076,6 +1148,64 @@ provides-extras = ["cpu", "gpu"]
         .expect("valid lock")
     }
 
+    fn dependency_selection_lock() -> Lock {
+        toml::from_str(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.11"
+conflicts = [[
+    { package = "project", group = "dev" },
+    { package = "project", group = "other" },
+]]
+
+[[package]]
+name = "contextual-dev-dependency"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/contextual_dev_dependency-1.0.0.tar.gz", hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111" }
+
+[[package]]
+name = "contextual-other-dependency"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/contextual_other_dependency-1.0.0.tar.gz", hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222" }
+
+[[package]]
+name = "optional-dependency"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/optional_dependency-1.0.0.tar.gz", hash = "sha256:3333333333333333333333333333333333333333333333333333333333333333" }
+
+[[package]]
+name = "project"
+version = "1.0.0"
+source = { virtual = "." }
+
+[package.dependency-groups]
+dev = [{ name = "tool", extra = ["cli"] }]
+other = [{ name = "tool" }]
+
+[[package]]
+name = "tool"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+dependencies = [
+    { name = "contextual-dev-dependency", marker = "extra == 'group-7-project-dev'" },
+    { name = "contextual-other-dependency", marker = "extra == 'group-7-project-other'" },
+]
+sdist = { url = "https://example.com/tool-1.0.0.tar.gz", hash = "sha256:4444444444444444444444444444444444444444444444444444444444444444" }
+
+[package.optional-dependencies]
+cli = [{ name = "optional-dependency" }]
+
+[package.metadata]
+provides-extras = ["cli"]
+"#,
+        )
+        .expect("valid lock")
+    }
+
     fn package<'lock>(lock: &'lock Lock, name: &str, version: &str) -> &'lock Package {
         lock.packages()
             .iter()
@@ -1128,6 +1258,31 @@ provides-extras = ["cpu", "gpu"]
             &BuildOptions::default(),
             &InstallOptions::default(),
         )
+    }
+
+    fn materialize_selected_dependency(lock: &Lock, group: &str) -> Resolution {
+        let project_name = PackageName::from_str("project").expect("valid package name");
+        let dependency_name = PackageName::from_str("tool").expect("valid package name");
+        let group = GroupName::from_str(group).expect("valid group name");
+        let selection = lock
+            .dependency_selection(
+                Some(&project_name),
+                &dependency_name,
+                DARWIN_MARKERS.markers(),
+            )
+            .expect("unique dependency selection");
+        let dependency = selection.group(&group).expect("group dependency");
+
+        lock.to_resolution_from_dependency(
+            Path::new("."),
+            dependency,
+            Some(&project_name),
+            &DARWIN_MARKERS,
+            &TAGS,
+            &BuildOptions::default(),
+            &InstallOptions::default(),
+        )
+        .expect("valid resolution")
     }
 
     struct OverridingInstallable<'lock> {
@@ -1336,6 +1491,54 @@ provides-extras = ["cpu", "gpu"]
                 "root --Prod--> tool==1.0.0 (install: true, hashes: sha256:[HASH])",
                 "runtime==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> cpu-backend==1.0.0 (install: true, hashes: sha256:[HASH])",
                 "tool==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> runtime==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+        )
+        "#);
+        });
+    }
+
+    #[test]
+    fn materializes_selected_dependency_extras() {
+        let resolution = materialize_selected_dependency(&dependency_selection_lock(), "dev");
+
+        insta::with_settings!({
+            filters => [(r"sha256:[0-9a-f]{64}", "sha256:[HASH]")],
+        }, {
+            insta::assert_debug_snapshot!(graph_snapshot(&resolution), @r#"
+        (
+            [
+                "contextual-dev-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "optional-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "root",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+            [
+                "root --Prod--> tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH]) --Optional(ExtraName(\"cli\"))--> optional-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> contextual-dev-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+        )
+        "#);
+        });
+    }
+
+    #[test]
+    fn materializes_selected_dependency_project_conflict_context() {
+        let resolution = materialize_selected_dependency(&dependency_selection_lock(), "other");
+
+        insta::with_settings!({
+            filters => [(r"sha256:[0-9a-f]{64}", "sha256:[HASH]")],
+        }, {
+            insta::assert_debug_snapshot!(graph_snapshot(&resolution), @r#"
+        (
+            [
+                "contextual-other-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "root",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+            [
+                "root --Prod--> tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> contextual-other-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
             ],
         )
         "#);

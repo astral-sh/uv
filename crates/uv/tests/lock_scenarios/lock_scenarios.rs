@@ -769,13 +769,9 @@ fn conflict_in_fork() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies for split (markers: sys_platform == 'os2'):
-      ╰─▶ Because only b==1.0.0 is available and b==1.0.0 depends on d==1, we can conclude that all versions of b depend on d==1.
-          And because c==1.0.0 depends on d==2 and only c==1.0.0 is available, we can conclude that all versions of b and all versions of c are incompatible.
-          And because a==1.0.0 depends on b and c, we can conclude that a==1.0.0 cannot be used.
-          And because only the following versions of a{sys_platform == 'os2'} are available:
-              a{sys_platform == 'os2'}==1.0.0
-              a{sys_platform == 'os2'}>=2
-          and your project depends on a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because all versions of c depend on d==2 and all versions of b depend on d==1, we can conclude that all versions of b and all versions of c are incompatible.
+          And because a<=1.0.0 depends on b, we can conclude that a<=1.0.0 and all versions of c are incompatible.
+          And because a<=1.0.0 depends on c and your project depends on a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     "
@@ -3138,7 +3134,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 depends on c<2.0.0 and b==1.0.0 depends on c>=2.0.0, we can conclude that b==1.0.0 and a{sys_platform == 'linux'}==1.0.0 are incompatible.
+      ╰─▶ Because all versions of b depend on c>=2.0.0 and all versions of a depend on c<2.0.0, we can conclude that all versions of a and all versions of b are incompatible.
           And because your project depends on a{sys_platform == 'linux'}==1.0.0 and b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "
     );
@@ -3210,7 +3206,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 depends on c{sys_platform == 'linux'}<2.0.0 and b==1.0.0 depends on c{sys_platform == 'darwin'}>=2.0.0, we can conclude that a==1.0.0 and b==1.0.0 are incompatible.
+      ╰─▶ Because all versions of b depend on c{sys_platform == 'darwin'}>=2.0.0 and all versions of a depend on c{sys_platform == 'linux'}<2.0.0, we can conclude that all versions of a and all versions of b are incompatible.
           And because your project depends on a==1.0.0 and b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "
     );

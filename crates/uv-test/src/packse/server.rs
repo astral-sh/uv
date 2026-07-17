@@ -103,6 +103,11 @@ impl PackseServer {
     pub fn index_url(&self) -> String {
         format!("{}/simple/", self.server.url())
     }
+
+    /// Return the URL for a generated distribution file.
+    pub fn file_url(&self, filename: &str) -> String {
+        format!("{}/files/{filename}", self.server.url())
+    }
 }
 
 /// Build the complete [`ServerIndex`] from a scenario and cached build dependencies.
@@ -210,8 +215,7 @@ fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> Respo
     if let Some(filename) = path.strip_prefix("/files/") {
         if let Some(file) = index.files.get(filename) {
             return match file.bytes() {
-                Ok(bytes) => ResponseTemplate::new(200)
-                    .set_body_raw(bytes.to_vec(), content_type_for_filename(filename)),
+                Ok(bytes) => build_file_response(req, filename, &bytes),
                 Err(error) => ResponseTemplate::new(500).set_body_string(format!("{error:#}")),
             };
         }
@@ -219,6 +223,62 @@ fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> Respo
     }
 
     ResponseTemplate::new(404)
+}
+
+/// Build a response for a distribution file, including support for single byte ranges.
+fn build_file_response(req: &Request, filename: &str, bytes: &[u8]) -> ResponseTemplate {
+    let content_type = content_type_for_filename(filename);
+    let Some(range) = req.headers.get("range") else {
+        return ResponseTemplate::new(200)
+            .insert_header("Accept-Ranges", "bytes")
+            .set_body_raw(bytes.to_vec(), content_type);
+    };
+
+    let Some((start, end)) = range
+        .to_str()
+        .ok()
+        .and_then(|range| parse_byte_range(range, bytes.len()))
+    else {
+        return ResponseTemplate::new(416)
+            .insert_header("Accept-Ranges", "bytes")
+            .insert_header("Content-Range", format!("bytes */{}", bytes.len()));
+    };
+
+    ResponseTemplate::new(206)
+        .insert_header("Accept-Ranges", "bytes")
+        .insert_header(
+            "Content-Range",
+            format!("bytes {start}-{end}/{}", bytes.len()),
+        )
+        .set_body_raw(bytes[start..=end].to_vec(), content_type)
+}
+
+/// Parse a single HTTP byte range and return its inclusive bounds.
+fn parse_byte_range(range: &str, length: usize) -> Option<(usize, usize)> {
+    let range = range.strip_prefix("bytes=")?;
+    let (start, end) = range.split_once('-')?;
+
+    if start.is_empty() {
+        let suffix = end.parse::<usize>().ok()?;
+        if suffix == 0 || length == 0 {
+            return None;
+        }
+        return Some((length.saturating_sub(suffix), length - 1));
+    }
+
+    let start = start.parse::<usize>().ok()?;
+    if start >= length {
+        return None;
+    }
+    let end = if end.is_empty() {
+        length - 1
+    } else {
+        end.parse::<usize>().ok()?.min(length - 1)
+    };
+    if start > end {
+        return None;
+    }
+    Some((start, end))
 }
 
 /// Build PEP 691 JSON response for a package.
@@ -274,9 +334,13 @@ fn extract_package_name(path: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
+    use reqwest::StatusCode;
+    use reqwest::header::{ACCEPT_RANGES, CONTENT_RANGE, RANGE};
+
     use crate::vendor::vendor_artifacts;
 
-    use super::{Scenario, build_server_index, extract_package_name};
+    use super::{PackseServer, Scenario, build_server_index, extract_package_name};
 
     #[test]
     fn extract_package_name_accepts_with_or_without_trailing_slash() {
@@ -300,5 +364,84 @@ mod tests {
                 .iter()
                 .all(|artifact| !artifact.is_loaded())
         );
+    }
+
+    #[tokio::test]
+    async fn file_requests_support_byte_ranges() -> Result<()> {
+        let scenario = toml::from_str::<Scenario>(
+            r#"
+name = "range-requests"
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+sdist = false
+"#,
+        )?;
+        let server = PackseServer::from_scenario(&scenario);
+        let url = server.file_url("a-1.0.0-py3-none-any.whl");
+        let client = reqwest::Client::new();
+
+        let response = client.get(&url).send().await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(ACCEPT_RANGES),
+            Some(&"bytes".parse()?)
+        );
+        let bytes = response.bytes().await?;
+        let length = bytes.len();
+
+        let response = client.get(&url).header(RANGE, "bytes=-8").send().await?;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get(CONTENT_RANGE),
+            Some(&format!("bytes {}-{}/{}", length - 8, length - 1, length).parse()?)
+        );
+        assert_eq!(response.bytes().await?, bytes[length - 8..]);
+
+        let response = client
+            .get(&url)
+            .header(RANGE, "bytes=-999999")
+            .send()
+            .await?;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get(CONTENT_RANGE),
+            Some(&format!("bytes 0-{}/{}", length - 1, length).parse()?)
+        );
+        assert_eq!(response.bytes().await?, bytes);
+
+        let response = client.get(&url).header(RANGE, "bytes=3-9").send().await?;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get(CONTENT_RANGE),
+            Some(&format!("bytes 3-9/{length}").parse()?)
+        );
+        assert_eq!(response.bytes().await?, bytes[3..=9]);
+
+        let response = client.get(&url).header(RANGE, "bytes=10-").send().await?;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get(CONTENT_RANGE),
+            Some(&format!("bytes 10-{}/{}", length - 1, length).parse()?)
+        );
+        assert_eq!(response.bytes().await?, bytes[10..]);
+
+        let response = client
+            .get(&url)
+            .header(RANGE, format!("bytes={length}-"))
+            .send()
+            .await?;
+        assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(
+            response.headers().get(CONTENT_RANGE),
+            Some(&format!("bytes */{length}").parse()?)
+        );
+
+        Ok(())
     }
 }

@@ -86354,8 +86354,8 @@
     "minor": 11,
     "patch": 15,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.23-macos_arm64.tar.bz2",
-    "sha256": "4747b3aceba4c1c6104cddc0fe5ea302101d32955f0957347b9ecc4fbd7aed05",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.23-macos_arm64.tar.gz",
+    "sha256": "f837b3c203d60d7e25a31e267671a07ba0c9b9ac8081ad225571fb06fccf1b7b",
     "variant": null,
     "build": "7.3.23"
   },
@@ -86371,8 +86371,8 @@
     "minor": 11,
     "patch": 15,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.23-macos_x86_64.tar.bz2",
-    "sha256": "c95363c4e87235d11a6cec8128239c291b1eb67a752778fbcfe029a71da82b5e",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.23-macos_x86_64.tar.gz",
+    "sha256": "798279b0f233893ae22754290aedf35a1aea1ec9013a8ad8110f166d85944c91",
     "variant": null,
     "build": "7.3.23"
   },
@@ -86388,8 +86388,8 @@
     "minor": 11,
     "patch": 15,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.23-aarch64.tar.bz2",
-    "sha256": "5433ac0ad526aeb35025ef8509bed65cd62ea35cb9e21ac649c69a5eff4eecb6",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.23-aarch64.tar.gz",
+    "sha256": "ed3b27a95257a8bb88707042e6bb5fe64569d47ef44bdc9842c730667637dfbd",
     "variant": null,
     "build": "7.3.23"
   },
@@ -86405,8 +86405,8 @@
     "minor": 11,
     "patch": 15,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.23-linux32.tar.bz2",
-    "sha256": "c7e2ffb173dcadbe4708a2e606e0b705474c1c33f25a09a4084f265d538172e4",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.23-linux32.tar.gz",
+    "sha256": "2b18b9d8f1ed1c69ac3aacd3b6ddbf032efb307b10240f59ca5c0aa8f23a544b",
     "variant": null,
     "build": "7.3.23"
   },
@@ -86422,8 +86422,8 @@
     "minor": 11,
     "patch": 15,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.23-linux64.tar.bz2",
-    "sha256": "16f9f56e82d1f4ec95a324c1a8cacfd78afc7f0656c0a809a18725ef4391453a",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.23-linux64.tar.gz",
+    "sha256": "2bcab031cef7a37fe1930b51f7091e78a191ae63f80eca00a265d3378c3a645b",
     "variant": null,
     "build": "7.3.23"
   },
@@ -86660,8 +86660,8 @@
     "minor": 10,
     "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-macos_arm64.tar.bz2",
-    "sha256": "3db8a03fc496164801646844d7f3b12baa0adb3ad9a0b7cb124521bc2e168a36",
+    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-macos_arm64.tar.gz",
+    "sha256": "72a74cf645e43608f7d88831581fb0f8e1f963fb38f0793bacd37d5018a9aeb8",
     "variant": null,
     "build": "7.3.19"
   },
@@ -86677,8 +86677,8 @@
     "minor": 10,
     "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-macos_x86_64.tar.bz2",
-    "sha256": "2c5e5c2a33ac882551d7f28b98d19d486b8995aa50824a73b4edcc6aeec35c63",
+    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-macos_x86_64.tar.gz",
+    "sha256": "63f9d30cdd9e47cfe279be941975ac3d24e46c79756cd1d1bd2c551c27d8b32c",
     "variant": null,
     "build": "7.3.19"
   },
@@ -86694,8 +86694,8 @@
     "minor": 10,
     "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-aarch64.tar.bz2",
-    "sha256": "af27a589178f11198e2244ab65ca510630ba97c131d7ccc4021eb5bc58de7f57",
+    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-aarch64.tar.gz",
+    "sha256": "598b73e166c4ce215f327cc1579c54ead8f2b048de429d5b77c5d0a2edb2f566",
     "variant": null,
     "build": "7.3.19"
   },
@@ -86711,8 +86711,8 @@
     "minor": 10,
     "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-linux32.tar.bz2",
-    "sha256": "e63a4fcad2641ee541e852918befb513abf04ce7070f743a50778cae9f9da80e",
+    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-linux32.tar.gz",
+    "sha256": "8aca1823df235f34a145c3f9107ee3c5b83261adbd2acac0d74b22f930bdf04b",
     "variant": null,
     "build": "7.3.19"
   },
@@ -86728,8 +86728,8 @@
     "minor": 10,
     "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-linux64.tar.bz2",
-    "sha256": "c73ac2cc2380ac9227fd297482bf2a3e17a80618ba46db7544d535515321ec1e",
+    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-linux64.tar.gz",
+    "sha256": "abfbb05bb3691e694cf9307635d14d0866f0a85429df8958c110e3de168706b4",
     "variant": null,
     "build": "7.3.19"
   },
@@ -87119,8 +87119,8 @@
     "minor": 9,
     "patch": 19,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-macos_arm64.tar.bz2",
-    "sha256": "88f824e7a2d676440d09bc90fc959ae0fd3557d7e2f14bfbbe53d41d159a47fe",
+    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-macos_arm64.tar.gz",
+    "sha256": "b09ce3a865c1c0f4e58c0ee4f70511f1b27dfc1f7148f4b6060cfdfd581c9e82",
     "variant": null,
     "build": "7.3.16"
   },
@@ -87136,8 +87136,8 @@
     "minor": 9,
     "patch": 19,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-macos_x86_64.tar.bz2",
-    "sha256": "fda015431621e7e5aa16359d114f2c45a77ed936992c1efff86302e768a6b21c",
+    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-macos_x86_64.tar.gz",
+    "sha256": "7ea762a1b0af7545a74cd4260bb3fd2812813deffef2ef8d2fddd5e03fa63ef1",
     "variant": null,
     "build": "7.3.16"
   },
@@ -87153,8 +87153,8 @@
     "minor": 9,
     "patch": 19,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-aarch64.tar.bz2",
-    "sha256": "de3f2ed3581b30555ac0dd3e4df78a262ec736a36fb2e8f28259f8539b278ef4",
+    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-aarch64.tar.gz",
+    "sha256": "2ccee5d2bdea7814f7f1f65e5c2193fbe16c790534efbf267b423013c039199d",
     "variant": null,
     "build": "7.3.16"
   },
@@ -87170,8 +87170,8 @@
     "minor": 9,
     "patch": 19,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-linux32.tar.bz2",
-    "sha256": "583b6d6dd4e8c07cbc04da04a7ec2bdfa6674825289c2378c5e018d5abe779ea",
+    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-linux32.tar.gz",
+    "sha256": "fa8a65326a3a8bef9c85efd424d58cc957b6e12069c1c70b178f9ccd12414e01",
     "variant": null,
     "build": "7.3.16"
   },
@@ -87187,8 +87187,8 @@
     "minor": 9,
     "patch": 19,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-s390x.tar.bz2",
-    "sha256": "7a56ebb27dba3110dc1ff52d8e0449cdb37fe5c2275f7faf11432e4e164833ba",
+    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-s390x.tar.gz",
+    "sha256": "1e4ace733829b2cdab3fe24a1fdf0fb34cc4d5411736cdbbc6281e5ddbe227cd",
     "variant": null,
     "build": "7.3.16"
   },
@@ -87204,8 +87204,8 @@
     "minor": 9,
     "patch": 19,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-linux64.tar.bz2",
-    "sha256": "16f9c5b808c848516e742986e826b833cdbeda09ad8764e8704595adbe791b23",
+    "url": "https://downloads.python.org/pypy/pypy3.9-v7.3.16-linux64.tar.gz",
+    "sha256": "95885b864c5b1560d6ae3bc1fd00b3732cac6db5328beb9cd425bf0cdee0e5b0",
     "variant": null,
     "build": "7.3.16"
   },
@@ -87918,8 +87918,8 @@
     "minor": 8,
     "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-macos_arm64.tar.bz2",
-    "sha256": "78cdc79ff964c4bfd13eb45a7d43a011cbe8d8b513323d204891f703fdc4fa1a",
+    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-macos_arm64.tar.gz",
+    "sha256": "110dea6402ec1e23d03ed08b832fed7d9e95aee1d83f3a20907a66682867795c",
     "variant": null,
     "build": "7.3.11"
   },
@@ -87935,8 +87935,8 @@
     "minor": 8,
     "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-macos_x86_64.tar.bz2",
-    "sha256": "194ca0b4d91ae409a9cb1a59eb7572d7affa8a451ea3daf26539aa515443433a",
+    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-macos_x86_64.tar.gz",
+    "sha256": "0e83febf891abc489eeb3ae2b26b466f37db4e1aec933d287378a66a04e0d057",
     "variant": null,
     "build": "7.3.11"
   },
@@ -87952,8 +87952,8 @@
     "minor": 8,
     "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-aarch64.tar.bz2",
-    "sha256": "9a2fa0b8d92b7830aa31774a9a76129b0ff81afbd22cd5c41fbdd9119e859f55",
+    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-aarch64.tar.gz",
+    "sha256": "a2bd02adf8dda887123bf558104377483acbcdf48eb7f679af48d7e6d066591e",
     "variant": null,
     "build": "7.3.11"
   },
@@ -87969,8 +87969,8 @@
     "minor": 8,
     "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux32.tar.bz2",
-    "sha256": "a79b31fce8f5bc1f9940b6777134189a1d3d18bda4b1c830384cda90077c9176",
+    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux32.tar.gz",
+    "sha256": "880c9654bca1671315b10de485f574e436cffdbfc7916226f6a3663e8a01ecb6",
     "variant": null,
     "build": "7.3.11"
   },
@@ -87986,8 +87986,8 @@
     "minor": 8,
     "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-s390x.tar.bz2",
-    "sha256": "eab7734d86d96549866f1cba67f4f9c73c989f6a802248beebc504080d4c3fcd",
+    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-s390x.tar.gz",
+    "sha256": "178bd0a509e63fc6047e450d5bdc199d9ac5151c2173808e4b72055098c9995a",
     "variant": null,
     "build": "7.3.11"
   },
@@ -88003,8 +88003,8 @@
     "minor": 8,
     "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2",
-    "sha256": "470330e58ac105c094041aa07bb05676b06292bc61409e26f5c5593ebb2292d9",
+    "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.gz",
+    "sha256": "2d976397f6bc94e0067f5cdadfa1489df3c95249aafed13a3d7d2ebe27f0aceb",
     "variant": null,
     "build": "7.3.11"
   },
@@ -88360,10 +88360,10 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.3/graalpy-25.0.3-macos-aarch64.tar.gz",
-    "sha256": "387d9f5b376860842bea4d55aae5820974f3f3b68fc36c77ae863a061a888857",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.1.3/graalpy3.12-25.1.3-macos-aarch64.tar.gz",
+    "sha256": "adb17eb3aa3c5701cfc518af26bbaf4e5755ecb62a6a22d490af06523ea02913",
     "variant": null,
-    "build": "25.0.3"
+    "build": "25.1.3"
   },
   "graalpy-3.12.0-darwin-x86_64-none": {
     "name": "graalpy",
@@ -88394,10 +88394,10 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.3/graalpy-25.0.3-linux-aarch64.tar.gz",
-    "sha256": "f889a02425b0b55a0f070d63324f3d08e0975ea0b33aa69041c14418cf6cdeec",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.1.3/graalpy3.12-25.1.3-linux-aarch64.tar.gz",
+    "sha256": "947170f0896c8acb02b364caad3e0c01439c12cbdad1b7605cff589b7dd5b26e",
     "variant": null,
-    "build": "25.0.3"
+    "build": "25.1.3"
   },
   "graalpy-3.12.0-linux-x86_64-gnu": {
     "name": "graalpy",
@@ -88411,10 +88411,10 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.3/graalpy-25.0.3-linux-amd64.tar.gz",
-    "sha256": "c351b503d212519ad5e7e835fd9eb56b557ca9d5b6ef59e32b40435603f90bf8",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.1.3/graalpy3.12-25.1.3-linux-amd64.tar.gz",
+    "sha256": "53d46f3ad78229699eb00677f4cb5e3cfe451b58c46970e4d4272a719b53ce82",
     "variant": null,
-    "build": "25.0.3"
+    "build": "25.1.3"
   },
   "graalpy-3.12.0-windows-x86_64-none": {
     "name": "graalpy",
@@ -88428,10 +88428,10 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.3/graalpy-25.0.3-windows-amd64.zip",
-    "sha256": "2ae5c42b93e08d9e106a017634a3442b272ccae6d08ace157244de0449e937d4",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.1.3/graalpy3.12-25.1.3-windows-amd64.zip",
+    "sha256": "2958b86e28cb820e918c8f20a94e84740ed5b65158587b35337d438b0869de41",
     "variant": null,
-    "build": "25.0.3"
+    "build": "25.1.3"
   },
   "graalpy-3.11.0-darwin-aarch64-none": {
     "name": "graalpy",

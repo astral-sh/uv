@@ -1,0 +1,106 @@
+# Reproduce reported bugs without modifying the repository or GitHub.
+name: "reproduce-bug"
+
+on:
+  workflow_call:
+    inputs:
+      issue:
+        description: "An issue URL or number"
+        required: true
+        type: string
+      runner:
+        description: "The runner to use for reproduction"
+        default: ubuntu-latest
+        required: false
+        type: string
+    outputs:
+      result:
+        description: "The bug reproduction result"
+        value: ${{ jobs.reproduce.outputs.result }}
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "An issue URL or number"
+        required: true
+        type: string
+      runner:
+        description: "The runner to use for reproduction"
+        default: ubuntu-latest
+        required: true
+        type: choice
+        options:
+          - ubuntu-latest
+          - macos-latest
+
+permissions: {}
+
+jobs:
+  reproduce:
+    if: github.repository == 'astral-sh/uv'
+    runs-on: ${{ inputs.runner }}
+    environment: automations
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      result: ${{ steps.reproduce.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: false
+
+      - name: "Collect issue context"
+        run: |
+          gh issue view "$ISSUE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author \
+            > .issue-triage-event.json
+
+          {
+            printf 'Bug reproduction automation for #%s\n\n' "$(jq -r '.number' .issue-triage-event.json)"
+            cat agents/prompts/reproduce-bug.md
+          } > "$RUNNER_TEMP/reproduce-bug-prompt.md"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ inputs.issue }}
+
+      - name: "Reproduce bug"
+        id: reproduce
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMPDIR: ${{ runner.temp }}
+          UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: "agents/codex"
+          permission-profile: "reproduce-bug"
+          safety-strategy: drop-sudo
+          allow-users: "*"
+          prompt-file: "${{ runner.temp }}/reproduce-bug-prompt.md"
+          output-schema-file: "agents/schemas/issue-triage-bug.json"
+
+      - name: "Upload Codex thread"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-reproduce-bug-${{ github.run_id }}-${{ github.run_attempt }}
+          path: agents/codex/sessions
+          if-no-files-found: warn
+
+  report:
+    needs: reproduce
+    if: needs.reproduce.outputs.result != ''
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: "Write reproduction summary"
+        run: printf '```json\n%s\n```\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}

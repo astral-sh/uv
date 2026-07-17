@@ -212,15 +212,13 @@ async fn malo_iffy_zip64_extra_too_long() {
 #[tokio::test]
 async fn malo_iffy_zip64_extra_too_short() {
     let result = unzip("https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/0723f54ceb33a4fdc7f2eddc19635cd704d61c84/iffy/zip64_extra_too_short.zip").await;
-    insta::assert_debug_snapshot!(result, @r#"
+    insta::assert_debug_snapshot!(result, @"
     Err(
-        BadCompressedSize {
-            path: "fixme",
-            computed: 7,
-            expected: 4294967295,
-        },
+        AsyncZip(
+            Zip64ExtendedFieldIncomplete,
+        ),
     )
-    "#);
+    ");
 }
 
 #[tokio::test]

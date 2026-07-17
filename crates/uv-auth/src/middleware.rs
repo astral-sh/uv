@@ -279,7 +279,8 @@ impl AuthMiddleware {
 
     /// Configure the [`CredentialsCache`] to use.
     #[must_use]
-    pub fn with_cache(mut self, cache: CredentialsCache) -> Self {
+    #[cfg(test)]
+    fn with_cache(mut self, cache: CredentialsCache) -> Self {
         self.cache = Arc::new(cache);
         self
     }
@@ -523,7 +524,7 @@ impl Middleware for AuthMiddleware {
                 index,
                 auth_policy,
             )
-            .await
+            .await?
         {
             retry_request = credentials.authenticate(retry_request).await?;
             trace!("Retrying request for {url} with {credentials:?}");
@@ -668,7 +669,7 @@ impl AuthMiddleware {
                 index,
                 auth_policy,
             )
-            .await
+            .await?
         {
             request = credentials.authenticate(request).await?;
             Some(credentials)
@@ -701,7 +702,13 @@ impl AuthMiddleware {
         url: &DisplaySafeUrl,
         index: Option<&Index>,
         auth_policy: AuthPolicy,
-    ) -> Option<Arc<Authentication>> {
+    ) -> reqwest_middleware::Result<Option<Arc<Authentication>>> {
+        let is_s3_endpoint =
+            S3EndpointProvider::is_s3_endpoint(url, self.preview).map_err(Error::Middleware)?;
+        let is_gcs_endpoint =
+            GcsEndpointProvider::is_gcs_endpoint(url, self.preview).map_err(Error::Middleware)?;
+        let is_azure_endpoint = AzureEndpointProvider::is_azure_endpoint(url, self.preview)
+            .map_err(Error::Middleware)?;
         let username = Username::from(
             credentials.map(|credentials| credentials.username().unwrap_or_default().to_string()),
         );
@@ -723,7 +730,7 @@ impl AuthMiddleware {
                 );
             }
 
-            return credentials;
+            return Ok(credentials);
         }
 
         // Support for known providers, like Hugging Face and S3.
@@ -733,10 +740,10 @@ impl AuthMiddleware {
         {
             debug!("Found Hugging Face credentials for {url}");
             self.cache().fetches.done(key, Some(credentials.clone()));
-            return Some(credentials);
+            return Ok(Some(credentials));
         }
 
-        if S3EndpointProvider::is_s3_endpoint(url, self.preview) {
+        if is_s3_endpoint {
             let mut s3_state = self.s3_credential_state.lock().await;
 
             // If the S3 credential state is uninitialized, initialize it.
@@ -754,11 +761,11 @@ impl AuthMiddleware {
             if let Some(credentials) = credentials {
                 debug!("Found S3 credentials for {url}");
                 self.cache().fetches.done(key, Some(credentials.clone()));
-                return Some(credentials);
+                return Ok(Some(credentials));
             }
         }
 
-        if GcsEndpointProvider::is_gcs_endpoint(url, self.preview) {
+        if is_gcs_endpoint {
             let mut gcs_state = self.gcs_credential_state.lock().await;
 
             // If the GCS credential state is uninitialized, initialize it.
@@ -776,11 +783,11 @@ impl AuthMiddleware {
             if let Some(credentials) = credentials {
                 debug!("Found GCS credentials for {url}");
                 self.cache().fetches.done(key, Some(credentials.clone()));
-                return Some(credentials);
+                return Ok(Some(credentials));
             }
         }
 
-        if AzureEndpointProvider::is_azure_endpoint(url, self.preview) {
+        if is_azure_endpoint {
             let mut azure_state = self.azure_credential_state.lock().await;
 
             // If the Azure credential state is uninitialized, initialize it.
@@ -798,7 +805,7 @@ impl AuthMiddleware {
             if let Some(credentials) = credentials {
                 debug!("Found Azure credentials for {url}");
                 self.cache().fetches.done(key, Some(credentials.clone()));
-                return Some(credentials);
+                return Ok(Some(credentials));
             }
         }
 
@@ -959,7 +966,7 @@ impl AuthMiddleware {
         // Register the fetch for this key
         self.cache().fetches.done(key, credentials.clone());
 
-        credentials
+        Ok(credentials)
     }
 }
 

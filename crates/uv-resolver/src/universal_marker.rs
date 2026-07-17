@@ -132,6 +132,9 @@ impl UniversalMarker {
     /// two items from the same set in the given conflicts can be active at a
     /// given time.
     pub(crate) fn imbibe(&mut self, conflicts: ConflictMarker) {
+        if conflicts.marker.is_true() {
+            return;
+        }
         let self_marker = self.marker;
         self.marker = conflicts.marker;
         self.marker.implies(self_marker);
@@ -178,7 +181,6 @@ impl UniversalMarker {
             ConflictKind::Group(ref group) => self.assume_group(item.package(), group),
             ConflictKind::Project => self.assume_project(item.package()),
         }
-        self.pep508 = self.marker.without_extras();
     }
 
     /// Assumes that a given extra/group for the given package is not
@@ -192,7 +194,6 @@ impl UniversalMarker {
             ConflictKind::Group(ref group) => self.assume_not_group(item.package(), group),
             ConflictKind::Project => self.assume_not_project(item.package()),
         }
-        self.pep508 = self.marker.without_extras();
     }
 
     /// Assumes that the "production" dependencies for the given project are
@@ -430,19 +431,14 @@ impl std::fmt::Debug for UniversalMarker {
 /// This encapsulates the encoding of extras and groups into PEP 508
 /// markers.
 #[derive(Default, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct ConflictMarker {
+pub(crate) struct ConflictMarker {
     marker: MarkerTree,
 }
 
 impl ConflictMarker {
     /// A constant conflict marker that always evaluates to `true`.
-    pub const TRUE: Self = Self {
+    pub(crate) const TRUE: Self = Self {
         marker: MarkerTree::TRUE,
-    };
-
-    /// A constant conflict marker that always evaluates to `false`.
-    pub const FALSE: Self = Self {
-        marker: MarkerTree::FALSE,
     };
 
     /// Creates a new conflict marker from the declared conflicts provided.
@@ -1060,6 +1056,18 @@ mod tests {
         );
         dep_conflict_marker.imbibe(conflicts_marker);
         assert_eq!(format!("{dep_conflict_marker:?}"), "true");
+    }
+
+    #[test]
+    fn imbibe_true() {
+        let pep508 =
+            MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression");
+        let mut marker = UniversalMarker::new(pep508, create_extra_marker("foo"));
+        let expected = marker;
+
+        marker.imbibe(ConflictMarker::TRUE);
+
+        assert_eq!(marker, expected);
     }
 
     #[test]

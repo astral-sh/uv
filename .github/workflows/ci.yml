@@ -17,6 +17,7 @@ jobs:
     runs-on: depot-ubuntu-24.04
     outputs:
       test-code: ${{ steps.plan.outputs.test_code }}
+      review-security: ${{ steps.plan.outputs.review_security }}
       check-schema: ${{ steps.plan.outputs.check_schema }}
       build-release-binaries: ${{ steps.plan.outputs.build_release_binaries }}
       run-checks: ${{ steps.plan.outputs.run_checks }}
@@ -96,7 +97,7 @@ jobs:
             [[ "$file" == ".github/workflows/test-integration.yml" || "$file" =~ ^test/integration/ || "$file" == "scripts/check_registry.py" || "$file" == "scripts/check_cache_compat.py" || "$file" == "scripts/registries-test.py" ]] && integration_changed=1
             [[ "$file" == ".github/workflows/test-system.yml" ]] && system_workflow_changed=1
             [[ "$file" == "scripts/check_system_python.py" || "$file" == "scripts/check_embedded_python.py" ]] && system_test_changed=1
-            [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ ]] && continue
+            [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ || "$file" =~ ^agents/ || "$file" =~ ^\.claude/ || "$file" =~ ^\.codex/ ]] && continue
             any_code_changed=1
           done <<< "$(git diff --name-only "${BASE_SHA:-origin/main}...HEAD")"
 
@@ -109,6 +110,7 @@ jobs:
 
           # Decisions
           [[ ! $has_skip_label && ($any_code_changed || $on_main_branch) ]] && test_code=1
+          [[ $any_code_changed ]] && review_security=1
           [[ $schema_changed ]] && check_schema=1
           [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
           [[ ! $has_skip_label ]] && run_checks=1
@@ -129,6 +131,7 @@ jobs:
           out() { [[ "$2" ]] && echo "$1=true" || echo "$1=false"; }
           {
             out test_code               "$test_code"
+            out review_security         "$review_security"
             out check_schema            "$check_schema"
             out build_release_binaries  "$build_release_binaries"
             out run_checks              "$run_checks"
@@ -148,6 +151,17 @@ jobs:
 
   check-fmt:
     uses: ./.github/workflows/check-fmt.yml
+
+  review:
+    needs: plan
+    if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
+    uses: ./.github/workflows/pull-request-security-review.yml
+    secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
+    permissions:
+      contents: read
+      id-token: write
+      issues: read
+      pull-requests: read
 
   check-lint:
     needs: plan
@@ -308,7 +322,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "${{ env.PYTHON_VERSION }}"
 

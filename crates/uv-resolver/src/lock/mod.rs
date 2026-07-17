@@ -13,8 +13,6 @@ use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use serde::Serializer;
-use toml_edit::{Array, ArrayOfTables, InlineTable, Item, Table, Value, value};
 use tracing::{debug, instrument, trace};
 use url::Url;
 
@@ -49,7 +47,7 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
+    Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
     ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -65,7 +63,7 @@ pub use crate::lock::export::{
 };
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
-pub use crate::lock::tree::TreeDisplay;
+pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
@@ -76,6 +74,7 @@ use crate::{
 pub(crate) mod export;
 mod installable;
 mod map;
+mod serialize;
 mod tree;
 
 /// The current version of the lockfile format.
@@ -303,31 +302,99 @@ pub struct Lock {
     manifest: ResolverManifest,
 }
 
-/// Package selections from a [`Lock`] for a named direct dependency.
+/// A direct dependency selected from a [`Lock`].
+#[derive(Clone, Debug)]
+pub struct SelectedDependency<'lock> {
+    package: &'lock Package,
+    extras: BTreeSet<&'lock ExtraName>,
+    context: DependencySelectionContext<'lock>,
+}
+
+impl<'lock> SelectedDependency<'lock> {
+    fn from_dependency(
+        package: &'lock Package,
+        dependency: &'lock Dependency,
+        context: DependencySelectionContext<'lock>,
+    ) -> Self {
+        Self {
+            package,
+            extras: dependency.extra.iter().collect(),
+            context,
+        }
+    }
+
+    fn from_requirement(package: &'lock Package, requirement: &'lock Requirement) -> Self {
+        Self {
+            package,
+            extras: requirement.extras.iter().collect(),
+            context: DependencySelectionContext::None,
+        }
+    }
+
+    fn extend_dependency(&mut self, dependency: &'lock Dependency) {
+        self.extras.extend(&dependency.extra);
+    }
+
+    fn extend_requirement(&mut self, requirement: &'lock Requirement) {
+        self.extras.extend(&requirement.extras);
+    }
+
+    /// Returns the selected package.
+    fn package(&self) -> &'lock Package {
+        self.package
+    }
+
+    /// Returns the extras activated by the direct dependency edge.
+    fn extras(&self) -> impl Iterator<Item = &'lock ExtraName> + '_ {
+        self.extras.iter().copied()
+    }
+
+    fn context(&self) -> DependencySelectionContext<'lock> {
+        self.context
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) enum DependencySelectionContext<'lock> {
+    None,
+    Production(&'lock PackageName),
+    Group(&'lock PackageName, &'lock GroupName),
+}
+
+impl<'lock> DependencySelectionContext<'lock> {
+    fn package(self) -> Option<&'lock PackageName> {
+        match self {
+            Self::None => None,
+            Self::Production(package) | Self::Group(package, _) => Some(package),
+        }
+    }
+}
+
+/// Direct dependency selections from a [`Lock`] for a named package.
 ///
 /// The dependency can come from the lock manifest, a dependency group, the production packages,
 /// or a combination thereof.
 #[derive(Debug)]
 pub struct DependencySelection<'lock> {
-    root: Option<&'lock Package>,
-    production: Option<&'lock Package>,
-    groups: BTreeMap<&'lock GroupName, &'lock Package>,
+    root: Option<SelectedDependency<'lock>>,
+    production: Option<SelectedDependency<'lock>>,
+    groups: BTreeMap<&'lock GroupName, SelectedDependency<'lock>>,
 }
 
 impl<'lock> DependencySelection<'lock> {
-    /// Returns the package selected by a direct requirement on the lock manifest.
-    pub fn root(&self) -> Option<&'lock Package> {
-        self.root
+    /// Returns the direct requirement selection from the lock manifest.
+    pub fn root(&self) -> Option<&SelectedDependency<'lock>> {
+        self.root.as_ref()
     }
 
-    /// Returns the package selected by the production dependency.
-    pub fn production(&self) -> Option<&'lock Package> {
-        self.production
+    /// Returns the production dependency selection.
+    pub fn production(&self) -> Option<&SelectedDependency<'lock>> {
+        self.production.as_ref()
     }
 
-    /// Returns the package selected by the given dependency group.
-    pub fn group(&self, group: &GroupName) -> Option<&'lock Package> {
-        self.groups.get(group).copied()
+    /// Returns the dependency selection for the given dependency group.
+    pub fn group(&self, group: &GroupName) -> Option<&SelectedDependency<'lock>> {
+        self.groups.get(group)
     }
 }
 
@@ -498,7 +565,7 @@ impl Lock {
             resolution_mode: resolution.options.resolution_mode,
             prerelease_mode: resolution.options.prerelease_mode,
             fork_strategy: resolution.options.fork_strategy,
-            exclude_newer: resolution.options.exclude_newer.clone().into(),
+            exclude_newer: resolution.options.exclude_newer.clone(),
         };
         // Canonicalize the top-level fork markers to match what is persisted in
         // `uv.lock`. In particular, conflict-only fork markers can serialize to
@@ -773,10 +840,8 @@ impl Lock {
     }
 
     /// Returns the exclude newer setting used to generate this lock.
-    pub fn exclude_newer(&self) -> ExcludeNewer {
-        // TODO(zanieb): It'd be nice not to hide this clone here, but I am hesitant to introduce
-        // a whole new `ExcludeNewerRef` type just for this
-        self.options.exclude_newer.clone().into()
+    pub fn exclude_newer(&self) -> &ExcludeNewer {
+        &self.options.exclude_newer
     }
 
     /// Returns the conflicting groups that were used to generate this lock.
@@ -806,7 +871,7 @@ impl Lock {
 
     /// Intersect a requirement marker with the forks that contain a package, then simplify it
     /// under the lockfile's Python requirement.
-    pub(crate) fn root_requirement_marker(
+    fn root_requirement_marker(
         &self,
         requirement: &Requirement,
         package: &Package,
@@ -849,16 +914,16 @@ impl Lock {
                 });
             };
             let production =
-                self.find_project_dependency_package(project, dependency_name, marker_environment)?;
+                self.find_project_dependency(project, dependency_name, marker_environment)?;
             let mut groups = BTreeMap::new();
             for group in project.resolved_dependency_groups().keys() {
-                if let Some(package) = self.find_project_dependency_group_package(
+                if let Some(dependency) = self.find_project_dependency_group(
                     project,
                     group,
                     dependency_name,
                     marker_environment,
                 )? {
-                    groups.insert(group, package);
+                    groups.insert(group, dependency);
                 }
             }
             (None, production, groups)
@@ -867,33 +932,53 @@ impl Lock {
                 &requirement.name == dependency_name
                     && requirement.marker.evaluate(marker_environment, &[])
             });
+            let group_applies =
+                self.manifest
+                    .dependency_groups
+                    .values()
+                    .flatten()
+                    .any(|requirement| {
+                        &requirement.name == dependency_name
+                            && requirement.marker.evaluate(marker_environment, &[])
+                    });
 
             // Lock-manifest requirements and dependency groups only record requirements, not
-            // resolved package IDs. Select the environment-specific package once, then associate
-            // it with every applicable direct requirement.
-            let mut applicable_groups = self
-                .manifest
-                .dependency_groups
-                .iter()
-                .filter_map(|(group, requirements)| {
-                    requirements
-                        .iter()
-                        .any(|requirement| {
-                            &requirement.name == dependency_name
-                                && requirement.marker.evaluate(marker_environment, &[])
-                        })
-                        .then_some(group)
-                })
-                .peekable();
-            let package = if root_applies || applicable_groups.peek().is_some() {
+            // resolved package IDs. Select the environment-specific package once, then preserve
+            // every applicable direct edge that selected it.
+            let package = if root_applies || group_applies {
                 self.find_by_markers(dependency_name, marker_environment)?
             } else {
                 None
             };
-            let root = root_applies.then_some(package).flatten();
-            let groups = package.map_or_else(BTreeMap::new, |package| {
-                applicable_groups.map(|group| (group, package)).collect()
+            let root = package.and_then(|package| {
+                let mut applicable = self.manifest.requirements.iter().filter(|requirement| {
+                    &requirement.name == dependency_name
+                        && requirement.marker.evaluate(marker_environment, &[])
+                });
+                let requirement = applicable.next()?;
+                let mut selection = SelectedDependency::from_requirement(package, requirement);
+                for requirement in applicable {
+                    selection.extend_requirement(requirement);
+                }
+                Some(selection)
             });
+            let mut groups = BTreeMap::new();
+            if let Some(package) = package {
+                for (group, requirements) in &self.manifest.dependency_groups {
+                    let mut applicable = requirements.iter().filter(|requirement| {
+                        &requirement.name == dependency_name
+                            && requirement.marker.evaluate(marker_environment, &[])
+                    });
+                    let Some(requirement) = applicable.next() else {
+                        continue;
+                    };
+                    let mut selection = SelectedDependency::from_requirement(package, requirement);
+                    for requirement in applicable {
+                        selection.extend_requirement(requirement);
+                    }
+                    groups.insert(group, selection);
+                }
+            }
             (root, None, groups)
         };
         Ok(DependencySelection {
@@ -903,20 +988,20 @@ impl Lock {
         })
     }
 
-    /// Returns the package selected by a dependency group on a non-virtual project.
-    fn find_project_dependency_group_package(
-        &self,
-        project: &Package,
-        group: &GroupName,
+    /// Returns the direct dependency selected by a dependency group on a non-virtual project.
+    fn find_project_dependency_group<'lock>(
+        &'lock self,
+        project: &'lock Package,
+        group: &'lock GroupName,
         dependency_name: &PackageName,
         marker_environment: &MarkerEnvironment,
-    ) -> Result<Option<&Package>, String> {
+    ) -> Result<Option<SelectedDependency<'lock>>, String> {
         let Some(dependencies) = project.resolved_dependency_groups().get(group) else {
             return Ok(None);
         };
         let project_name = project.name();
 
-        let mut selected = None;
+        let mut selected: Option<SelectedDependency<'lock>> = None;
         for dependency in dependencies
             .iter()
             .filter(|dependency| &dependency.package_id.name == dependency_name)
@@ -939,26 +1024,37 @@ impl Lock {
             }
 
             let package = self.find_by_id(&dependency.package_id);
-            if selected.is_some_and(|selected: &Package| selected.id != package.id) {
+            if selected
+                .as_ref()
+                .is_some_and(|selected| selected.package.id != package.id)
+            {
                 return Err(format!(
                     "found multiple packages matching `{dependency_name}` in dependency group `{group}` for `{project_name}`"
                 ));
             }
-            selected = Some(package);
+            if let Some(selected) = selected.as_mut() {
+                selected.extend_dependency(dependency);
+            } else {
+                selected = Some(SelectedDependency::from_dependency(
+                    package,
+                    dependency,
+                    DependencySelectionContext::Group(project_name, group),
+                ));
+            }
         }
         Ok(selected)
     }
 
-    /// Returns the package selected by a production dependency on a non-virtual project.
-    fn find_project_dependency_package(
-        &self,
-        project: &Package,
+    /// Returns the direct production dependency selected on a non-virtual project.
+    fn find_project_dependency<'lock>(
+        &'lock self,
+        project: &'lock Package,
         dependency_name: &PackageName,
         marker_environment: &MarkerEnvironment,
-    ) -> Result<Option<&Package>, String> {
+    ) -> Result<Option<SelectedDependency<'lock>>, String> {
         let project_name = project.name();
 
-        let mut selected = None;
+        let mut selected: Option<SelectedDependency<'lock>> = None;
         for dependency in project
             .dependencies()
             .iter()
@@ -977,12 +1073,23 @@ impl Lock {
             }
 
             let package = self.find_by_id(&dependency.package_id);
-            if selected.is_some_and(|selected: &Package| selected.id != package.id) {
+            if selected
+                .as_ref()
+                .is_some_and(|selected| selected.package.id != package.id)
+            {
                 return Err(format!(
                     "found multiple packages matching production dependency `{dependency_name}` for `{project_name}`"
                 ));
             }
-            selected = Some(package);
+            if let Some(selected) = selected.as_mut() {
+                selected.extend_dependency(dependency);
+            } else {
+                selected = Some(SelectedDependency::from_dependency(
+                    package,
+                    dependency,
+                    DependencySelectionContext::Production(project_name),
+                ));
+            }
         }
         Ok(selected)
     }
@@ -1283,356 +1390,7 @@ impl Lock {
 
     /// Returns the TOML representation of this lockfile.
     pub fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
-        // Catch a lockfile where the union of fork markers doesn't cover the supported
-        // environments.
-        debug_assert!(self.check_marker_coverage().is_ok());
-
-        // We construct a TOML document manually instead of going through Serde to enable
-        // the use of inline tables.
-        let mut doc = toml_edit::DocumentMut::new();
-        doc.insert("version", value(i64::from(self.version)));
-
-        if self.revision > 0 {
-            doc.insert("revision", value(i64::from(self.revision)));
-        }
-
-        doc.insert("requires-python", value(self.requires_python.to_string()));
-
-        if !self.fork_markers.is_empty() {
-            let fork_markers = each_element_on_its_line_array(
-                simplified_universal_markers(&self.fork_markers, &self.requires_python).into_iter(),
-            );
-            if !fork_markers.is_empty() {
-                doc.insert("resolution-markers", value(fork_markers));
-            }
-        }
-
-        // The simplified marker space covered by this resolution.
-        let simplified_environment =
-            SimplifiedMarkerTree::new(&self.requires_python, self.fork_markers_union())
-                .as_simplified_marker_tree();
-
-        if !self.supported_environments.is_empty() {
-            let supported_environments = each_element_on_its_line_array(
-                self.supported_environments
-                    .iter()
-                    .copied()
-                    .map(|marker| SimplifiedMarkerTree::new(&self.requires_python, marker))
-                    .filter_map(SimplifiedMarkerTree::try_to_string),
-            );
-            doc.insert("supported-markers", value(supported_environments));
-        }
-
-        if !self.required_environments.is_empty() {
-            let required_environments = each_element_on_its_line_array(
-                self.required_environments
-                    .iter()
-                    .copied()
-                    .map(|marker| SimplifiedMarkerTree::new(&self.requires_python, marker))
-                    .filter_map(SimplifiedMarkerTree::try_to_string),
-            );
-            doc.insert("required-markers", value(required_environments));
-        }
-
-        if !self.conflicts.is_empty() {
-            let mut list = Array::new();
-            for set in self.conflicts.iter() {
-                list.push(each_element_on_its_line_array(set.iter().map(|item| {
-                    let mut table = InlineTable::new();
-                    table.insert("package", Value::from(item.package().to_string()));
-                    match item.kind() {
-                        ConflictKind::Project => {}
-                        ConflictKind::Extra(extra) => {
-                            table.insert("extra", Value::from(extra.to_string()));
-                        }
-                        ConflictKind::Group(group) => {
-                            table.insert("group", Value::from(group.to_string()));
-                        }
-                    }
-                    table
-                })));
-            }
-            doc.insert("conflicts", value(list));
-        }
-
-        // Write the settings that were used to generate the resolution.
-        // This enables us to invalidate the lockfile if the user changes
-        // their settings.
-        {
-            let mut options_table = Table::new();
-
-            if self.options.resolution_mode != ResolutionMode::default() {
-                options_table.insert(
-                    "resolution-mode",
-                    value(self.options.resolution_mode.to_string()),
-                );
-            }
-            if self.options.prerelease_mode != PrereleaseMode::default() {
-                options_table.insert(
-                    "prerelease-mode",
-                    value(self.options.prerelease_mode.to_string()),
-                );
-            }
-            if self.options.fork_strategy != ForkStrategy::default() {
-                options_table.insert(
-                    "fork-strategy",
-                    value(self.options.fork_strategy.to_string()),
-                );
-            }
-            let exclude_newer = ExcludeNewer::from(self.options.exclude_newer.clone());
-            if !exclude_newer.is_empty() {
-                // Always serialize global exclude-newer as a string
-                if let Some(global) = &exclude_newer.global {
-                    if let Some(span) = global.span() {
-                        // When a relative span is present, write a no-op timestamp to avoid
-                        // merge conflicts in the lockfile. In a future version of uv, we'll drop
-                        // this field entirely but it's retained for backwards compatibility for now.
-                        let mut noop = value(ExcludeNewerValue::PLACEHOLDER);
-                        if let Item::Value(ref mut v) = noop {
-                            v.decor_mut().set_suffix(" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.");
-                        }
-                        options_table.insert("exclude-newer", noop);
-                        options_table.insert("exclude-newer-span", value(span.to_string()));
-                    } else {
-                        options_table.insert("exclude-newer", value(global.to_string()));
-                    }
-                }
-
-                // Serialize package-specific exclusions as a separate field
-                if !exclude_newer.package.is_empty() {
-                    let mut package_table = toml_edit::Table::new();
-                    for (name, setting) in &exclude_newer.package {
-                        match setting {
-                            ExcludeNewerOverride::Enabled(exclude_newer_value) => {
-                                if let Some(span) = exclude_newer_value.span() {
-                                    // When a relative span is present, write a no-op timestamp
-                                    // for backwards compatibility. This matches treatment for
-                                    // the global `exclude-newer`.
-                                    let mut inline = toml_edit::InlineTable::new();
-                                    inline
-                                        .insert("timestamp", ExcludeNewerValue::PLACEHOLDER.into());
-                                    inline.insert("span", span.to_string().into());
-                                    package_table.insert(name.as_ref(), Item::Value(inline.into()));
-                                } else {
-                                    // Serialize as simple string
-                                    package_table.insert(
-                                        name.as_ref(),
-                                        value(exclude_newer_value.to_string()),
-                                    );
-                                }
-                            }
-                            ExcludeNewerOverride::Disabled => {
-                                package_table.insert(name.as_ref(), value(false));
-                            }
-                        }
-                    }
-                    options_table.insert("exclude-newer-package", Item::Table(package_table));
-                }
-            }
-
-            if !options_table.is_empty() {
-                doc.insert("options", Item::Table(options_table));
-            }
-        }
-
-        // Write the manifest that was used to generate the resolution.
-        {
-            let mut manifest_table = Table::new();
-
-            if !self.manifest.members.is_empty() {
-                manifest_table.insert(
-                    "members",
-                    value(each_element_on_its_line_array(
-                        self.manifest
-                            .members
-                            .iter()
-                            .map(std::string::ToString::to_string),
-                    )),
-                );
-            }
-
-            if !self.manifest.requirements.is_empty() {
-                let requirements = self
-                    .manifest
-                    .requirements
-                    .iter()
-                    .map(|requirement| {
-                        serde::Serialize::serialize(
-                            &requirement,
-                            toml_edit::ser::ValueSerializer::new(),
-                        )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let requirements = match requirements.as_slice() {
-                    [] => Array::new(),
-                    [requirement] => Array::from_iter([requirement]),
-                    requirements => each_element_on_its_line_array(requirements.iter()),
-                };
-                manifest_table.insert("requirements", value(requirements));
-            }
-
-            if !self.manifest.constraints.is_empty() {
-                let constraints = self
-                    .manifest
-                    .constraints
-                    .iter()
-                    .map(|requirement| {
-                        serde::Serialize::serialize(
-                            &requirement,
-                            toml_edit::ser::ValueSerializer::new(),
-                        )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let constraints = match constraints.as_slice() {
-                    [] => Array::new(),
-                    [requirement] => Array::from_iter([requirement]),
-                    constraints => each_element_on_its_line_array(constraints.iter()),
-                };
-                manifest_table.insert("constraints", value(constraints));
-            }
-
-            if !self.manifest.overrides.is_empty() {
-                let overrides = self
-                    .manifest
-                    .overrides
-                    .iter()
-                    .map(|requirement| {
-                        serde::Serialize::serialize(
-                            &requirement,
-                            toml_edit::ser::ValueSerializer::new(),
-                        )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let overrides = match overrides.as_slice() {
-                    [] => Array::new(),
-                    [requirement] => Array::from_iter([requirement]),
-                    overrides => each_element_on_its_line_array(overrides.iter()),
-                };
-                manifest_table.insert("overrides", value(overrides));
-            }
-
-            if !self.manifest.excludes.is_empty() {
-                let excludes = self
-                    .manifest
-                    .excludes
-                    .iter()
-                    .map(|name| {
-                        serde::Serialize::serialize(&name, toml_edit::ser::ValueSerializer::new())
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let excludes = match excludes.as_slice() {
-                    [] => Array::new(),
-                    [name] => Array::from_iter([name]),
-                    excludes => each_element_on_its_line_array(excludes.iter()),
-                };
-                manifest_table.insert("excludes", value(excludes));
-            }
-
-            if !self.manifest.build_constraints.is_empty() {
-                let build_constraints = self
-                    .manifest
-                    .build_constraints
-                    .iter()
-                    .map(|requirement| {
-                        serde::Serialize::serialize(
-                            &requirement,
-                            toml_edit::ser::ValueSerializer::new(),
-                        )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let build_constraints = match build_constraints.as_slice() {
-                    [] => Array::new(),
-                    [requirement] => Array::from_iter([requirement]),
-                    build_constraints => each_element_on_its_line_array(build_constraints.iter()),
-                };
-                manifest_table.insert("build-constraints", value(build_constraints));
-            }
-
-            if !self.manifest.dependency_groups.is_empty() {
-                let mut dependency_groups = Table::new();
-                for (extra, requirements) in &self.manifest.dependency_groups {
-                    let requirements = requirements
-                        .iter()
-                        .map(|requirement| {
-                            serde::Serialize::serialize(
-                                &requirement,
-                                toml_edit::ser::ValueSerializer::new(),
-                            )
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    let requirements = match requirements.as_slice() {
-                        [] => Array::new(),
-                        [requirement] => Array::from_iter([requirement]),
-                        requirements => each_element_on_its_line_array(requirements.iter()),
-                    };
-                    if !requirements.is_empty() {
-                        dependency_groups.insert(extra.as_ref(), value(requirements));
-                    }
-                }
-                if !dependency_groups.is_empty() {
-                    manifest_table.insert("dependency-groups", Item::Table(dependency_groups));
-                }
-            }
-
-            if !self.manifest.dependency_metadata.is_empty() {
-                let mut tables = ArrayOfTables::new();
-                for metadata in &self.manifest.dependency_metadata {
-                    let mut table = Table::new();
-                    table.insert("name", value(metadata.name.to_string()));
-                    if let Some(version) = metadata.version.as_ref() {
-                        table.insert("version", value(version.to_string()));
-                    }
-                    if !metadata.requires_dist.is_empty() {
-                        table.insert(
-                            "requires-dist",
-                            value(serde::Serialize::serialize(
-                                &metadata.requires_dist,
-                                toml_edit::ser::ValueSerializer::new(),
-                            )?),
-                        );
-                    }
-                    if let Some(requires_python) = metadata.requires_python.as_ref() {
-                        table.insert("requires-python", value(requires_python.to_string()));
-                    }
-                    if !metadata.provides_extra.is_empty() {
-                        table.insert(
-                            "provides-extras",
-                            value(serde::Serialize::serialize(
-                                &metadata.provides_extra,
-                                toml_edit::ser::ValueSerializer::new(),
-                            )?),
-                        );
-                    }
-                    tables.push(table);
-                }
-                manifest_table.insert("dependency-metadata", Item::ArrayOfTables(tables));
-            }
-
-            if !manifest_table.is_empty() {
-                doc.insert("manifest", Item::Table(manifest_table));
-            }
-        }
-
-        // Count the number of packages for each package name. When
-        // there's only one package for a particular package name (the
-        // overwhelmingly common case), we can omit some data (like source and
-        // version) on dependency edges since it is strictly redundant.
-        let mut dist_count_by_name: FxHashMap<PackageName, u64> = FxHashMap::default();
-        for dist in &self.packages {
-            *dist_count_by_name.entry(dist.id.name.clone()).or_default() += 1;
-        }
-
-        let mut packages = ArrayOfTables::new();
-        for dist in &self.packages {
-            packages.push(dist.to_toml(
-                &self.requires_python,
-                simplified_environment,
-                &dist_count_by_name,
-            )?);
-        }
-
-        doc.insert("package", Item::ArrayOfTables(packages));
-        Ok(doc.to_string())
+        serialize::to_toml(self)
     }
 
     /// Returns the package with the given name. If there are multiple
@@ -2704,9 +2462,22 @@ pub enum SatisfiesResult<'lock> {
 }
 
 /// We discard the lockfile if these options match.
-#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct ResolverOptions {
+    /// The [`ResolutionMode`] used to generate this lock.
+    resolution_mode: ResolutionMode,
+    /// The [`PrereleaseMode`] used to generate this lock.
+    prerelease_mode: PrereleaseMode,
+    /// The [`ForkStrategy`] used to generate this lock.
+    fork_strategy: ForkStrategy,
+    /// The [`ExcludeNewer`] setting used to generate this lock.
+    exclude_newer: ExcludeNewer,
+}
+
+/// The serialized resolver options in the lockfile.
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct ResolverOptionsWire {
     /// The [`ResolutionMode`] used to generate this lock.
     #[serde(default)]
     resolution_mode: ResolutionMode,
@@ -2904,7 +2675,7 @@ struct LockWire {
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
     #[serde(default)]
-    options: ResolverOptions,
+    options: ResolverOptionsWire,
     #[serde(default)]
     manifest: ResolverManifest,
     #[serde(rename = "package", alias = "distribution", default)]
@@ -2942,10 +2713,21 @@ impl TryFrom<LockWire> for Lock {
             &wire.requires_python,
             fork_markers_union(&fork_markers, &wire.requires_python),
         );
+        // Most dependency entries omit their marker, so reuse the result of intersecting the
+        // default marker with the lock's environment.
+        let default =
+            UniversalMarker::from_combined(environment.into_marker(&wire.requires_python));
         let packages = wire
             .packages
             .into_iter()
-            .map(|dist| dist.unwire(&wire.requires_python, environment, &unambiguous_package_ids))
+            .map(|dist| {
+                dist.unwire(
+                    &wire.requires_python,
+                    environment,
+                    default,
+                    &unambiguous_package_ids,
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let supported_environments = wire
             .supported_environments
@@ -2957,10 +2739,16 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
-        let mut options = wire.options;
-        if options.exclude_newer.exclude_newer_span.is_some() {
-            options.exclude_newer.exclude_newer = None;
+        let mut options_wire = wire.options;
+        if options_wire.exclude_newer.exclude_newer_span.is_some() {
+            options_wire.exclude_newer.exclude_newer = None;
         }
+        let options = ResolverOptions {
+            resolution_mode: options_wire.resolution_mode,
+            prerelease_mode: options_wire.prerelease_mode,
+            fork_strategy: options_wire.fork_strategy,
+            exclude_newer: options_wire.exclude_newer.into(),
+        };
         let lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
@@ -3677,150 +3465,6 @@ impl Package {
         Ok(Some(sdist))
     }
 
-    fn to_toml(
-        &self,
-        requires_python: &RequiresPython,
-        simplified_environment: MarkerTree,
-        dist_count_by_name: &FxHashMap<PackageName, u64>,
-    ) -> Result<Table, toml_edit::ser::Error> {
-        let mut table = Table::new();
-
-        self.id.to_toml(None, &mut table);
-
-        if !self.fork_markers.is_empty() {
-            let fork_markers = each_element_on_its_line_array(
-                simplified_universal_markers(&self.fork_markers, requires_python).into_iter(),
-            );
-            if !fork_markers.is_empty() {
-                table.insert("resolution-markers", value(fork_markers));
-            }
-        }
-
-        if !self.dependencies.is_empty() {
-            let deps = each_element_on_its_line_array(self.dependencies.iter().map(|dep| {
-                dep.to_toml(simplified_environment, dist_count_by_name)
-                    .into_inline_table()
-            }));
-            table.insert("dependencies", value(deps));
-        }
-
-        if !self.optional_dependencies.is_empty() {
-            let mut optional_deps = Table::new();
-            for (extra, deps) in &self.optional_dependencies {
-                let deps = each_element_on_its_line_array(deps.iter().map(|dep| {
-                    dep.to_toml(simplified_environment, dist_count_by_name)
-                        .into_inline_table()
-                }));
-                if !deps.is_empty() {
-                    optional_deps.insert(extra.as_ref(), value(deps));
-                }
-            }
-            if !optional_deps.is_empty() {
-                table.insert("optional-dependencies", Item::Table(optional_deps));
-            }
-        }
-
-        if !self.dependency_groups.is_empty() {
-            let mut dependency_groups = Table::new();
-            for (extra, deps) in &self.dependency_groups {
-                let deps = each_element_on_its_line_array(deps.iter().map(|dep| {
-                    dep.to_toml(simplified_environment, dist_count_by_name)
-                        .into_inline_table()
-                }));
-                if !deps.is_empty() {
-                    dependency_groups.insert(extra.as_ref(), value(deps));
-                }
-            }
-            if !dependency_groups.is_empty() {
-                table.insert("dev-dependencies", Item::Table(dependency_groups));
-            }
-        }
-
-        if let Some(ref sdist) = self.sdist {
-            table.insert("sdist", value(sdist.to_toml()?));
-        }
-
-        if !self.wheels.is_empty() {
-            let wheels = each_element_on_its_line_array(
-                self.wheels
-                    .iter()
-                    .map(Wheel::to_toml)
-                    .collect::<Result<Vec<_>, _>>()?
-                    .into_iter(),
-            );
-            table.insert("wheels", value(wheels));
-        }
-
-        // Write the package metadata, if non-empty.
-        {
-            let mut metadata_table = Table::new();
-
-            if !self.metadata.requires_dist.is_empty() {
-                let requires_dist = self
-                    .metadata
-                    .requires_dist
-                    .iter()
-                    .map(|requirement| {
-                        serde::Serialize::serialize(
-                            &requirement,
-                            toml_edit::ser::ValueSerializer::new(),
-                        )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let requires_dist = match requires_dist.as_slice() {
-                    [] => Array::new(),
-                    [requirement] => Array::from_iter([requirement]),
-                    requires_dist => each_element_on_its_line_array(requires_dist.iter()),
-                };
-                metadata_table.insert("requires-dist", value(requires_dist));
-            }
-
-            if !self.metadata.dependency_groups.is_empty() {
-                let mut dependency_groups = Table::new();
-                for (extra, deps) in &self.metadata.dependency_groups {
-                    let deps = deps
-                        .iter()
-                        .map(|requirement| {
-                            serde::Serialize::serialize(
-                                &requirement,
-                                toml_edit::ser::ValueSerializer::new(),
-                            )
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    let deps = match deps.as_slice() {
-                        [] => Array::new(),
-                        [requirement] => Array::from_iter([requirement]),
-                        deps => each_element_on_its_line_array(deps.iter()),
-                    };
-                    dependency_groups.insert(extra.as_ref(), value(deps));
-                }
-                if !dependency_groups.is_empty() {
-                    metadata_table.insert("requires-dev", Item::Table(dependency_groups));
-                }
-            }
-
-            if !self.metadata.provides_extra.is_empty() {
-                let provides_extras = self
-                    .metadata
-                    .provides_extra
-                    .iter()
-                    .map(|extra| {
-                        serde::Serialize::serialize(&extra, toml_edit::ser::ValueSerializer::new())
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                // This is just a list of names, so linebreaking it is excessive.
-                let provides_extras = Array::from_iter(provides_extras);
-                metadata_table.insert("provides-extras", value(provides_extras));
-            }
-
-            if !metadata_table.is_empty() {
-                table.insert("metadata", Item::Table(metadata_table));
-            }
-        }
-
-        Ok(table)
-    }
-
     fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
         type WheelPriority<'lock> = (TagPriority, Option<&'lock BuildTag>);
 
@@ -3933,7 +3577,7 @@ impl Package {
         match &self.id.source {
             Source::Git(url, git) => Ok(Some(ResolvedRepositoryReference {
                 reference: RepositoryReference {
-                    url: RepositoryUrl::new(&url.to_url().map_err(LockErrorKind::InvalidUrl)?),
+                    url: RepositoryUrl::new(url.to_url().map_err(LockErrorKind::InvalidUrl)?),
                     reference: GitReference::from(git.kind.clone()),
                 },
                 sha: git.precise,
@@ -4035,6 +3679,7 @@ impl PackageWire {
         self,
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
+        default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
         // Consistency check
@@ -4056,9 +3701,25 @@ impl PackageWire {
             }
         }
 
+        // A registry-source package must carry a version; downstream conversions
+        // (e.g. `to_source_dist`, `satisfies`) rely on it.
+        if matches!(self.id.source, Source::Registry(_)) && self.id.version.is_none() {
+            return Err(LockErrorKind::MissingPackageVersion {
+                name: self.id.name.clone(),
+            }
+            .into());
+        }
+
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
-                .map(|dep| dep.unwire(requires_python, environment, unambiguous_package_ids))
+                .map(|dep| {
+                    dep.unwire(
+                        requires_python,
+                        environment,
+                        default,
+                        unambiguous_package_ids,
+                    )
+                })
                 .collect()
         };
 
@@ -4119,23 +3780,6 @@ impl PackageId {
             version,
             source,
         })
-    }
-
-    /// Writes this package ID inline into the table given.
-    ///
-    /// When a map is given, and if the package name in this ID is unambiguous
-    /// (i.e., it has a count of 1 in the map), then the `version` and `source`
-    /// fields are omitted. In all other cases, including when a map is not
-    /// given, the `version` and `source` fields are written.
-    fn to_toml(&self, dist_count_by_name: Option<&FxHashMap<PackageName, u64>>, table: &mut Table) {
-        let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
-        table.insert("name", value(self.name.to_string()));
-        if count.is_none_or(|count| count > 1) {
-            if let Some(version) = &self.version {
-                table.insert("version", value(version.to_string()));
-            }
-            self.source.to_toml(table);
-        }
     }
 }
 
@@ -4498,54 +4142,6 @@ impl Source {
             Self::Directory(path) | Self::Editable(path) | Self::Virtual(path) => Some(path),
             Self::Path(..) | Self::Git(..) | Self::Registry(..) | Self::Direct(..) => None,
         }
-    }
-
-    fn to_toml(&self, table: &mut Table) {
-        let mut source_table = InlineTable::new();
-        match self {
-            Self::Registry(source) => match source {
-                RegistrySource::Url(url) => {
-                    source_table.insert("registry", Value::from(url.as_ref()));
-                }
-                RegistrySource::Path(path) => {
-                    source_table.insert(
-                        "registry",
-                        Value::from(PortablePath::from(path).to_string()),
-                    );
-                }
-            },
-            Self::Git(url, _) => {
-                source_table.insert("git", Value::from(url.as_ref()));
-            }
-            Self::Direct(url, DirectSource { subdirectory }) => {
-                source_table.insert("url", Value::from(url.as_ref()));
-                if let Some(ref subdirectory) = *subdirectory {
-                    source_table.insert(
-                        "subdirectory",
-                        Value::from(PortablePath::from(subdirectory).to_string()),
-                    );
-                }
-            }
-            Self::Path(path) => {
-                source_table.insert("path", Value::from(PortablePath::from(path).to_string()));
-            }
-            Self::Directory(path) => {
-                source_table.insert(
-                    "directory",
-                    Value::from(PortablePath::from(path).to_string()),
-                );
-            }
-            Self::Editable(path) => {
-                source_table.insert(
-                    "editable",
-                    Value::from(PortablePath::from(path).to_string()),
-                );
-            }
-            Self::Virtual(path) => {
-                source_table.insert("virtual", Value::from(PortablePath::from(path).to_string()));
-            }
-        }
-        table.insert("source", value(source_table));
     }
 
     /// Check if a package is local by examining its source.
@@ -5121,35 +4717,6 @@ enum SourceDistWire {
     },
 }
 
-impl SourceDist {
-    /// Returns the TOML representation of this source distribution.
-    fn to_toml(&self) -> Result<InlineTable, toml_edit::ser::Error> {
-        let mut table = InlineTable::new();
-        match self {
-            Self::Metadata { .. } => {}
-            Self::Url { url, .. } => {
-                table.insert("url", Value::from(url.as_ref()));
-            }
-            Self::Path { path, .. } => {
-                table.insert("path", Value::from(PortablePath::from(path).to_string()));
-            }
-        }
-        if let Some(hash) = self.hash() {
-            table.insert("hash", Value::from(hash.to_string()));
-        }
-        if let Some(size) = self.size() {
-            table.insert(
-                "size",
-                toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
-            );
-        }
-        if let Some(upload_time) = self.upload_time() {
-            table.insert("upload-time", Value::from(upload_time.to_string()));
-        }
-        Ok(table)
-    }
-}
-
 impl From<SourceDistWire> for SourceDist {
     fn from(wire: SourceDistWire) -> Self {
         match wire {
@@ -5604,50 +5171,6 @@ enum WheelWireSource {
     },
 }
 
-impl Wheel {
-    /// Returns the TOML representation of this wheel.
-    fn to_toml(&self) -> Result<InlineTable, toml_edit::ser::Error> {
-        let mut table = InlineTable::new();
-        match &self.url {
-            WheelWireSource::Url { url } => {
-                table.insert("url", Value::from(url.as_ref()));
-            }
-            WheelWireSource::Path { path } => {
-                table.insert("path", Value::from(PortablePath::from(path).to_string()));
-            }
-            WheelWireSource::Filename { filename } => {
-                table.insert("filename", Value::from(filename.to_string()));
-            }
-        }
-        if let Some(ref hash) = self.hash {
-            table.insert("hash", Value::from(hash.to_string()));
-        }
-        if let Some(size) = self.size {
-            table.insert(
-                "size",
-                toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
-            );
-        }
-        if let Some(upload_time) = self.upload_time {
-            table.insert("upload-time", Value::from(upload_time.to_string()));
-        }
-        if let Some(zstd) = &self.zstd {
-            let mut inner = InlineTable::new();
-            if let Some(ref hash) = zstd.hash {
-                inner.insert("hash", Value::from(hash.to_string()));
-            }
-            if let Some(size) = zstd.size {
-                inner.insert(
-                    "size",
-                    toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
-                );
-            }
-            table.insert("zstd", Value::from(inner));
-        }
-        Ok(table)
-    }
-}
-
 impl TryFrom<WheelWire> for Wheel {
     type Error = String;
 
@@ -5750,36 +5273,6 @@ impl Dependency {
         ))
     }
 
-    /// Returns the TOML representation of this dependency.
-    fn to_toml(
-        &self,
-        simplified_environment: MarkerTree,
-        dist_count_by_name: &FxHashMap<PackageName, u64>,
-    ) -> Table {
-        let mut table = Table::new();
-        self.package_id
-            .to_toml(Some(dist_count_by_name), &mut table);
-        if !self.extra.is_empty() {
-            let extra_array = self
-                .extra
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Array>();
-            table.insert("extra", value(extra_array));
-        }
-        // Avoid restating the resolution's environment on every dependency edge.
-        if let Some(marker) = self
-            .simplified_marker
-            .as_simplified_marker_tree()
-            .restrict(simplified_environment)
-            .try_to_string()
-        {
-            table.insert("marker", value(marker));
-        }
-
-        table
-    }
-
     /// Returns the package name of this dependency.
     pub fn package_name(&self) -> &PackageName {
         &self.package_id.name
@@ -5830,16 +5323,24 @@ impl DependencyWire {
         self,
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
+        default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Dependency, LockError> {
-        let mut simplified_marker = self.marker;
-        simplified_marker.and(environment);
-        let complexified_marker = simplified_marker.into_marker(requires_python);
+        let (simplified_marker, complexified_marker) =
+            if self.marker.as_simplified_marker_tree().is_true() {
+                (environment, default)
+            } else {
+                let mut simplified_marker = self.marker;
+                simplified_marker.and(environment);
+                let complexified_marker =
+                    UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
+                (simplified_marker, complexified_marker)
+            };
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
             simplified_marker,
-            complexified_marker: UniversalMarker::from_combined(complexified_marker),
+            complexified_marker,
         })
     }
 }
@@ -6276,9 +5777,9 @@ impl WheelTagHint {
             .iter()
             .map(|filename| {
                 tags.compatibility(
-                    filename.python_tags(),
-                    filename.abi_tags(),
-                    filename.platform_tags(),
+                    filename.python_tags().iter(),
+                    filename.abi_tags().iter(),
+                    filename.platform_tags().iter(),
                 )
             })
             .max()?;
@@ -6805,6 +6306,13 @@ enum LockErrorKind {
         /// The name of the dependency that is missing a `version` field.
         name: PackageName,
     },
+    /// An error that occurs when a registry-source package is missing a
+    /// `version` field.
+    #[error("Package `{name}` from a registry source has a missing `version` field", name = name.cyan())]
+    MissingPackageVersion {
+        /// The name of the package that is missing a `version` field.
+        name: PackageName,
+    },
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `source` field.
     #[error("Dependency `{name}` has missing `source` field but has more than one matching package", name = name.cyan())]
@@ -6958,33 +6466,6 @@ impl Display for HashParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Display::fmt(self.0, f)
     }
-}
-
-/// Format an array so that each element is on its own line and has a trailing comma.
-///
-/// Example:
-///
-/// ```toml
-/// dependencies = [
-///     { name = "idna" },
-///     { name = "sniffio" },
-/// ]
-/// ```
-fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value>>) -> Array {
-    let mut array = elements
-        .map(|item| {
-            let mut value = item.into();
-            // Each dependency is on its own line and indented.
-            value.decor_mut().set_prefix("\n    ");
-            value
-        })
-        .collect::<Array>();
-    // With a trailing comma, inserting another entry doesn't change the preceding line,
-    // reducing the diff noise.
-    array.set_trailing_comma(true);
-    // The line break between the last element's comma and the closing square bracket.
-    array.set_trailing("\n");
-    array
 }
 
 /// Return the PEP 508 marker space covered by the resolution.
@@ -7344,7 +6825,7 @@ mod tests {
     #[test]
     fn dependency_marker_preserves_parent_conflicts() {
         let requires_python = RequiresPython::from_specifiers(
-            &VersionSpecifiers::from_str(">=3.12").expect("valid version specifier"),
+            VersionSpecifiers::from_str(">=3.12").expect("valid version specifier"),
         );
         let parent = UniversalMarker::from_combined(
             MarkerTree::from_str(
@@ -7396,9 +6877,15 @@ source = { registry = "https://example.com/simple" }
         let selection = lock
             .dependency_selection(Some(&project_name), &dependency_name, &marker_environment)
             .expect("unique project package");
-        let preferred = selection.group(&dev).expect("dev dependency");
-        let included = selection.group(&typing).expect("typing dependency");
-        let production = selection.production().expect("production dependency");
+        let preferred = selection.group(&dev).expect("dev dependency").package();
+        let included = selection
+            .group(&typing)
+            .expect("typing dependency")
+            .package();
+        let production = selection
+            .production()
+            .expect("production dependency")
+            .package();
 
         assert!(std::ptr::eq(preferred, included));
         assert!(std::ptr::eq(preferred, production));
@@ -7430,7 +6917,7 @@ source = { registry = "https://example.com/simple" }
             .expect("unique root package");
         let root = selection.root().expect("root dependency");
 
-        assert_eq!(root.name(), &dependency_name);
+        assert_eq!(root.package().name(), &dependency_name);
         assert!(selection.production().is_none());
     }
 
@@ -7617,6 +7104,21 @@ source = { registry = "https://pypi.org/simple" }
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
         assert_stripped_snapshot!(result, @"Dependency `a` has missing `version` field but has more than one matching package");
+    }
+
+    #[test]
+    fn missing_package_version_registry() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Package `a` from a registry source has a missing `version` field");
     }
 
     #[test]

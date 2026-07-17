@@ -271,6 +271,50 @@ fn sync_centralized_env_avoids_project_name_collisions() -> Result<()> {
 }
 
 #[test]
+#[cfg(unix)]
+fn sync_centralized_env_reuses_symlinked_workspace() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let project = context.temp_dir.child("project");
+    project.create_dir_all()?;
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    let symlink = context.temp_dir.child("project-link");
+    uv_fs::create_symlink(project.path(), symlink.path())?;
+
+    context
+        .sync()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--project")
+        .arg(project.path())
+        .assert()
+        .success();
+    let first = fs_err::read_link(project.child(".venv").path())?;
+
+    fs_err::remove_file(project.child(".venv").path())?;
+    context
+        .sync()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--project")
+        .arg(symlink.path())
+        .assert()
+        .success();
+    let second = fs_err::read_link(project.child(".venv").path())?;
+
+    assert_eq!(first, second);
+    Ok(())
+}
+
+#[test]
 fn sync_centralized_env_respects_explicit_environments() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
     write_project(&context, ">=3.12", &[])?;
@@ -595,19 +639,18 @@ fn sync_centralized_env_with_existing_file() -> Result<()> {
         .assert()
         .success();
 
-    #[cfg(unix)]
-    {
-        let target = fs_err::read_link(environment.path())?;
-        insta::with_settings!({ filters => context.filters() }, {
-            assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
-        });
-    }
-
-    #[cfg(windows)]
-    {
-        // TODO(tk): This changes once `.venv` can store an environment path.
-        assert_eq!(fs_err::read_to_string(environment.path())?, "user-data");
-        assert!(context.cache_dir.child("environments-v2").is_dir());
+    cfg_select! {
+        unix => {
+            let target = fs_err::read_link(environment.path())?;
+            insta::with_settings!({ filters => context.filters() }, {
+                assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
+            });
+        },
+        windows => {
+            // TODO(tk): This changes once `.venv` can store an environment path.
+            assert_eq!(fs_err::read_to_string(environment.path())?, "user-data");
+            assert!(context.cache_dir.child("environments-v2").is_dir());
+        },
     }
     Ok(())
 }

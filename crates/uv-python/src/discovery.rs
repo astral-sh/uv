@@ -13,6 +13,7 @@ use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::RequiresPython;
+use uv_errors::Hints;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
 use uv_pep440::{
@@ -214,9 +215,9 @@ type FindPythonResult = Result<PythonInstallation, PythonNotFound>;
 /// See [`FindPythonResult`].
 #[derive(Clone, Debug, Error)]
 pub struct PythonNotFound {
-    pub(crate) request: PythonRequest,
-    pub(crate) python_preference: PythonPreference,
-    pub(crate) environment_preference: EnvironmentPreference,
+    pub(super) request: PythonRequest,
+    pub(super) python_preference: PythonPreference,
+    pub(super) environment_preference: EnvironmentPreference,
 }
 
 /// A location for discovery of a Python installation or interpreter.
@@ -940,7 +941,7 @@ fn source_satisfies_environment_preference(
 ///
 /// Returns false when an error could be due to a faulty Python installation and we should continue searching for a working one.
 impl Error {
-    pub fn is_critical(&self) -> bool {
+    pub(crate) fn is_critical(&self) -> bool {
         match self {
             // When querying the Python interpreter fails, we will only raise errors that demonstrate that something is broken
             // If the Python interpreter returned a bad response, we'll continue searching for one that works
@@ -1032,7 +1033,7 @@ fn python_installations_with_name<'a>(
 }
 
 /// Iterate over all Python installations that satisfy the given request.
-pub fn find_python_installations<'a>(
+pub(crate) fn find_python_installations<'a>(
     request: &'a PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
@@ -1496,9 +1497,9 @@ pub(crate) async fn find_best_python_installation(
                 if let Some(download_state) = &mut download_state {
                     download_state
                 } else {
-                    let download_list_client = client_builder.build()?;
                     let download_list = ManagedPythonDownloadList::new(
-                        &download_list_client,
+                        client_builder,
+                        cache,
                         python_downloads_json_url,
                     )
                     .await?;
@@ -1552,7 +1553,8 @@ pub(crate) async fn find_best_python_installation(
                 let error = anyhow::Error::from(error).context(format!(
                     "A managed Python download is available for {request}, but an error occurred when attempting to download it."
                 ));
-                write_warning_chain(error.as_ref()).expect("writing to stderr should not fail");
+                write_warning_chain(error.as_ref(), Hints::none())
+                    .expect("writing to stderr should not fail");
                 previous_fetch_failed = true;
             }
         }
@@ -2201,19 +2203,18 @@ impl PythonRequest {
     /// Serialize the request to a canonical representation.
     ///
     /// [`Self::parse`] should always return the same request when given the output of this method.
-    pub fn to_canonical_string(&self) -> String {
+    pub fn to_canonical_string(&self) -> Cow<'_, str> {
         match self {
-            Self::Any => "any".to_string(),
-            Self::Default => "default".to_string(),
-            Self::Version(version) => version.to_string(),
-            Self::Directory(path) => path.display().to_string(),
-            Self::File(path) => path.display().to_string(),
-            Self::ExecutableName(name) => name.clone(),
-            Self::Implementation(implementation) => implementation.to_string(),
+            Self::Any => Cow::Borrowed("any"),
+            Self::Default => Cow::Borrowed("default"),
+            Self::Version(version) => Cow::Owned(version.to_string()),
+            Self::Directory(path) | Self::File(path) => path.to_string_lossy(),
+            Self::ExecutableName(name) => Cow::Borrowed(name),
+            Self::Implementation(implementation) => Cow::Borrowed(implementation.long_name()),
             Self::ImplementationVersion(implementation, version) => {
-                format!("{implementation}@{version}")
+                Cow::Owned(format!("{implementation}@{version}"))
             }
-            Self::Key(request) => request.to_string(),
+            Self::Key(request) => Cow::Owned(request.to_string()),
         }
     }
 
@@ -4645,7 +4646,7 @@ mod tests {
     #[test]
     fn intersects_requires_python_exact() {
         let requires_python =
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
 
         assert!(PythonRequest::parse("3.12").intersects_requires_python(&requires_python));
         assert!(!PythonRequest::parse("3.11").intersects_requires_python(&requires_python));
@@ -4654,7 +4655,7 @@ mod tests {
     #[test]
     fn intersects_requires_python_major() {
         let requires_python =
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
 
         // `3` overlaps with `>=3.12` (e.g., 3.12, 3.13, ... are all Python 3)
         assert!(PythonRequest::parse("3").intersects_requires_python(&requires_python));
@@ -4665,7 +4666,7 @@ mod tests {
     #[test]
     fn intersects_requires_python_range() {
         let requires_python =
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
 
         assert!(PythonRequest::parse(">=3.12,<3.13").intersects_requires_python(&requires_python));
         assert!(!PythonRequest::parse(">=3.10,<3.12").intersects_requires_python(&requires_python));
@@ -4674,7 +4675,7 @@ mod tests {
     #[test]
     fn intersects_requires_python_implementation_range() {
         let requires_python =
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
 
         assert!(
             PythonRequest::parse("cpython@>=3.12,<3.13")
@@ -4689,7 +4690,7 @@ mod tests {
     #[test]
     fn intersects_requires_python_no_version() {
         let requires_python =
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
 
         // Requests without version constraints are always compatible
         assert!(PythonRequest::Any.intersects_requires_python(&requires_python));

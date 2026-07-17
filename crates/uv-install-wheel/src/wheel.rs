@@ -22,7 +22,7 @@ use uv_trampoline_builder::windows_script_launcher;
 use uv_warnings::warn_user_once;
 
 use crate::record::RecordEntry;
-use crate::script::{Script, scripts_from_ini};
+use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
 
 /// Wrapper script template function
@@ -841,12 +841,14 @@ fn get_relocatable_executable(
 
 /// Reads the record file
 /// <https://www.python.org/dev/peps/pep-0376/#record>
-pub fn read_record(record: impl Read) -> Result<Vec<RecordEntry>, Error> {
+pub fn read_record_into_iter(
+    record: impl Read,
+) -> impl Iterator<Item = Result<RecordEntry, Error>> {
     csv::ReaderBuilder::new()
         .has_headers(false)
         .escape(Some(b'"'))
         .from_reader(record)
-        .deserialize()
+        .into_deserialize()
         .map(|entry| {
             let entry: RecordEntry = entry?;
             Ok(RecordEntry {
@@ -855,7 +857,10 @@ pub fn read_record(record: impl Read) -> Result<Vec<RecordEntry>, Error> {
                 ..entry
             })
         })
-        .collect()
+}
+
+pub fn read_record(record: impl Read) -> Result<Vec<RecordEntry>, Error> {
+    read_record_into_iter(record).collect()
 }
 
 pub(crate) fn write_record(
@@ -1074,16 +1079,12 @@ pub(crate) fn parse_scripts(
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/entry_points.txt"));
 
-    // Read the entry points mapping. If the file doesn't exist, we just return an empty mapping.
-    let ini = match fs::read_to_string(entry_points_path) {
-        Ok(ini) => ini,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            return Ok((Vec::new(), Vec::new()));
-        }
-        Err(err) => return Err(err.into()),
-    };
+    let EntryPoints {
+        console_scripts,
+        gui_scripts,
+    } = EntryPoints::read(entry_points_path, extras, python_minor)?;
 
-    scripts_from_ini(extras, python_minor, ini)
+    Ok((console_scripts, gui_scripts))
 }
 
 /// Rename a file with a fallback to copy that switches over on the first failure.

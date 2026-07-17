@@ -14,7 +14,7 @@ use uv_client::{
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
-use uv_errors::{ErrorOptions, write_error_chain_with_options};
+use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_preview::{Preview, PreviewFeature};
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
@@ -248,6 +248,7 @@ pub(crate) async fn publish(
                     if dry_run {
                         write_error_chain_with_options(
                             &err,
+                            Hints::none(),
                             ErrorOptions::default().with_stream(printer.stderr()),
                         )?;
                         error_count += 1;
@@ -289,6 +290,7 @@ pub(crate) async fn publish(
                     if dry_run {
                         write_error_chain_with_options(
                             &err,
+                            Hints::none(),
                             ErrorOptions::default().with_stream(printer.stderr()),
                         )?;
                         error_count += 1;
@@ -333,6 +335,7 @@ pub(crate) async fn publish(
                         let err: anyhow::Error = err.into();
                         write_error_chain_with_options(
                             err.as_ref(),
+                            Hints::none(),
                             ErrorOptions::default().with_stream(printer.stderr()),
                         )?;
                         error_count += 1;
@@ -394,6 +397,7 @@ pub(crate) async fn publish(
                         let err: anyhow::Error = err.into();
                         write_error_chain_with_options(
                             err.as_ref(),
+                            Hints::none(),
                             ErrorOptions::default().with_stream(printer.stderr()),
                         )?;
                         error_count += 1;
@@ -556,6 +560,7 @@ async fn gather_credentials(
                 anyhow::Error::from(err)
                     .context("Trusted publishing failed")
                     .as_ref(),
+                Hints::none(),
                 ErrorOptions::default().with_stream(printer.stderr()),
             )?;
         }

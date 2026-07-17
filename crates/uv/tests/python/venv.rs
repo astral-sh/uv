@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
@@ -10,8 +12,12 @@ use uv_static::EnvVars;
 
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
+#[cfg(unix)]
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+#[cfg(windows)]
+use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
-use uv_test::uv_snapshot;
+use uv_test::{site_packages_path, uv_snapshot};
 
 #[test]
 fn create_venv() {
@@ -72,6 +78,61 @@ fn create_venv() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_preview_skips_distutils_patch_on_py310_plus() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--preview-features")
+        .arg("no-distutils-patch"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+    let site_packages = site_packages_path(context.venv.path(), "python3.12");
+    assert!(!site_packages.join("_virtualenv.py").exists());
+    assert!(!site_packages.join("_virtualenv.pth").exists());
+}
+
+#[test]
+#[cfg(feature = "test-python-eol")]
+fn create_venv_preview_keeps_distutils_patch_on_py39() {
+    let context = uv_test::test_context_with_versions!(&["3.9"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.9")
+        .arg("--preview-features")
+        .arg("no-distutils-patch"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+    let site_packages = site_packages_path(context.venv.path(), "python3.9");
+    assert!(site_packages.join("_virtualenv.py").is_file());
+    assert!(site_packages.join("_virtualenv.pth").is_file());
 }
 
 #[test]
@@ -1432,6 +1493,33 @@ fn file_exists() -> Result<()> {
     );
 
     Ok(())
+}
+
+#[test]
+fn non_utf8_path() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let path = PathBuf::from(cfg_select! {
+        unix => OsStr::from_bytes(b".venv-\xff"),
+        windows => OsString::from_wide(&[0x002e, 0x0076, 0x0065, 0x006e, 0x0076, 0x002d, 0xd800]),
+    });
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(&path)
+        .arg("--python")
+        .arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv-�
+    error: Failed to create virtual environment
+      Caused by: Virtual environment path is not valid UTF-8: .venv-�
+    "
+    );
+
+    assert!(!context.temp_dir.join(path).exists());
 }
 
 #[test]

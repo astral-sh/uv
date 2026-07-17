@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
@@ -341,11 +342,11 @@ pub fn uninstall_egg(egg_info: &Path, distribution: impl Display) -> Result<Unin
     })
 }
 
-fn normcase(s: &str) -> String {
+fn normcase(s: &str) -> Cow<'_, str> {
     if cfg!(windows) {
-        s.replace('/', "\\").to_lowercase()
+        Cow::Owned(s.replace('/', "\\").to_lowercase())
     } else {
-        s.to_owned()
+        Cow::Borrowed(s)
     }
 }
 

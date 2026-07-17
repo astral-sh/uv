@@ -112,12 +112,9 @@ impl<'a> Headers<'a> {
 
 /// Parse a `Metadata-Version` field into a (major, minor) tuple.
 fn parse_version(metadata_version: &str) -> Result<(u8, u8), MetadataError> {
-    let (major, minor) =
-        metadata_version
-            .split_once('.')
-            .ok_or(MetadataError::InvalidMetadataVersion(
-                metadata_version.to_string(),
-            ))?;
+    let (major, minor) = metadata_version
+        .split_once('.')
+        .ok_or_else(|| MetadataError::InvalidMetadataVersion(metadata_version.to_string()))?;
     let major = major
         .parse::<u8>()
         .map_err(|_| MetadataError::InvalidMetadataVersion(metadata_version.to_string()))?;

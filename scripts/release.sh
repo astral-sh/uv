@@ -28,7 +28,10 @@ echo "Generating JSON schema..."
 cargo dev generate-json-schema
 
 echo "Checking crates.io publish setup..."
-uv run --no-config "$project_root/scripts/setup-crates-io-publish.py" --quiet
+crates_policies="$(mktemp -d)"
+trap 'rm -rf "$crates_policies"' EXIT
+git clone --depth=1 --quiet https://github.com/astral-sh/crates-policies.git "$crates_policies"
+uv run --no-config "$crates_policies/check.py" "$project_root"
 
 echo "Creating release branch..."
 git checkout -b "release/$(uv version --short)"

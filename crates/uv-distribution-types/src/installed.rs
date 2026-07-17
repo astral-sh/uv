@@ -281,8 +281,8 @@ impl InstalledDist {
                 let Some(egg_metadata) = read_metadata(path) else {
                     return Ok(None);
                 };
-                return Ok(Some(Self::from(InstalledDistKind::EggInfoDirectory(
-                    InstalledEggInfoDirectory {
+                return Ok(Some(Self::from(InstalledDistKind::EggInfoFile(
+                    InstalledEggInfoFile {
                         name: file_name.name,
                         version: Version::from_str(&egg_metadata.version)?,
                         path: path.to_path_buf().into_boxed_path(),

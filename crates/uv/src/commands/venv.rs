@@ -24,7 +24,8 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
+    PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
@@ -32,7 +33,7 @@ use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{
     AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy, SourceTreeEditablePolicy,
 };
-use uv_virtualenv::{OnExisting, RemovalReason};
+use uv_virtualenv::{OnExisting, RemovalReason, Seed};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
@@ -65,7 +66,6 @@ enum VenvError {
 }
 
 /// Create a virtual environment.
-#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn venv(
     project_dir: &Path,
     path: Option<PathBuf>,
@@ -81,12 +81,12 @@ pub(crate) async fn venv(
     client_builder: &BaseClientBuilder<'_>,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
-    seed: bool,
+    seed: Seed,
     on_existing: OnExisting,
     exclude_newer: ExcludeNewer,
     concurrency: Concurrency,
-    no_config: bool,
     no_project: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -156,7 +156,7 @@ pub(crate) async fn venv(
         project.as_ref().map(VirtualProject::workspace),
         &groups,
         project_dir,
-        no_config,
+        config_discovery,
     )
     .await?;
 
@@ -213,7 +213,10 @@ pub(crate) async fn venv(
         }
     }
 
-    let with_seed = if seed { " with seed packages" } else { "" };
+    let with_seed = match seed {
+        Seed::Enabled => " with seed packages",
+        Seed::Disabled => "",
+    };
     if centralized_workspace.is_some() {
         writeln!(
             printer.stderr(),
@@ -272,7 +275,7 @@ pub(crate) async fn venv(
     .map_err(VenvError::Creation)?;
 
     // Install seed packages.
-    if seed {
+    if let Seed::Enabled = seed {
         // Extract the interpreter.
         let interpreter = venv.interpreter();
 

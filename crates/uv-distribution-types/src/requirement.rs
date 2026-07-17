@@ -92,11 +92,15 @@ impl Requirement {
 
     /// Return the hashes of the requirement, as specified in the URL fragment.
     pub fn hashes(&self) -> Option<Hashes> {
-        let RequirementSource::Url { ref url, .. } = self.source else {
+        let (RequirementSource::Url { ref url, .. } | RequirementSource::Path { ref url, .. }) =
+            self.source
+        else {
             return None;
         };
         let fragment = url.fragment()?;
-        Hashes::parse_fragment(fragment).ok()
+        fragment
+            .split('&')
+            .find_map(|fragment| Hashes::parse_fragment(fragment).ok())
     }
 
     /// Set the source file containing the requirement.
@@ -1145,7 +1149,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 let location = url.clone();
 
                 // Create a PEP 508-compatible URL.
-                let mut url = url.clone();
+                let mut url = url;
                 if let Some(subdirectory) = &subdirectory {
                     url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
                 }
@@ -1155,7 +1159,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                     subdirectory: subdirectory.map(Box::<Path>::from),
                     ext: DistExtension::from_path(url.path())
                         .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?,
-                    url: VerbatimUrl::from_url(url.clone()),
+                    url: VerbatimUrl::from_url(url),
                 })
             }
             // TODO(charlie): The use of `CWD` here is incorrect. These should be resolved relative

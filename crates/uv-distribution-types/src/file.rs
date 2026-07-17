@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -31,7 +32,7 @@ pub struct File {
     pub dist_info_metadata: bool,
     pub filename: SmallString,
     pub hashes: HashDigests,
-    pub requires_python: Option<VersionSpecifiers>,
+    pub requires_python: Option<Arc<VersionSpecifiers>>,
     pub size: Option<u64>,
     // N.B. We don't use a Jiff timestamp here because it's a little
     // annoying to do so with rkyv. Since we only use this field for doing
@@ -141,6 +142,18 @@ impl FileLocation {
             Some(..) => Self::AbsoluteUrl(UrlString::new(url)),
             None => Self::RelativeUrl(base.clone(), url),
         }
+    }
+
+    /// Returns the final raw URL path component after removing any query or fragment.
+    ///
+    /// The filename is not percent-decoded.
+    pub fn raw_filename(&self) -> &str {
+        let path = match self {
+            Self::RelativeUrl(_, path) => path.as_ref(),
+            Self::AbsoluteUrl(url) => url.as_ref(),
+        };
+        let path = path.split_once(['?', '#']).map_or(path, |(path, _)| path);
+        path.rsplit_once('/').map_or(path, |(_, filename)| filename)
     }
 
     /// Convert this location to a URL.
@@ -307,6 +320,23 @@ pub struct Zstd {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn raw_filename() {
+        let base = SmallString::from("https://example.com/simple/");
+
+        let location = FileLocation::new(
+            SmallString::from("files/example%20pkg.whl?download=1#fragment"),
+            &base,
+        );
+        assert_eq!(location.raw_filename(), "example%20pkg.whl");
+
+        let location = FileLocation::new(
+            SmallString::from("https://files.example.com/example.whl#sha256=digest"),
+            &base,
+        );
+        assert_eq!(location.raw_filename(), "example.whl");
+    }
 
     #[test]
     fn base_str() {

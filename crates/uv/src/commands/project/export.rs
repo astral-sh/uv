@@ -17,7 +17,7 @@ use uv_configuration::{
 use uv_distribution_types::Verbatim;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
-use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_scripts::Pep723Script;
@@ -84,14 +84,14 @@ pub(crate) async fn export(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     quiet: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     // Identify the target.
-    let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
         ExportTarget::Script(script)
     } else {
@@ -103,7 +103,7 @@ pub(crate) async fn export(
                     ..DiscoveryOptions::default()
                 },
                 cache,
-                &workspace_cache,
+                workspace_cache,
             )
             .await?
         } else if let [name] = package.as_slice() {
@@ -111,7 +111,7 @@ pub(crate) async fn export(
                 project_dir,
                 &DiscoveryOptions::default(),
                 cache,
-                &workspace_cache,
+                workspace_cache,
                 name.clone(),
             )
             .await?
@@ -120,7 +120,7 @@ pub(crate) async fn export(
                 project_dir,
                 &DiscoveryOptions::default(),
                 cache,
-                &workspace_cache,
+                workspace_cache,
             )
             .await?;
 
@@ -162,8 +162,8 @@ pub(crate) async fn export(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
-                no_config,
                 false,
+                config_discovery,
                 Some(false),
                 cache,
                 printer,
@@ -176,7 +176,7 @@ pub(crate) async fn export(
                     Some(project.workspace()),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
@@ -225,7 +225,7 @@ pub(crate) async fn export(
             Box::new(DefaultResolveLogger),
             &concurrency,
             cache,
-            &workspace_cache,
+            workspace_cache,
             printer,
             preview,
         )
@@ -235,11 +235,9 @@ pub(crate) async fn export(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };

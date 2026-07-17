@@ -4,6 +4,8 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::io;
 use std::io::Read;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, anyhow, bail};
@@ -30,8 +32,8 @@ use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions,
 };
 use uv_redacted::DisplaySafeUrl;
@@ -97,7 +99,7 @@ pub(crate) async fn run(
     all_packages: bool,
     package: Option<PackageName>,
     no_project: bool,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
@@ -211,7 +213,7 @@ pub(crate) async fn run(
                 python_downloads,
                 &install_mirrors,
                 no_sync,
-                no_config,
+                config_discovery,
                 active.map_or(Some(false), Some),
                 &cache,
                 DryRun::Disabled,
@@ -261,12 +263,10 @@ pub(crate) async fn run(
             {
                 Ok(result) => result.into_lock(),
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .with_context("script")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -309,12 +309,10 @@ pub(crate) async fn run(
             {
                 Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .with_context("script")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -381,7 +379,7 @@ pub(crate) async fn run(
                     python_downloads,
                     &install_mirrors,
                     no_sync,
-                    no_config,
+                    config_discovery,
                     active.map_or(Some(false), Some),
                     &cache,
                     DryRun::Disabled,
@@ -448,12 +446,10 @@ pub(crate) async fn run(
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .with_context("script")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return diagnostics::OperationDiagnostic::default()
+                            .with_context("script")
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -467,7 +463,7 @@ pub(crate) async fn run(
                     python_downloads,
                     &install_mirrors,
                     no_sync,
-                    no_config,
+                    config_discovery,
                     active.map_or(Some(false), Some),
                     &cache,
                     printer,
@@ -485,7 +481,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?;
 
@@ -653,7 +649,7 @@ pub(crate) async fn run(
                     Some(project.workspace()),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
 
@@ -693,7 +689,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?
             } else {
@@ -708,7 +704,7 @@ pub(crate) async fn run(
                     python_preference,
                     python_downloads,
                     no_sync,
-                    no_config,
+                    config_discovery,
                     active,
                     &cache,
                     DryRun::Disabled,
@@ -775,11 +771,9 @@ pub(crate) async fn run(
                 {
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -864,11 +858,9 @@ pub(crate) async fn run(
                 {
                     Ok(_) => {}
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -891,7 +883,8 @@ pub(crate) async fn run(
                 } else {
                     PythonVersionFile::discover(
                         &project_dir,
-                        &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+                        &VersionFileDiscoveryOptions::default()
+                            .with_config_discovery(config_discovery),
                     )
                     .await?
                     .and_then(PythonVersionFile::into_version)
@@ -929,7 +922,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?;
                 venv.into_interpreter()
@@ -1018,12 +1011,10 @@ pub(crate) async fn run(
             let environment = match result {
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .with_context("`--with`")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .with_context("`--with`")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -1057,7 +1048,7 @@ pub(crate) async fn run(
                     uv_virtualenv::RemovalReason::TemporaryEnvironment,
                 ),
                 false,
-                false,
+                uv_virtualenv::Seed::Disabled,
                 false,
             )
         })
@@ -1341,7 +1332,7 @@ fn can_skip_ephemeral(
     }
 
     // Determine the markers and tags to use for resolution.
-    let markers = interpreter.resolver_marker_environment();
+    let markers = interpreter.to_resolver_marker_environment();
     let Ok(tags) = interpreter.tags() else {
         return false;
     };
@@ -1777,16 +1768,15 @@ impl RunCommand {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg("-c");
 
-                #[cfg(unix)]
-                {
-                    use std::os::unix::ffi::OsStringExt;
-                    process.arg(OsString::from_vec(script.clone()));
-                }
-
-                #[cfg(not(unix))]
-                {
-                    let script = String::from_utf8(script.clone()).expect("script is valid UTF-8");
-                    process.arg(script);
+                cfg_select! {
+                    unix => {
+                        process.arg(OsString::from_vec(script.clone()));
+                    },
+                    _ => {
+                        let script =
+                            String::from_utf8(script.clone()).expect("script is valid UTF-8");
+                        process.arg(script);
+                    },
                 }
                 process.args(args);
 
@@ -1809,16 +1799,15 @@ impl RunCommand {
                 let mut process = Command::new(&pythonw_executable);
                 process.arg("-c");
 
-                #[cfg(unix)]
-                {
-                    use std::os::unix::ffi::OsStringExt;
-                    process.arg(OsString::from_vec(script.clone()));
-                }
-
-                #[cfg(not(unix))]
-                {
-                    let script = String::from_utf8(script.clone()).expect("script is valid UTF-8");
-                    process.arg(script);
+                cfg_select! {
+                    unix => {
+                        process.arg(OsString::from_vec(script.clone()));
+                    },
+                    _ => {
+                        let script =
+                            String::from_utf8(script.clone()).expect("script is valid UTF-8");
+                        process.arg(script);
+                    },
                 }
                 process.args(args);
 

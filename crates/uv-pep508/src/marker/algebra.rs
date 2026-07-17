@@ -192,11 +192,11 @@ impl InternerGuard<'_> {
             } => match key {
                 MarkerValueVersion::ImplementationVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
-                    Edges::from_versions(&versions, operator),
+                    Edges::from_versions(versions, operator),
                 ),
                 MarkerValueVersion::PythonFullVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-                    Edges::from_versions(&versions, operator),
+                    Edges::from_versions(versions, operator),
                 ),
                 // Normalize `python_version` markers to `python_full_version` nodes.
                 MarkerValueVersion::PythonVersion => {
@@ -925,17 +925,27 @@ impl InternerGuard<'_> {
         ///
         /// This is equivalent to [`InternerGuard::or`], with the exception that it does not
         /// incorporate knowledge from outside the marker algebra.
-        fn disjunction(guard: &mut InternerGuard<'_>, xi: NodeId, yi: NodeId) -> NodeId {
+        fn disjunction(
+            guard: &mut InternerGuard<'_>,
+            cache: &mut FxHashMap<(NodeId, NodeId), NodeId>,
+            xi: NodeId,
+            yi: NodeId,
+        ) -> NodeId {
             // We take advantage of cheap negation here and implement OR in terms
             // of it's De Morgan complement.
-            conjunction(guard, xi.not(), yi.not()).not()
+            conjunction(guard, cache, xi.not(), yi.not()).not()
         }
 
         /// Perform a conjunction operation between two nodes.
         ///
         /// This is equivalent to [`InternerGuard::and`], with the exception that it does not
         /// incorporate knowledge from outside the marker algebra.
-        fn conjunction(guard: &mut InternerGuard<'_>, xi: NodeId, yi: NodeId) -> NodeId {
+        fn conjunction(
+            guard: &mut InternerGuard<'_>,
+            cache: &mut FxHashMap<(NodeId, NodeId), NodeId>,
+            xi: NodeId,
+            yi: NodeId,
+        ) -> NodeId {
             if xi.is_true() {
                 return yi;
             }
@@ -954,7 +964,7 @@ impl InternerGuard<'_> {
             }
 
             // The operation was memoized.
-            if let Some(result) = guard.state.cache.get(&(xi, yi)) {
+            if let Some(result) = cache.get(&(xi, yi)) {
                 return *result;
             }
 
@@ -964,19 +974,23 @@ impl InternerGuard<'_> {
             let (func, children) = match x.var.cmp(&y.var) {
                 // X is higher order than Y, apply Y to every child of X.
                 Ordering::Less => {
-                    let children = x.children.map(xi, |node| conjunction(guard, node, yi));
+                    let children = x
+                        .children
+                        .map(xi, |node| conjunction(guard, cache, node, yi));
                     (x.var.clone(), children)
                 }
                 // Y is higher order than X, apply X to every child of Y.
                 Ordering::Greater => {
-                    let children = y.children.map(yi, |node| conjunction(guard, node, xi));
+                    let children = y
+                        .children
+                        .map(yi, |node| conjunction(guard, cache, node, xi));
                     (y.var.clone(), children)
                 }
                 // X and Y represent the same variable, merge their children.
                 Ordering::Equal => {
                     let children = x
                         .children
-                        .apply(xi, &y.children, yi, |x, y| conjunction(guard, x, y));
+                        .apply(xi, &y.children, yi, |x, y| conjunction(guard, cache, x, y));
                     (x.var.clone(), children)
                 }
             };
@@ -985,7 +999,7 @@ impl InternerGuard<'_> {
             let node = guard.create_node(func, children);
 
             // Memoize the result of this operation.
-            guard.state.cache.insert((xi, yi), node);
+            cache.insert((xi, yi), node);
 
             node
         }
@@ -994,6 +1008,9 @@ impl InternerGuard<'_> {
             return exclusions;
         }
         let mut tree = NodeId::FALSE;
+        // These operations omit known-incompatibility checks, so their results must not be reused
+        // by regular marker operations.
+        let mut cache = FxHashMap::default();
 
         // Create all nodes upfront.
         let os_name_nt = self.expression(MarkerExpression::String {
@@ -1126,8 +1143,8 @@ impl InternerGuard<'_> {
         }
 
         for (a, b) in pairs {
-            let a_and_b = conjunction(self, a, b);
-            tree = disjunction(self, tree, a_and_b);
+            let a_and_b = conjunction(self, &mut cache, a, b);
+            tree = disjunction(self, &mut cache, tree, a_and_b);
         }
 
         self.state.exclusions = Some(tree);
@@ -1409,15 +1426,10 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_versions(versions: &[Version], operator: ContainerOperator) -> Self {
+    fn from_versions(versions: Vec<Version>, operator: ContainerOperator) -> Self {
         let mut range: Ranges<Version> = versions
-            .iter()
-            .map(|version| {
-                (
-                    Bound::Included(version.clone()),
-                    Bound::Included(version.clone()),
-                )
-            })
+            .into_iter()
+            .map(|version| (Bound::Included(version.clone()), Bound::Included(version)))
             .collect();
 
         if operator == ContainerOperator::NotIn {

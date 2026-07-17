@@ -13,7 +13,7 @@ use uv_configuration::{
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
 };
 use uv_scripts::Pep723Script;
@@ -66,7 +66,7 @@ pub(crate) async fn check(
     printer: Printer,
     preview: Preview,
     no_project: bool,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     if !preview.is_enabled(PreviewFeature::Check) {
@@ -165,7 +165,7 @@ pub(crate) async fn check(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
+                config_discovery,
                 Some(false),
                 cache,
                 printer,
@@ -183,7 +183,7 @@ pub(crate) async fn check(
                 workspace,
                 &groups,
                 project_dir,
-                no_config,
+                config_discovery,
             )
             .await?;
 
@@ -223,7 +223,7 @@ pub(crate) async fn check(
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             false,
-            false,
+            uv_virtualenv::Seed::Disabled,
             false,
         )?)
     } else {
@@ -246,7 +246,7 @@ pub(crate) async fn check(
                 python_downloads,
                 &install_mirrors,
                 no_sync,
-                no_config,
+                config_discovery,
                 Some(false),
                 cache,
                 DryRun::Disabled,
@@ -295,16 +295,14 @@ pub(crate) async fn check(
         {
             Ok(result) => result,
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::default()
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
 
-        let marker_environment = venv.interpreter().resolver_marker_environment();
+        let marker_environment = venv.interpreter().to_resolver_marker_environment();
         if ty_path.is_none()
             && ty_version.is_none()
             && result
@@ -354,11 +352,9 @@ pub(crate) async fn check(
         {
             Ok(_) => {}
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::default()
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         }
@@ -400,7 +396,7 @@ pub(crate) async fn check(
                 python_preference,
                 python_downloads,
                 no_sync,
-                no_config,
+                config_discovery,
                 None,
                 cache,
                 DryRun::Disabled,
@@ -419,7 +415,7 @@ pub(crate) async fn check(
                 Some(project.workspace()),
                 &groups,
                 project_dir,
-                no_config,
+                config_discovery,
             )
             .await?;
             Some(
@@ -488,11 +484,9 @@ pub(crate) async fn check(
         {
             Ok(result) => result,
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::default()
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
@@ -536,7 +530,7 @@ pub(crate) async fn check(
                 let resolution = project::toolchain::resolution_from_lock(
                     project,
                     result.lock(),
-                    tool.package(),
+                    &tool,
                     &base_interpreter,
                     &settings.resolver.build_options,
                 )?;
@@ -562,11 +556,9 @@ pub(crate) async fn check(
                 {
                     Ok(environment) => environment,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -606,11 +598,9 @@ pub(crate) async fn check(
             {
                 Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }

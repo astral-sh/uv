@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::env::current_dir;
 use std::fs;
 use std::io::Cursor;
+use std::process::Command;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -13,6 +14,8 @@ use fs_err::File;
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
 use http::StatusCode;
+#[cfg(feature = "test-universal")]
+use indoc::formatdoc;
 use indoc::indoc;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use url::Url;
@@ -588,6 +591,7 @@ fn compile_constraint_extra() -> Result<()> {
 /// to false (for example, `python_version < '0'`).
 ///
 /// See: <https://github.com/astral-sh/uv/issues/8676>
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_constraints_omit_impossible_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1068,10 +1072,10 @@ build-backend = "poetry.core.masonry.api"
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 13, column 1
-       |
-    13 | [project.dependencies]
-       | ^^^^^^^^^^^^^^^^^^^^^^
-    invalid type: map, expected a sequence
+           |
+        13 | [project.dependencies]
+           | ^^^^^^^^^^^^^^^^^^^^^^
+        invalid type: map, expected a sequence
     "
     );
 
@@ -1276,10 +1280,10 @@ dependencies = [
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 6, column 8
-      |
-    6 | name = "!project"
-      |        ^^^^^^^^^^
-    Not a valid package or extra name: "!project". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+          |
+        6 | name = "!project"
+          |        ^^^^^^^^^^
+        Not a valid package or extra name: "!project". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "#
     );
 
@@ -2670,8 +2674,8 @@ fn compile_git_subdirectory_static_metadata() -> Result<()> {
 /// when re-running `uv pip compile`.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/18224>
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn pep_751_compile_git_preferences() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -4657,12 +4661,12 @@ fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 10, column 7
-       |
-    10 |       "werkzeug=2.3.0"
-       |       ^^^^^^^^^^^^^^^^
-    no such comparison operator "=", must be one of ~= == != <= >= < > ===
-    werkzeug=2.3.0
-            ^^^^^^
+           |
+        10 |       "werkzeug=2.3.0"
+           |       ^^^^^^^^^^^^^^^^
+        no such comparison operator "=", must be one of ~= == != <= >= < > ===
+        werkzeug=2.3.0
+                ^^^^^^
     "#
     );
 
@@ -5022,8 +5026,8 @@ fn error_missing_unnamed_env_var() -> Result<()> {
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.in` at position 0
       Caused by: Expected package name starting with an alphanumeric character, found `$`
-    ${URL}
-    ^
+        ${URL}
+        ^
     "
     );
 
@@ -7899,8 +7903,8 @@ fn unsupported_scheme() -> Result<()> {
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.in` at position 0
       Caused by: Unsupported URL prefix `bzr` in URL: `bzr+https://example.com/anyio` (Bazaar is not supported)
-    anyio @ bzr+https://example.com/anyio
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        anyio @ bzr+https://example.com/anyio
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "
     );
 
@@ -8323,6 +8327,7 @@ fn no_strip_markers_transitive_marker() -> Result<()> {
 }
 
 /// Perform a universal resolution with a package that has a marker.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8368,6 +8373,7 @@ fn universal() -> Result<()> {
 }
 
 /// Perform a universal resolution with conflicting versions and markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_conflicting() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8417,6 +8423,7 @@ fn universal_conflicting() -> Result<()> {
 }
 
 /// Perform a universal resolution with a package that contains cycles in its dependency graph.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_cycles() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8475,6 +8482,7 @@ fn universal_cycles() -> Result<()> {
 }
 
 /// Perform a universal resolution with a constraint.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_constraint() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8516,6 +8524,7 @@ fn universal_constraint() -> Result<()> {
 }
 
 /// Perform a universal resolution with a constraint, where the constraint itself has a marker.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_constraint_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8562,6 +8571,7 @@ fn universal_constraint_marker() -> Result<()> {
 /// This currently fails, but should succeed.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/4640>
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_multi_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8600,6 +8610,7 @@ fn universal_multi_version() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_platform_fork() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -8662,6 +8673,7 @@ fn universal_platform_fork() -> Result<()> {
 }
 
 /// Requested distinct local versions with disjoint markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_locals() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -8720,6 +8732,7 @@ fn universal_disjoint_locals() -> Result<()> {
 
 /// Requested distinct local versions with disjoint markers of a package
 /// that is also present as a transitive dependency.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_transitive_disjoint_locals() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -8801,6 +8814,7 @@ fn universal_transitive_disjoint_locals() -> Result<()> {
 }
 
 /// Prefer local versions for dependencies of path requirements.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_local_path_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -8872,6 +8886,7 @@ fn universal_local_path_requirement() -> Result<()> {
 
 /// If a dependency requests a local version with an overlapping marker expression,
 /// we should prefer the local in both forks.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlapping_local_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -8943,6 +8958,7 @@ fn universal_overlapping_local_requirement() -> Result<()> {
 
 /// If a dependency requests distinct local versions with disjoint marker expressions,
 /// we should fork the root requirement.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_local_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -9021,6 +9037,7 @@ fn universal_disjoint_local_requirement() -> Result<()> {
 
 /// If a dependency requests distinct local versions and non-local versions with disjoint marker
 /// expressions, we should fork the root requirement.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_base_or_local_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.10").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -9105,6 +9122,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
 /// If a dependency requests a local version with an overlapping marker expression
 /// that form a nested fork, we should prefer the local in both children of the outer
 /// fork.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_nested_overlapping_local_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -9266,6 +9284,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
 
 /// If a dependency requests distinct local versions with disjoint marker expressions
 /// that form a nested fork, we should create a nested fork.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_nested_disjoint_local_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -9396,6 +9415,7 @@ fn existing_prerelease_preference() -> Result<()> {
 }
 
 /// Requested distinct pre-release strategies with disjoint markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_prereleases() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9427,6 +9447,7 @@ fn universal_disjoint_prereleases() -> Result<()> {
 }
 
 /// Requested distinct pre-release strategies with disjoint markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_prereleases_preference() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9468,6 +9489,7 @@ fn universal_disjoint_prereleases_preference() -> Result<()> {
 /// Requested distinct pre-release strategies with disjoint markers.
 ///
 /// TODO(charlie): This should resolve to two different `cffi` versions, one for each fork.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_prereleases_preference_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9509,6 +9531,7 @@ fn universal_disjoint_prereleases_preference_marker() -> Result<()> {
 
 /// Resolve to a single version as `--prerelease=allow` is provided, even though the first branch
 /// doesn't include a pre-release marker.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_prereleases_allow() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9545,6 +9568,7 @@ fn universal_disjoint_prereleases_allow() -> Result<()> {
 
 /// Requested distinct pre-release strategies with disjoint markers for a package
 /// that is also present as a transitive dependency.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9585,6 +9609,7 @@ fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
 }
 
 /// Ensure that the global pre-release mode is respected across forks.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_prerelease_mode() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9618,6 +9643,7 @@ fn universal_prerelease_mode() -> Result<()> {
 
 /// If a dependency requests a pre-release version with an overlapping marker expression,
 /// we should prefer the pre-release version in both forks.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlapping_prerelease_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9666,6 +9692,7 @@ fn universal_overlapping_prerelease_requirement() -> Result<()> {
 
 /// If a dependency requests distinct pre-release strategies with disjoint marker expressions,
 /// we should fork the root requirement.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_prerelease_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9721,6 +9748,7 @@ fn universal_disjoint_prerelease_requirement() -> Result<()> {
 
 /// Perform a universal resolution that requires narrowing the supported Python range in one of the
 /// fork branches.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9755,6 +9783,7 @@ fn universal_requires_python() -> Result<()> {
 }
 
 /// Perform a universal resolution that requires narrowing the supported Python range in a non-fork.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_requires_python_incomplete() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9791,6 +9820,7 @@ fn universal_requires_python_incomplete() -> Result<()> {
 /// [1]: https://github.com/astral-sh/uv/issues/4885
 /// [2]: https://github.com/astral-sh/uv/pull/4707
 /// [3]: https://github.com/astral-sh/uv/pull/5597
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_no_repeated_unconditional_distributions_1() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9909,6 +9939,7 @@ fn universal_no_repeated_unconditional_distributions_1() -> Result<()> {
 /// This test captures a case[1] that was broken by marker normalization.
 ///
 /// [1]: https://github.com/astral-sh/uv/issues/6064
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_no_repeated_unconditional_distributions_2() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9962,6 +9993,7 @@ fn universal_no_repeated_unconditional_distributions_2() -> Result<()> {
 
 /// Solve for upper bounds before solving for lower bounds. A solution that satisfies `pylint < 3`
 /// can also work for `pylint > 2`, but the inverse isn't true (due to maximum version selection).
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_prefer_upper_bounds() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10018,6 +10050,7 @@ fn universal_prefer_upper_bounds() -> Result<()> {
 }
 
 /// Remove `python_version` markers that are always true.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_unnecessary_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10059,13 +10092,67 @@ fn universal_unnecessary_python() -> Result<()> {
 /// versions of `torch`.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/5086>
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_marker_propagation() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let mut scenario = Scenario::empty();
+    scenario.packages.insert(
+        PackageName::from_str("torch")?,
+        Package {
+            versions: BTreeMap::from([
+                (
+                    Version::from_str("2.0.0")?,
+                    PackageMetadata {
+                        requires_python: None,
+                        sdist: false,
+                        wheel: true,
+                        ..PackageMetadata::default()
+                    },
+                ),
+                (
+                    Version::from_str("2.2.0")?,
+                    PackageMetadata {
+                        requires_python: None,
+                        sdist: false,
+                        wheel: true,
+                        ..PackageMetadata::default()
+                    },
+                ),
+            ]),
+        },
+    );
+    scenario.packages.insert(
+        PackageName::from_str("torchvision")?,
+        Package {
+            versions: BTreeMap::from([
+                (
+                    Version::from_str("0.15.1")?,
+                    PackageMetadata {
+                        requires_python: None,
+                        requires: vec![Requirement::from_str("torch==2.0.0")?],
+                        sdist: false,
+                        wheel: true,
+                        ..PackageMetadata::default()
+                    },
+                ),
+                (
+                    Version::from_str("0.17.0")?,
+                    PackageMetadata {
+                        requires_python: None,
+                        requires: vec![Requirement::from_str("torch==2.2.0")?],
+                        sdist: false,
+                        wheel: true,
+                        ..PackageMetadata::default()
+                    },
+                ),
+            ]),
+        },
+    );
+    let server = PackseServer::from_scenario(&scenario);
+
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc::indoc! {r"
-        --find-links https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html
-
         torch==2.0.0 ; platform_machine == 'x86_64'
         torch==2.2.0 ; platform_machine != 'x86_64'
         torchvision
@@ -10073,6 +10160,8 @@ fn universal_marker_propagation() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
+            .arg("--index-url")
+            .arg(server.index_url())
             .arg("-p")
             .arg("3.8")
             .arg("--universal"), @"
@@ -10081,77 +10170,29 @@ fn universal_marker_propagation() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in -p 3.8 --universal
-    certifi==2024.2.2
-        # via requests
-    charset-normalizer==3.3.2
-        # via requests
-    cmake==3.28.4 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
-        # via pytorch-triton-rocm
-    filelock==3.13.1
-        # via
-        #   pytorch-triton-rocm
-        #   torch
-    fsspec==2024.3.1 ; platform_machine != 'x86_64'
-        # via torch
-    idna==3.6
-        # via requests
-    jinja2==3.1.3
-        # via torch
-    lit==18.1.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
-        # via pytorch-triton-rocm
-    markupsafe==2.1.5
-        # via jinja2
-    mpmath==1.3.0
-        # via sympy
-    networkx==3.1 ; python_full_version < '3.9'
-        # via torch
-    networkx==3.2 ; python_full_version >= '3.9'
-        # via torch
-    numpy==1.24.4 ; python_full_version < '3.9'
-        # via torchvision
-    numpy==1.26.4 ; python_full_version >= '3.9'
-        # via torchvision
-    pillow==10.2.0
-        # via torchvision
-    pytorch-triton-rocm==2.0.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
-        # via torch
-    requests==2.31.0
-        # via torchvision
-    sympy==1.12
-        # via torch
-    torch==2.0.0 ; (python_full_version == '3.11.*' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
+    torch==2.0.0 ; platform_machine == 'x86_64'
         # via
         #   -r requirements.in
-        #   torchvision
-    torch==2.0.0+rocm5.4.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
-        # via
-        #   -r requirements.in
-        #   pytorch-triton-rocm
         #   torchvision
     torch==2.2.0 ; platform_machine != 'x86_64'
         # via
         #   -r requirements.in
         #   torchvision
-    torchvision==0.15.1 ; (python_full_version == '3.11.*' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
-        # via -r requirements.in
-    torchvision==0.15.1+rocm5.4.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torchvision==0.15.1 ; platform_machine == 'x86_64'
         # via -r requirements.in
     torchvision==0.17.0 ; platform_machine != 'x86_64'
         # via -r requirements.in
-    typing-extensions==4.10.0
-        # via torch
-    urllib3==2.2.1
-        # via requests
 
     ----- stderr -----
     warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
-    Resolved 26 packages in [TIME]
+    Resolved 4 packages in [TIME]
     "
     );
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10198,6 +10239,7 @@ fn universal_disjoint_extra() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_extra_no_strip() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10249,6 +10291,7 @@ fn universal_disjoint_extra_no_strip() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlap_extra_base() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10295,6 +10338,7 @@ fn universal_overlap_extra_base() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlap_extra_base_no_strip() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10344,6 +10388,7 @@ fn universal_overlap_extra_base_no_strip() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlap_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10390,6 +10435,7 @@ fn universal_overlap_extras() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlap_extras_no_strip() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10439,6 +10485,7 @@ fn universal_overlap_extras_no_strip() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_identical_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10485,6 +10532,7 @@ fn universal_identical_extras() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_identical_extras_no_strip() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -11083,6 +11131,7 @@ dev = [
 }
 
 /// Resolve from a `pyproject.toml` file with a recursive extra, with a marker attached.
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_pyproject_toml_recursive_extra_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -11134,6 +11183,7 @@ dev = [
 }
 
 /// Resolve from a `pyproject.toml` file with multiple recursive extras.
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_pyproject_toml_deeply_recursive_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13367,6 +13417,7 @@ fn compile_index_url_first_match_base() -> Result<()> {
 ///
 /// If the package exists on the "extra" index, but at an incompatible version, the resolution
 /// should fail by default (even though a compatible version exists on the "primary" index).
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_index_url_first_match_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -13788,7 +13839,7 @@ fn emit_index_annotation_multiple_indexes() -> Result<()> {
     Ok(())
 }
 
-/// Test error message when direct dependency is an empty set.
+/// Test error message when a direct dependency has incompatible version specifiers.
 #[test]
 fn no_version_for_direct_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13806,7 +13857,7 @@ fn no_version_for_direct_dependency() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ you require pypyp ∅
+      ╰─▶ you require pypyp==1 and pypyp>=1.2, which are incompatible
     "
     );
 
@@ -14331,8 +14382,8 @@ fn invalid_tool_uv_sources() -> Result<()> {
     ----- stderr -----
     error: Failed to parse metadata from built wheel
       Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-    urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "
     );
 
@@ -14871,8 +14922,8 @@ fn invalid_extra() -> Result<()> {
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.in` at position 0
       Caused by: Expected an alphanumeric character starting the extra name, found `_`
-    .[_anyio]
-      ^
+        .[_anyio]
+          ^
     ");
 
     // Sync the `anyio` extra. We should reject it.
@@ -14946,6 +14997,7 @@ fn symlink() -> Result<()> {
 
 /// Resolve with `--universal`, applying user-provided constraints to the space of supported
 /// environments.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_constrained_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -14994,6 +15046,7 @@ fn universal_constrained_environment() -> Result<()> {
 }
 
 /// Resolve with `--universal`, requiring artifact coverage for user-provided environments.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_required_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15110,6 +15163,7 @@ fn compile_requires_txt() -> Result<()> {
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/issues/6269>
+#[cfg(feature = "test-universal")]
 #[test]
 fn astroid_not_repeated() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15247,6 +15301,7 @@ exceptiongroup==1.0.0rc8
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/issues/6412>
+#[cfg(feature = "test-universal")]
 #[test]
 fn tomli_less_than_python311() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15357,6 +15412,7 @@ matplotlib
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/issues/6836>
+#[cfg(feature = "test-universal")]
 #[test]
 fn importlib_metadata_not_repeated() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15419,6 +15475,7 @@ fn importlib_metadata_not_repeated() -> Result<()> {
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/issues/6836>
+#[cfg(feature = "test-universal")]
 #[test]
 fn prune_unreachable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15465,6 +15522,7 @@ fn prune_unreachable() -> Result<()> {
 /// includes static metadata.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/8767>
+#[cfg(feature = "test-universal")]
 #[test]
 fn unsupported_requires_python_static_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.11").with_exclude_newer("2024-11-04T00:00:00Z");
@@ -15495,6 +15553,7 @@ fn unsupported_requires_python_static_metadata() -> Result<()> {
 ///
 /// See: <https://github.com/astral-sh/uv/issues/8767>
 #[cfg(feature = "test-python-eol")]
+#[cfg(feature = "test-universal")]
 #[test]
 fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.8").with_exclude_newer("2024-11-04T00:00:00Z");
@@ -15552,152 +15611,6 @@ fn negation_not_imply_prerelease() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     ");
-
-    Ok(())
-}
-
-#[test]
-fn lowest_direct_fork_min_python() -> Result<()> {
-    let context = uv_test::test_context!("3.10");
-    let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str(indoc::indoc! {r"
-        pycountry >= 22.1.10
-        setuptools >= 50.0.0 ; python_version >= '3.12'
-    "})?;
-
-    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .arg("requirements.in")
-            .arg("--universal")
-            .arg("--resolution")
-            .arg("lowest-direct"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal --resolution lowest-direct
-    pycountry==22.1.10
-        # via -r requirements.in
-    setuptools==50.0.0 ; python_full_version >= '3.12'
-        # via
-        #   -r requirements.in
-        #   pycountry
-    setuptools==69.2.0 ; python_full_version < '3.12'
-        # via
-        #   -r requirements.in
-        #   pycountry
-
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    "
-    );
-
-    Ok(())
-}
-
-#[test]
-fn lowest_fork_min_python() -> Result<()> {
-    let context = uv_test::test_context!("3.10");
-    let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str(indoc::indoc! {r"
-        anyio >= 3.0.0
-        idna >= 3.0.0 ; python_version >= '3.12'
-    "})?;
-
-    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .arg("requirements.in")
-            .arg("--universal")
-            .arg("--resolution")
-            .arg("lowest"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal --resolution lowest
-    anyio==3.0.0
-        # via -r requirements.in
-    idna==2.8 ; python_full_version < '3.12'
-        # via
-        #   -r requirements.in
-        #   anyio
-    idna==3.0 ; python_full_version >= '3.12'
-        # via
-        #   -r requirements.in
-        #   anyio
-    sniffio==1.1.0
-        # via anyio
-
-    ----- stderr -----
-    Resolved 4 packages in [TIME]
-    "
-    );
-
-    Ok(())
-}
-
-#[test]
-fn lowest_direct_fork_max_python() -> Result<()> {
-    let context = uv_test::test_context!("3.10");
-    let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str(indoc::indoc! {r"
-        pycountry >= 22.1.10
-        setuptools >= 50.0.0 ; python_version < '3.12'
-    "})?;
-
-    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .arg("requirements.in")
-            .arg("--universal")
-            .arg("--resolution")
-            .arg("lowest-direct"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal --resolution lowest-direct
-    pycountry==22.1.10
-        # via -r requirements.in
-    setuptools==50.0.0
-        # via
-        #   -r requirements.in
-        #   pycountry
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    "
-    );
-
-    Ok(())
-}
-
-#[test]
-fn lowest_fork_max_python() -> Result<()> {
-    let context = uv_test::test_context!("3.10");
-    let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str(indoc::indoc! {r"
-        pycountry >= 22.1.10
-        setuptools >= 50.0.0 ; python_version < '3.12'
-    "})?;
-
-    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .arg("requirements.in")
-            .arg("--universal")
-            .arg("--resolution")
-            .arg("lowest"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal --resolution lowest
-    pycountry==22.1.10
-        # via -r requirements.in
-    setuptools==50.0.0
-        # via
-        #   -r requirements.in
-        #   pycountry
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    "
-    );
 
     Ok(())
 }
@@ -15857,6 +15770,7 @@ fn invalid_platform() -> Result<()> {
 }
 
 /// Treat `sys_platform` and `sys.platform` as equivalent markers in the marker algebra.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_deprecated_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15889,6 +15803,7 @@ fn universal_disjoint_deprecated_markers() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_override_urls() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15934,6 +15849,7 @@ fn universal_disjoint_override_urls() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_conflicting_override_urls() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -16013,6 +15929,7 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
 }
 
 #[cfg(feature = "test-python-eol")]
+#[cfg(feature = "test-universal")]
 #[test]
 fn disjoint_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.8").with_exclude_newer("2025-01-29T00:00:00Z");
@@ -16107,6 +16024,7 @@ fn dynamic_version_source_dist() -> Result<()> {
 }
 
 #[cfg(feature = "test-python-eol")]
+#[cfg(feature = "test-universal")]
 #[test]
 fn max_python_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.8").with_exclude_newer("2024-12-18T00:00:00Z");
@@ -16311,11 +16229,18 @@ fn dependency_group() -> Result<()> {
         Ok(context)
     }
 
+    fn command(context: &TestContext, server: &PackseServer) -> Command {
+        let mut command = context.pip_compile();
+        command.arg("--index-url").arg(server.index_url());
+        command
+    }
+
+    let server = PackseServer::new("simple/dependency-groups.toml");
     let mut context;
 
     // Passing --group should add just that group's contents from ./pyproject.toml
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("bar"), @"
     success: true
     exit_code: 0
@@ -16333,7 +16258,7 @@ fn dependency_group() -> Result<()> {
     // (This is a "try to confuse the internals" test, as this file is logically
     // imported twice, but with two different semantics.)
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("pyproject.toml")
         .arg("--group").arg("bar"), @"
     success: true
@@ -16352,7 +16277,7 @@ fn dependency_group() -> Result<()> {
 
     // Another "try to confuse the internals" test with an absolute path
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg(context.temp_dir.child("pyproject.toml").path())
         .arg("--group").arg("bar"), @"
     success: true
@@ -16371,7 +16296,7 @@ fn dependency_group() -> Result<()> {
 
     // An explicit use of `<path>:<group>` syntax, here using what the default is anyway
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("pyproject.toml:bar"), @"
     success: true
     exit_code: 0
@@ -16387,7 +16312,7 @@ fn dependency_group() -> Result<()> {
 
     // "try to confuse the internals" with an explicit path for the group
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("pyproject.toml")
         .arg("--group").arg("pyproject.toml:bar"), @"
     success: true
@@ -16406,7 +16331,7 @@ fn dependency_group() -> Result<()> {
 
     // Let's check that the other group works fine individually
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("foo"), @"
     success: true
     exit_code: 0
@@ -16422,7 +16347,7 @@ fn dependency_group() -> Result<()> {
 
     // Now let's do both of the groups together
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("foo")
         .arg("--group").arg("bar"), @"
     success: true
@@ -16441,7 +16366,7 @@ fn dependency_group() -> Result<()> {
 
     // And finally put it all together
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("pyproject.toml")
         .arg("--group").arg("foo")
         .arg("--group").arg("bar"), @"
@@ -17143,6 +17068,7 @@ fn group_target_does_not_exist() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/10957>
 #[cfg(feature = "test-python-eol")]
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_preserve_requires_python_split() -> Result<()> {
     let context = uv_test::test_context!("3.8").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -17198,6 +17124,7 @@ fn compile_preserve_requires_python_split() -> Result<()> {
 }
 
 /// Regression test for <https://github.com/astral-sh/uv/issues/11279#issuecomment-2640270189>
+#[cfg(feature = "test-universal")]
 #[test]
 fn markers_on_extra_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17232,6 +17159,7 @@ fn markers_on_extra_packages() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn respect_non_local_preference() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -17284,6 +17212,7 @@ fn respect_non_local_preference() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn omit_wheels_exclude_newer() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-08-01T00:00:00Z");
@@ -17349,6 +17278,7 @@ fn omit_wheels_exclude_newer() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/12260>
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_quotes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17411,6 +17341,7 @@ fn compile_invalid_output_file() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_filename() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17437,6 +17368,7 @@ fn pep_751_filename() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_registry_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17486,6 +17418,7 @@ fn pep_751_compile_registry_wheel() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_registry_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
@@ -17534,6 +17467,7 @@ fn pep_751_compile_registry_sdist() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17638,8 +17572,8 @@ fn pep_751_compile_directory() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn pep_751_compile_git() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -17689,6 +17623,7 @@ fn pep_751_compile_git() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_url_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17753,18 +17688,23 @@ fn pep_751_compile_url_wheel() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_url_sdist() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(
-        "anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz",
-    )?;
+    requirements_txt.write_str(&formatdoc! {
+        "a @ {sdist_url}",
+        sdist_url = server.file_url("a-1.0.0.tar.gz"),
+    })?;
 
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--universal")
         .arg("-o")
         .arg("pylock.toml"), @r#"
@@ -17778,24 +17718,12 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     requires-python = ">=3.12"
 
     [[packages]]
-    name = "anyio"
-    version = "4.3.0"
-    archive = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
-
-    [[packages]]
-    name = "idna"
-    version = "3.6"
-    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
-    wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
-
-    [[packages]]
-    name = "sniffio"
-    version = "1.3.1"
-    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
-    wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+    name = "a"
+    version = "1.0.0"
+    archive = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hashes = { sha256 = "3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097" } }
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 1 package in [TIME]
     "#);
 
     uv_snapshot!(context.filters(), context.pip_sync()
@@ -17806,17 +17734,16 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
-     + idna==3.6
-     + sniffio==1.3.1
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0.tar.gz)
     "
     );
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_path_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17896,6 +17823,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_path_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17976,6 +17904,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_preferences() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18146,6 +18075,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_warn() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18321,6 +18251,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
 }
 
 /// Test that `--only-binary` excludes source distributions from pylock.toml output.
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_only_binary() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18359,6 +18290,7 @@ fn pep_751_compile_only_binary() -> Result<()> {
 }
 
 /// Test that `--no-binary` excludes wheels from pylock.toml output.
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_no_binary() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18396,6 +18328,7 @@ fn pep_751_compile_no_binary() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_no_emit_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18541,7 +18474,7 @@ fn incompatible_cuda() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because torchvision==0.17.1+cu118 depends on system:cuda==11.8 and torch==2.2.1+cu121 depends on system:cuda==12.1, we can conclude that torch==2.2.1+cu121 and torchvision==0.17.1+cu118 are incompatible.
+      ╰─▶ Because torchvision==0.17.1+cu118 depends on system:cuda==11.8 and torch>=2.2.1+cu121 depends on system:cuda==12.1, we can conclude that torch>=2.2.1+cu121 and torchvision==0.17.1+cu118 are incompatible.
           And because you require torch==2.2.1+cu121 and torchvision==0.17.1+cu118, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -18714,6 +18647,7 @@ fn git_path_transitive_dependency() -> Result<()> {
 }
 
 /// Ensure that `--emit-index-annotation` plays nicely with `--annotation-style=line`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn omit_python_patch_universal() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -18826,7 +18760,8 @@ async fn credentials_from_subdirectory() -> Result<()> {
 
 /// Install a package with a post-release version constraint.
 ///
-/// `<V.postN` should include earlier post-releases but exclude pre-releases.
+/// `<V.postN` should include pre-releases of the base release and earlier post-releases, but
+/// exclude pre-releases of the specified post-release.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/16868>
 #[test]
@@ -18865,6 +18800,7 @@ fn post_release_less_than() -> Result<()> {
 /// The main test (first snapshot) builds a Windows wheel, and targets macOS. If we run this test on
 /// Linux, the wheel tag is neither host nor target, but we don't have a reason to reject the
 /// Windows tag either.
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_with_python_platform_and_built_wheel_for_different_platform() -> Result<()> {
     let context = uv_test::test_context!("3.12");

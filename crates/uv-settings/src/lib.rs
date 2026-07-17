@@ -689,6 +689,7 @@ pub struct Concurrency {
     pub downloads: Option<NonZeroUsize>,
     pub builds: Option<NonZeroUsize>,
     pub installs: Option<NonZeroUsize>,
+    pub cache_reads: Option<NonZeroUsize>,
 }
 
 /// A boolean flag parsed from an environment variable.
@@ -811,6 +812,10 @@ impl EnvironmentOptions {
                 builds: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_BUILDS, None)?,
                 installs: parse_integer_environment_variable(
                     EnvVars::UV_CONCURRENT_INSTALLS,
+                    None,
+                )?,
+                cache_reads: parse_integer_environment_variable(
+                    EnvVars::UV_CONCURRENT_CACHE_READS,
                     None,
                 )?,
             },

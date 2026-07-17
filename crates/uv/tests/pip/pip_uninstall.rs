@@ -41,8 +41,8 @@ fn invalid_requirement() {
     ----- stderr -----
     error: Failed to parse: `flask==1.0.x`
       Caused by: after parsing `1.0`, found `.x`, which is not part of a valid version
-    flask==1.0.x
-         ^^^^^^^
+        flask==1.0.x
+             ^^^^^^^
     ");
 }
 
@@ -80,8 +80,8 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.txt` at position 0
       Caused by: after parsing `1.0`, found `.x`, which is not part of a valid version
-    flask==1.0.x
-         ^^^^^^^
+        flask==1.0.x
+             ^^^^^^^
     ");
 
     Ok(())
@@ -381,6 +381,29 @@ fn uninstall_egg_info() -> Result<()> {
     Uninstalled 1 package in [TIME]
      - zstandard==0.22.0
     ");
+
+    Ok(())
+}
+
+/// Refuse to uninstall a versionless `.egg-info` file without the metadata required to do so safely.
+#[test]
+fn uninstall_versionless_egg_info_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let egg_info = ChildPath::new(context.site_packages()).child("demo.egg-info");
+    egg_info.write_str("Metadata-Version: 1.1\nName: demo\nVersion: 1.0\n")?;
+
+    uv_snapshot!(context.pip_uninstall().arg("demo"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to uninstall `demo==1.0`. distutils-installed distributions do not include the metadata required to uninstall safely.
+    "
+    );
+
+    assert!(egg_info.exists());
 
     Ok(())
 }

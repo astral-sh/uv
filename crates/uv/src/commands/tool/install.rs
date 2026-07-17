@@ -23,8 +23,8 @@ use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -54,7 +54,6 @@ use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.
-#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     package: String,
     editable: bool,
@@ -77,7 +76,7 @@ pub(crate) async fn install(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: Cache,
     refresh: Refresh,
     workspace_cache: &WorkspaceCache,
@@ -124,7 +123,7 @@ pub(crate) async fn install(
             .as_ref()
             .and_then(|requirements| requirements.first())
             .map(|requirement| &requirement.requirement),
-        no_config,
+        config_discovery,
         lfs,
         state.git(),
         &client_builder,
@@ -728,11 +727,9 @@ pub(crate) async fn install(
                 {
                     Ok(resolution) => resolution,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -861,11 +858,9 @@ pub(crate) async fn install(
             {
                 Ok(update) => update,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -954,11 +949,9 @@ pub(crate) async fn install(
                         .await
                         .ok()
                         .flatten() else {
-                            return diagnostics::OperationDiagnostic::with_system_certs(
-                                client_builder.system_certs(),
-                            )
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                            return diagnostics::OperationDiagnostic::default()
+                                .report(err)
+                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                         };
 
                         debug!(
@@ -990,11 +983,9 @@ pub(crate) async fn install(
                         {
                             Ok(resolution) => (resolution, interpreter),
                             Err(ProjectError::Operation(err)) => {
-                                return diagnostics::OperationDiagnostic::with_system_certs(
-                                    client_builder.system_certs(),
-                                )
-                                .report(err)
-                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                                return diagnostics::OperationDiagnostic::default()
+                                    .report(err)
+                                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                             }
                             Err(err) => return Err(err.into()),
                         }
@@ -1054,11 +1045,9 @@ pub(crate) async fn install(
         }) {
             Ok(environment) => (environment, tool_lock),
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::default()
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         }

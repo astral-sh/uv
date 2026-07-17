@@ -255,11 +255,15 @@ impl Upgrade {
     /// Combine a set of [`Upgrade`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        // For `strategy`: `other` takes precedence for an explicit `All` or `None`; otherwise,
+        // For `strategy`: an explicit `All` or `None` in `self` takes precedence; otherwise,
         // merge.
         let strategy = match (self.strategy, other.strategy) {
-            (_, UpgradeStrategy::All) => UpgradeStrategy::All,
-            (_, UpgradeStrategy::None) => UpgradeStrategy::None,
+            (UpgradeStrategy::All, _) => UpgradeStrategy::All,
+            (UpgradeStrategy::None, _) => UpgradeStrategy::None,
+            (UpgradeStrategy::Some(_, _), UpgradeStrategy::All) => UpgradeStrategy::All,
+            (UpgradeStrategy::Some(packages, groups), UpgradeStrategy::None) => {
+                UpgradeStrategy::Some(packages, groups)
+            }
             (
                 UpgradeStrategy::Some(mut self_packages, mut self_groups),
                 UpgradeStrategy::Some(other_packages, other_groups),
@@ -268,7 +272,6 @@ impl Upgrade {
                 self_groups.extend(other_groups);
                 UpgradeStrategy::Some(self_packages, self_groups)
             }
-            (_, UpgradeStrategy::Some(packages, groups)) => UpgradeStrategy::Some(packages, groups),
         };
 
         // For `constraints`: always merge the constraints of `self` and `other`.

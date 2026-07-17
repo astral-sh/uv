@@ -136,14 +136,12 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
                 Some((name, doc, added_in, item.ident.span()))
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
-                // Extract the environment variable patterns.
-                if let Some(pattern) = get_env_var_pattern_from_attr(&item.attrs) {
+                get_env_var_pattern_from_attr(&item.attrs).map(|pattern| {
+                    // Extract the environment variable patterns.
                     let doc = get_doc_comment(&item.attrs);
                     let added_in = get_added_in(&item.attrs);
-                    Some((pattern, doc, added_in, item.sig.span()))
-                } else {
-                    None // Skip if pattern extraction fails.
-                }
+                    (pattern, doc, added_in, item.sig.span())
+                })
             }
             _ => None,
         })

@@ -1001,26 +1001,20 @@ pub async fn check_url(
         return Ok(false);
     };
 
-    let archived_file = match filename {
-        DistFilename::SourceDistFilename(source_dist) => metadatum
-            .files
-            .source_dists
-            .iter()
-            .find(|entry| &entry.name == source_dist)
-            .map(|entry| &entry.file),
-        DistFilename::WheelFilename(wheel) => metadatum
-            .files
-            .wheels
-            .iter()
-            .find(|entry| &entry.name == wheel)
-            .map(|entry| &entry.file),
+    let archived_files = match filename {
+        DistFilename::SourceDistFilename(_) => &metadatum.files.source_dists,
+        DistFilename::WheelFilename(_) => &metadatum.files.wheels,
     };
+    let archived_file = archived_files.iter().find(|file| {
+        DistFilename::try_from_filename(file.filename(), filename.name())
+            .is_some_and(|candidate| &candidate == filename)
+    });
     let Some(archived_file) = archived_file else {
         return Ok(false);
     };
 
     // TODO(konsti): Do we have a preference for a hash here?
-    if let Some(remote_hash) = archived_file.hashes.first() {
+    if let Some(remote_hash) = archived_file.hashes().first() {
         // We accept the risk for TOCTOU errors here, since we already read the file once before the
         // streaming upload to compute the hash for the form metadata.
         let local_hash = &hash_file(
@@ -1542,7 +1536,7 @@ mod tests {
         group_files, upload,
     };
     use tokio::sync::Semaphore;
-    use uv_errors::{ErrorOptions, write_error_chain_with_options};
+    use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -2251,8 +2245,12 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
-            .unwrap();
+        write_error_chain_with_options(
+            &err,
+            Hints::none(),
+            ErrorOptions::default().with_stream(&mut capture),
+        )
+        .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2280,8 +2278,12 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
-            .unwrap();
+        write_error_chain_with_options(
+            &err,
+            Hints::none(),
+            ErrorOptions::default().with_stream(&mut capture),
+        )
+        .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2314,8 +2316,12 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
-            .unwrap();
+        write_error_chain_with_options(
+            &err,
+            Hints::none(),
+            ErrorOptions::default().with_stream(&mut capture),
+        )
+        .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2351,8 +2357,12 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
-            .unwrap();
+        write_error_chain_with_options(
+            &err,
+            Hints::none(),
+            ErrorOptions::default().with_stream(&mut capture),
+        )
+        .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);

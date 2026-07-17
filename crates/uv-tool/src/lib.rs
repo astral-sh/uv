@@ -19,7 +19,7 @@ use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
-pub use receipt::ToolReceipt;
+pub(crate) use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
 
 mod receipt;
@@ -347,7 +347,7 @@ impl InstalledTools {
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::ManagedEnvironment),
             false,
-            false,
+            uv_virtualenv::Seed::Disabled,
             false,
         )?;
 

@@ -27,7 +27,10 @@ use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
-use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_python::{
+    ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonPreference,
+    PythonRequest,
+};
 use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
@@ -50,7 +53,7 @@ use crate::commands::project::{
     WorkspacePython, init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
+use crate::commands::{ExitStatus, ScriptPath, UvError, diagnostics, pip};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
 
@@ -95,7 +98,7 @@ pub(crate) async fn lock(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -112,7 +115,7 @@ pub(crate) async fn lock(
                 false,
                 python_preference,
                 python_downloads,
-                no_config,
+                config_discovery,
                 &client_builder,
                 cache,
                 &reporter,
@@ -153,7 +156,7 @@ pub(crate) async fn lock(
                     Some(workspace),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
@@ -180,7 +183,7 @@ pub(crate) async fn lock(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
+                config_discovery,
                 Some(false),
                 cache,
                 printer,
@@ -268,16 +271,10 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Success)
         }
         // Lock mismatches from `--check`/`--locked` are expected validation failures.
-        // Handle them here so we return exit code 1 instead of bubbling up as an error (exit code 2).
-        Err(err @ ProjectError::LockMismatch(..)) => {
-            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-        }
+        Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
+        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
 }

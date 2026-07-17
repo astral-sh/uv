@@ -1,0 +1,87 @@
+name: Rebase conflicted pull requests
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: pull-request-conflicts-main
+  # Let an in-progress rebase finish; newer pushes replace the single pending run.
+  cancel-in-progress: false
+
+jobs:
+  identify:
+    name: Identify conflicted pull requests
+    if: github.repository == 'astral-sh/uv-dev'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      matrix: ${{ steps.identify.outputs.matrix }}
+      rebasable: ${{ steps.identify.outputs.rebasable }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Identify conflicted pull requests
+        id: identify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          pull_requests=$(./scripts/find-conflicted-pull-requests.sh)
+          conflicted=$(jq 'length' <<< "$pull_requests")
+          rebasable=$(jq '[.[] | select(.is_cross_repository | not)] | length' <<< "$pull_requests")
+          cross_repository=$(( conflicted - rebasable ))
+
+          if (( rebasable > 256 )); then
+            echo "Found $rebasable rebasable pull requests, which exceeds the GitHub Actions matrix limit of 256." >&2
+            exit 1
+          fi
+
+          matrix=$(jq --compact-output '{include: [.[] | select(.is_cross_repository | not) | {number, base_ref, head_ref, head_sha}]}' <<< "$pull_requests")
+          {
+            echo "matrix=$matrix"
+            echo "rebasable=$rebasable"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Conflicted pull requests"
+            echo
+            echo "Found $conflicted conflicted pull requests."
+
+            if (( cross_repository > 0 )); then
+              echo
+              echo "Skipping $cross_repository cross-repository pull requests that cannot be updated by the uv-dev app token."
+            fi
+
+            if (( conflicted > 0 )); then
+              echo
+              jq --raw-output '.[] | "- \(.url)"' <<< "$pull_requests"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  rebase-and-push:
+    name: "Rebase pull request #${{ matrix.number }}"
+    needs: identify
+    if: needs.identify.outputs.rebasable != '0'
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.identify.outputs.matrix) }}
+    uses: ./.github/workflows/rebase-conflicted-pull-request.yml
+    secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
+    with:
+      number: ${{ matrix.number }}
+      base-ref: ${{ matrix.base_ref }}
+      head-ref: ${{ matrix.head_ref }}
+      head-sha: ${{ matrix.head_sha }}

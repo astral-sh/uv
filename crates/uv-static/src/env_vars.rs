@@ -422,6 +422,10 @@ impl EnvVars {
     #[attr_added_in("0.1.45")]
     pub const UV_CONCURRENT_INSTALLS: &'static str = "UV_CONCURRENT_INSTALLS";
 
+    /// Controls the number of threads used to read cached HTTP responses.
+    #[attr_added_in("0.11.29")]
+    pub const UV_CONCURRENT_CACHE_READS: &'static str = "UV_CONCURRENT_CACHE_READS";
+
     /// Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
     /// example, spinners and progress bars.
     #[attr_added_in("0.2.28")]
@@ -532,7 +536,7 @@ impl EnvVars {
     /// [`UV_INSTALLER_GHE_BASE_URL`](Self::UV_INSTALLER_GHE_BASE_URL) override this
     /// variable for `uv self update`.
     #[attr_added_in("0.11.14")]
-    pub const UV_ASTRAL_MIRROR_URL: &'static str = "UV_ASTRAL_MIRROR_URL";
+    pub(crate) const UV_ASTRAL_MIRROR_URL: &'static str = "UV_ASTRAL_MIRROR_URL";
 
     /// Pin managed CPython versions to a specific build version.
     ///

@@ -212,14 +212,18 @@ authenticate = "always"
 When `authenticate` is set to `always`, uv will eagerly search for credentials and error if
 credentials cannot be found.
 
-### Ignoring error codes when searching across indexes
+### Ignoring error codes
 
 When using the [first-index strategy](#searching-across-multiple-indexes), uv will stop searching
 across indexes if an HTTP 401 Unauthorized or HTTP 403 Forbidden status code is encountered. The one
 exception is that uv will ignore 403s when searching the `pytorch` index (since this index returns a
 403 when a package is not present).
 
-To configure which error codes are ignored for an index, use the `ignored-error-codes` setting. For
+By default, uv will also stop resolution if an HTTP error is encountered when fetching distribution
+metadata or an archive from an index. Ignoring that error marks the affected package version as
+unavailable, allowing the resolver to try another version.
+
+To configure which error codes are ignored for an index, use the `ignore-error-codes` setting. For
 example, to ignore 403s (but not 401s) for a private index:
 
 ```toml

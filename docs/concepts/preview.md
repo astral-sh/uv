@@ -73,6 +73,8 @@ The following preview features are available:
 - `centralized-project-envs`: Stores
   [project virtual environments](./projects/layout.md#centralized-project-environments) in the uv
   cache.
+- `no-distutils-patch`: Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils
+  configuration monkeypatch in virtual environments for Python 3.10 and later.
 - `json-output`: Allows `--output-format json` for various uv commands.
 - `package-conflicts`: Allows defining workspace conflicts at the package level.
 - `pylock`: Allows installing from `pylock.toml` files.

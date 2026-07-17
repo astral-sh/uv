@@ -17,7 +17,7 @@ use tracing::{debug, trace};
 use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
-use uv_fs::Simplified;
+use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_preview::PreviewFeature;
@@ -138,27 +138,7 @@ fn write_wheel(
         .cloned()
         .unwrap_or_else(BuildBackendSettings::default);
 
-    // Wheel excludes
-    let mut excludes: Vec<String> = Vec::new();
-    if settings.default_excludes {
-        excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
-    }
-    for exclude in settings.wheel_exclude {
-        // Avoid duplicate entries.
-        if !excludes.contains(&exclude) {
-            excludes.push(exclude);
-        }
-    }
-    // The wheel must not include any files excluded by the source distribution (at least until we
-    // have files generated in the source dist -> wheel build step).
-    for exclude in &settings.source_exclude {
-        // Avoid duplicate entries.
-        if !excludes.contains(exclude) {
-            excludes.push(exclude.clone());
-        }
-    }
-    debug!("Wheel excludes: {:?}", excludes);
-    let exclude_matcher = build_exclude_matcher(excludes)?;
+    let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
 
     debug!("Adding content files to wheel");
     let (src_root, module_relative) = find_roots(
@@ -239,6 +219,7 @@ fn write_wheel(
             pyproject_toml.license_files_wheel(),
             &mut wheel_writer,
             "project.license-files",
+            None,
         )?;
     }
 
@@ -246,6 +227,7 @@ fn write_wheel(
         source_tree,
         pyproject_toml,
         settings.data.iter(),
+        &exclude_matcher,
         &mut wheel_writer,
     )?;
 
@@ -278,6 +260,7 @@ pub fn build_editable(
         .settings()
         .cloned()
         .unwrap_or_else(BuildBackendSettings::default);
+    let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
 
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
@@ -322,6 +305,7 @@ pub fn build_editable(
         source_tree,
         &pyproject_toml,
         settings.data.iter(),
+        &exclude_matcher,
         &mut wheel_writer,
     )?;
 
@@ -347,9 +331,13 @@ fn write_data_files<'data>(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     data: impl Iterator<Item = (&'static str, &'data Path)>,
+    exclude_matcher: &GlobSet,
     wheel_writer: &mut impl DirectoryWriter,
 ) -> Result<(), Error> {
+    let canonical_source_tree = source_tree.simple_canonicalize()?;
+
     for (name, directory) in data {
+        let directory = normalize_path(directory);
         debug!(
             "Adding {name} data files from: {}",
             directory.user_display()
@@ -364,6 +352,16 @@ fn write_data_files<'data>(
                 path: directory.to_path_buf(),
             });
         }
+        let data_root = source_tree.join(directory.as_ref());
+        if !data_root
+            .simple_canonicalize()?
+            .starts_with(&canonical_source_tree)
+        {
+            return Err(Error::InvalidDataRoot {
+                name: name.to_string(),
+                path: directory.to_path_buf(),
+            });
+        }
         let data_dir = format!(
             "{}-{}.data/{}/",
             pyproject_toml.name().as_dist_info_name(),
@@ -372,15 +370,35 @@ fn write_data_files<'data>(
         );
 
         wheel_subdir_from_globs(
-            &source_tree.join(directory),
+            &data_root,
             &data_dir,
             &["**".to_string()],
             wheel_writer,
             &format!("tool.uv.build-backend.data.{name}"),
+            Some((exclude_matcher, source_tree)),
         )?;
     }
 
     Ok(())
+}
+
+/// Build a globset matcher for all files that must be excluded from a wheel.
+fn build_wheel_exclude_matcher(settings: &BuildBackendSettings) -> Result<GlobSet, Error> {
+    let mut excludes: Vec<String> = Vec::new();
+    if settings.default_excludes {
+        excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
+    }
+    for exclude in settings
+        .wheel_exclude
+        .iter()
+        .chain(&settings.source_exclude)
+    {
+        if !excludes.contains(exclude) {
+            excludes.push(exclude.clone());
+        }
+    }
+    debug!("Wheel excludes: {:?}", excludes);
+    build_exclude_matcher(excludes)
 }
 
 /// Write the dist-info directory to the output directory without building the wheel.
@@ -535,6 +553,7 @@ fn wheel_subdir_from_globs(
     wheel_writer: &mut impl DirectoryWriter,
     // For error messages
     globs_field: &str,
+    exclude_matcher: Option<(&GlobSet, &Path)>,
 ) -> Result<(), Error> {
     let license_files_globs: Vec<_> = globs
         .into_iter()
@@ -554,13 +573,22 @@ fn wheel_subdir_from_globs(
             source: err,
         })?;
     let matcher =
-        GlobDirFilter::from_globs(&license_files_globs).map_err(|err| Error::GlobSetTooLarge {
+        GlobDirFilter::from_globs(license_files_globs).map_err(|err| Error::GlobSetTooLarge {
             field: globs_field.to_string(),
             source: err,
         })?;
 
     let mut written_directories = FxHashSet::<PathBuf>::default();
     let target = Path::new(target);
+    let is_excluded = |path: &Path| {
+        exclude_matcher.is_some_and(|(exclude_matcher, source_tree)| {
+            if let Ok(relative) = path.strip_prefix(source_tree) {
+                exclude_matcher.is_match(relative)
+            } else {
+                true
+            }
+        })
+    };
 
     for entry in WalkDir::new(src)
         .sort_by_file_name()
@@ -573,7 +601,7 @@ fn wheel_subdir_from_globs(
                 .expect("walkdir starts with root");
 
             // Fast path: Don't descend into a directory that can't be included.
-            matcher.match_directory(relative)
+            matcher.match_directory(relative) && !is_excluded(entry.path())
         })
     {
         let entry = entry.map_err(|err| Error::WalkDir {
@@ -594,7 +622,7 @@ fn wheel_subdir_from_globs(
             .strip_prefix(src)
             .expect("walkdir starts with root");
 
-        if !matcher.match_path(relative) {
+        if !matcher.match_path(relative) || is_excluded(entry.path()) {
             trace!("Excluding {}: {}", globs_field, relative.user_display());
             continue;
         }

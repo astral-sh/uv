@@ -98,10 +98,10 @@ pub(crate) async fn pin(
         if let Some(file) = version_file? {
             let mut pins = file.versions().peekable();
             let download_list = if virtual_project.is_some() && pins.peek().is_some() {
-                let download_list_client = client_builder.build()?;
                 Some(
                     ManagedPythonDownloadList::new(
-                        &download_list_client,
+                        &client_builder,
+                        cache,
                         install_mirrors.python_downloads_json_url.as_deref(),
                     )
                     .await?,

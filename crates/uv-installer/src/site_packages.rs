@@ -1,13 +1,14 @@
 use std::borrow::Cow;
-use std::collections::BTreeSet;
 use std::iter::Flatten;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::{ExcludeDependency, Excludes, Override, Overrides};
+use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
     InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
@@ -50,52 +51,53 @@ impl SitePackages {
         Self::from_interpreter(environment.interpreter())
     }
 
+    /// Build an index of the requested installed packages from the given Python environment.
+    pub fn from_environment_for_packages<'a>(
+        environment: &PythonEnvironment,
+        package_names: impl IntoIterator<Item = &'a PackageName>,
+    ) -> Result<Self> {
+        let package_names = package_names.into_iter().collect::<FxHashSet<_>>();
+        Self::from_interpreter_with_filter(environment.interpreter(), Some(&package_names))
+    }
+
     /// Build an index of installed packages from the given Python executable.
     pub fn from_interpreter(interpreter: &Interpreter) -> Result<Self> {
+        Self::from_interpreter_with_filter(interpreter, None)
+    }
+
+    /// Build an index of installed packages from the given Python executable.
+    fn from_interpreter_with_filter(
+        interpreter: &Interpreter,
+        package_names: Option<&FxHashSet<&PackageName>>,
+    ) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
-        let mut by_name = FxHashMap::default();
-        let mut by_url = FxHashMap::default();
+        let mut by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
+        let mut by_url: FxHashMap<DisplaySafeUrl, Vec<usize>> = FxHashMap::default();
 
         for site_packages in interpreter.site_packages() {
             // Read the site-packages directory.
             let site_packages = match fs::read_dir(site_packages.as_ref()) {
-                Ok(read_dir) => {
-                    // Collect sorted directory paths; `read_dir` is not stable across platforms
-                    let dist_likes: BTreeSet<_> = read_dir
-                        .filter_map(|read_dir| match read_dir {
-                            Ok(entry) => match entry.file_type() {
-                                Ok(file_type) => (file_type.is_dir()
-                                    || entry
-                                        .path()
-                                        .extension()
-                                        .is_some_and(|ext| ext == "egg-link" || ext == "egg-info"))
-                                .then_some(Ok(entry.path())),
-                                Err(err) => Some(Err(err)),
-                            },
-                            Err(err) => Some(Err(err)),
-                        })
-                        .collect::<Result<_, std::io::Error>>()
-                        .with_context(|| {
-                            format!(
-                                "Failed to read site-packages directory contents: {}",
-                                site_packages.user_display()
-                            )
-                        })?;
-                    dist_likes
-                }
+                Ok(read_dir) => sorted_dist_like_paths(read_dir).with_context(|| {
+                    format!(
+                        "Failed to read site-packages directory contents: {}",
+                        site_packages.user_display()
+                    )
+                })?,
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    return Ok(Self {
-                        interpreter: interpreter.clone(),
-                        distributions,
-                        by_name,
-                        by_url,
-                    });
+                    continue;
                 }
                 Err(err) => return Err(err).context("Failed to read site-packages directory"),
             };
 
             // Index all installed packages by name.
             for path in site_packages {
+                if let Some(package_names) = package_names
+                    && let Some(package_name) = installed_dist_name(&path)
+                    && !package_names.contains(&package_name)
+                {
+                    continue;
+                }
+
                 let dist_info = match InstalledDist::try_from_path(&path) {
                     Ok(Some(dist_info)) => dist_info,
                     Ok(None) => continue,
@@ -117,6 +119,12 @@ impl SitePackages {
                         ));
                     }
                 };
+
+                if let Some(package_names) = package_names
+                    && !package_names.contains(dist_info.name())
+                {
+                    continue;
+                }
 
                 let idx = distributions.len();
 
@@ -615,6 +623,29 @@ pub enum SatisfiesResult {
     Unsatisfied(String),
 }
 
+/// Infer the package name from an installed distribution path without reading its metadata.
+///
+/// Returns `None` when the name cannot safely be derived from the filename alone.
+fn installed_dist_name(path: &Path) -> Option<PackageName> {
+    let extension = path.extension()?.to_str()?;
+    let file_stem = path.file_stem()?.to_str()?;
+
+    match extension {
+        "dist-info" => {
+            let (name, version) = file_stem.split_once('-')?;
+            Version::from_str(version).ok()?;
+            PackageName::from_str(name).ok()
+        }
+        "egg-info" => {
+            let filename = EggInfoFilename::parse(file_stem).ok()?;
+            filename.version?;
+            Some(filename.name)
+        }
+        // Legacy editables require reading metadata to determine their package name.
+        _ => None,
+    }
+}
+
 impl IntoIterator for SitePackages {
     type Item = InstalledDist;
     type IntoIter = Flatten<std::vec::IntoIter<Option<InstalledDist>>>;
@@ -622,6 +653,25 @@ impl IntoIterator for SitePackages {
     fn into_iter(self) -> Self::IntoIter {
         self.distributions.into_iter().flatten()
     }
+}
+
+fn sorted_dist_like_paths(read_dir: fs::ReadDir) -> Result<Vec<PathBuf>, std::io::Error> {
+    let mut paths = read_dir
+        .filter_map(|read_dir| match read_dir {
+            Ok(entry) => match entry.file_type() {
+                Ok(file_type) => (file_type.is_dir()
+                    || entry
+                        .path()
+                        .extension()
+                        .is_some_and(|ext| ext == "egg-link" || ext == "egg-info"))
+                .then_some(Ok(entry.path())),
+                Err(err) => Some(Err(err)),
+            },
+            Err(err) => Some(Err(err)),
+        })
+        .collect::<Result<Vec<_>, std::io::Error>>()?;
+    paths.sort_unstable();
+    Ok(paths)
 }
 
 #[derive(Debug)]
@@ -744,5 +794,132 @@ impl InstalledPackagesProvider for SitePackages {
 
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
         self.get_packages(name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    use anyhow::Result;
+    #[cfg(unix)]
+    use uv_cache::Cache;
+    #[cfg(unix)]
+    use uv_distribution_types::Name;
+    #[cfg(unix)]
+    use uv_python::Interpreter;
+
+    #[cfg(unix)]
+    use super::SitePackages;
+    use super::sorted_dist_like_paths;
+
+    #[test]
+    fn sorted_dist_like_paths_filters_and_sorts() -> Result<()> {
+        let site_packages = tempfile::tempdir()?;
+        fs_err::create_dir(site_packages.path().join("z_package-1.0.0.dist-info"))?;
+        fs_err::create_dir(site_packages.path().join("a_package"))?;
+        fs_err::write(site_packages.path().join("editable.egg-link"), "")?;
+        fs_err::write(site_packages.path().join("module.py"), "")?;
+        fs_err::write(site_packages.path().join("metadata.egg-info"), "")?;
+
+        let paths = sorted_dist_like_paths(fs_err::read_dir(site_packages.path())?)?;
+        let names = paths
+            .iter()
+            .filter_map(|path| path.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            vec![
+                "a_package".to_string(),
+                "editable.egg-link".to_string(),
+                "metadata.egg-info".to_string(),
+                "z_package-1.0.0.dist-info".to_string(),
+            ]
+        );
+
+        Ok(())
+    }
+
+    /// A missing `purelib` directory must not prevent indexing an existing, distinct `platlib`.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn site_packages_scans_platlib_when_purelib_is_missing() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let purelib = temp_dir.path().join("purelib");
+        let platlib = temp_dir.path().join("platlib");
+        let dist_info = platlib.join("demo-1.0.dist-info");
+        fs_err::create_dir_all(&dist_info)?;
+        fs_err::write(
+            dist_info.join("METADATA"),
+            "Metadata-Version: 2.1\nName: demo\nVersion: 1.0\n",
+        )?;
+
+        let executable = temp_dir.path().join("python");
+        let json = r#"{
+            "result": "success",
+            "platform": {"os": {"name": "manylinux", "major": 2, "minor": 38}, "arch": "x86_64"},
+            "manylinux_compatible": true,
+            "standalone": false,
+            "markers": {
+                "implementation_name": "cpython",
+                "implementation_version": "3.12.0",
+                "os_name": "posix",
+                "platform_machine": "x86_64",
+                "platform_python_implementation": "CPython",
+                "platform_release": "6.5.0",
+                "platform_system": "Linux",
+                "platform_version": "test",
+                "python_full_version": "3.12.0",
+                "python_version": "3.12",
+                "sys_platform": "linux"
+            },
+            "sys_base_exec_prefix": "/python",
+            "sys_base_prefix": "/python",
+            "sys_prefix": "/python",
+            "sys_executable": "{EXECUTABLE}",
+            "sys_path": [],
+            "site_packages": [],
+            "stdlib": "/python/lib/python3.12",
+            "extension_suffixes": [".cpython-312-x86_64-linux-gnu.so", ".abi3.so", ".so"],
+            "scheme": {
+                "data": "/python",
+                "include": "/python/include",
+                "platlib": "{PLATLIB}",
+                "purelib": "{PURELIB}",
+                "scripts": "/python/bin"
+            },
+            "virtualenv": {
+                "data": "",
+                "include": "include",
+                "platlib": "lib64/python3.12/site-packages",
+                "purelib": "lib/python3.12/site-packages",
+                "scripts": "bin"
+            },
+            "pointer_size": "64",
+            "gil_disabled": false,
+            "debug_enabled": false
+        }"#
+        .replace("{EXECUTABLE}", &executable.to_string_lossy())
+        .replace("{PLATLIB}", &platlib.to_string_lossy())
+        .replace("{PURELIB}", &purelib.to_string_lossy());
+        fs_err::write(&executable, format!("#!/bin/sh\necho '{json}'\n"))?;
+        fs_err::set_permissions(&executable, PermissionsExt::from_mode(0o770))?;
+
+        let cache = Cache::temp()?.init().await?;
+        let interpreter = Interpreter::query(&executable, &cache)?;
+        let site_packages = SitePackages::from_interpreter(&interpreter)?;
+
+        assert_eq!(
+            site_packages
+                .iter()
+                .map(|distribution| distribution.name().as_ref())
+                .collect::<Vec<_>>(),
+            ["demo"]
+        );
+
+        Ok(())
     }
 }

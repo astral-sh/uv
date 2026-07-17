@@ -311,7 +311,9 @@ fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     "
     );
 
@@ -1308,10 +1310,10 @@ fn check_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to parse `uv.lock`
       Caused by: TOML parse error at line 1, column 8
-      |
-    1 | invalid
-      |        ^
-    key with no value, expected `=`
+          |
+        1 | invalid
+          |        ^
+        key with no value, expected `=`
     "
     );
 
@@ -1355,10 +1357,10 @@ fn check_script_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to parse `uv.lock`
       Caused by: TOML parse error at line 1, column 8
-      |
-    1 | invalid
-      |        ^
-    key with no value, expected `=`
+          |
+        1 | invalid
+          |        ^
+        key with no value, expected `=`
     "
     );
 

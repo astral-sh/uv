@@ -17,7 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
-use uv_errors::{ErrorOptions, write_error_chain_with_options};
+use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeature};
@@ -30,7 +30,7 @@ use uv_python::managed::{
     compare_build_versions, create_link_to_executable, python_executable_dir,
 };
 use uv_python::{
-    ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
+    ConfigDiscovery, ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
     PythonInstallationMinorVersionKey, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
@@ -194,7 +194,7 @@ pub(crate) async fn install(
     client_builder: BaseClientBuilder<'_>,
     default: bool,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     compile_bytecode: bool,
     concurrency: &Concurrency,
     cache: &Cache,
@@ -239,9 +239,10 @@ pub(crate) async fn install(
         pypy_install_mirror,
         python_downloads_json_url,
         client_builder,
+        cache,
         default,
         python_downloads,
-        no_config,
+        config_discovery,
         compile_bytecode.then_some(sender),
         concurrency,
         preview,
@@ -284,7 +285,6 @@ pub(crate) async fn install(
     installer_result
 }
 
-#[expect(clippy::fn_params_excessive_bools)]
 async fn perform_install(
     project_dir: &Path,
     install_dir: Option<PathBuf>,
@@ -298,9 +298,10 @@ async fn perform_install(
     pypy_install_mirror: Option<String>,
     python_downloads_json_url: Option<String>,
     client_builder: BaseClientBuilder<'_>,
+    cache: &Cache,
     default: bool,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     bytecode_compilation_sender: Option<mpsc::UnboundedSender<ManagedPythonInstallation>>,
     concurrency: &Concurrency,
     preview: Preview,
@@ -337,11 +338,15 @@ async fn perform_install(
     let mut is_default_install = false;
     let mut is_unspecified_upgrade = false;
     let retry_policy = client_builder.retry_policy();
+    let download_list = ManagedPythonDownloadList::new(
+        &client_builder,
+        cache,
+        python_downloads_json_url.as_deref(),
+    )
+    .await?;
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
     let client = client_builder.retries(0).build()?;
-    let download_list =
-        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
     // have generalized request source tracking instead
     let mut is_from_python_version_file = false;
@@ -368,7 +373,7 @@ async fn perform_install(
             PythonVersionFile::discover(
                 project_dir,
                 &VersionFileDiscoveryOptions::default()
-                    .with_no_config(no_config)
+                    .with_config_discovery(config_discovery)
                     .with_preference(VersionFilePreference::Versions),
             )
             .await?
@@ -917,6 +922,7 @@ async fn perform_install(
                 InstallErrorKind::DownloadUnpack => {
                     write_error_chain_with_options(
                         err.context(format!("Failed to install {key}")).as_ref(),
+                        Hints::none(),
                         ErrorOptions::default().with_stream(printer.stderr()),
                     )?;
                 }
@@ -930,6 +936,7 @@ async fn perform_install(
                     write_error_chain_with_options(
                         err.context(format!("Failed to install executable for {key}"))
                             .as_ref(),
+                        Hints::none(),
                         ErrorOptions::default()
                             .with_level(level)
                             .with_color(color)
@@ -947,6 +954,7 @@ async fn perform_install(
                     write_error_chain_with_options(
                         err.context(format!("Failed to create registry entry for {key}"))
                             .as_ref(),
+                        Hints::none(),
                         ErrorOptions::default()
                             .with_level(level)
                             .with_color(color)

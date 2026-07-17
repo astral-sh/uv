@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::path::Path;
 
 use anstream::print;
@@ -5,17 +6,19 @@ use anyhow::{Error, Result};
 use futures::StreamExt;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
+use uv_cli::TreeFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, DependencyGroups, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
 use uv_normalize::DefaultGroups;
 use uv_normalize::PackageName;
-use uv_preview::Preview;
-use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
-use uv_resolver::{PackageMap, TreeDisplay};
+use uv_preview::{Preview, PreviewFeature};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
+use uv_resolver::{PackageMap, TreeDisplay, TreeJsonTarget};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+use uv_warnings::warn_user;
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -41,6 +44,7 @@ pub(crate) async fn tree(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     universal: bool,
+    format: TreeFormat,
     depth: u8,
     prune: Vec<PackageName>,
     package: Vec<PackageName>,
@@ -58,25 +62,32 @@ pub(crate) async fn tree(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if matches!(format, TreeFormat::Json) && !preview.is_enabled(PreviewFeature::JsonOutput) {
+        warn_user!(
+            "The `--format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
+        );
+    }
+
     // Find the project requirements.
-    let workspace_cache = WorkspaceCache::default();
-    let workspace;
+    let virtual_project;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace = Workspace::discover(
+        virtual_project = VirtualProject::discover(
             project_dir,
             &DiscoveryOptions::default(),
             cache,
-            &workspace_cache,
+            workspace_cache,
         )
         .await?;
-        LockTarget::Workspace(&workspace)
+        LockTarget::Workspace(virtual_project.workspace())
     };
 
     // Determine the groups to include.
@@ -99,7 +110,7 @@ pub(crate) async fn tree(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
+                config_discovery,
                 Some(false),
                 cache,
                 printer,
@@ -112,7 +123,7 @@ pub(crate) async fn tree(
                     Some(workspace),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
@@ -159,7 +170,7 @@ pub(crate) async fn tree(
             Box::new(DefaultResolveLogger),
             &concurrency,
             cache,
-            &workspace_cache,
+            workspace_cache,
             printer,
             preview,
         )
@@ -169,11 +180,9 @@ pub(crate) async fn tree(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -249,7 +258,7 @@ pub(crate) async fn tree(
                 client: &client,
                 capabilities: &capabilities,
                 prerelease: lock.prerelease_mode(),
-                exclude_newer: &exclude_newer,
+                exclude_newer,
                 index_locations,
                 requires_python: Some(lock.requires_python()),
                 tags: None,
@@ -304,7 +313,19 @@ pub(crate) async fn tree(
         show_sizes,
     );
 
-    print!("{tree}");
+    match format {
+        TreeFormat::Text => print!("{tree}"),
+        TreeFormat::Json => writeln!(
+            printer.stdout_important(),
+            "{}",
+            tree.to_json(match target {
+                LockTarget::Workspace(workspace) => {
+                    TreeJsonTarget::Workspace(workspace.install_path())
+                }
+                LockTarget::Script(script) => TreeJsonTarget::Script(&script.path),
+            })?
+        )?,
+    }
 
     Ok(ExitStatus::Success)
 }

@@ -26,13 +26,14 @@ use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
     PackageConfigSettings, Requirement, SourceDist,
 };
+use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::RequirementsSource;
@@ -51,7 +52,7 @@ use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
 #[derive(Debug, Error)]
-enum Error {
+pub(crate) enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
@@ -99,16 +100,37 @@ enum Error {
     VersionMismatch(Version, Version),
 }
 
-/// Collect hints from a build [`Error`] by inspecting its inner types.
-fn collect_build_hints(err: &Error) -> uv_errors::Hints<'_> {
-    use uv_errors::Hint;
-    match err {
-        Error::BuildBackend(err) => err.hints(),
-        Error::BuildFrontend(err) => err.hints(),
-        Error::BuildDispatch(err) => err.hints(),
-        Error::Project(err) => err.hints(),
-        Error::Operations(err) => err.hints(),
-        _ => uv_errors::Hints::none(),
+impl Hint for Error {
+    fn hints(&self) -> Hints<'_> {
+        match self {
+            Self::BuildBackend(err) => err.hints(),
+            Self::BuildFrontend(err) => err.hints(),
+            Self::BuildDispatch(err) => err.hints(),
+            Self::Project(err) => err.hints(),
+            Self::Operations(err) => err.hints(),
+            Self::Extract(uv_extract::Error::Tar(err)) => {
+                // TODO(konsti): astral-tokio-tar should use a proper error instead of
+                // encoding everything in strings
+                // NOTE(ww): We check for both messages below because they indicate
+                // different external extraction scenarios; the first is for any
+                // absolute path outside of the target directory, and the second
+                // is specifically for symlinks that point outside.
+                if err.to_string().contains("/bin/python")
+                    && std::error::Error::source(err).is_some_and(|err| {
+                        let err = err.to_string();
+                        err.ends_with("outside of the target directory")
+                            || err.ends_with("external symlinks are not allowed")
+                    })
+                {
+                    Hints::from(
+                        "The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.",
+                    )
+                } else {
+                    Hints::none()
+                }
+            }
+            _ => Hints::none(),
+        }
     }
 }
 
@@ -134,7 +156,7 @@ pub(crate) async fn build_frontend(
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
@@ -163,7 +185,7 @@ pub(crate) async fn build_frontend(
         install_mirrors,
         settings,
         client_builder,
-        no_config,
+        config_discovery,
         python_preference,
         python_downloads,
         &concurrency,
@@ -212,7 +234,7 @@ async fn build_impl(
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: &Concurrency,
@@ -393,7 +415,7 @@ async fn build_impl(
             output_dir,
             python_request,
             install_mirrors.clone(),
-            no_config,
+            config_discovery,
             workspace.as_deref(),
             python_preference,
             python_downloads,
@@ -443,53 +465,13 @@ async fn build_impl(
                 }
             }
             Err(err) => {
-                #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-                #[error("Failed to build `{source}`", source = source.cyan())]
-                #[diagnostic()]
-                struct Diagnostic {
-                    source: String,
-                    #[source]
-                    cause: anyhow::Error,
-                    #[help]
-                    help: Option<String>,
-                }
-
-                let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
-                    // TODO(konsti): astral-tokio-tar should use a proper error instead of
-                    // encoding everything in strings
-                    // NOTE(ww): We check for both messages below because the both indicate
-                    // different external extraction scenarios; the first is for any
-                    // absolute path outside of the target directory, and the second
-                    // is specifically for symlinks that point outside.
-                    if err.to_string().contains("/bin/python")
-                        && std::error::Error::source(err).is_some_and(|err| {
-                            let err = err.to_string();
-                            err.ends_with("outside of the target directory")
-                                || err.ends_with("external symlinks are not allowed")
-                        })
-                    {
-                        Some(
-                            "This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions."
-                                .to_string(),
-                        )
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-
-                let hints = collect_build_hints(&err).into_owned();
-                let report = miette::Report::new(Diagnostic {
-                    source: source.to_string(),
-                    cause: err.into(),
-                    help,
-                });
-                anstream::eprint!("{report:?}");
-                anstream::eprint!("{hints}");
-                if !hints.is_empty() {
-                    anstream::eprintln!();
-                }
+                let err = anyhow::Error::from(err).context(format!("Failed to build `{source}`"));
+                let hints = crate::commands::diagnostics::hints_for_error(&err);
+                write_error_chain_with_options(
+                    err.as_ref(),
+                    hints,
+                    ErrorOptions::default().with_stream(printer.stderr_important()),
+                )?;
 
                 success = false;
             }
@@ -509,7 +491,7 @@ async fn build_package(
     output_dir: Option<&Path>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     workspace: Result<&Workspace, &WorkspaceError>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -568,7 +550,7 @@ async fn build_package(
     if interpreter_request.is_none() {
         interpreter_request = PythonVersionFile::discover(
             source.directory(),
-            &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+            &VersionFileDiscoveryOptions::default().with_config_discovery(config_discovery),
         )
         .await?
         .and_then(PythonVersionFile::into_version);
@@ -611,7 +593,7 @@ async fn build_package(
             build_constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&interpreter.resolver_marker_environment()),
+            Some(&interpreter.to_resolver_marker_environment()),
             hash_checking,
         )?
     } else {

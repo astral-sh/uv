@@ -22,7 +22,7 @@ use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRev
 
 /// An entry in the [`RegistryWheelIndex`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-struct IndexEntry<'index> {
+pub struct IndexEntry<'index> {
     /// The cached distribution.
     dist: CachedRegistryDist,
     /// Whether the wheel was built from source (true), or downloaded from the registry directly (false).
@@ -32,6 +32,21 @@ struct IndexEntry<'index> {
 }
 
 impl IndexEntry<'_> {
+    /// The index from which the wheel was downloaded.
+    pub fn index(&self) -> &Index {
+        self.index
+    }
+
+    /// Whether the wheel was built from source.
+    pub fn is_built(&self) -> bool {
+        self.built
+    }
+
+    /// The cached distribution.
+    pub fn dist(&self) -> &CachedRegistryDist {
+        &self.dist
+    }
+
     fn matches_wheel(
         &self,
         index: &IndexUrl,
@@ -146,7 +161,7 @@ impl<'a> RegistryWheelIndex<'a> {
     /// Return an iterator over available wheels for a given package.
     ///
     /// If the package is not yet indexed, this will index the package by reading from the cache.
-    fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry<'_>> {
+    pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry<'_>> {
         self.get_impl(name).iter().rev()
     }
 
@@ -302,9 +317,9 @@ impl<'a> RegistryWheelIndex<'a> {
                         config_settings_package,
                     );
                     let build_info = BuildInfo::from_settings(
-                        &config_settings,
-                        extra_build_deps,
-                        extra_build_vars,
+                        config_settings.into_owned(),
+                        extra_build_deps.to_vec(),
+                        extra_build_vars.cloned(),
                     );
                     let cache_shard = build_info
                         .cache_shard()

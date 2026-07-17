@@ -19,7 +19,6 @@ use uv_configuration::{Concurrency, Constraints, HashCheckingMode, TargetTriple}
 use uv_distribution_types::{
     BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };
-use uv_fs::PythonExt;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
@@ -77,10 +76,11 @@ impl EphemeralEnvironment {
         &self,
         parent_environment_sys_prefix: &Path,
     ) -> Result<(), ProjectError> {
-        self.0.set_pyvenv_cfg(
-            "extends-environment",
-            &parent_environment_sys_prefix.escape_for_python(),
-        )?;
+        let parent_environment_sys_prefix = parent_environment_sys_prefix
+            .to_str()
+            .ok_or(ProjectError::InvalidParentEnvironmentPath)?;
+        self.0
+            .set_pyvenv_cfg("extends-environment", parent_environment_sys_prefix)?;
         Ok(())
     }
 
@@ -312,7 +312,7 @@ impl CachedEnvironment {
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             true,
-            false,
+            uv_virtualenv::Seed::Disabled,
             false,
         )?;
 

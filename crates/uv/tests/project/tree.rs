@@ -1,12 +1,62 @@
-use anyhow::Result;
+use std::process::Command;
+
+use anyhow::{Context, Result, bail};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
-use insta::assert_snapshot;
+use insta::{assert_json_snapshot, assert_snapshot};
 use url::Url;
 
 use uv_static::EnvVars;
+#[cfg(feature = "test-universal")]
+use uv_test::TestContext;
 use uv_test::uv_snapshot;
+
+/// The workspace discovered while resolving settings is reused by `uv tree`.
+#[test]
+fn tree_reuses_settings_workspace_discovery() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.workspace]
+            members = ["member"]
+        "#})?;
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member
+        .child("pyproject.toml")
+        .write_str("[project]\nname = \"member\"\nversion = \"0.1.0\"\n")?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--frozen")
+        .arg("--universal")
+        .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    root v0.1.0
+    member v0.1.0
+
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/member`
+    DEBUG Found project root: `[TEMP_DIR]/`
+    ");
+
+    Ok(())
+}
 
 #[test]
 fn tree_centralized_environment_no_cache() -> Result<()> {
@@ -42,6 +92,7 @@ fn tree_centralized_environment_no_cache() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn nested_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -79,6 +130,1280 @@ fn nested_dependencies() -> Result<()> {
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn json_output() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    setup_json_output(&context)?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "project:dev==0.1.0@virtual+[TEMP_DIR]/"
+        },
+        {
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "project",
+          "path": "[TEMP_DIR]/",
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "package-a==1.0.0@directory+[TEMP_DIR]/packages/package-a": {
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/packages/package-a"
+          },
+          "kind": "package",
+          "dependencies": [],
+          "optional_dependencies": [
+            {
+              "name": "feature",
+              "id": "package-a[feature]==1.0.0@directory+[TEMP_DIR]/packages/package-a"
+            }
+          ]
+        },
+        "package-a[feature]==1.0.0@directory+[TEMP_DIR]/packages/package-a": {
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/packages/package-a"
+          },
+          "kind": {
+            "extra": "feature"
+          },
+          "dependencies": [
+            {
+              "id": "package-a==1.0.0@directory+[TEMP_DIR]/packages/package-a"
+            },
+            {
+              "id": "package-b==1.0.0@directory+[TEMP_DIR]/packages/package-b"
+            }
+          ]
+        },
+        "package-b==1.0.0@directory+[TEMP_DIR]/packages/package-b": {
+          "name": "package-b",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/packages/package-b"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "package-c==1.0.0@directory+[TEMP_DIR]/packages/package-c": {
+          "name": "package-c",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/packages/package-c"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "project:dev==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": {
+            "group": "dev"
+          },
+          "dependencies": [
+            {
+              "id": "package-c==1.0.0@directory+[TEMP_DIR]/packages/package-c"
+            }
+          ]
+        },
+        "project==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "package-a[feature]==1.0.0@directory+[TEMP_DIR]/packages/package-a"
+            }
+          ],
+          "dependency_groups": [
+            {
+              "name": "dev",
+              "id": "project:dev==0.1.0@virtual+[TEMP_DIR]/"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "#);
+
+    let assert = context
+        .tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal")
+        .arg("--quiet")
+        .output()?
+        .assert()
+        .success();
+    assert!(assert.get_output().stderr.is_empty());
+    let report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let package_names = report["resolution"]
+        .as_object()
+        .context("dependency graph resolution should be an object")?
+        .values()
+        .filter(|node| node["kind"] == "package")
+        .map(|node| {
+            node["name"]
+                .as_str()
+                .context("dependency graph node should have a name")
+        })
+        .collect::<Result<Vec<_>>>()?;
+    assert_json_snapshot!(package_names, @r#"
+    [
+      "package-a",
+      "package-b",
+      "package-c",
+      "project"
+    ]
+    "#);
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn json_output_depth() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    setup_json_output(&context)?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal")
+        .arg("--depth")
+        .arg("1"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "project:dev==0.1.0@virtual+[TEMP_DIR]/"
+        },
+        {
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "project",
+          "path": "[TEMP_DIR]/",
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "package-a==1.0.0@directory+[TEMP_DIR]/packages/package-a": {
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/packages/package-a"
+          },
+          "kind": "package",
+          "dependencies": [],
+          "optional_dependencies": [
+            {
+              "name": "feature",
+              "id": "package-a[feature]==1.0.0@directory+[TEMP_DIR]/packages/package-a"
+            }
+          ]
+        },
+        "package-a[feature]==1.0.0@directory+[TEMP_DIR]/packages/package-a": {
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/packages/package-a"
+          },
+          "kind": {
+            "extra": "feature"
+          },
+          "dependencies": [
+            {
+              "id": "package-a==1.0.0@directory+[TEMP_DIR]/packages/package-a"
+            }
+          ]
+        },
+        "package-c==1.0.0@directory+[TEMP_DIR]/packages/package-c": {
+          "name": "package-c",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/packages/package-c"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "project:dev==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": {
+            "group": "dev"
+          },
+          "dependencies": [
+            {
+              "id": "package-c==1.0.0@directory+[TEMP_DIR]/packages/package-c"
+            }
+          ]
+        },
+        "project==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "package-a[feature]==1.0.0@directory+[TEMP_DIR]/packages/package-a"
+            }
+          ],
+          "dependency_groups": [
+            {
+              "name": "dev",
+              "id": "project:dev==0.1.0@virtual+[TEMP_DIR]/"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn json_output_inverted_depth() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    setup_json_output(&context)?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal")
+        .arg("--invert")
+        .arg("--depth")
+        .arg("1"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "package-b==1.0.0@directory+[TEMP_DIR]/packages/package-b"
+        },
+        {
+          "id": "package-c==1.0.0@directory+[TEMP_DIR]/packages/package-c"
+        }
+      ],
+      "inverted": true,
+      "members": [
+        {
+          "name": "project",
+          "path": "[TEMP_DIR]/",
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "package-a==1.0.0@directory+[TEMP_DIR]/packages/package-a": {
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/packages/package-a"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "package-a[feature]==1.0.0@directory+[TEMP_DIR]/packages/package-a"
+            }
+          ],
+          "optional_dependencies": [
+            {
+              "name": "feature",
+              "id": "package-a[feature]==1.0.0@directory+[TEMP_DIR]/packages/package-a"
+            }
+          ]
+        },
+        "package-a[feature]==1.0.0@directory+[TEMP_DIR]/packages/package-a": {
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/packages/package-a"
+          },
+          "kind": {
+            "extra": "feature"
+          },
+          "dependencies": []
+        },
+        "package-b==1.0.0@directory+[TEMP_DIR]/packages/package-b": {
+          "name": "package-b",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/packages/package-b"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "package-a[feature]==1.0.0@directory+[TEMP_DIR]/packages/package-a"
+            }
+          ]
+        },
+        "package-c==1.0.0@directory+[TEMP_DIR]/packages/package-c": {
+          "name": "package-c",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/packages/package-c"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "project:dev==0.1.0@virtual+[TEMP_DIR]/"
+            }
+          ]
+        },
+        "project:dev==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": {
+            "group": "dev"
+          },
+          "dependencies": []
+        },
+        "project==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": [],
+          "dependency_groups": [
+            {
+              "name": "dev",
+              "id": "project:dev==0.1.0@virtual+[TEMP_DIR]/"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn json_output_projected_members_respect_depth() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    setup_json_output(&context)?;
+
+    let projected_members = |depth: Option<u8>| -> Result<Vec<String>> {
+        let mut command = context.tree();
+        command
+            .arg("--preview-features")
+            .arg("json-output")
+            .arg("--format")
+            .arg("json")
+            .arg("--universal")
+            .arg("--invert")
+            .arg("--package")
+            .arg("package-b");
+        if let Some(depth) = depth {
+            command.arg("--depth").arg(depth.to_string());
+        }
+        let assert = command.output()?.assert().success();
+        let report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+        report["members"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|member| {
+                member["name"]
+                    .as_str()
+                    .context("workspace member should have a name")
+                    .map(ToOwned::to_owned)
+            })
+            .collect()
+    };
+
+    assert_json_snapshot!(projected_members(None)?, @r#"
+    [
+      "project"
+    ]
+    "#);
+    assert_json_snapshot!(projected_members(Some(1))?, @r#"[]"#);
+
+    Ok(())
+}
+
+#[test]
+fn json_output_root_contexts_respect_depth() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["extra-dependency"]
+
+        [dependency-groups]
+        dev = ["group-dependency"]
+
+        [tool.uv.sources]
+        extra-dependency = { path = "extra-dependency" }
+        group-dependency = { path = "group-dependency" }
+        "#,
+    )?;
+
+    for package in ["extra-dependency", "group-dependency"] {
+        let directory = context.temp_dir.child(package);
+        directory.create_dir_all()?;
+        directory
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "{package}"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+        "#})?;
+    }
+
+    let projected_contexts = |depth: usize| -> Result<(Vec<String>, Vec<String>)> {
+        let output = context
+            .tree()
+            .arg("--preview-features")
+            .arg("json-output")
+            .arg("--format")
+            .arg("json")
+            .arg("--universal")
+            .arg("--depth")
+            .arg(depth.to_string())
+            .output()?;
+        output.clone().assert().success();
+
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        let roots = report["roots"]
+            .as_array()
+            .context("dependency graph roots should be an array")?;
+        let resolution = report["resolution"]
+            .as_object()
+            .context("dependency graph resolution should be an object")?;
+        let context_kind = |node: &serde_json::Value| {
+            let kind = &node["kind"];
+            if let Some(extra) = kind["extra"].as_str() {
+                Some(format!("extra: {extra}"))
+            } else {
+                kind["group"]
+                    .as_str()
+                    .map(|group| format!("group: {group}"))
+            }
+        };
+        let root_kinds = roots
+            .iter()
+            .map(|root| -> Result<String> {
+                let id = root["id"]
+                    .as_str()
+                    .context("dependency graph root should have an ID")?;
+                let node = resolution
+                    .get(id)
+                    .context("dependency graph root should be in the resolution")?;
+                let kind = &node["kind"];
+                if kind == "package" {
+                    Ok("package".to_owned())
+                } else if let Some(context) = context_kind(node) {
+                    Ok(context)
+                } else {
+                    bail!("dependency graph root should have a known kind")
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let contexts = resolution
+            .values()
+            .filter_map(context_kind)
+            .collect::<Vec<_>>();
+        Ok((root_kinds, contexts))
+    };
+
+    let (root_kinds, contexts) = projected_contexts(0)?;
+    assert_json_snapshot!(root_kinds, @r#"
+    [
+      "package"
+    ]
+    "#);
+    assert_json_snapshot!(contexts, @r#"[]"#);
+
+    let (root_kinds, contexts) = projected_contexts(1)?;
+    assert_json_snapshot!(root_kinds, @r#"
+    [
+      "group: dev",
+      "package",
+      "extra: feature"
+    ]
+    "#);
+    assert_json_snapshot!(contexts, @r#"
+    [
+      "group: dev",
+      "extra: feature"
+    ]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn json_output_virtual_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [dependency-groups]
+        dev = ["package-a"]
+
+        [tool.uv.sources]
+        package-a = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["package-a"]
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("package-a");
+    package_a.create_dir_all()?;
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal")
+        // A workspace-owned group's direct requirements are at depth zero, even though the JSON
+        // graph represents the group itself as a root node.
+        .arg("--depth")
+        .arg("0")
+        .arg("--only-group")
+        .arg("dev"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "workspace+[TEMP_DIR]/:dev"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "package-a",
+          "path": "[TEMP_DIR]/package-a",
+          "id": "package-a==1.0.0@editable+[TEMP_DIR]/package-a"
+        }
+      ],
+      "resolution": {
+        "package-a==1.0.0@editable+[TEMP_DIR]/package-a": {
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/package-a"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": [],
+          "dependency_groups": [
+            {
+              "name": "dev",
+              "id": "workspace+[TEMP_DIR]/:dev"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/:dev": {
+          "kind": {
+            "group": "dev"
+          },
+          "path": "[TEMP_DIR]/",
+          "dependencies": [
+            {
+              "id": "package-a==1.0.0@editable+[TEMP_DIR]/package-a"
+            }
+          ]
+        }
+      }
+    }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal")
+        .arg("--only-group")
+        .arg("dev")
+        .arg("--invert"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "package-a==1.0.0@editable+[TEMP_DIR]/package-a"
+        }
+      ],
+      "inverted": true,
+      "members": [
+        {
+          "name": "package-a",
+          "path": "[TEMP_DIR]/package-a",
+          "id": "package-a==1.0.0@editable+[TEMP_DIR]/package-a"
+        }
+      ],
+      "resolution": {
+        "package-a==1.0.0@editable+[TEMP_DIR]/package-a": {
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/package-a"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "workspace+[TEMP_DIR]/:dev"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": [],
+          "dependency_groups": [
+            {
+              "name": "dev",
+              "id": "workspace+[TEMP_DIR]/:dev"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/:dev": {
+          "kind": {
+            "group": "dev"
+          },
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn virtual_workspace_members() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages/package-a");
+    package_a.create_dir_all()?;
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-b"]
+
+        [tool.uv.sources]
+        package-b = { workspace = true }
+        "#,
+    )?;
+
+    let package_b = context.temp_dir.child("packages/package-b");
+    package_b.create_dir_all()?;
+    package_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-b"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-b v1.0.0
+    package-a v1.0.0
+    └── package-b v1.0.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "package-a==1.0.0@virtual+[TEMP_DIR]/packages/package-a"
+        },
+        {
+          "id": "package-b==1.0.0@editable+[TEMP_DIR]/packages/package-b"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "package-a",
+          "path": "[TEMP_DIR]/packages/package-a",
+          "id": "package-a==1.0.0@virtual+[TEMP_DIR]/packages/package-a"
+        },
+        {
+          "name": "package-b",
+          "path": "[TEMP_DIR]/packages/package-b",
+          "id": "package-b==1.0.0@editable+[TEMP_DIR]/packages/package-b"
+        }
+      ],
+      "resolution": {
+        "package-a==1.0.0@virtual+[TEMP_DIR]/packages/package-a": {
+          "name": "package-a",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/packages/package-a"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "package-b==1.0.0@editable+[TEMP_DIR]/packages/package-b"
+            }
+          ]
+        },
+        "package-b==1.0.0@editable+[TEMP_DIR]/packages/package-b": {
+          "name": "package-b",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/packages/package-b"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn virtual_workspace_dependency_groups_only() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [dependency-groups]
+        dev = ["group-dependency"]
+
+        [tool.uv.sources]
+        group-dependency = { path = "group-dependency" }
+
+        [tool.uv.workspace]
+        members = []
+        "#,
+    )?;
+
+    let dependency = context.temp_dir.child("group-dependency");
+    dependency.create_dir_all()?;
+    dependency.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "group-dependency"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--universal")
+        .arg("--only-group")
+        .arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    group-dependency v1.0.0 (group: dev)
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal")
+        .arg("--only-group")
+        .arg("dev"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "workspace+[TEMP_DIR]/:dev"
+        }
+      ],
+      "inverted": false,
+      "resolution": {
+        "group-dependency==1.0.0@directory+[TEMP_DIR]/group-dependency": {
+          "name": "group-dependency",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/group-dependency"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": [],
+          "dependency_groups": [
+            {
+              "name": "dev",
+              "id": "workspace+[TEMP_DIR]/:dev"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/:dev": {
+          "kind": {
+            "group": "dev"
+          },
+          "path": "[TEMP_DIR]/",
+          "dependencies": [
+            {
+              "id": "group-dependency==1.0.0@directory+[TEMP_DIR]/group-dependency"
+            }
+          ]
+        }
+      }
+    }
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn json_output_frozen_missing_members() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["generated/members/*"]
+        "#,
+    )?;
+
+    let generated = context.temp_dir.child("generated");
+    let app = generated.child("members/app");
+    app.create_dir_all()?;
+    app.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "app"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge"]
+
+        [tool.uv.sources]
+        bridge = { path = "../../bridge" }
+        "#,
+    )?;
+
+    let bridge = generated.child("bridge");
+    bridge.create_dir_all()?;
+    bridge.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "bridge"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [tool.uv.sources]
+        target = { path = "../target" }
+        "#,
+    )?;
+
+    let target = generated.child("target");
+    target.create_dir_all()?;
+    target.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+    fs_err::remove_dir_all(generated.path())?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--frozen")
+        .arg("--universal")
+        .arg("--invert")
+        .arg("--package")
+        .arg("target")
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "target==1.0.0@directory+[TEMP_DIR]/generated/target"
+        }
+      ],
+      "inverted": true,
+      "members": [
+        {
+          "name": "app",
+          "path": "[TEMP_DIR]/generated/members/app",
+          "id": "app==1.0.0@virtual+[TEMP_DIR]/generated/members/app"
+        }
+      ],
+      "resolution": {
+        "app==1.0.0@virtual+[TEMP_DIR]/generated/members/app": {
+          "name": "app",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/generated/members/app"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "bridge==1.0.0@directory+[TEMP_DIR]/generated/bridge": {
+          "name": "bridge",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/generated/bridge"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "app==1.0.0@virtual+[TEMP_DIR]/generated/members/app"
+            }
+          ]
+        },
+        "target==1.0.0@directory+[TEMP_DIR]/generated/target": {
+          "name": "target",
+          "version": "1.0.0",
+          "source": {
+            "directory": "[TEMP_DIR]/generated/target"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "bridge==1.0.0@directory+[TEMP_DIR]/generated/bridge"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn json_output_depth_with_extra_context() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a", "package-c"]
+
+        [tool.uv.sources]
+        package-a = { path = "packages/package-a" }
+        package-c = { path = "packages/package-c" }
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages/package-a");
+    package_a.create_dir_all()?;
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["package-b"]
+
+        [tool.uv.sources]
+        package-b = { path = "../package-b" }
+        "#,
+    )?;
+
+    let package_c = context.temp_dir.child("packages/package-c");
+    package_c.create_dir_all()?;
+    package_c.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-c"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a[feature]"]
+
+        [tool.uv.sources]
+        package-a = { path = "../package-a" }
+        "#,
+    )?;
+
+    let package_b = context.temp_dir.child("packages/package-b");
+    package_b.create_dir_all()?;
+    package_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-b"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let package_names = |depth: u8| -> Result<Vec<String>> {
+        let output = context
+            .tree()
+            .arg("--preview-features")
+            .arg("json-output")
+            .arg("--format")
+            .arg("json")
+            .arg("--universal")
+            .arg("--depth")
+            .arg(depth.to_string())
+            .output()?;
+        output.clone().assert().success();
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        report["resolution"]
+            .as_object()
+            .context("dependency graph resolution should be an object")?
+            .values()
+            .filter(|node| node["kind"] == "package")
+            .map(|node| {
+                node["name"]
+                    .as_str()
+                    .context("dependency graph node should have a name")
+                    .map(ToOwned::to_owned)
+            })
+            .collect()
+    };
+
+    assert_json_snapshot!(package_names(2)?, @r#"
+    [
+      "package-a",
+      "package-c",
+      "project"
+    ]
+    "#);
+    assert_json_snapshot!(package_names(3)?, @r#"
+    [
+      "package-a",
+      "package-b",
+      "package-c",
+      "project"
+    ]
+    "#);
 
     Ok(())
 }
@@ -212,6 +1537,7 @@ fn invert() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn frozen() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -274,6 +1600,7 @@ fn frozen() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn outdated() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -303,6 +1630,23 @@ fn outdated() -> Result<()> {
     "
     );
 
+    let output = context
+        .tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--outdated")
+        .arg("--universal")
+        .output()?;
+    output.clone().assert().success();
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let anyio = report["resolution"]
+        .as_object()
+        .and_then(|resolution| resolution.values().find(|node| node["name"] == "anyio"))
+        .expect("anyio should be included in the dependency graph");
+    assert_eq!(anyio["latest_version"], "4.3.0");
+
     Ok(())
 }
 
@@ -312,6 +1656,7 @@ fn outdated() -> Result<()> {
 /// Uses idna which has releases at:
 /// - 3.6: 2023-11-25
 /// - 3.7: 2024-04-11
+#[cfg(feature = "test-universal")]
 #[test]
 fn outdated_exclude_newer_relative() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -451,6 +1796,7 @@ fn scoped_exclude_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn platform_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -576,6 +1922,7 @@ fn platform_dependencies_inverted() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn repeated_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -613,6 +1960,98 @@ fn repeated_dependencies() -> Result<()> {
     "
     );
 
+    let mut projected_edges = Vec::new();
+    for invert in [false, true] {
+        let mut command = context.tree();
+        command
+            .arg("--preview-features")
+            .arg("json-output")
+            .arg("--format")
+            .arg("json")
+            .arg("--universal");
+        if invert {
+            command.arg("--invert");
+        }
+        let output = command.output()?;
+        output.clone().assert().success();
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        let resolution = report["resolution"]
+            .as_object()
+            .context("dependency graph resolution should be an object")?;
+        let project_edges = if invert {
+            resolution
+                .iter()
+                .filter(|(_, node)| node["name"] == "anyio" && node["kind"] == "package")
+                .flat_map(|(package, node)| {
+                    node["dependencies"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|dependency| {
+                            dependency["id"]
+                                .as_str()
+                                .is_some_and(|id| id.starts_with("project=="))
+                        })
+                        .map(move |dependency| {
+                            serde_json::json!({
+                                "package": package,
+                                "marker": dependency["marker"],
+                            })
+                        })
+                })
+                .collect::<Vec<_>>()
+        } else {
+            resolution
+                .values()
+                .find(|node| node["name"] == "project" && node["kind"] == "package")
+                .and_then(|node| node["dependencies"].as_array())
+                .context("project should have dependency graph edges")?
+                .iter()
+                .map(|dependency| {
+                    serde_json::json!({
+                        "package": dependency["id"],
+                        "marker": dependency["marker"],
+                    })
+                })
+                .collect::<Vec<_>>()
+        };
+
+        projected_edges.push(serde_json::json!({
+            "inverted": invert,
+            "edges": project_edges,
+        }));
+    }
+    assert_json_snapshot!(projected_edges, @r#"
+    [
+      {
+        "edges": [
+          {
+            "marker": "sys_platform == 'win32'",
+            "package": "anyio==1.4.0@registry+https://pypi.org/simple"
+          },
+          {
+            "marker": "sys_platform == 'linux'",
+            "package": "anyio==4.3.0@registry+https://pypi.org/simple"
+          }
+        ],
+        "inverted": false
+      },
+      {
+        "edges": [
+          {
+            "marker": "sys_platform == 'win32'",
+            "package": "anyio==1.4.0@registry+https://pypi.org/simple"
+          },
+          {
+            "marker": "sys_platform == 'linux'",
+            "package": "anyio==4.3.0@registry+https://pypi.org/simple"
+          }
+        ],
+        "inverted": true
+      }
+    ]
+    "#);
+
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
@@ -622,6 +2061,7 @@ fn repeated_dependencies() -> Result<()> {
 
 /// In this case, a package is included twice at the same version, but pointing to different direct
 /// URLs.
+#[cfg(feature = "test-universal")]
 #[test]
 fn repeated_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -748,6 +2188,7 @@ fn dev_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn dev_dependencies_inverted() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -805,6 +2246,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn optional_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -855,6 +2297,7 @@ fn optional_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn optional_dependencies_inverted() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -920,6 +2363,7 @@ fn optional_dependencies_inverted() -> Result<()> {
 /// When a package is required both as a plain dep and as a dep with extras (e.g., from a
 /// dependency group), `uv tree` should not display extra-conditional dependencies for the plain
 /// occurrence.
+#[cfg(feature = "test-universal")]
 #[test]
 fn dep_and_group_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1334,6 +2778,7 @@ fn group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1420,6 +2865,7 @@ fn cycle() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_no_orphaned_roots() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1452,6 +2898,7 @@ fn cycle_no_orphaned_roots() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_no_infinite_loop() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1495,6 +2942,7 @@ fn cycle_no_infinite_loop() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_invert() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1539,6 +2987,7 @@ fn cycle_invert() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_depth_boundary_no_premature_dedupe() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1585,6 +3034,7 @@ fn cycle_depth_boundary_no_premature_dedupe() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_invert_deep() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1637,6 +3087,7 @@ fn cycle_invert_deep() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_depth_no_dedupe() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1679,6 +3130,7 @@ fn cycle_depth_no_dedupe() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_dev() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1759,6 +3211,7 @@ fn workspace_dev() -> Result<()> {
 }
 
 /// An inverted tree should only follow consumers that activate the extra required by the path.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_extra_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1836,10 +3289,29 @@ fn invert_preserves_extra_attribution() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
+    assert_json_snapshot!(
+        json_tree_package_names(
+            context
+                .tree()
+                .arg("--universal")
+                .arg("--invert")
+                .arg("--package")
+                .arg("package-x")
+        )?,
+        @r#"
+    [
+      "package-a",
+      "package-p",
+      "package-x"
+    ]
+    "#
+    );
+
     Ok(())
 }
 
 /// Member dependency groups describe the root member, not consumers of that member.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_dependency_group_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1902,10 +3374,28 @@ fn invert_preserves_dependency_group_attribution() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
+    assert_json_snapshot!(
+        json_tree_package_names(
+            context
+                .tree()
+                .arg("--universal")
+                .arg("--invert")
+                .arg("--package")
+                .arg("package-x")
+        )?,
+        @r#"
+    [
+      "package-a",
+      "package-x"
+    ]
+    "#
+    );
+
     Ok(())
 }
 
 /// Universal inverted trees should not join edges from mutually exclusive environments.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_marker_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1981,11 +3471,30 @@ fn invert_preserves_marker_attribution() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
+    assert_json_snapshot!(
+        json_tree_package_names(
+            context
+                .tree()
+                .arg("--universal")
+                .arg("--invert")
+                .arg("--package")
+                .arg("package-x")
+        )?,
+        @r#"
+    [
+      "package-b",
+      "package-p",
+      "package-x"
+    ]
+    "#
+    );
+
     Ok(())
 }
 
 /// Universal inverted trees should include every version that directly depends on a package in a
 /// satisfiable marker environment.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_marker_split_versions() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2069,6 +3578,7 @@ fn invert_preserves_marker_split_versions() -> Result<()> {
 }
 
 /// Declared conflicts are world knowledge for the encoded extra and group markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_conflict_marker_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2190,6 +3700,7 @@ fn invert_preserves_conflict_marker_attribution() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn non_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2200,6 +3711,42 @@ fn non_project() -> Result<()> {
         [tool.uv.workspace]
         members = []
 
+        [dependency-groups]
+        async = ["anyio"]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--group").arg("async"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio v4.3.0 (group: async)
+    ├── idna v3.6
+    └── sniffio v1.3.1
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = context.read("uv.lock");
+    assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+/// A pyproject.toml with only `[dependency-groups]` (no `[project]`, no `[tool.uv.workspace]`)
+/// is valid per PEP 735, and `uv tree` must handle it.
+#[cfg(feature = "test-universal")]
+#[test]
+fn dependency_groups_only() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
         [dependency-groups]
         async = ["anyio"]
     "#,
@@ -2315,9 +3862,86 @@ fn non_project_group_selection_with_extras() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        // A script's direct requirements are at depth zero, even though the JSON graph represents
+        // the script itself as a root node.
+        .arg("--depth")
+        .arg("0"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "script": {
+        "path": "[TEMP_DIR]/script.py",
+        "id": "script+[TEMP_DIR]/script.py"
+      },
+      "roots": [
+        {
+          "id": "script+[TEMP_DIR]/script.py"
+        }
+      ],
+      "inverted": false,
+      "resolution": {
+        "child==0.1.0@directory+[TEMP_DIR]/child": {
+          "name": "child",
+          "version": "0.1.0",
+          "source": {
+            "directory": "[TEMP_DIR]/child"
+          },
+          "kind": "package",
+          "dependencies": [],
+          "optional_dependencies": [
+            {
+              "name": "feature",
+              "id": "child[feature]==0.1.0@directory+[TEMP_DIR]/child"
+            }
+          ]
+        },
+        "child[feature]==0.1.0@directory+[TEMP_DIR]/child": {
+          "name": "child",
+          "version": "0.1.0",
+          "source": {
+            "directory": "[TEMP_DIR]/child"
+          },
+          "kind": {
+            "extra": "feature"
+          },
+          "dependencies": [
+            {
+              "id": "child==0.1.0@directory+[TEMP_DIR]/child"
+            }
+          ]
+        },
+        "script+[TEMP_DIR]/script.py": {
+          "kind": "script",
+          "path": "[TEMP_DIR]/script.py",
+          "dependencies": [
+            {
+              "id": "child[feature]==0.1.0@directory+[TEMP_DIR]/child"
+            }
+          ]
+        }
+      }
+    }
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "#);
+
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn non_project_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2791,6 +4415,7 @@ fn script() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn only_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2873,6 +4498,7 @@ fn only_group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn show_sizes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2899,6 +4525,85 @@ fn show_sizes() -> Result<()> {
     Resolved 2 packages in [TIME]
     "
     );
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .arg("--universal"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "project",
+          "path": "[TEMP_DIR]/",
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "iniconfig==2.0.0@registry+https://pypi.org/simple": {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374"
+              },
+              "size": 5892,
+              "upload_time": "2023-01-07T11:08:09.864Z",
+              "filename": "iniconfig-2.0.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "project==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "#);
 
     Ok(())
 }
@@ -2997,4 +4702,81 @@ fn workspace_circular_dependencies() -> Result<()> {
     );
 
     Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+fn setup_json_output(context: &TestContext) -> Result<()> {
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a[feature]"]
+
+        [dependency-groups]
+        dev = ["package-c"]
+
+        [tool.uv.sources]
+        package-a = { path = "packages/package-a" }
+        package-c = { path = "packages/package-c" }
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages/package-a");
+    package_a.create_dir_all()?;
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["package-b"]
+
+        [tool.uv.sources]
+        package-b = { path = "../package-b" }
+        "#,
+    )?;
+
+    for package in ["package-b", "package-c"] {
+        let directory = context.temp_dir.child(format!("packages/{package}"));
+        directory.create_dir_all()?;
+        directory
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "{package}"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+        "#})?;
+    }
+
+    Ok(())
+}
+
+fn json_tree_package_names(command: &mut Command) -> Result<Vec<String>> {
+    let assert = command
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .output()?
+        .assert()
+        .success();
+
+    let report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    report["resolution"]
+        .as_object()
+        .context("dependency graph resolution should be an object")?
+        .values()
+        .filter(|node| node["kind"] == "package")
+        .map(|node| {
+            node["name"]
+                .as_str()
+                .context("dependency graph node should have a name")
+                .map(ToOwned::to_owned)
+        })
+        .collect()
 }

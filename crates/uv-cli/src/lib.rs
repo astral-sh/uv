@@ -79,6 +79,15 @@ pub enum AuditOutputFormat {
     Sarif,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum TreeFormat {
+    /// Display the dependency graph as a human-readable tree.
+    #[default]
+    Text,
+    /// Display the dependency graph as JSON.
+    Json,
+}
+
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
 pub enum ListFormat {
     /// Display the list of packages in a human-readable table.
@@ -1626,9 +1635,9 @@ pub struct PipCompileArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -1660,9 +1669,10 @@ pub struct PipCompileArgs {
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
-    /// When enabled, resolving will not run code from the given packages. The cached wheels of already-built
-    /// source distributions will be reused, but operations that require building distributions will
-    /// exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution for the given packages will exit
+    /// with an error. uv may still build editable requirements, and their build backends may run
+    /// arbitrary Python code.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
@@ -1987,9 +1997,9 @@ pub struct PipSyncArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -2021,9 +2031,10 @@ pub struct PipSyncArgs {
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
-    /// When enabled, resolving will not run code from the given packages. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution for the given packages will exit
+    /// with an error. uv may still build editable requirements, and their build backends may run
+    /// arbitrary Python code.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
@@ -2372,9 +2383,9 @@ pub struct PipInstallArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -2406,9 +2417,10 @@ pub struct PipInstallArgs {
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
-    /// When enabled, resolving will not run code from the given packages. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution for the given packages will exit
+    /// with an error. uv may still build editable requirements, and their build backends may run
+    /// arbitrary Python code.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
@@ -4639,7 +4651,13 @@ pub struct RemoveArgs {
     /// Remove the packages from the development dependency group [env: UV_DEV=]
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, conflicts_with("optional"), conflicts_with("group"), value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(
+        long,
+        conflicts_with("optional"),
+        conflicts_with("group"),
+        conflicts_with("script"),
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub dev: bool,
 
     /// Remove the packages from the project's optional dependencies for the specified extra.
@@ -4737,6 +4755,10 @@ pub struct TreeArgs {
     /// Multiple versions may be shown for a each package.
     #[arg(long)]
     pub universal: bool,
+
+    /// The format in which to display the dependency graph.
+    #[arg(long, value_enum, default_value_t = TreeFormat::default())]
+    pub format: TreeFormat,
 
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
@@ -5570,7 +5592,7 @@ pub struct AuditArgs {
     /// The service needs to use the OSV protocol, unless a different
     /// format was requested by `--service-format`.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub service_url: Option<String>,
+    pub service_url: Option<DisplaySafeUrl>,
 }
 
 #[derive(Args)]
@@ -6427,9 +6449,10 @@ pub struct ToolUpgradeArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -7286,9 +7309,9 @@ pub struct RefreshArgs {
 pub struct BuildOptionsArgs {
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     #[arg(
         long,
         env = EnvVars::UV_NO_BUILD,
@@ -7500,9 +7523,10 @@ pub struct InstallerArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -8001,9 +8025,10 @@ pub struct ResolverInstallerArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",

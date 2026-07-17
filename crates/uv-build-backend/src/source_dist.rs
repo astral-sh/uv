@@ -170,7 +170,7 @@ fn source_dist_matcher(
             .collect::<Vec<_>>()
     );
     let include_matcher =
-        GlobDirFilter::from_globs(&include_globs).map_err(|err| Error::GlobSetTooLarge {
+        GlobDirFilter::from_globs(include_globs).map_err(|err| Error::GlobSetTooLarge {
             field: "tool.uv.build-backend.source-include".to_string(),
             source: err,
         })?;

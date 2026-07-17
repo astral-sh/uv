@@ -23,6 +23,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
 
+use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use url::Url;
@@ -31,12 +32,13 @@ use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::cursor::Cursor;
+pub(crate) use crate::marker::MarkerValue;
 pub use crate::marker::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
-    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString,
-    MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerTreeKind, MarkerValueExtra, MarkerValueList, MarkerValueString, MarkerValueVersion,
+    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
@@ -167,32 +169,20 @@ fn fmt_requirement<T: Pep508Url + Display>(
 ) -> std::fmt::Result {
     write!(f, "{}", requirement.name)?;
     if !requirement.extras.is_empty() {
-        write!(
-            f,
-            "[{}]",
-            requirement
-                .extras
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        )?;
+        write!(f, "[{}]", requirement.extras.iter().format(","))?;
     }
     if let Some(version_or_url) = &requirement.version_or_url {
         match version_or_url {
             VersionOrUrl::VersionSpecifier(version_specifier) => {
-                let version_specifier: Vec<String> =
-                    version_specifier.iter().map(ToString::to_string).collect();
-                write!(f, "{}", version_specifier.join(","))?;
+                write!(f, "{}", version_specifier.iter().format(","))?;
             }
             VersionOrUrl::Url(url) => {
-                let url_string = if display_credentials {
-                    url.displayable_with_credentials().to_string()
-                } else {
-                    url.to_string()
-                };
                 // We add the space for markers later if necessary
-                write!(f, " @ {url_string}")?;
+                if display_credentials {
+                    write!(f, " @ {}", url.displayable_with_credentials())?;
+                } else {
+                    write!(f, " @ {url}")?;
+                }
             }
         }
     }
@@ -293,11 +283,11 @@ impl<T: Pep508Url> Requirement<T> {
     /// For example, given `flask >= 2.0.2`, calling `with_extra_marker("dotenv")` would return
     /// `flask >= 2.0.2 ; extra == "dotenv"`.
     #[must_use]
-    pub fn with_extra_marker(mut self, extra: &ExtraName) -> Self {
+    pub fn with_extra_marker(mut self, extra: ExtraName) -> Self {
         self.marker
             .and(MarkerTree::expression(MarkerExpression::Extra {
                 operator: ExtraOperator::Equal,
-                name: MarkerValueExtra::Extra(extra.clone()),
+                name: MarkerValueExtra::Extra(extra),
             }));
 
         self
@@ -1957,13 +1947,13 @@ mod tests {
     fn add_extra_marker() -> Result<(), InvalidNameError> {
         let requirement = Requirement::<Url>::from_str("pytest").unwrap();
         let expected = Requirement::<Url>::from_str("pytest; extra == 'dotenv'").unwrap();
-        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
+        let actual = requirement.with_extra_marker(ExtraName::from_str("dotenv")?);
         assert_eq!(actual, expected);
 
         let requirement = Requirement::<Url>::from_str("pytest; '4.0' >= python_version").unwrap();
         let expected =
             Requirement::from_str("pytest; '4.0' >= python_version and extra == 'dotenv'").unwrap();
-        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
+        let actual = requirement.with_extra_marker(ExtraName::from_str("dotenv")?);
         assert_eq!(actual, expected);
 
         let requirement = Requirement::<Url>::from_str(
@@ -1974,7 +1964,7 @@ mod tests {
             "pytest; ('4.0' >= python_version or sys_platform == 'win32') and extra == 'dotenv'",
         )
         .unwrap();
-        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
+        let actual = requirement.with_extra_marker(ExtraName::from_str("dotenv")?);
         assert_eq!(actual, expected);
 
         Ok(())

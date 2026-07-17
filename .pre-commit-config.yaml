@@ -7,12 +7,12 @@ exclude: |
 
 repos:
   - repo: https://github.com/abravalheri/validate-pyproject
-    rev: v0.24.1
+    rev: 4b2e70d08cb2ccd26d1fba73588de41c7a5d50b7 # frozen: v0.25
     hooks:
       - id: validate-pyproject
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.42.3
+    rev: bee27e3a4fd1ea2111cf90ab89cd076c870fce14 # frozen: v1.48.0
     hooks:
       - id: typos
 
@@ -44,7 +44,7 @@ repos:
         types_or: [yaml, json5]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
+    rev: 01a675ea018f2fb714478a5ffb83fcea8374bb06 # frozen: v0.15.21
     hooks:
       - id: ruff-format
       - id: ruff

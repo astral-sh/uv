@@ -2,15 +2,15 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use owo_colors::OwoColorize;
-
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroupsWithDefaults, DryRun, ExtrasSpecificationWithDefaults,
 };
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_python::{
+    ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest,
+};
 use uv_resolver::Metadata;
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -25,7 +25,7 @@ use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptEnvironment,
     ScriptInterpreter, UniversalState, WorkspacePython,
 };
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
@@ -48,7 +48,7 @@ pub(crate) async fn metadata(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -92,7 +92,7 @@ pub(crate) async fn metadata(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
+                config_discovery,
                 Some(false),
                 cache,
                 printer,
@@ -105,7 +105,7 @@ pub(crate) async fn metadata(
                     Some(workspace),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
@@ -183,7 +183,7 @@ pub(crate) async fn metadata(
                         python_preference,
                         python_downloads,
                         false,
-                        no_config,
+                        config_discovery,
                         Some(false),
                         cache,
                         DryRun::Disabled,
@@ -200,7 +200,7 @@ pub(crate) async fn metadata(
                         python_downloads,
                         &install_mirrors,
                         false,
-                        no_config,
+                        config_discovery,
                         Some(false),
                         cache,
                         DryRun::Disabled,
@@ -237,15 +237,10 @@ pub(crate) async fn metadata(
 
             print_metadata(&export, printer)
         }
-        Err(err @ ProjectError::LockMismatch(..)) => {
-            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-        }
+        Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
+        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
 }

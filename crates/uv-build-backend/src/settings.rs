@@ -46,7 +46,7 @@ pub struct BuildBackendSettings {
         value_type = "str | list[str]",
         example = r#"module-name = "sklearn""#
     )]
-    pub module_name: Option<ModuleName>,
+    pub(crate) module_name: Option<ModuleName>,
 
     /// Glob expressions which files and directories to additionally include in the source
     /// distribution.
@@ -192,7 +192,7 @@ impl Default for BuildBackendSettings {
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged)]
-pub enum ModuleName {
+pub(crate) enum ModuleName {
     /// A single module name.
     Name(String),
     /// Multiple module names, which are all included.

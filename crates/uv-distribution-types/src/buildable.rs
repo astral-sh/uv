@@ -82,7 +82,7 @@ impl BuildableSource<'_> {
         let Self::Dist(SourceDist::Registry(dist)) = self else {
             return None;
         };
-        dist.file.requires_python.as_ref()
+        dist.file.requires_python.as_deref()
     }
 }
 

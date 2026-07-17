@@ -5157,7 +5157,7 @@ conflicts = [
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    error: Extra `x2` is not defined in the project's `optional-dependencies` table
+    error: Extra `x2` is not defined in the `optional-dependencies` table for `project`
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"
@@ -16098,10 +16098,10 @@ fn conflict_item_unknown_field() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 10, column 17
-       |
-    10 |               { name = "foo", extra = "extra1" },
-       |                 ^^^^
-    unknown field `name`, expected one of `package`, `extra`, `group`
+           |
+        10 |               { name = "foo", extra = "extra1" },
+           |                 ^^^^
+        unknown field `name`, expected one of `package`, `extra`, `group`
     "#);
 
     Ok(())

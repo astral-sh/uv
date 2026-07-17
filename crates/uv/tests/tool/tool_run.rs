@@ -105,8 +105,8 @@ fn tool_run_at_version() {
     ----- stderr -----
     error: Failed to parse: `pytest@`
       Caused by: Expected URL
-    pytest@
-           ^
+        pytest@
+               ^
     ");
 
     // Invalid versions are just treated as package and command names
@@ -1910,7 +1910,16 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
      + werkzeug==3.0.1
     ");
 
-    // If invalid, we should reference `--with`.
+    Ok(())
+}
+
+/// Invalid `--with` requirements should use the standard user-error renderer.
+#[test]
+fn tool_run_invalid_with() {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
     uv_snapshot!(context.filters(), context
         .tool_run()
         .arg("--with")
@@ -1924,11 +1933,9 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to resolve `--with` requirement
-      ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
+    error: Failed to resolve `--with` requirement
+      Caused by: Distribution not found at: file://[TEMP_DIR]/foo
     ");
-
-    Ok(())
 }
 
 #[test]

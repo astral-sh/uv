@@ -1,4 +1,5 @@
 use std::env::VarError;
+use std::fmt;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process;
@@ -19,7 +20,7 @@ use uv_cli::{
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
     SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec,
+    ToolUninstallArgs, TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec,
     VersionFormat,
 };
 use uv_cli::{
@@ -33,8 +34,8 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode,
+    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode, DryRun, EditableMode,
+    EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode,
     IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, Override,
     PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion,
     TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
@@ -127,6 +128,11 @@ impl GlobalSettings {
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_installs))
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
+                environment
+                    .concurrency
+                    .cache_reads
+                    .map(NonZeroUsize::get)
+                    .unwrap_or(Concurrency::DEFAULT_CACHE_READS),
             ),
             show_settings: args.show_settings,
             preview: resolve_preview(args, workspace, environment),
@@ -264,16 +270,16 @@ pub(crate) fn resolve_preview(
 /// The resolved network settings to use for any invocation of the CLI.
 #[derive(Debug, Clone)]
 pub(crate) struct NetworkSettings {
-    pub(crate) connectivity: Connectivity,
-    pub(crate) offline: Flag,
-    pub(crate) system_certs: bool,
-    pub(crate) http_proxy: Option<ProxyUrl>,
-    pub(crate) https_proxy: Option<ProxyUrl>,
-    pub(crate) no_proxy: Option<Vec<String>>,
-    pub(crate) allow_insecure_host: Vec<TrustedHost>,
-    pub(crate) read_timeout: Duration,
-    pub(crate) connect_timeout: Duration,
-    pub(crate) retries: u32,
+    pub(super) connectivity: Connectivity,
+    pub(super) offline: Flag,
+    pub(super) system_certs: bool,
+    pub(super) http_proxy: Option<ProxyUrl>,
+    pub(super) https_proxy: Option<ProxyUrl>,
+    pub(super) no_proxy: Option<Vec<String>>,
+    pub(super) allow_insecure_host: Vec<TrustedHost>,
+    pub(super) read_timeout: Duration,
+    pub(super) connect_timeout: Duration,
+    pub(super) retries: u32,
 }
 
 impl NetworkSettings {
@@ -803,9 +809,7 @@ impl RunSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev.into(),
-                no_dev.into(),
-                only_dev,
+                DevMode::from_args(dev.into(), no_dev.into(), only_dev),
                 group,
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -1769,25 +1773,25 @@ impl PythonPinSettings {
 #[expect(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
-    pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) dry_run: DryRun,
-    pub(crate) script: Option<PathBuf>,
-    pub(crate) active: Option<bool>,
-    pub(crate) extras: ExtrasSpecification,
-    pub(crate) groups: DependencyGroups,
-    pub(crate) editable: Option<EditableMode>,
-    pub(crate) install_options: InstallOptions,
-    pub(crate) modifications: Modifications,
-    pub(crate) all_packages: bool,
-    pub(crate) package: Vec<PackageName>,
-    pub(crate) python: Option<String>,
-    pub(crate) python_platform: Option<TargetTriple>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) output_format: SyncFormat,
-    pub(crate) malware_settings: MalwareCheckSettings,
+    pub(super) lock_check: LockCheck,
+    pub(super) frozen: Option<FrozenSource>,
+    pub(super) dry_run: DryRun,
+    pub(super) script: Option<PathBuf>,
+    pub(super) active: Option<bool>,
+    pub(super) extras: ExtrasSpecification,
+    pub(super) groups: DependencyGroups,
+    pub(super) editable: Option<EditableMode>,
+    pub(super) install_options: InstallOptions,
+    pub(super) modifications: Modifications,
+    pub(super) all_packages: bool,
+    pub(super) package: Vec<PackageName>,
+    pub(super) python: Option<String>,
+    pub(super) python_platform: Option<TargetTriple>,
+    pub(super) install_mirrors: PythonInstallMirrors,
+    pub(super) refresh: Refresh,
+    pub(super) settings: ResolverInstallerSettings,
+    pub(super) output_format: SyncFormat,
+    pub(super) malware_settings: MalwareCheckSettings,
 }
 
 impl SyncSettings {
@@ -1941,9 +1945,7 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev.into(),
-                no_dev.into(),
-                only_dev,
+                DevMode::from_args(dev.into(), no_dev.into(), only_dev),
                 group,
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -2094,7 +2096,7 @@ impl UpgradeSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct MetadataSettings {
     #[expect(dead_code)]
-    pub(crate) script: Option<PathBuf>,
+    script: Option<PathBuf>,
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
@@ -2453,19 +2455,19 @@ impl AddSettings {
 #[expect(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
-    pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) active: Option<bool>,
-    pub(crate) no_sync: bool,
-    pub(crate) packages: Vec<PackageName>,
-    pub(crate) dependency_type: DependencyType,
-    pub(crate) package: Option<PackageName>,
-    pub(crate) script: Option<PathBuf>,
-    pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) malware_settings: MalwareCheckSettings,
+    pub(super) lock_check: LockCheck,
+    pub(super) frozen: Option<FrozenSource>,
+    pub(super) active: Option<bool>,
+    pub(super) no_sync: bool,
+    pub(super) packages: Vec<PackageName>,
+    pub(super) dependency_type: DependencyType,
+    pub(super) package: Option<PackageName>,
+    pub(super) script: Option<PathBuf>,
+    pub(super) python: Option<String>,
+    pub(super) install_mirrors: PythonInstallMirrors,
+    pub(super) refresh: Refresh,
+    pub(super) settings: ResolverInstallerSettings,
+    pub(super) malware_settings: MalwareCheckSettings,
 }
 
 impl RemoveSettings {
@@ -2645,24 +2647,25 @@ impl VersionSettings {
 /// The resolved settings to use for a `tree` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
-    pub(crate) groups: DependencyGroups,
-    pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) universal: bool,
-    pub(crate) depth: u8,
-    pub(crate) prune: Vec<PackageName>,
-    pub(crate) package: Vec<PackageName>,
-    pub(crate) no_dedupe: bool,
-    pub(crate) invert: bool,
-    pub(crate) outdated: bool,
-    pub(crate) show_sizes: bool,
+    pub(super) groups: DependencyGroups,
+    pub(super) lock_check: LockCheck,
+    pub(super) frozen: Option<FrozenSource>,
+    pub(super) universal: bool,
+    pub(super) format: TreeFormat,
+    pub(super) depth: u8,
+    pub(super) prune: Vec<PackageName>,
+    pub(super) package: Vec<PackageName>,
+    pub(super) no_dedupe: bool,
+    pub(super) invert: bool,
+    pub(super) outdated: bool,
+    pub(super) show_sizes: bool,
     #[expect(dead_code)]
-    pub(crate) script: Option<PathBuf>,
-    pub(crate) python_version: Option<PythonVersion>,
-    pub(crate) python_platform: Option<TargetTriple>,
-    pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) resolver: ResolverSettings,
+    pub(super) script: Option<PathBuf>,
+    pub(super) python_version: Option<PythonVersion>,
+    pub(super) python_platform: Option<TargetTriple>,
+    pub(super) python: Option<String>,
+    pub(super) install_mirrors: PythonInstallMirrors,
+    pub(super) resolver: ResolverSettings,
 }
 
 impl TreeSettings {
@@ -2675,6 +2678,7 @@ impl TreeSettings {
         let TreeArgs {
             tree,
             universal,
+            format,
             dev,
             only_dev,
             no_dev,
@@ -2716,9 +2720,7 @@ impl TreeSettings {
 
         Self {
             groups: DependencyGroups::from_args(
-                dev.into(),
-                no_dev.into(),
-                only_dev,
+                DevMode::from_args(dev.into(), no_dev.into(), only_dev),
                 group,
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -2732,6 +2734,7 @@ impl TreeSettings {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
             universal,
+            format,
             depth: tree.depth,
             prune: tree.prune,
             package: tree.package,
@@ -2759,27 +2762,27 @@ impl TreeSettings {
 #[expect(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct ExportSettings {
-    pub(crate) format: Option<ExportFormat>,
-    pub(crate) all_packages: bool,
-    pub(crate) package: Vec<PackageName>,
-    pub(crate) prune: Vec<PackageName>,
-    pub(crate) extras: ExtrasSpecification,
-    pub(crate) groups: DependencyGroups,
-    pub(crate) editable: Option<EditableMode>,
-    pub(crate) hashes: bool,
-    pub(crate) install_options: InstallOptions,
-    pub(crate) output_file: Option<PathBuf>,
-    pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) include_annotations: bool,
-    pub(crate) include_header: bool,
-    pub(crate) include_index_url: bool,
-    pub(crate) include_find_links: bool,
-    pub(crate) script: Option<PathBuf>,
-    pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: ResolverSettings,
+    pub(super) format: Option<ExportFormat>,
+    pub(super) all_packages: bool,
+    pub(super) package: Vec<PackageName>,
+    pub(super) prune: Vec<PackageName>,
+    pub(super) extras: ExtrasSpecification,
+    pub(super) groups: DependencyGroups,
+    pub(super) editable: Option<EditableMode>,
+    pub(super) hashes: bool,
+    pub(super) install_options: InstallOptions,
+    pub(super) output_file: Option<PathBuf>,
+    pub(super) lock_check: LockCheck,
+    pub(super) frozen: Option<FrozenSource>,
+    pub(super) include_annotations: bool,
+    pub(super) include_header: bool,
+    pub(super) include_index_url: bool,
+    pub(super) include_find_links: bool,
+    pub(super) script: Option<PathBuf>,
+    pub(super) python: Option<String>,
+    pub(super) install_mirrors: PythonInstallMirrors,
+    pub(super) refresh: Refresh,
+    pub(super) settings: ResolverSettings,
 }
 
 impl ExportSettings {
@@ -2880,9 +2883,7 @@ impl ExportSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev.into(),
-                no_dev.into(),
-                only_dev,
+                DevMode::from_args(dev.into(), no_dev.into(), only_dev),
                 group,
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -2982,7 +2983,7 @@ impl FormatSettings {
 pub(crate) struct CheckSettings {
     pub(crate) ty_path: Option<PathBuf>,
     #[expect(dead_code)]
-    pub(crate) script: Option<PathBuf>,
+    script: Option<PathBuf>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
     pub(crate) lock_check: LockCheck,
@@ -3070,9 +3071,7 @@ impl CheckSettings {
                 flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
             groups: DependencyGroups::from_args(
-                dev.into(),
-                no_dev.into(),
-                only_dev,
+                DevMode::from_args(dev.into(), no_dev.into(), only_dev),
                 group,
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -3114,7 +3113,7 @@ pub(crate) struct AuditSettings {
     pub(crate) settings: ResolverSettings,
     pub(crate) output_format: AuditOutputFormat,
     pub(crate) service_format: VulnerabilityServiceFormat,
-    pub(crate) service_url: Option<String>,
+    pub(crate) service_url: Option<DisplaySafeUrl>,
     pub(crate) ignore: Vec<VulnerabilityID>,
     pub(crate) ignore_until_fixed: Vec<VulnerabilityID>,
 }
@@ -3177,9 +3176,7 @@ impl AuditSettings {
                 true,
             ),
             groups: DependencyGroups::from_args(
-                only_group.is_empty() && !only_dev,
-                no_dev,
-                only_dev,
+                DevMode::from_args(only_group.is_empty() && !only_dev, no_dev, only_dev),
                 vec![],
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -4981,7 +4978,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
 }
 
 /// The resolved settings to use for an invocation of the `uv publish` CLI.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct PublishSettings {
     // CLI only, see [`PublishArgs`] for docs.
     pub(crate) files: Vec<String>,
@@ -5000,6 +4997,25 @@ pub(crate) struct PublishSettings {
 
     // Configuration only
     pub(crate) index_locations: IndexLocations,
+}
+
+impl fmt::Debug for PublishSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PublishSettings")
+            .field("files", &self.files)
+            .field("username", &self.username)
+            .field("password", &self.password.as_ref().map(|_| "****"))
+            .field("index", &self.index)
+            .field("dry_run", &self.dry_run)
+            .field("no_attestations", &self.no_attestations)
+            .field("direct", &self.direct)
+            .field("publish_url", &self.publish_url)
+            .field("trusted_publishing", &self.trusted_publishing)
+            .field("keyring_provider", &self.keyring_provider)
+            .field("check_url", &self.check_url)
+            .field("index_locations", &self.index_locations)
+            .finish()
+    }
 }
 
 impl PublishSettings {

@@ -143,7 +143,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .dependency_metadata()
             .get(dist.name(), Some(dist.version()))
         {
-            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
+            return Ok(ArchiveMetadata::from_metadata23(metadata));
         }
 
         let metadata = dist
@@ -586,7 +586,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .dependency_metadata()
                 .get(dist.name(), Some(dist.version()))
             {
-                metadata.clone()
+                metadata
             } else {
                 wheel.metadata()?
             };
@@ -603,7 +603,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .dependency_metadata()
             .get(dist.name(), Some(dist.version()))
         {
-            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
+            return Ok(ArchiveMetadata::from_metadata23(metadata));
         }
 
         let result = self
@@ -802,22 +802,21 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Determine the cache control policy for the URL.
         let cache_control = match self.client.unmanaged.connectivity() {
-            Connectivity::Online => {
+            Connectivity::Online
                 if let Some(header) = index.and_then(|index| {
                     self.build_context
                         .locations()
                         .artifact_cache_control_for(index)
-                }) {
-                    CacheControl::Override(header)
-                } else {
-                    CacheControl::from(
-                        self.build_context
-                            .cache()
-                            .freshness(&http_entry, Some(&filename.name), None)
-                            .map_err(Error::CacheRead)?,
-                    )
-                }
+                }) =>
+            {
+                CacheControl::Override(header)
             }
+            Connectivity::Online => CacheControl::from(
+                self.build_context
+                    .cache()
+                    .freshness(&http_entry, Some(&filename.name), None)
+                    .map_err(Error::CacheRead)?,
+            ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -978,22 +977,21 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Determine the cache control policy for the URL.
         let cache_control = match self.client.unmanaged.connectivity() {
-            Connectivity::Online => {
+            Connectivity::Online
                 if let Some(header) = index.and_then(|index| {
                     self.build_context
                         .locations()
                         .artifact_cache_control_for(index)
-                }) {
-                    CacheControl::Override(header)
-                } else {
-                    CacheControl::from(
-                        self.build_context
-                            .cache()
-                            .freshness(&http_entry, Some(&filename.name), None)
-                            .map_err(Error::CacheRead)?,
-                    )
-                }
+                }) =>
+            {
+                CacheControl::Override(header)
             }
+            Connectivity::Online => CacheControl::from(
+                self.build_context
+                    .cache()
+                    .freshness(&http_entry, Some(&filename.name), None)
+                    .map_err(Error::CacheRead)?,
+            ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
 

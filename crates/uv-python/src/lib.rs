@@ -4,12 +4,13 @@ use thiserror::Error;
 #[cfg(test)]
 use uv_static::EnvVars;
 
+#[cfg(all(test, unix))]
+use crate::discovery::find_python_installations;
 pub use crate::discovery::{
     EnvironmentPreference, Error as DiscoveryError, PythonDownloads, PythonNotFound,
     PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
-    find_all_python_installations, find_python_installations,
+    find_all_python_installations,
 };
-pub use crate::downloads::PlatformRequest;
 pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::{ImplementationName, LenientImplementationName};
 pub use crate::installation::{
@@ -23,8 +24,9 @@ pub use crate::prefix::Prefix;
 pub use crate::python_version::{BuildVersionError, PythonVersion};
 pub use crate::target::Target;
 pub use crate::version_files::{
-    DiscoveryOptions as VersionFileDiscoveryOptions, FilePreference as VersionFilePreference,
-    PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME, PythonVersionFile,
+    ConfigDiscovery, DiscoveryOptions as VersionFileDiscoveryOptions,
+    FilePreference as VersionFilePreference, PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME,
+    PythonVersionFile,
 };
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
 

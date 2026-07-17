@@ -1,6 +1,8 @@
 //! Create a virtual environment.
 
+use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -15,6 +17,7 @@ use tracing::{debug, trace};
 use crate::{Error, Prompt};
 use uv_fs::{CWD, Simplified, cachedir};
 use uv_platform_tags::Os;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_python::managed::{
     ManagedPythonInstallation, PythonMinorVersionLink, replace_link_to_executable,
@@ -41,6 +44,15 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
 ];
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 
+/// Python 3.10 and later already ignore the distutils install config keys this hook guards
+/// against, while the last pip release supporting Python 3.9 still needs the workaround.
+///
+/// See <https://github.com/pypa/virtualenv/issues/3181>
+fn install_distutils_patch(interpreter: &Interpreter) -> bool {
+    interpreter.python_tuple() < (3, 10)
+        || !uv_preview::is_enabled(PreviewFeature::NoDistutilsPatch)
+}
+
 /// Very basic `.cfg` file format writer.
 fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
     for (key, value) in data {
@@ -50,7 +62,6 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
 }
 
 /// Create a [`VirtualEnvironment`] at the given location.
-#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) fn create(
     location: &Path,
     interpreter: &Interpreter,
@@ -58,7 +69,7 @@ pub(crate) fn create(
     system_site_packages: bool,
     on_existing: OnExisting,
     relocatable: bool,
-    seed: bool,
+    seed: Seed,
     upgradeable: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
@@ -88,6 +99,12 @@ pub(crate) fn create(
         Prompt::None => None,
     };
     let absolute = std::path::absolute(location)?;
+
+    // Validate the path before creating the virtual environment, since some filesystems, e.g.,
+    // APFS, reject non-UTF-8 paths before the activation scripts are generated.
+    if absolute.simplified().to_str().is_none() {
+        return Err(Error::NonUtf8Path { path: absolute });
+    }
 
     // Validate the existing location.
     match location.metadata() {
@@ -468,23 +485,27 @@ pub(crate) fn create(
         .map(|path| path.simplified().to_str().unwrap().replace('\\', "\\\\"))
         .join(path_sep);
 
+        let location_string = location
+            .simplified()
+            .to_str()
+            .ok_or_else(|| Error::NonUtf8Path {
+                path: location.clone(),
+            })?;
         let virtual_env_dir = match (relocatable, name.to_owned()) {
-            (true, "activate") => {
-                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#.to_string()
-            }
-            (true, "activate.bat") => r"%~dp0..".to_string(),
+            (true, "activate") => Cow::Borrowed(
+                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#,
+            ),
+            (true, "activate.bat") => Cow::Borrowed(r"%~dp0.."),
             (true, "activate.fish") => {
-                r"'(dirname -- (dirname -- (realpath -- (status -f))))'".to_string()
+                Cow::Borrowed(r"'(dirname -- (dirname -- (realpath -- (status -f))))'")
             }
-            (true, "activate.nu") => r"(path self | path dirname | path dirname)".to_string(),
-            (false, "activate.nu") => {
-                format!(
-                    "'{}'",
-                    escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
-                )
-            }
+            (true, "activate.nu") => Cow::Borrowed(r"(path self | path dirname | path dirname)"),
+            (false, "activate.nu") => Cow::Owned(format!(
+                "'{}'",
+                escape_posix_for_single_quotes(location_string)
+            )),
             // Note: `activate.ps1` is already relocatable by default.
-            _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
+            _ => escape_posix_for_single_quotes(location_string),
         };
 
         let activator = template
@@ -534,8 +555,9 @@ pub(crate) fn create(
         pyvenv_cfg_data.push(("relocatable".to_string(), "true".to_string()));
     }
 
-    if seed {
-        pyvenv_cfg_data.push(("seed".to_string(), "true".to_string()));
+    match seed {
+        Seed::Enabled => pyvenv_cfg_data.push(("seed".to_string(), "true".to_string())),
+        Seed::Disabled => {}
     }
 
     if let Some(prompt) = prompt {
@@ -576,9 +598,10 @@ pub(crate) fn create(
         }
     }
 
-    // Populate `site-packages` with a `_virtualenv.py` file.
-    fs_err::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
-    fs_err::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
+    if install_distutils_patch(interpreter) {
+        fs_err::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
+        fs_err::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
+    }
 
     Ok(VirtualEnvironment {
         scheme: Scheme {
@@ -684,6 +707,22 @@ impl OnExisting {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
+pub enum Seed {
+    /// Seed the virtual environment with one or more of `pip`, `setuptools`, and `wheel`.
+    Enabled,
+    /// Do not seed the virtual environment.
+    #[default]
+    Disabled,
+}
+
+impl Seed {
+    /// Determine the [`Seed`] setting based on the command-line arguments.
+    pub fn from_args(seed: bool) -> Self {
+        if seed { Self::Enabled } else { Self::Disabled }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 enum WindowsExecutable {
     /// The `python.exe` executable (or `venvlauncher.exe` launcher shim).
@@ -714,54 +753,46 @@ enum WindowsExecutable {
 
 impl WindowsExecutable {
     /// The name of the Python executable.
-    fn exe(self, interpreter: &Interpreter) -> String {
+    fn exe(self, interpreter: &Interpreter) -> Cow<'static, OsStr> {
         match self {
-            Self::Python => String::from("python.exe"),
-            Self::PythonMajor => {
-                format!("python{}.exe", interpreter.python_major())
-            }
-            Self::PythonMajorMinor => {
-                format!(
-                    "python{}.{}.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::PythonMajorMinort => {
-                format!(
-                    "python{}.{}t.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::Pythonw => String::from("pythonw.exe"),
-            Self::PythonwMajorMinort => {
-                format!(
-                    "pythonw{}.{}t.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::PyPy => String::from("pypy.exe"),
-            Self::PyPyMajor => {
-                format!("pypy{}.exe", interpreter.python_major())
-            }
-            Self::PyPyMajorMinor => {
-                format!(
-                    "pypy{}.{}.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::PyPyw => String::from("pypyw.exe"),
-            Self::PyPyMajorMinorw => {
-                format!(
-                    "pypy{}.{}w.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::GraalPy => String::from("graalpy.exe"),
+            Self::Python => Cow::Borrowed(OsStr::new("python.exe")),
+            Self::PythonMajor => Cow::Owned(OsString::from(format!(
+                "python{}.exe",
+                interpreter.python_major()
+            ))),
+            Self::PythonMajorMinor => Cow::Owned(OsString::from(format!(
+                "python{}.{}.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::PythonMajorMinort => Cow::Owned(OsString::from(format!(
+                "python{}.{}t.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::Pythonw => Cow::Borrowed(OsStr::new("pythonw.exe")),
+            Self::PythonwMajorMinort => Cow::Owned(OsString::from(format!(
+                "pythonw{}.{}t.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::PyPy => Cow::Borrowed(OsStr::new("pypy.exe")),
+            Self::PyPyMajor => Cow::Owned(OsString::from(format!(
+                "pypy{}.exe",
+                interpreter.python_major()
+            ))),
+            Self::PyPyMajorMinor => Cow::Owned(OsString::from(format!(
+                "pypy{}.{}.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::PyPyw => Cow::Borrowed(OsStr::new("pypyw.exe")),
+            Self::PyPyMajorMinorw => Cow::Owned(OsString::from(format!(
+                "pypy{}.{}w.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::GraalPy => Cow::Borrowed(OsStr::new("graalpy.exe")),
         }
     }
 
