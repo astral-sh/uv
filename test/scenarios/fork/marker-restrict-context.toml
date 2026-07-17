@@ -1,0 +1,29 @@
+name = "fork-marker-restrict-context"
+description = '''
+This scenario checks that dependency markers are simplified using the parent
+fork before creating child forks. The Linux branch selects two versions of
+`b` on complementary architecture and Python markers, while both dependencies
+also include a Darwin branch that cannot be reached from the Linux parent.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = [
+  "a<2 ; sys_platform == 'linux'",
+  "a>=2 ; sys_platform != 'linux'",
+]
+
+[packages.a.versions."1.0.0"]
+requires = [
+  "b<2 ; (sys_platform == 'linux' and (platform_machine != 'x86_64' or python_version < '3.13')) or sys_platform == 'darwin'",
+  "b>=2 ; (sys_platform == 'linux' and platform_machine == 'x86_64' and python_version >= '3.13') or sys_platform == 'darwin'",
+]
+[packages.a.versions."2.0.0"]
+
+[packages.b.versions."1.0.0"]
+[packages.b.versions."2.0.0"]

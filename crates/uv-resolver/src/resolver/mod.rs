@@ -3997,7 +3997,7 @@ impl Forks {
                         continue;
                     }
                     ForkingPossibility::NoForkingPossible => {
-                        // Or, if the markers are always true, then we just
+                        // Or, if the markers are always true within the parent fork, then we just
                         // add the dependency to every fork unconditionally.
                         for fork in &mut forks {
                             fork.add_dependency(dep.clone());

@@ -525,7 +525,7 @@ impl std::fmt::Display for ResolverEnvironment {
 ///
 /// 1. Forking cannot be ruled out.
 /// 2. The dependency is excluded by the "parent" fork.
-/// 3. The dependency is unconditional and thus cannot provoke new forks.
+/// 3. The dependency is unconditional in the "parent" fork and thus cannot provoke new forks.
 ///
 /// This enum encapsulates those possibilities. In the first case, a helper is
 /// returned to help management the nuts and bolts of forking.
@@ -541,9 +541,14 @@ impl<'d> ForkingPossibility<'d> {
         let marker = dep.package.marker();
         if !env.included_by_marker(marker) {
             ForkingPossibility::DependencyAlwaysExcluded
-        } else if marker.is_true() {
+        } else if marker.is_true() || !env.included_by_marker(marker.negate()) {
             ForkingPossibility::NoForkingPossible
         } else {
+            // All forks visited by this forker are contained within the original parent, so the
+            // forker can drop conditions implied by the parent while the dependency keeps its original.
+            let marker = env
+                .fork_markers()
+                .map_or(marker, |parent| marker.restrict_bounded(parent));
             let forker = Forker {
                 package: &dep.package,
                 marker,

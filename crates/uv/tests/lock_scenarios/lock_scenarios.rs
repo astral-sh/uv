@@ -1449,6 +1449,138 @@ fn fork_marker_accrue() -> Result<()> {
     Ok(())
 }
 
+/// The Linux branch selects two versions of `b` on complementary architecture and Python markers.
+/// Both dependency markers also include a Darwin branch, which is unreachable from the Linux
+/// parent and should not produce additional forks or leak into the serialized dependency markers.
+#[test]
+fn fork_marker_restrict_context() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/marker-restrict-context.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''a<2 ; sys_platform == 'linux'''',
+          '''a>=2 ; sys_platform != 'linux'''',
+        ]
+        requires-python = ">=3.12"
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "(python_full_version < '3.13' and sys_platform == 'linux') or (platform_machine != 'x86_64' and sys_platform == 'linux')",
+            "sys_platform != 'linux'",
+        ]
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "(python_full_version < '3.13' and sys_platform == 'linux') or (platform_machine != 'x86_64' and sys_platform == 'linux')",
+        ]
+        dependencies = [
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13' or platform_machine != 'x86_64'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.13' and platform_machine == 'x86_64'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:56b651e6dc2f66bd4b76142bf6c3b9ccd119d7dea6299779d53fb036e2ce43bb", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:02038cb16423a695b074aedd0e375db4b1e506b1f61e8d40c2ec889b14379ddf", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:833374310e0a15880f3be9e6d082f527c9ac70129b2054d733da9b754315361f", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "(python_full_version < '3.13' and sys_platform == 'linux') or (platform_machine != 'x86_64' and sys_platform == 'linux')",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:b532bd9c3ccd69c4d5e915542dc50fb748c91c7a8e204c75387178d68fca113f", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:a4c65510001153cab97a29ff219ad86e0d4330653ca89d9d4c84187ccf14c621", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:18fb09ba28eba255186405065e027093a6e952fa71eb565b4c46d619fdb60809", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.0.0-py3-none-any.whl", hash = "sha256:04cc57f7563029528b6d23283933b244b6f52ba1543fad54687c586d6e639fc4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform != 'linux'", specifier = ">=2" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = "<2" },
+        ]
+        "#);
+    });
+
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// A basic test that ensures, at least in this one basic case, that forking in
 /// universal resolution happens only when the corresponding marker expressions are
 /// completely disjoint. Here, we provide two completely incompatible dependency

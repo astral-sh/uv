@@ -448,14 +448,7 @@ impl InternerGuard<'_> {
             return node;
         }
         let exclusions = self.exclusions();
-        let restricted = self.restrict(node, exclusions.not());
-        // Restricting can introduce decisions from the assumption. Keep the original marker when
-        // that would make the decision diagram larger.
-        if self.node_count(restricted) < self.node_count(node) {
-            restricted
-        } else {
-            node
-        }
+        self.restrict_bounded(node, exclusions.not())
     }
 
     /// Returns the number of unique decision nodes reachable from `node`.
@@ -603,6 +596,19 @@ impl InternerGuard<'_> {
     pub(crate) fn restrict(&mut self, value: NodeId, assumption: NodeId) -> NodeId {
         let mut cache = FxHashMap::default();
         self.restrict_cached(value, assumption, &mut cache)
+    }
+
+    /// Restricts a marker without increasing the size of its decision diagram.
+    pub(crate) fn restrict_bounded(&mut self, value: NodeId, assumption: NodeId) -> NodeId {
+        if assumption.is_true() || matches!(value, NodeId::TRUE | NodeId::FALSE) {
+            return value;
+        }
+        let restricted = self.restrict(value, assumption);
+        if self.node_count(restricted) < self.node_count(value) {
+            restricted
+        } else {
+            value
+        }
     }
 
     fn restrict_cached(
