@@ -97,7 +97,7 @@ jobs:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
           repository: astral-sh/uv
-          # `contents: write` copies the uv-dev head into uv; the uv-scoped token cannot open
+          # `contents: write` copies the uv-dev branch into uv; the uv-scoped token cannot open
           # a cross-repository pull request because GitHub requires write access to its source branch.
           # `workflows: write` is required when the promoted pull request modifies workflow files.
           permissions: |
