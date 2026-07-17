@@ -1,0 +1,89 @@
+name = "coalesce-prefetched-dependencies"
+description = """A parent pins a different core release at each version. The newer core releases have identical, incompatible dependencies, so backtracking the parent repeatedly visits adjacent core versions whose prefetched metadata can share one dependency incompatibility."""
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+leaf = "1.0.0"
+parent = "2.0.0"
+core = "2.0.0"
+
+[resolver_options]
+test = "compile"
+universal = false
+
+[root]
+requires = ["leaf==1.0.0", "parent"]
+
+[packages.leaf.versions]
+"1.0.0" = {}
+"2.0.0" = {}
+
+[packages.parent.versions]
+"2.0.0" = { requires = ["core==2.0.0"] }
+"3.0.0" = { requires = ["core==3.0.0"] }
+"3.0.1" = { requires = ["core==3.0.1"] }
+"3.0.2" = { requires = ["core==3.0.2"] }
+"3.0.3" = { requires = ["core==3.0.3"] }
+"3.0.4" = { requires = ["core==3.0.4"] }
+"3.0.5" = { requires = ["core==3.0.5"] }
+"3.0.6" = { requires = ["core==3.0.6"] }
+"3.0.7" = { requires = ["core==3.0.7"] }
+"3.0.8" = { requires = ["core==3.0.8"] }
+"3.0.9" = { requires = ["core==3.0.9"] }
+"3.0.10" = { requires = ["core==3.0.10"] }
+"3.0.11" = { requires = ["core==3.0.11"] }
+"3.0.12" = { requires = ["core==3.0.12"] }
+"3.0.13" = { requires = ["core==3.0.13"] }
+"3.0.14" = { requires = ["core==3.0.14"] }
+"3.0.15" = { requires = ["core==3.0.15"] }
+"3.0.16" = { requires = ["core==3.0.16"] }
+"3.0.17" = { requires = ["core==3.0.17"] }
+"3.0.18" = { requires = ["core==3.0.18"] }
+"3.0.19" = { requires = ["core==3.0.19"] }
+"3.0.20" = { requires = ["core==3.0.20"] }
+"3.0.21" = { requires = ["core==3.0.21"] }
+"3.0.22" = { requires = ["core==3.0.22"] }
+"3.0.23" = { requires = ["core==3.0.23"] }
+"3.0.24" = { requires = ["core==3.0.24"] }
+"3.0.25" = { requires = ["core==3.0.25"] }
+"3.0.26" = { requires = ["core==3.0.26"] }
+"3.0.27" = { requires = ["core==3.0.27"] }
+"3.0.28" = { requires = ["core==3.0.28"] }
+"3.0.29" = { requires = ["core==3.0.29"] }
+"3.0.30" = { requires = ["core==3.0.30"] }
+
+[packages.core.versions]
+"2.0.0" = { requires = ["leaf==1.0.0"] }
+"3.0.0" = { requires = ["leaf==2.0.0"] }
+"3.0.1" = { requires = ["leaf==2.0.0"] }
+"3.0.2" = { requires = ["leaf==2.0.0"] }
+"3.0.3" = { requires = ["leaf==2.0.0"] }
+"3.0.4" = { requires = ["leaf==2.0.0"] }
+"3.0.5" = { requires = ["leaf==2.0.0"] }
+"3.0.6" = { requires = ["leaf==2.0.0"] }
+"3.0.7" = { requires = ["leaf==2.0.0"] }
+"3.0.8" = { requires = ["leaf==2.0.0"] }
+"3.0.9" = { requires = ["leaf==2.0.0"] }
+"3.0.10" = { requires = ["leaf==2.0.0"] }
+"3.0.11" = { requires = ["leaf==2.0.0"] }
+"3.0.12" = { requires = ["leaf==2.0.0"] }
+"3.0.13" = { requires = ["leaf==2.0.0"] }
+"3.0.14" = { requires = ["leaf==2.0.0"] }
+"3.0.15" = { requires = ["leaf==2.0.0"] }
+"3.0.16" = { requires = ["leaf==2.0.0"] }
+"3.0.17" = { requires = ["leaf==2.0.0"] }
+"3.0.18" = { requires = ["leaf==2.0.0"] }
+"3.0.19" = { requires = ["leaf==2.0.0"] }
+"3.0.20" = { requires = ["leaf==2.0.0"] }
+"3.0.21" = { requires = ["leaf==2.0.0"] }
+"3.0.22" = { requires = ["leaf==2.0.0"] }
+"3.0.23" = { requires = ["leaf==2.0.0"] }
+"3.0.24" = { requires = ["leaf==2.0.0"] }
+"3.0.25" = { requires = ["leaf==2.0.0"] }
+"3.0.26" = { requires = ["leaf==2.0.0"] }
+"3.0.27" = { requires = ["leaf==2.0.0"] }
+"3.0.28" = { requires = ["leaf==2.0.0"] }
+"3.0.29" = { requires = ["leaf==2.0.0"] }
+"3.0.30" = { requires = ["leaf==2.0.0"] }
