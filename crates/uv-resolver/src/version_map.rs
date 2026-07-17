@@ -7,7 +7,7 @@ use jiff::Timestamp;
 use pubgrub::Ranges;
 use tracing::{instrument, trace};
 
-use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles};
+use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
@@ -637,16 +637,14 @@ impl VersionMapLazy {
         simple: &'p SimplePrioritizedDist,
     ) -> Option<&'p PrioritizedDist> {
         let get_or_init = || {
-            let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(
-                &self
-                    .simple_metadata
-                    .datum(simple.datum_index)
-                    .expect("index to lazy dist is correct")
-                    .files,
-            )
-            .expect("archived version files always deserializes");
+            let files = &self
+                .simple_metadata
+                .datum(simple.datum_index)
+                .expect("index to lazy dist is correct")
+                .files;
             let mut priority_dist = init.cloned().unwrap_or_default();
-            for (filename, file) in files.all(&self.package_name) {
+            for (filename, file) in files.all(&self.package_name, self.simple_metadata.url_prefix())
+            {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =

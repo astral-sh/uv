@@ -6,6 +6,23 @@ use std::ops::Deref;
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SmallString(arcstr::ArcStr);
 
+impl SmallString {
+    /// Concatenate string slices with a single reference-counted allocation.
+    pub fn concat(parts: &[&str]) -> Self {
+        let length = parts.iter().map(|part| part.len()).sum();
+        let value = arcstr::ArcStr::init_with(length, |buffer| {
+            let mut offset = 0;
+            for part in parts {
+                let end = offset + part.len();
+                buffer[offset..end].copy_from_slice(part.as_bytes());
+                offset = end;
+            }
+        })
+        .unwrap_or_else(|_| arcstr::ArcStr::from(parts.concat()));
+        Self(value)
+    }
+}
+
 impl From<arcstr::ArcStr> for SmallString {
     #[inline]
     fn from(s: arcstr::ArcStr) -> Self {

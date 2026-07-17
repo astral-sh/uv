@@ -1,7 +1,7 @@
 use tokio::sync::Semaphore;
 use tracing::debug;
 
-use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
+use uv_client::{MetadataFormat, RegistryClient};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     File, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexUrl, RequiresPython,
@@ -150,11 +150,7 @@ impl LatestClient<'_> {
             match archive {
                 MetadataFormat::Simple(archive) => {
                     for datum in archive.iter().rev() {
-                        let files =
-                            rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)
-                                .expect("archived version files always deserializes");
-
-                        for (filename, file) in files.all(package) {
+                        for (filename, file) in datum.files.all(package, archive.url_prefix()) {
                             if self.consider_candidate(&filename, &file, exclude_newer.as_ref()) {
                                 update_latest(filename);
                             }
