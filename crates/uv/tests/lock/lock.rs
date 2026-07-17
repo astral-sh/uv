@@ -16395,6 +16395,107 @@ fn lock_impossible_platform_markers() -> Result<()> {
     Ok(())
 }
 
+/// Check that a Windows-only dependency doesn't retain impossible branches from platform forks.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_simplifies_impossible_platform_branches() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dependency = context.temp_dir.child("dependency");
+    dependency.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency ; os_name == 'nt'"]
+
+        [tool.uv]
+        environments = [
+            "sys_platform == 'darwin'",
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
+        ]
+
+        [tool.uv.sources]
+        dependency = { path = "./dependency" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
+        ]
+        supported-markers = [
+            "sys_platform == 'darwin'",
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "dependency"
+        version = "0.1.0"
+        source = { directory = "dependency" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "dependency", marker = "os_name == 'nt'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "dependency", marker = "os_name == 'nt'", directory = "dependency" }]
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Change indexes between locking operations.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
