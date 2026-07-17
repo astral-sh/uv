@@ -366,6 +366,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         match result {
                             Err(err) => {
                                 // If unit propagation failed, there is no solution.
+                                for package in derivation_tree_packages(&err) {
+                                    Self::known_versions(
+                                        &self.index,
+                                        &self.installed_packages,
+                                        &state.fork_urls,
+                                        &state.fork_indexes,
+                                        &mut state.known_versions,
+                                        package,
+                                    );
+                                }
                                 return Err(self.convert_no_solution_err(
                                     err,
                                     state.fork_urls,
@@ -1160,6 +1170,47 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             known_versions.insert(name.clone(), versions.into());
         }
         Some(&known_versions[name][..])
+    }
+
+    /// Widen a selected registry version using only its immediate included neighbors.
+    ///
+    /// A single index without installed distributions is already sorted and unique, so widening a
+    /// singleton does not require cloning, sorting, and deduplicating the complete version map.
+    fn widened_singleton_dependency_versions(
+        index: &InMemoryIndex,
+        installed_packages: &InstalledPackages,
+        fork_urls: &ForkUrls,
+        fork_indexes: &ForkIndexes,
+        package: &PubGrubPackage,
+        version: &Version,
+    ) -> Option<Range<Version>> {
+        let name = package.name_no_root()?;
+        if fork_urls.get(name).is_some() || !installed_packages.get_packages(name).is_empty() {
+            return None;
+        }
+        let response = if let Some(index_metadata) = fork_indexes.get(name) {
+            index
+                .explicit()
+                .get(&(name.clone(), index_metadata.url().clone()))?
+        } else {
+            index.implicit().get(name)?
+        };
+        let VersionsResponse::Found(version_maps) = &*response else {
+            return None;
+        };
+        let [version_map] = version_maps.as_slice() else {
+            return None;
+        };
+        let (previous, next) = version_map.neighboring_included_versions(version)?;
+        Some(match (previous, next) {
+            (Some(previous), Some(next)) => Range::from_range_bounds((
+                Bound::Excluded(previous.clone()),
+                Bound::Excluded(next.clone()),
+            )),
+            (Some(previous), None) => Range::strictly_higher_than(previous.clone()),
+            (None, Some(next)) => Range::strictly_lower_than(next.clone()),
+            (None, None) => Range::full(),
+        })
     }
 
     /// Given a candidate package, choose the next version in range to try.
@@ -3249,23 +3300,31 @@ impl ForkState {
 
         // Widen across gaps so rejected adjacent versions merge into contiguous ranges rather
         // than leaving one hole per version.
-        let versions = Range::singleton(for_version.clone());
-        let versions = if let Some(known_versions) =
-            ResolverState::<InstalledPackages>::known_versions(
+        let versions = if let Some(versions) =
+            ResolverState::<InstalledPackages>::widened_singleton_dependency_versions(
                 index,
                 installed_packages,
                 &self.fork_urls,
                 &self.fork_indexes,
-                &mut self.known_versions,
                 &self.pubgrub.package_store[self.next],
-            )
-            .filter(|versions| !versions.is_empty())
+                for_version,
+            ) {
+            versions
+        } else if let Some(known_versions) = ResolverState::<InstalledPackages>::known_versions(
+            index,
+            installed_packages,
+            &self.fork_urls,
+            &self.fork_indexes,
+            &mut self.known_versions,
+            &self.pubgrub.package_store[self.next],
+        )
+        .filter(|versions| !versions.is_empty())
         {
-            versions.widen_versions(known_versions)
+            Range::singleton(for_version.clone()).widen_versions(known_versions)
         } else {
             // A decided version is always selectable and thus in the list, but an empty list
             // would unsoundly widen to the full range.
-            versions
+            Range::singleton(for_version.clone())
         };
         let conflict = self.pubgrub.add_package_version_dependencies(
             self.next,

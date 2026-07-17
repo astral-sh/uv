@@ -174,6 +174,50 @@ impl VersionMap {
         }
     }
 
+    /// Return the included versions immediately before and after `version`, without materializing
+    /// distributions or cloning the complete version map.
+    pub(crate) fn neighboring_included_versions(
+        &self,
+        version: &Version,
+    ) -> Option<(Option<&Version>, Option<&Version>)> {
+        match &self.inner {
+            VersionMapInner::Eager(eager) => {
+                eager.map.get(version)?;
+                let previous = eager
+                    .map
+                    .range::<Version, _>((Bound::Unbounded, Bound::Excluded(version)))
+                    .next_back()
+                    .map(|(version, _)| version);
+                let next = eager
+                    .map
+                    .range::<Version, _>((Bound::Excluded(version), Bound::Unbounded))
+                    .next()
+                    .map(|(version, _)| version);
+                Some((previous, next))
+            }
+            VersionMapInner::Lazy(lazy) => {
+                let position = lazy
+                    .map
+                    .entries
+                    .binary_search_by(|entry| entry.version.cmp(version))
+                    .ok()?;
+                if !lazy.entry_is_included(&lazy.map.entries[position]) {
+                    return None;
+                }
+                let previous = lazy.map.entries[..position]
+                    .iter()
+                    .rev()
+                    .find(|entry| lazy.entry_is_included(entry))
+                    .map(|entry| &entry.version);
+                let next = lazy.map.entries[position + 1..]
+                    .iter()
+                    .find(|entry| lazy.entry_is_included(entry))
+                    .map(|entry| &entry.version);
+                Some((previous, next))
+            }
+        }
+    }
+
     /// Return the index URL where this package came from.
     pub(crate) fn index(&self) -> Option<&IndexUrl> {
         match &self.inner {
@@ -547,15 +591,21 @@ impl VersionMapLazy {
     /// Returns an iterator over the versions with at least one file within the exclude-newer
     /// cutoffs, without materializing the distributions.
     fn included_versions(&self) -> impl DoubleEndedIterator<Item = &Version> {
-        self.map.entries.iter().filter_map(move |entry| {
-            let included = match (&entry.dist.flat, &entry.dist.simple) {
-                // Flat index files have no upload times and bypass the cutoffs.
-                (Some(_), _) => true,
-                (None, Some(simple)) => self.any_file_included(simple),
-                (None, None) => false,
-            };
-            included.then_some(&entry.version)
-        })
+        self.map
+            .entries
+            .iter()
+            .filter(|entry| self.entry_is_included(entry))
+            .map(|entry| &entry.version)
+    }
+
+    /// Return whether an entry has at least one file within the exclude-newer cutoffs.
+    fn entry_is_included(&self, entry: &VersionMapLazyEntry) -> bool {
+        match (&entry.dist.flat, &entry.dist.simple) {
+            // Flat index files have no upload times and bypass the cutoffs.
+            (Some(_), _) => true,
+            (None, Some(simple)) => self.any_file_included(simple),
+            (None, None) => false,
+        }
     }
 
     /// Returns whether at least one file keeps this version inside the candidate universe.
@@ -904,5 +954,47 @@ impl<'a> RangeBounds<Version> for BoundingRange<'a> {
 
     fn end_bound(&self) -> Bound<&'a Version> {
         self.max
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use uv_distribution_types::PrioritizedDist;
+    use uv_pep440::Version;
+
+    use super::{VersionMap, VersionMapEager, VersionMapInner};
+
+    #[test]
+    fn neighboring_included_versions() {
+        let first = Version::new([1]);
+        let second = Version::new([2]);
+        let third = Version::new([3]);
+        let map = VersionMap {
+            inner: VersionMapInner::Eager(VersionMapEager {
+                map: BTreeMap::from([
+                    (first.clone(), PrioritizedDist::default()),
+                    (second.clone(), PrioritizedDist::default()),
+                    (third.clone(), PrioritizedDist::default()),
+                ]),
+                stable: true,
+                local: false,
+            }),
+        };
+
+        assert_eq!(
+            map.neighboring_included_versions(&first),
+            Some((None, Some(&second)))
+        );
+        assert_eq!(
+            map.neighboring_included_versions(&second),
+            Some((Some(&first), Some(&third)))
+        );
+        assert_eq!(
+            map.neighboring_included_versions(&third),
+            Some((Some(&second), None))
+        );
+        assert_eq!(map.neighboring_included_versions(&Version::new([4])), None);
     }
 }
