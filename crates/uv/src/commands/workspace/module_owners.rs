@@ -95,21 +95,6 @@ pub(crate) async fn collect_module_owners(
     find_module_owners_in_environment(venv, &package_ids)
 }
 
-/// Map the modules in an existing environment to package IDs from the lockfile.
-pub(crate) fn find_module_owners(
-    target: InstallTarget<'_>,
-    venv: &PythonEnvironment,
-    extras: &ExtrasSpecificationWithDefaults,
-    groups: &DependencyGroupsWithDefaults,
-    settings: &ResolverSettings,
-) -> Result<BTreeMap<ModuleName, Vec<String>>> {
-    let Some(package_ids) = selected_package_ids(target, venv, extras, groups, settings)? else {
-        return Ok(BTreeMap::new());
-    };
-
-    find_module_owners_in_environment(venv, &package_ids)
-}
-
 /// Select the package IDs that can own modules in the target resolution.
 fn selected_package_ids(
     target: InstallTarget<'_>,
