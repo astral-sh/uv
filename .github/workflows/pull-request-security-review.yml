@@ -70,6 +70,7 @@ jobs:
           codex-home: "agents/codex"
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
+          allow-bot-users: "astral-automations-bot[bot]"
           prompt-file: "${{ runner.temp }}/pull-request-security-review-prompt.md"
           output-schema-file: "agents/schemas/pull-request-security-review.json"
 
