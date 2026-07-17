@@ -160,7 +160,12 @@ import iniconfig
       },
       "workspace_root": "[TEMP_DIR]/",
       "environment": {
-        "root": "[CACHE_DIR]/environments-v2/script-[HASH]"
+        "root": "[CACHE_DIR]/environments-v2/script-[HASH]",
+        "python": {
+          "path": "[CACHE_DIR]/environments-v2/script-[HASH]/bin/python",
+          "version": "3.12.[X]",
+          "implementation": "cpython"
+        }
       },
       "script": {
         "path": "[TEMP_DIR]/script.py",
@@ -633,7 +638,12 @@ dependencies = [
       },
       "workspace_root": "[TEMP_DIR]/",
       "environment": {
-        "root": "[VENV]/"
+        "root": "[VENV]/",
+        "python": {
+          "path": "[VENV]/bin/python3",
+          "version": "3.12.[X]",
+          "implementation": "cpython"
+        }
       },
       "workspace": {
         "path": "[TEMP_DIR]/",

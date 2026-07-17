@@ -232,7 +232,7 @@ pub(crate) async fn metadata(
                 .await
                 .context("Failed to collect module owners")?;
                 export = export
-                    .with_environment_root(environment.root())
+                    .with_environment(&environment)
                     .with_module_owners(module_owners);
             }
 
@@ -259,7 +259,7 @@ pub(crate) fn metadata_from_target(
         let module_owners = find_module_owners(target, environment, extras, groups, settings)
             .context("Failed to collect module owners")?;
         export = export
-            .with_environment_root(environment.root())
+            .with_environment(environment)
             .with_module_owners(module_owners);
     }
 

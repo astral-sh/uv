@@ -9,6 +9,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, ModuleName};
+use uv_python::PythonEnvironment;
 use uv_workspace::Workspace;
 
 use crate::lock::{
@@ -113,6 +114,19 @@ struct SchemaReport {
 struct MetadataEnvironment {
     /// Absolute path to the environment root.
     root: PortablePathBuf,
+    /// Information about the Python interpreter in the environment.
+    python: MetadataPython,
+}
+
+/// Information about the Python interpreter in a synchronized environment.
+#[derive(Debug, serde::Serialize)]
+struct MetadataPython {
+    /// Absolute path to the Python executable.
+    path: PortablePathBuf,
+    /// Full Python version.
+    version: Version,
+    /// Python implementation name.
+    implementation: String,
 }
 
 /// The script entry-point.
@@ -1430,9 +1444,15 @@ impl Metadata {
     }
 
     #[must_use]
-    pub fn with_environment_root(mut self, environment_root: &Path) -> Self {
+    pub fn with_environment(mut self, environment: &PythonEnvironment) -> Self {
+        let interpreter = environment.interpreter();
         self.environment = Some(MetadataEnvironment {
-            root: PortablePathBuf::from(environment_root),
+            root: PortablePathBuf::from(environment.root()),
+            python: MetadataPython {
+                path: PortablePathBuf::from(interpreter.sys_executable()),
+                version: interpreter.python_version().clone(),
+                implementation: interpreter.implementation_name().to_string(),
+            },
         });
         self
     }
