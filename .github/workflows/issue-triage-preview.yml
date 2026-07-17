@@ -5,16 +5,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - ".github/workflows/issue-triage-preview.yml"
-      - ".github/workflows/issue-triage.yml"
-      - ".github/workflows/reproduce-bug.yml"
-      - "agents/codex/**"
       - "agents/prompts/reproduce-bug.md"
       - "agents/prompts/triage-issue.md"
       - "agents/schemas/issue-triage-bug.json"
       - "agents/schemas/issue-triage.json"
-      - "agents/scripts/issue-triage-preview.py"
-      - "agents/scripts/issue-triage-preview.py.lock"
 
 permissions: {}
 
