@@ -6251,6 +6251,7 @@ dependencies = [
  "fs-err",
  "futures",
  "h2",
+ "hex",
  "html-escape",
  "http",
  "http-body-util",

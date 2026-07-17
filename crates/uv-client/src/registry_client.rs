@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,16 +20,17 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name, RegistryBuiltWheel,
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
+    RegistryBuiltWheel, Zstd,
 };
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_pypi_types::ProjectStatus;
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, ProjectStatus, Yanked};
 use uv_pypi_types::{
     PypiSimpleDetail, PypiSimpleIndex, PyxSimpleDetail, PyxSimpleIndex, ResolutionMetadata,
 };
@@ -1381,12 +1382,13 @@ type FlatIndexSlot = Arc<Mutex<Option<FlatIndexEntriesByPackage>>>;
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct VersionFiles {
-    pub wheels: Vec<File>,
-    pub source_dists: Vec<File>,
+    pub wheels: Vec<CachedFile>,
+    pub source_dists: Vec<CachedFile>,
 }
 
 impl VersionFiles {
     fn push(&mut self, filename: &DistFilename, file: File) {
+        let file = CachedFile::from(file);
         match filename {
             DistFilename::WheelFilename(_) => self.wheels.push(file),
             DistFilename::SourceDistFilename(_) => self.source_dists.push(file),
@@ -1398,10 +1400,213 @@ impl VersionFiles {
             .into_iter()
             .chain(self.wheels)
             .filter_map(|file| {
+                let file = File::from(file);
                 let filename = DistFilename::try_from_filename(&file.filename, package_name)?;
                 Some((filename, file))
             })
     }
+}
+
+/// A compact, cache-local representation of a registry file from the Simple API.
+///
+/// Filenames recoverable from the URL and false `yanked` markers are omitted, while optional
+/// scalar values use presence bits. Converting back to [`File`] restores equivalent Simple API
+/// metadata.
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+pub struct CachedFile {
+    size: u64,
+    upload_time_utc_ms: i64,
+    hashes: CachedHashDigests,
+    url: FileLocation,
+    requires_python: Option<Arc<VersionSpecifiers>>,
+    #[rkyv(with = rkyv::with::Niche)]
+    filename: Option<Box<SmallString>>,
+    #[rkyv(with = rkyv::with::Niche)]
+    yanked: Option<Box<Yanked>>,
+    #[rkyv(with = rkyv::with::Niche)]
+    zstd: Option<Box<Zstd>>,
+    dist_info_metadata: bool,
+    has_size: bool,
+    has_upload_time: bool,
+}
+
+impl ArchivedCachedFile {
+    /// Returns the upload time in UTC milliseconds, if it was present in the index metadata.
+    pub fn upload_time_utc_ms(&self) -> Option<i64> {
+        self.has_upload_time
+            .then_some(self.upload_time_utc_ms.to_native())
+    }
+}
+
+impl CachedFile {
+    /// Returns the stored filename or reconstructs it from the file URL.
+    pub fn filename(&self) -> &str {
+        self.filename
+            .as_deref()
+            .map_or_else(|| self.url.raw_filename(), SmallString::as_ref)
+    }
+
+    /// Reconstructs the file's hash digests from their compact cache representation.
+    pub fn hashes(&self) -> HashDigests {
+        HashDigests::from(&self.hashes)
+    }
+}
+
+impl From<File> for CachedFile {
+    fn from(file: File) -> Self {
+        let filename =
+            (file.url.raw_filename() != file.filename.as_ref()).then(|| Box::new(file.filename));
+        let has_size = file.size.is_some();
+        let has_upload_time = file.upload_time_utc_ms.is_some();
+        Self {
+            dist_info_metadata: file.dist_info_metadata,
+            filename,
+            hashes: CachedHashDigests::from(file.hashes),
+            requires_python: file.requires_python,
+            size: file.size.unwrap_or_default(),
+            upload_time_utc_ms: file.upload_time_utc_ms.unwrap_or_default(),
+            has_size,
+            has_upload_time,
+            url: file.url,
+            yanked: file.yanked.filter(|yanked| yanked.is_yanked()),
+            zstd: file.zstd,
+        }
+    }
+}
+
+impl From<CachedFile> for File {
+    fn from(file: CachedFile) -> Self {
+        let filename = SmallString::from(file.filename());
+        Self {
+            dist_info_metadata: file.dist_info_metadata,
+            filename,
+            hashes: HashDigests::from(file.hashes),
+            requires_python: file.requires_python,
+            size: file.has_size.then_some(file.size),
+            upload_time_utc_ms: file.has_upload_time.then_some(file.upload_time_utc_ms),
+            url: file.url,
+            yanked: file.yanked,
+            zstd: file.zstd,
+        }
+    }
+}
+
+/// A compact representation of a single, canonical hash digest.
+///
+/// Only lowercase hexadecimal digests of the expected length use the packed variants. Multiple
+/// hashes and non-canonical spellings remain in [`Self::Other`] so conversion back to
+/// [`HashDigests`] is lossless. The larger digests are boxed to keep the common archived layout
+/// small.
+#[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+enum CachedHashDigests {
+    Sha256([u8; 32]),
+    Md5([u8; 16]),
+    Blake2b([u8; 32]),
+    Sha384(Box<[u8; 48]>),
+    Sha512(Box<[u8; 64]>),
+    Other(HashDigests),
+}
+
+impl Debug for CachedHashDigests {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let (name, digest) = match self {
+            Self::Md5(digest) => ("Md5", digest.as_slice()),
+            Self::Sha256(digest) => ("Sha256", digest.as_slice()),
+            Self::Blake2b(digest) => ("Blake2b", digest.as_slice()),
+            Self::Sha384(digest) => ("Sha384", digest.as_slice()),
+            Self::Sha512(digest) => ("Sha512", digest.as_slice()),
+            Self::Other(hashes) => return f.debug_tuple("Other").field(hashes).finish(),
+        };
+        f.debug_tuple(name).field(&hex::encode(digest)).finish()
+    }
+}
+
+impl From<HashDigests> for CachedHashDigests {
+    fn from(hashes: HashDigests) -> Self {
+        let [hash] = hashes.as_slice() else {
+            return Self::Other(hashes);
+        };
+        let cached = match hash.algorithm {
+            HashAlgorithm::Md5 => decode_digest(hash).map(Self::Md5),
+            HashAlgorithm::Sha256 => decode_digest(hash).map(Self::Sha256),
+            HashAlgorithm::Blake2b => decode_digest(hash).map(Self::Blake2b),
+            HashAlgorithm::Sha384 => {
+                decode_digest(hash).map(|digest| Self::Sha384(Box::new(digest)))
+            }
+            HashAlgorithm::Sha512 => {
+                decode_digest(hash).map(|digest| Self::Sha512(Box::new(digest)))
+            }
+        };
+        let Some(cached) = cached else {
+            return Self::Other(hashes);
+        };
+        cached
+    }
+}
+
+impl From<CachedHashDigests> for HashDigests {
+    fn from(hashes: CachedHashDigests) -> Self {
+        match hashes {
+            CachedHashDigests::Other(hashes) => hashes,
+            hashes => Self::from(&hashes),
+        }
+    }
+}
+
+impl From<&CachedHashDigests> for HashDigests {
+    fn from(hashes: &CachedHashDigests) -> Self {
+        match hashes {
+            CachedHashDigests::Md5(digest) => Self::from(hash_digest(HashAlgorithm::Md5, digest)),
+            CachedHashDigests::Sha256(digest) => {
+                Self::from(hash_digest(HashAlgorithm::Sha256, digest))
+            }
+            CachedHashDigests::Blake2b(digest) => {
+                Self::from(hash_digest(HashAlgorithm::Blake2b, digest))
+            }
+            CachedHashDigests::Sha384(digest) => {
+                Self::from(hash_digest(HashAlgorithm::Sha384, digest.as_slice()))
+            }
+            CachedHashDigests::Sha512(digest) => {
+                Self::from(hash_digest(HashAlgorithm::Sha512, digest.as_slice()))
+            }
+            CachedHashDigests::Other(hashes) => hashes.clone(),
+        }
+    }
+}
+
+/// Decodes a lowercase hexadecimal digest of exactly `N` bytes.
+///
+/// Rejecting non-canonical spellings lets [`CachedHashDigests::Other`] preserve their original
+/// text.
+fn decode_digest<const N: usize>(hash: &HashDigest) -> Option<[u8; N]> {
+    if hash.digest.len() != N * 2
+        || !hash
+            .digest
+            .as_bytes()
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return None;
+    }
+    let mut digest = [0; N];
+    hex::decode_to_slice(hash.digest.as_bytes(), &mut digest).ok()?;
+    Some(digest)
+}
+
+/// Reconstructs the canonical lowercase spelling of a packed digest.
+fn hash_digest(algorithm: HashAlgorithm, digest: &[u8]) -> HashDigest {
+    let mut encoded = [0; 128];
+    let length = digest.len() * 2;
+    let digest = if let Some(encoded) = encoded.get_mut(..length)
+        && hex::encode_to_slice(digest, &mut *encoded).is_ok()
+    {
+        SmallString::from(String::from_utf8_lossy(encoded))
+    } else {
+        SmallString::from(hex::encode(digest))
+    };
+    HashDigest { algorithm, digest }
 }
 
 /// The list of projects available in a Simple API index.
@@ -1461,7 +1666,8 @@ pub struct SimpleDetailMetadata {
 pub struct SimpleDetailMetadatum {
     pub version: Version,
     pub files: VersionFiles,
-    pub metadata: Option<ResolutionMetadata>,
+    #[rkyv(with = rkyv::with::Niche)]
+    pub metadata: Option<Box<ResolutionMetadata>>,
 }
 
 impl SimpleDetailMetadata {
@@ -1517,10 +1723,10 @@ impl SimpleDetailMetadata {
         for files in version_map.values_mut() {
             files
                 .wheels
-                .sort_unstable_by(|left, right| left.filename.cmp(&right.filename));
+                .sort_unstable_by(|left, right| left.filename().cmp(right.filename()));
             files
                 .source_dists
-                .sort_unstable_by(|left, right| left.filename.cmp(&right.filename));
+                .sort_unstable_by(|left, right| left.filename().cmp(right.filename()));
         }
 
         Self {
@@ -1585,17 +1791,16 @@ impl SimpleDetailMetadata {
             versions: version_map
                 .into_iter()
                 .map(|(version, files)| {
-                    let metadata =
-                        core_metadata
-                            .remove(&version)
-                            .map(|metadata| ResolutionMetadata {
-                                name: package_name.clone(),
-                                version: version.clone(),
-                                requires_dist: metadata.requires_dist,
-                                requires_python: metadata.requires_python,
-                                provides_extra: metadata.provides_extra,
-                                dynamic: false,
-                            });
+                    let metadata = core_metadata.remove(&version).map(|metadata| {
+                        Box::new(ResolutionMetadata {
+                            name: package_name.clone(),
+                            version: version.clone(),
+                            requires_dist: metadata.requires_dist,
+                            requires_python: metadata.requires_python,
+                            provides_extra: metadata.provides_extra,
+                            dynamic: false,
+                        })
+                    });
                     SimpleDetailMetadatum {
                         version,
                         files,
@@ -2187,16 +2392,16 @@ mod tests {
                     files: VersionFiles {
                         wheels: [],
                         source_dists: [
-                            File {
-                                dist_info_metadata: false,
-                                filename: "pepy-2.1.1.tar.gz",
-                                hashes: HashDigests(
-                                    [
-                                        HashDigest {
-                                            algorithm: Sha256,
-                                            digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
-                                        },
-                                    ],
+                            CachedFile {
+                                size: 15399,
+                                upload_time_utc_ms: 1668446093935,
+                                hashes: Sha256(
+                                    "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                ),
+                                url: AbsoluteUrl(
+                                    UrlString(
+                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
+                                    ),
                                 ),
                                 requires_python: Some(
                                     VersionSpecifiers(
@@ -2208,23 +2413,12 @@ mod tests {
                                         ],
                                     ),
                                 ),
-                                size: Some(
-                                    15399,
-                                ),
-                                upload_time_utc_ms: Some(
-                                    1668446093935,
-                                ),
-                                url: AbsoluteUrl(
-                                    UrlString(
-                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
-                                    ),
-                                ),
-                                yanked: Some(
-                                    Bool(
-                                        false,
-                                    ),
-                                ),
+                                filename: None,
+                                yanked: None,
                                 zstd: None,
+                                dist_info_metadata: false,
+                                has_size: true,
+                                has_upload_time: true,
                             },
                         ],
                     },
@@ -2270,16 +2464,16 @@ mod tests {
                     files: VersionFiles {
                         wheels: [],
                         source_dists: [
-                            File {
-                                dist_info_metadata: false,
-                                filename: "pepy-2.1.1.tar.gz",
-                                hashes: HashDigests(
-                                    [
-                                        HashDigest {
-                                            algorithm: Sha256,
-                                            digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
-                                        },
-                                    ],
+                            CachedFile {
+                                size: 0,
+                                upload_time_utc_ms: 0,
+                                hashes: Sha256(
+                                    "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                ),
+                                url: AbsoluteUrl(
+                                    UrlString(
+                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
+                                    ),
                                 ),
                                 requires_python: Some(
                                     VersionSpecifiers(
@@ -2291,15 +2485,12 @@ mod tests {
                                         ],
                                     ),
                                 ),
-                                size: None,
-                                upload_time_utc_ms: None,
-                                url: AbsoluteUrl(
-                                    UrlString(
-                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
-                                    ),
-                                ),
+                                filename: None,
                                 yanked: None,
                                 zstd: None,
+                                dist_info_metadata: false,
+                                has_size: false,
+                                has_upload_time: false,
                             },
                         ],
                     },
