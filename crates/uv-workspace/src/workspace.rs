@@ -299,11 +299,11 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    /// Find the install path of the workspace containing the given path without discovering its
-    /// members.
+    /// Find the install path used for settings discovery without collecting workspace members.
     ///
-    /// This is intended for settings discovery, which only needs the workspace root and must not
-    /// require an async runtime.
+    /// This follows the root-selection rules from [`Self::discover`], including workspace
+    /// membership, exclusions, and discovery boundaries, but performs only synchronous reads so it
+    /// can run before an async runtime exists.
     pub fn discover_install_path(
         path: &Path,
         options: &DiscoveryOptions,
