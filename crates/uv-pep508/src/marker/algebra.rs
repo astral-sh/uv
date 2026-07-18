@@ -52,7 +52,7 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
 use itertools::{Either, Itertools};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
 use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
@@ -703,80 +703,24 @@ impl InternerGuard<'_> {
 
     /// Returns `true` if a ternary marker can reach a `true` terminal on a valid assignment.
     fn can_be_true(&self, node: NodeId) -> bool {
-        let mut seen = FxHashSet::default();
-        let mut pending = vec![node];
-        while let Some(node) = pending.pop() {
-            if node.is_true() {
-                return true;
-            }
-            if node.is_terminal() || !seen.insert(node) {
-                continue;
-            }
-            pending.extend(
-                self.shared
-                    .node(node)
-                    .children
-                    .nodes()
-                    .map(|child| child.negate(node)),
-            );
+        if node.is_true() {
+            return true;
         }
-        false
+        if node.is_terminal() {
+            return false;
+        }
+
+        self.shared
+            .node(node)
+            .children
+            .nodes()
+            .any(|child| self.can_be_true(child.negate(node)))
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
     /// i.e. their conjunction is always `false`.
     pub(crate) fn is_disjoint(&mut self, xi: NodeId, yi: NodeId) -> bool {
-        if xi.is_dont_care() || yi.is_dont_care() {
-            return true;
-        }
-        // `false` is disjoint with any marker.
-        if xi.is_false() || yi.is_false() {
-            return true;
-        }
-        // `true` is not disjoint with any marker except `false`.
-        if xi.is_true() {
-            return !self.can_be_true(yi);
-        }
-        if yi.is_true() {
-            return !self.can_be_true(xi);
-        }
-        // `X` and `X` are not disjoint.
-        if xi == yi {
-            return !self.can_be_true(xi);
-        }
-        // `X` and `not X` are disjoint by definition.
-        if xi.not() == yi {
-            return true;
-        }
-
-        let (x, y) = (self.shared.node(xi), self.shared.node(yi));
-
-        // Determine whether the conjunction _could_ contain a conflict.
-        //
-        // As an optimization, we only have to perform this check at the top-level, since these
-        // variables are given higher priority in the tree. In other words, if they're present, they
-        // _must_ be at the top; and if they're not at the top, we know they aren't present in any
-        // children.
-        if x.var.is_conflicting_variable() && y.var.is_conflicting_variable() {
-            let node = self.and(xi, yi);
-            return !self.can_be_true(node);
-        }
-
-        // Perform Shannon Expansion of the higher order variable.
-        match x.var.cmp(&y.var) {
-            // X is higher order than Y, Y must be disjoint with every child of X.
-            Ordering::Less => x
-                .children
-                .nodes()
-                .all(|x| self.disjointness(x.negate(xi), yi)),
-            // Y is higher order than X, X must be disjoint with every child of Y.
-            Ordering::Greater => y
-                .children
-                .nodes()
-                .all(|y| self.disjointness(y.negate(yi), xi)),
-            // X and Y represent the same variable, their merged edges must be unsatisfiable.
-            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
-        }
+        self.disjointness(xi, yi)
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
@@ -785,11 +729,6 @@ impl InternerGuard<'_> {
         if xi.is_dont_care() || yi.is_dont_care() {
             return true;
         }
-        // NOTE(charlie): This is equivalent to `is_disjoint`, with the exception that it doesn't
-        // perform the mutually-incompatible marker check. If it did, we'd create an infinite loop,
-        // since `is_disjoint` calls `and` (when relevant variables are present) which then calls
-        // `disjointness`.
-
         // `false` is disjoint with any marker.
         if xi.is_false() || yi.is_false() {
             return true;
@@ -2361,6 +2300,19 @@ mod tests {
             let raw = interner.expression_raw(expression);
             assert_eq!(interner.finish(raw), raw);
         }
+    }
+
+    #[test]
+    fn disjointness_does_not_intern_conjunctions() {
+        let windows = expr("os_name == 'nt'");
+        let linux = expr("sys_platform == 'linux'");
+        let netbsd = expr("platform_system == 'NetBSD'");
+
+        let mut interner = INTERNER.lock();
+        let nodes = INTERNER.shared.nodes.count();
+        assert!(interner.is_disjoint(windows, linux));
+        assert!(!interner.is_disjoint(windows, netbsd));
+        assert_eq!(INTERNER.shared.nodes.count(), nodes);
     }
 
     #[test]
