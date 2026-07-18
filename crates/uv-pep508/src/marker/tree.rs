@@ -3217,6 +3217,27 @@ mod test {
         let without_extras = combined.without_extras();
         assert_eq!(combined, without_extras);
         assert_eq!(combined.cmp(&without_extras), std::cmp::Ordering::Equal);
+
+        let custom = m("os_name == 'custom-os' and sys_platform == 'custom-sys'");
+        let mut with_invalid = custom;
+        with_invalid.and(m("extra == 'foo'"));
+        with_invalid.or(m(
+            "os_name == 'nt' and sys_platform == 'linux' and extra != 'foo'",
+        ));
+        let mut expected = custom;
+        expected.and(m("extra == 'foo'"));
+        assert_eq!(with_invalid, expected);
+
+        let windows = m("os_name == 'nt'");
+        let posix = m("os_name == 'posix'");
+        let not_linux = m("sys_platform != 'linux'");
+        let mut left = windows;
+        left.or(posix);
+        left.or(not_linux);
+        let mut right = posix;
+        right.or(not_linux);
+        right.or(windows);
+        assert_eq!(left, right);
     }
 
     #[test]

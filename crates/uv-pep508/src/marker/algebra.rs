@@ -490,9 +490,18 @@ impl InternerGuard<'_> {
         }
         // A single conflicting variable (or the non-conflicting `os_name` and
         // `platform_system` pair) does not need to be expanded across the validity domain.
-        // Projection also coalesces any redundant range boundaries left by prior operations.
         if !self.can_conflict(node) {
-            return self.project(node);
+            let current = self.shared.node(node);
+            let projected = if current.children.is_coalesced() {
+                node
+            } else {
+                let children = current.children.clone().coalesce();
+                self.create_node(current.var.clone(), children).negate(node)
+            };
+            self.shared.cache_projection(projected, projected);
+            self.shared
+                .cache_projection(projected.not(), projected.not());
+            return projected;
         }
         let validity = self.exclusions().not();
         let masked = self.mask(node, validity);
@@ -521,8 +530,48 @@ impl InternerGuard<'_> {
         }
 
         let node = self.shared.node(node);
-        node.children.nodes().any(|child| {
-            !child.is_terminal() && node.var.conflicts_with(&self.shared.node(child).var)
+        let Edges::String { edges } = &node.children else {
+            return false;
+        };
+
+        let excluded_values: &[&str] = match node.var {
+            Variable::String(CanonicalMarkerValueString::OsName) => &["nt", "posix"],
+            Variable::String(CanonicalMarkerValueString::SysPlatform) => &[
+                "linux",
+                "darwin",
+                "ios",
+                "win32",
+                "aix",
+                "android",
+                "emscripten",
+                "cygwin",
+                "wasi",
+            ],
+            _ => &[],
+        };
+        let references_excluded_value = edges.iter().any(|(range, _)| {
+            range.iter().any(|(start, end)| {
+                [start, end].into_iter().any(|bound| {
+                    matches!(bound, Bound::Included(value) | Bound::Excluded(value)
+                        if excluded_values.contains(&value.as_ref()))
+                })
+            })
+        });
+
+        edges.iter().any(|(_, child)| {
+            if child.is_terminal() {
+                return false;
+            }
+
+            let child_node = self.shared.node(*child);
+            if !child_node.var.is_conflicting_variable() {
+                return false;
+            }
+
+            let can_conflict =
+                references_excluded_value && node.var.conflicts_with(&child_node.var);
+
+            can_conflict || self.can_conflict(*child)
         })
     }
 
@@ -2129,6 +2178,25 @@ impl Edges {
         }
     }
 
+    /// Returns `true` if no adjacent range edges can be merged.
+    fn is_coalesced(&self) -> bool {
+        match self {
+            Self::Version { edges } => Self::ranges_are_coalesced(edges),
+            Self::String { edges } => Self::ranges_are_coalesced(edges),
+            Self::Boolean { .. } => true,
+        }
+    }
+
+    /// Returns `true` if no adjacent ranges point to the same node.
+    fn ranges_are_coalesced<T>(edges: &SmallVec<(Ranges<T>, NodeId)>) -> bool
+    where
+        T: Clone + Ord,
+    {
+        edges
+            .windows(2)
+            .all(|edges| edges[0].1 != edges[1].1 || !can_conjoin(&edges[0].0, &edges[1].0))
+    }
+
     /// Merge adjacent ranges that point to the same node.
     fn coalesce_ranges<T>(edges: SmallVec<(Ranges<T>, NodeId)>) -> SmallVec<(Ranges<T>, NodeId)>
     where
@@ -2556,6 +2624,48 @@ mod tests {
         );
         let raw = interner.and_cached(os_name, platform_system);
         assert_eq!(interner.finish(raw), raw);
+    }
+
+    #[test]
+    fn markers_without_reachable_exclusion_remain_boolean() {
+        let mut interner = INTERNER.lock();
+        let mut custom = NodeId::FALSE;
+        for index in 0..32 {
+            let os_name = interner.expression_raw(
+                MarkerExpression::from_str(&format!("os_name == 'custom-os-{index}'"))
+                    .unwrap()
+                    .unwrap(),
+            );
+            let sys_platform = interner.expression_raw(
+                MarkerExpression::from_str(&format!("sys_platform == 'custom-sys-{index}'"))
+                    .unwrap()
+                    .unwrap(),
+            );
+            let alternative = interner.and_cached(os_name, sys_platform);
+            custom = interner.or_cached(custom, alternative);
+        }
+        assert!(!interner.can_conflict(custom));
+        assert_eq!(interner.finish(custom), custom);
+
+        let os_name = interner.expression_raw(
+            MarkerExpression::from_str("os_name == 'custom-os'")
+                .unwrap()
+                .unwrap(),
+        );
+        let sys_platform = interner.expression_raw(
+            MarkerExpression::from_str("sys_platform == 'linux'")
+                .unwrap()
+                .unwrap(),
+        );
+        let platform_system = interner.expression_raw(
+            MarkerExpression::from_str("platform_system == 'FreeBSD'")
+                .unwrap()
+                .unwrap(),
+        );
+        let nested = interner.and_cached(os_name, sys_platform);
+        let nested = interner.and_cached(nested, platform_system);
+        assert!(interner.can_conflict(nested));
+        assert!(interner.finish(nested).is_false());
     }
 
     #[test]
