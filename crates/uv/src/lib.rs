@@ -1728,6 +1728,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.show_extras,
                 args.show_python,
                 args.outdated,
+                args.output_format,
                 args.args,
                 args.filesystem,
                 client_builder.subcommand(vec!["tool".to_owned(), "list".to_owned()]),

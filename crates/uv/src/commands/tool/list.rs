@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -6,17 +7,21 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 
+use serde::Serialize;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
+use uv_cli::ToolListFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::Concurrency;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, RequiresPython};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pep508::StringVersion;
 use uv_python::LenientImplementationName;
 use uv_settings::{Combine, ResolverInstallerOptions};
-use uv_tool::InstalledTools;
+use uv_tool::{InstalledTools, Tool, ToolEnvironment};
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
@@ -24,6 +29,49 @@ use crate::commands::pip::latest::LatestClient;
 use crate::commands::reporters::LatestVersionReporter;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
+
+#[derive(Debug, Serialize, Default)]
+struct Schema {
+    version: SchemaVersion,
+}
+
+#[derive(Debug, Serialize, Default)]
+#[serde(rename_all = "snake_case")]
+enum SchemaVersion {
+    #[default]
+    Preview,
+}
+
+#[derive(Debug, Serialize)]
+struct CommandPrintData {
+    name: String,
+    path: PathBuf,
+}
+
+#[derive(Debug, Serialize)]
+struct PythonPrintData {
+    implementation: String,
+    version: StringVersion,
+}
+
+#[derive(Debug, Serialize)]
+struct ToolPrintData {
+    name: String,
+    version: Version,
+    latest_version: Option<Version>,
+    path: PathBuf,
+    commands: Vec<CommandPrintData>,
+    extras: Vec<String>,
+    version_specifiers: String,
+    with: Vec<String>,
+    python: PythonPrintData,
+}
+
+#[derive(Debug, Serialize)]
+struct PrintData {
+    schema: Schema,
+    tools: Vec<ToolPrintData>,
+}
 
 /// List installed tools.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -34,6 +82,7 @@ pub(crate) async fn list(
     show_extras: bool,
     show_python: bool,
     outdated: bool,
+    output_format: ToolListFormat,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
     client_builder: BaseClientBuilder<'_>,
@@ -49,7 +98,16 @@ pub(crate) async fn list(
                 .as_io_error()
                 .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
         {
-            writeln!(printer.stderr(), "No tools installed")?;
+            match output_format {
+                ToolListFormat::Text => writeln!(printer.stderr(), "No tools installed")?,
+                ToolListFormat::Json => render_list_json(
+                    outdated,
+                    FxHashMap::default(),
+                    printer,
+                    Vec::new(),
+                    installed_tools,
+                )?,
+            }
             return Ok(ExitStatus::Success);
         }
         Err(err) => return Err(err.into()),
@@ -59,7 +117,16 @@ pub(crate) async fn list(
     tools.sort_by_key(|(name, _)| name.clone());
 
     if tools.is_empty() {
-        writeln!(printer.stderr(), "No tools installed")?;
+        match output_format {
+            ToolListFormat::Text => writeln!(printer.stderr(), "No tools installed")?,
+            ToolListFormat::Json => render_list_json(
+                outdated,
+                FxHashMap::default(),
+                printer,
+                Vec::new(),
+                installed_tools,
+            )?,
+        }
         return Ok(ExitStatus::Success);
     }
 
@@ -183,6 +250,121 @@ pub(crate) async fn list(
         FxHashMap::default()
     };
 
+    match output_format {
+        ToolListFormat::Text => render_list_text(
+            outdated,
+            show_version_specifiers,
+            show_extras,
+            show_python,
+            show_with,
+            show_paths,
+            latest,
+            printer,
+            valid_tools,
+            installed_tools,
+        )?,
+        ToolListFormat::Json => {
+            render_list_json(outdated, latest, printer, valid_tools, installed_tools)?
+        }
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+fn render_list_json(
+    outdated: bool,
+    latest: FxHashMap<PackageName, Option<DistFilename>>,
+    printer: Printer,
+    valid_tools: Vec<(PackageName, Tool, ToolEnvironment, Version)>,
+    installed_tools: InstalledTools,
+) -> Result<()> {
+    let tools = valid_tools
+        .iter()
+        .filter(|(name, _, _, version)| {
+            // skip up-to-date entries if we want outdated tools
+            !outdated
+                || latest
+                    .get(&name)
+                    .and_then(Option::as_ref)
+                    .is_some_and(|filename| filename.version() > &version)
+        })
+        .map(|(name, tool, tool_env, version)| ToolPrintData {
+            name: name.to_string(),
+            version: version.clone(),
+            latest_version: if outdated {
+                latest
+                    .get(&name)
+                    .and_then(Option::as_ref)
+                    .map(|filename| filename.version().clone())
+            } else {
+                // when we don't list outdated tools, we do not know the latest version
+                None
+            },
+            path: installed_tools.tool_dir(&name),
+            commands: tool
+                .entrypoints()
+                .iter()
+                .map(|ep| CommandPrintData {
+                    name: ep.name.clone(),
+                    path: ep.install_path.clone(),
+                })
+                .collect::<Vec<_>>(),
+            extras: tool
+                .requirements()
+                .iter()
+                .filter(|req| req.name == *name)
+                .flat_map(|req| req.extras.iter()) // Flatten the extras from all matching requirements
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            version_specifiers: tool
+                .requirements()
+                .iter()
+                .filter(|req| req.name == *name)
+                .map(|req| req.source.to_string())
+                .filter(|s| !s.is_empty())
+                // XXX I don't think we'll ever have more than 1 element here, since multiple
+                // specifiers like in 'twine[keyring]>=6.2.0,!=69' are all in the same string
+                .join(", "),
+            with: tool
+                .requirements()
+                .iter()
+                .filter(|req| req.name != *name)
+                .map(|req| format!("{}{}", req.name, req.source))
+                .collect::<Vec<_>>(),
+            python: {
+                let interpreter = tool_env.environment().interpreter();
+                let implementation =
+                    LenientImplementationName::from(interpreter.implementation_name());
+                PythonPrintData {
+                    implementation: implementation.to_string(),
+                    version: interpreter.python_full_version().clone(),
+                }
+            },
+        })
+        .collect::<Vec<_>>();
+
+    let data = PrintData {
+        schema: Schema {
+            version: SchemaVersion::Preview,
+        },
+        tools,
+    };
+    writeln!(printer.stdout(), "{}", serde_json::to_string(&data)?)?;
+    Ok(())
+}
+
+fn render_list_text(
+    outdated: bool,
+    show_version_specifiers: bool,
+    show_extras: bool,
+    show_python: bool,
+    show_with: bool,
+    show_paths: bool,
+    latest: FxHashMap<PackageName, Option<DistFilename>>,
+    printer: Printer,
+    valid_tools: Vec<(PackageName, Tool, ToolEnvironment, Version)>,
+    installed_tools: InstalledTools,
+) -> Result<()> {
     for (name, tool, tool_env, version) in valid_tools {
         // If `--outdated` is set, skip tools that are up-to-date.
         if outdated {
@@ -295,5 +477,5 @@ pub(crate) async fn list(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(())
 }

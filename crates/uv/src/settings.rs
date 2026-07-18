@@ -19,7 +19,7 @@ use uv_cli::{
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
-    SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
+    SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolListFormat, ToolRunArgs,
     ToolUninstallArgs, TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec,
     VersionFormat,
 };
@@ -1270,6 +1270,7 @@ pub(crate) struct ToolListSettings {
     pub(crate) show_extras: bool,
     pub(crate) show_python: bool,
     pub(crate) outdated: bool,
+    pub(crate) output_format: ToolListFormat,
     pub(crate) args: ResolverInstallerOptions,
     pub(crate) filesystem: ResolverInstallerOptions,
 }
@@ -1285,6 +1286,7 @@ impl ToolListSettings {
             show_python,
             outdated,
             no_outdated,
+            output_format,
             exclude_newer,
             python_preference: _,
             no_python_downloads: _,
@@ -1303,6 +1305,7 @@ impl ToolListSettings {
             show_extras,
             show_python,
             outdated: flag(outdated, no_outdated, "outdated").unwrap_or(false),
+            output_format,
             args: ResolverInstallerOptions {
                 exclude_newer,
                 ..ResolverInstallerOptions::default()

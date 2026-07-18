@@ -59,6 +59,15 @@ pub enum PythonListFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ToolListFormat {
+    /// Plain text (for humans).
+    #[default]
+    Text,
+    /// JSON (for computers).
+    Json,
+}
+
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum SyncFormat {
     /// Display the result in a human-readable format.
@@ -6149,6 +6158,10 @@ pub struct ToolListArgs {
 
     #[arg(long, hide = true)]
     pub no_python_downloads: bool,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = ToolListFormat::default())]
+    pub output_format: ToolListFormat,
 }
 
 #[derive(Args)]
