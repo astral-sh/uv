@@ -25115,6 +25115,42 @@ fn lock_multiple_sources_disjoint_platform_markers() -> Result<()> {
     Ok(())
 }
 
+/// Multiple sources remain disjoint when the incompatible platform key is below another marker
+/// decision.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_multiple_sources_disjoint_platform_descendants() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", marker = "os_name == 'custom' and sys_platform == 'linux'" },
+            { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", marker = "platform_system == 'FreeBSD'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_conflict() -> Result<()> {

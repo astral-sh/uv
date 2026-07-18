@@ -93,7 +93,12 @@ struct InternedNode {
     node: Node,
     projections: [AtomicUsize; 2],
     can_conflict: bool,
+    conflicting_variables: u8,
 }
+
+const OS_NAME_VARIABLE: u8 = 1;
+const SYS_PLATFORM_VARIABLE: u8 = 1 << 1;
+const PLATFORM_SYSTEM_VARIABLE: u8 = 1 << 2;
 
 /// The mutable [`Interner`] state, stored behind a lock.
 #[derive(Default)]
@@ -128,6 +133,39 @@ impl InternerShared {
     /// Returns `true` if the given marker can reach a known-incompatible pair of variables.
     fn can_conflict(&self, id: NodeId) -> bool {
         !id.is_terminal() && self.nodes[id.index()].can_conflict
+    }
+
+    /// Returns `true` if two marker trees can contain a known-incompatible pair of variables.
+    fn trees_can_conflict(&self, left: NodeId, right: NodeId) -> bool {
+        let left = self.conflicting_variables(left);
+        let right = self.conflicting_variables(right);
+        let systems = OS_NAME_VARIABLE | PLATFORM_SYSTEM_VARIABLE;
+        (left & SYS_PLATFORM_VARIABLE != 0 && right & systems != 0)
+            || (right & SYS_PLATFORM_VARIABLE != 0 && left & systems != 0)
+    }
+
+    /// Returns the conflicting variables reachable from a marker tree.
+    fn conflicting_variables(&self, id: NodeId) -> u8 {
+        if id.is_terminal() {
+            0
+        } else {
+            self.nodes[id.index()].conflicting_variables
+        }
+    }
+
+    /// Returns the conflicting variables reachable from a new node.
+    fn node_conflicting_variables(&self, node: &Node) -> u8 {
+        let current = match node.var {
+            Variable::String(CanonicalMarkerValueString::OsName) => OS_NAME_VARIABLE,
+            Variable::String(CanonicalMarkerValueString::SysPlatform) => SYS_PLATFORM_VARIABLE,
+            Variable::String(CanonicalMarkerValueString::PlatformSystem) => {
+                PLATFORM_SYSTEM_VARIABLE
+            }
+            _ => return 0,
+        };
+        node.children.nodes().fold(current, |variables, child| {
+            variables | self.conflicting_variables(child)
+        })
     }
 
     /// Returns `true` if a new node can reach a known-incompatible pair of variables.
@@ -250,11 +288,13 @@ impl InternerGuard<'_> {
         // Insert the node.
         let id = self.state.unique.entry(node.clone()).or_insert_with(|| {
             let can_conflict = self.shared.node_can_conflict(&node);
+            let conflicting_variables = self.shared.node_conflicting_variables(&node);
             NodeId::new(
                 self.shared.nodes.push(InternedNode {
                     node,
                     projections: [AtomicUsize::new(usize::MAX), AtomicUsize::new(usize::MAX)],
                     can_conflict,
+                    conflicting_variables,
                 }),
                 false,
             )
@@ -846,16 +886,10 @@ impl InternerGuard<'_> {
     /// Returns `true` if there is no environment in which both marker trees can apply,
     /// i.e. their conjunction is always `false`.
     pub(crate) fn is_disjoint(&mut self, xi: NodeId, yi: NodeId) -> bool {
-        let roots_conflict = !xi.is_terminal()
-            && !yi.is_terminal()
-            && self
-                .shared
-                .node(xi)
-                .var
-                .conflicts_with(&self.shared.node(yi).var);
+        let trees_conflict = self.shared.trees_can_conflict(xi, yi);
         let left_can_conflict = self.can_conflict(xi);
         let right_can_conflict = self.can_conflict(yi);
-        let validity_sensitive = left_can_conflict || right_can_conflict || roots_conflict;
+        let validity_sensitive = left_can_conflict || right_can_conflict || trees_conflict;
 
         // Ordinary Boolean trees are cheap to compare, and caching every pair can otherwise
         // retain a quadratic number of entries during requirement and wheel selection.
@@ -868,8 +902,8 @@ impl InternerGuard<'_> {
             return disjoint;
         }
 
-        let disjoint = if roots_conflict && !left_can_conflict && !right_can_conflict {
-            // Singleton platform predicates remain Boolean until they are combined. Account
+        let disjoint = if trees_conflict && !left_can_conflict && !right_can_conflict {
+            // Boolean platform predicates remain unmasked until they are combined. Account
             // for the validity domain here without materializing their conjunction.
             let validity = self.exclusions().not();
             self.disjointness_under_validity(xi, yi, validity)

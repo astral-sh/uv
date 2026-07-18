@@ -3274,6 +3274,11 @@ mod test {
         assert!(custom_linux.is_disjoint(windows));
         assert!(windows.is_disjoint(custom_linux));
 
+        let freebsd = m("platform_system == 'FreeBSD'");
+        let custom_linux = m("os_name == 'custom' and sys_platform == 'linux'");
+        assert!(freebsd.is_disjoint(custom_linux));
+        assert!(custom_linux.is_disjoint(freebsd));
+
         let pypy = m("implementation_name == 'pypy'");
         let pypy_freebsd_or_windows = m(
             "(implementation_name == 'pypy' and platform_system == 'FreeBSD') or os_name == 'nt'",
