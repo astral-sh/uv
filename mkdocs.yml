@@ -109,6 +109,7 @@ plugins:
           - guides/tools.md
           - guides/projects.md
           - guides/package.md
+          - guides/contributing.md
         Integrations:
           - guides/integration/docker.md
           - guides/integration/jupyter.md
@@ -213,6 +214,7 @@ nav:
           - Dependabot: guides/integration/dependabot.md
           - AWS Lambda: guides/integration/aws-lambda.md
           - Coiled: guides/integration/coiled.md
+      - Contributing: guides/contributing.md
   - Concepts:
       - concepts/index.md
       - Projects:
