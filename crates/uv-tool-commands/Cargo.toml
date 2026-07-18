@@ -60,6 +60,7 @@ uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
+anstream = { workspace = true }
 anyhow = { workspace = true }
 console = { workspace = true }
 fs-err = { workspace = true }
@@ -67,6 +68,7 @@ futures = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

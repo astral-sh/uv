@@ -1934,6 +1934,469 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn tool_upgrade_empty_json() {
+    let new_index = new_tool_index();
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .arg("--output-format")
+        .arg("json")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "upgrades": []
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    "#);
+
+    context
+        .tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .arg("--output-format")
+        .arg("json")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "upgrades": [
+        {
+          "name": "babel",
+          "outcome": "no_op"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    "#);
+}
+
+#[test]
+fn tool_upgrade_name_json() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--output-format")
+        .arg("json")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "upgrades": [
+        {
+          "name": "babel",
+          "outcome": "upgrade_tool"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    Updated babel v2.6.0 -> v2.14.0
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
+    Installed 1 executable: pybabel
+    "#);
+}
+
+#[test]
+fn tool_upgrade_multiple_names_json() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("python-dotenv")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    context
+        .tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("python-dotenv")
+        .arg("--output-format")
+        .arg("json")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "upgrades": [
+        {
+          "name": "babel",
+          "outcome": "upgrade_tool"
+        },
+        {
+          "name": "python-dotenv",
+          "outcome": "upgrade_tool"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    Updated babel v2.6.0 -> v2.14.0
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
+    Installed 1 executable: pybabel
+    Updated python-dotenv v0.10.2.post2 -> v1.0.1
+     - python-dotenv==0.10.2.post2
+     + python-dotenv==1.0.1
+    Installed 1 executable: dotenv
+    "#);
+}
+
+#[test]
+fn tool_upgrade_pinned_hint_json() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("babel==2.6.0")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--output-format")
+        .arg("json")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "upgrades": [
+        {
+          "name": "babel",
+          "outcome": "upgrade_dependencies",
+          "constraint": {
+            "kind": "pinned_version",
+            "version": "2.6.0"
+          }
+        }
+      ]
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    Modified babel environment
+     - pytz==2018.5
+     + pytz==2024.1
+    "#);
+}
+
+#[test]
+fn tool_upgrade_all_json() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("python-dotenv")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    context
+        .tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .arg("--output-format")
+        .arg("json")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "upgrades": [
+        {
+          "name": "babel",
+          "outcome": "upgrade_tool"
+        },
+        {
+          "name": "python-dotenv",
+          "outcome": "upgrade_tool"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    Updated babel v2.6.0 -> v2.14.0
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
+    Installed 1 executable: pybabel
+    Updated python-dotenv v0.10.2.post2 -> v1.0.1
+     - python-dotenv==0.10.2.post2
+     + python-dotenv==1.0.1
+    Installed 1 executable: dotenv
+    "#);
+}
+
+#[test]
+fn tool_upgrade_non_existing_package_json() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("black")
+        .arg("--output-format")
+        .arg("json")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "upgrades": [
+        {
+          "name": "black",
+          "outcome": "failed",
+          "error": "`black` is not installed; run `uv tool install black` to install"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    error: Failed to upgrade black
+      cause: `black` is not installed; run `uv tool install black` to install
+    "#);
+}
+
+#[test]
+fn tool_upgrade_not_stop_if_upgrade_fails_json() -> anyhow::Result<()> {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("python-dotenv")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    context
+        .tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    tool_dir
+        .child("python-dotenv")
+        .child("uv-receipt.toml")
+        .write_str("Invalid receipt")?;
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .arg("--output-format")
+        .arg("json")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "upgrades": [
+        {
+          "name": "babel",
+          "outcome": "upgrade_tool"
+        },
+        {
+          "name": "python-dotenv",
+          "outcome": "failed",
+          "error": "`python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    Updated babel v2.6.0 -> v2.14.0
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
+    Installed 1 executable: pybabel
+    error: Failed to upgrade python-dotenv
+      cause: `python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn tool_upgrade_python_json() {
+    let old_index = old_tool_index();
+
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("babel==2.6.0")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .arg("--python")
+        .arg("3.11")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--python").arg("3.12")
+        .arg("--output-format")
+        .arg("json")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "upgrades": [
+        {
+          "name": "babel",
+          "outcome": "upgrade_environment"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    "#);
+}
+
 /// An index containing earlier synthetic tool releases and their dependencies.
 fn old_tool_index() -> PackseServer {
     let scenario = toml::from_str::<Scenario>(indoc! {r#"

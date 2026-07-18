@@ -8055,6 +8055,7 @@ dependencies = [
 name = "uv-tool-commands"
 version = "0.0.98"
 dependencies = [
+ "anstream",
  "anyhow",
  "console",
  "fs-err",
@@ -8063,6 +8064,7 @@ dependencies = [
  "owo-colors",
  "rustc-hash",
  "self-replace",
+ "serde",
  "serde_json",
  "thiserror",
  "tokio",
