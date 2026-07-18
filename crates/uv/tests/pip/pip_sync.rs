@@ -4869,6 +4869,8 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
       ├─▶ Failed to resolve requirements from `build-system.requires`
       ├─▶ No solution found when resolving: `uv-build>=0.8.3, <0.9.0`
       ╰─▶ Because uv-build was not found in the package registry and you require uv-build>=0.8.3,<0.9.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: The build requires Python >=3.13, but Python 3.12 is used.
     "
     );
 

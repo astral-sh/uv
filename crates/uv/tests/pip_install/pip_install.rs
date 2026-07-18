@@ -4853,7 +4853,7 @@ fn build_requires_python_hint() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("."), @r###"
+        .arg("."), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4862,12 +4862,11 @@ fn build_requires_python_hint() -> Result<()> {
     Resolved 1 package in [TIME]
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
       ├─▶ No solution found when resolving: `this-package-does-not-exist-anywhere`
       ╰─▶ Because this-package-does-not-exist-anywhere was not found in the package registry and you require this-package-does-not-exist-anywhere, we can conclude that your requirements are unsatisfiable.
 
-    hint: `requires-python = "<3.0"` is declared, but you are using Python 3.12.[X]; consider selecting a version of the package that supports your Python.
-    "###
+    hint: The build requires Python <3.0, but Python 3.12 is used.
+    "
     );
 
     Ok(())

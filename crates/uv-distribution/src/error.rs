@@ -72,16 +72,6 @@ pub enum Error {
     // Build error
     #[error(transparent)]
     Build(AnyErrorBuild),
-    /// A build failure where the source's `requires-python` does not include the interpreter used
-    /// for the build environment. Carries the same error as [`Self::Build`], but adds a hint
-    /// pointing at the `requires-python` mismatch as a likely cause.
-    #[error("{err}")]
-    BuildRequiresPython {
-        #[source]
-        err: AnyErrorBuild,
-        requires_python: VersionSpecifiers,
-        python_version: Version,
-    },
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
@@ -235,19 +225,6 @@ impl uv_errors::Hint for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::Build(err) => err.hints(),
-            Self::BuildRequiresPython {
-                err,
-                requires_python,
-                python_version,
-            } => {
-                let mut hints = err.hints().into_owned();
-                hints.prepend(format!(
-                    "`requires-python = \"{requires_python}\"` is declared, but you are using \
-                     Python {python_version}; consider selecting a version of the package that \
-                     supports your Python."
-                ));
-                hints
-            }
             Self::Client(err) => uv_errors::Hint::hints(err),
             Self::MetadataLowering(err) => err.hints(),
             _ => uv_errors::Hints::none(),
@@ -258,9 +235,7 @@ impl uv_errors::Hint for Error {
 impl IsBuildBackendError for Error {
     fn is_build_backend_error(&self) -> bool {
         match self {
-            Self::Build(err) | Self::BuildRequiresPython { err, .. } => {
-                err.is_build_backend_error()
-            }
+            Self::Build(err) => err.is_build_backend_error(),
             _ => false,
         }
     }

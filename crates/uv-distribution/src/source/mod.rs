@@ -3158,8 +3158,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// If `result` is a build failure and the source's `requires-python` doesn't include the build
-    /// environment's interpreter, upgrade the error to [`Error::BuildRequiresPython`] so we can hint
-    /// that the mismatch is a likely cause. Other errors and successes pass through unchanged.
+    /// environment's interpreter, attach a hint pointing at the mismatch as a likely cause. Other
+    /// errors and successes pass through unchanged.
     async fn annotate_build_failure<R>(
         &self,
         result: Result<R, Error>,
@@ -3180,11 +3180,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if requires_python.contains(python_version) {
             return Err(Error::Build(err));
         }
-        Err(Error::BuildRequiresPython {
-            err,
-            requires_python,
-            python_version: python_version.clone(),
-        })
+        // Report the minor version (e.g. `3.12`), since `requires-python` is expressed in minor
+        // versions and the patch component is both irrelevant here and unstable across
+        // environments (which would make snapshot tests depend on the exact patch release).
+        let python_version = python_version
+            .only_release_at_precision(2)
+            .unwrap_or_else(|| python_version.clone());
+        let hint = format!(
+            "The build requires Python {requires_python}, but Python {python_version} is used."
+        );
+        Err(Error::Build(err.with_requires_python_hint(hint)))
     }
 
     /// Build the metadata for a source distribution.
