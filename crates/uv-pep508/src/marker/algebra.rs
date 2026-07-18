@@ -109,6 +109,9 @@ struct InternerState {
 
     /// A cache for projecting ternary trees back to Boolean marker trees.
     projection_cache: FxHashMap<NodeId, NodeId>,
+
+    /// A cache for disjointness checks between two marker trees.
+    disjointness_cache: FxHashMap<(NodeId, NodeId), bool>,
 }
 
 impl InternerShared {
@@ -720,7 +723,14 @@ impl InternerGuard<'_> {
     /// Returns `true` if there is no environment in which both marker trees can apply,
     /// i.e. their conjunction is always `false`.
     pub(crate) fn is_disjoint(&mut self, xi: NodeId, yi: NodeId) -> bool {
-        self.disjointness(xi, yi)
+        let key = if xi <= yi { (xi, yi) } else { (yi, xi) };
+        if let Some(&disjoint) = self.state.disjointness_cache.get(&key) {
+            return disjoint;
+        }
+
+        let disjoint = self.disjointness(xi, yi);
+        self.state.disjointness_cache.insert(key, disjoint);
+        disjoint
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
@@ -2310,8 +2320,13 @@ mod tests {
 
         let mut interner = INTERNER.lock();
         let nodes = INTERNER.shared.nodes.count();
+        let cache = interner.state.disjointness_cache.len();
         assert!(interner.is_disjoint(windows, linux));
+        assert!(interner.is_disjoint(linux, windows));
+        assert_eq!(interner.state.disjointness_cache.len(), cache + 1);
         assert!(!interner.is_disjoint(windows, netbsd));
+        assert!(!interner.is_disjoint(netbsd, windows));
+        assert_eq!(interner.state.disjointness_cache.len(), cache + 2);
         assert_eq!(INTERNER.shared.nodes.count(), nodes);
     }
 
