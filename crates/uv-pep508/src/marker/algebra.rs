@@ -99,6 +99,8 @@ struct InternedNode {
 const OS_NAME_VARIABLE: u8 = 1;
 const SYS_PLATFORM_VARIABLE: u8 = 1 << 1;
 const PLATFORM_SYSTEM_VARIABLE: u8 = 1 << 2;
+const BSD_SYSTEMS: &[&str] = &["FreeBSD", "NetBSD", "OpenBSD", "SunOS"];
+const BSD_AND_IOS_SYSTEMS: &[&str] = &["FreeBSD", "NetBSD", "OpenBSD", "SunOS", "iOS", "iPadOS"];
 
 /// The mutable [`Interner`] state, stored behind a lock.
 #[derive(Default)]
@@ -177,29 +179,34 @@ impl InternerShared {
             return false;
         };
 
-        let excluded_values: &[&str] = match node.var {
-            Variable::String(CanonicalMarkerValueString::OsName) => &["nt", "posix"],
+        let excluded_values: &[(&str, &[&str])] = match node.var {
+            Variable::String(CanonicalMarkerValueString::OsName) => {
+                &[("nt", &["linux", "darwin", "ios"]), ("posix", &["win32"])]
+            }
             Variable::String(CanonicalMarkerValueString::SysPlatform) => &[
-                "linux",
-                "darwin",
-                "ios",
-                "win32",
-                "aix",
-                "android",
-                "emscripten",
-                "cygwin",
-                "wasi",
+                ("aix", BSD_AND_IOS_SYSTEMS),
+                ("android", BSD_AND_IOS_SYSTEMS),
+                ("emscripten", BSD_AND_IOS_SYSTEMS),
+                ("ios", BSD_SYSTEMS),
+                ("linux", BSD_AND_IOS_SYSTEMS),
+                ("darwin", BSD_AND_IOS_SYSTEMS),
+                ("win32", BSD_AND_IOS_SYSTEMS),
+                ("cygwin", BSD_AND_IOS_SYSTEMS),
+                ("wasi", BSD_AND_IOS_SYSTEMS),
             ],
             _ => &[],
         };
-        let references_excluded_value = edges.iter().any(|(range, _)| {
-            range.iter().any(|(start, end)| {
-                [start, end].into_iter().any(|bound| {
-                    matches!(bound, Bound::Included(value) | Bound::Excluded(value)
-                        if excluded_values.contains(&value.as_ref()))
-                })
-            })
-        });
+        let referenced_parents =
+            excluded_values
+                .iter()
+                .enumerate()
+                .fold(0_u16, |referenced, (index, (parent, _))| {
+                    if node.children.references_string_value(parent) {
+                        referenced | (1 << index)
+                    } else {
+                        referenced
+                    }
+                });
 
         edges.iter().any(|(range, child)| {
             if child.is_terminal() {
@@ -211,9 +218,26 @@ impl InternerShared {
                 return false;
             }
 
-            let can_conflict = (references_excluded_value
-                || excluded_values.iter().any(|value| range.contains(*value)))
-                && node.var.conflicts_with(&child_node.var);
+            let children_conflict = matches!(
+                (&node.var, &child_node.var),
+                (
+                    Variable::String(CanonicalMarkerValueString::OsName),
+                    Variable::String(CanonicalMarkerValueString::SysPlatform)
+                ) | (
+                    Variable::String(CanonicalMarkerValueString::SysPlatform),
+                    Variable::String(CanonicalMarkerValueString::PlatformSystem)
+                )
+            );
+            let can_conflict = children_conflict
+                && excluded_values
+                    .iter()
+                    .enumerate()
+                    .any(|(index, (parent, children))| {
+                        (range.contains(*parent) || referenced_parents & (1 << index) != 0)
+                            && children
+                                .iter()
+                                .any(|child| child_node.children.references_string_value(child))
+                    });
 
             can_conflict || self.can_conflict(*child)
         })
@@ -1757,24 +1781,6 @@ impl Variable {
         };
         marker.is_conflicting()
     }
-
-    /// Returns `true` if two variables can form a known-incompatible marker pair.
-    fn conflicts_with(&self, other: &Self) -> bool {
-        matches!(
-            (self, other),
-            (
-                Self::String(
-                    CanonicalMarkerValueString::OsName | CanonicalMarkerValueString::PlatformSystem
-                ),
-                Self::String(CanonicalMarkerValueString::SysPlatform)
-            ) | (
-                Self::String(CanonicalMarkerValueString::SysPlatform),
-                Self::String(
-                    CanonicalMarkerValueString::OsName | CanonicalMarkerValueString::PlatformSystem
-                )
-            )
-        )
-    }
 }
 
 /// A decision node in an Algebraic Decision Diagram.
@@ -2278,6 +2284,22 @@ impl Edges {
         }
     }
 
+    /// Returns `true` if these string edges contain a decision boundary for the given value.
+    fn references_string_value(&self, value: &str) -> bool {
+        let Self::String { edges } = self else {
+            return false;
+        };
+
+        edges.iter().any(|(range, _)| {
+            range.iter().any(|(start, end)| {
+                [start, end].into_iter().any(|bound| {
+                    matches!(bound, Bound::Included(bound) | Bound::Excluded(bound)
+                        if bound.as_str() == value)
+                })
+            })
+        })
+    }
+
     /// Merge adjacent ranges that point to the same node.
     fn coalesce_ranges<T>(edges: SmallVec<(Ranges<T>, NodeId)>) -> SmallVec<(Ranges<T>, NodeId)>
     where
@@ -2705,6 +2727,29 @@ mod tests {
         );
         let raw = interner.and_cached(os_name, platform_system);
         assert_eq!(interner.finish(raw), raw);
+
+        for (left, right, can_conflict) in [
+            ("os_name == 'nt'", "sys_platform == 'win32'", false),
+            ("os_name == 'posix'", "sys_platform == 'linux'", false),
+            ("sys_platform == 'ios'", "platform_system == 'iOS'", false),
+            ("os_name == 'nt'", "sys_platform == 'linux'", true),
+            ("os_name == 'posix'", "sys_platform == 'win32'", true),
+            (
+                "sys_platform == 'linux'",
+                "platform_system == 'FreeBSD'",
+                true,
+            ),
+        ] {
+            let left = interner.expression_raw(MarkerExpression::from_str(left).unwrap().unwrap());
+            let right =
+                interner.expression_raw(MarkerExpression::from_str(right).unwrap().unwrap());
+            let raw = interner.and_cached(left, right);
+            assert_eq!(interner.can_conflict(raw), can_conflict);
+            assert_eq!(interner.can_conflict(raw.not()), can_conflict);
+            if !can_conflict {
+                assert_eq!(interner.finish(raw), raw);
+            }
+        }
     }
 
     #[test]
