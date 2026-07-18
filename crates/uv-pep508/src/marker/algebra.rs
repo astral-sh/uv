@@ -558,7 +558,7 @@ impl InternerGuard<'_> {
             })
         });
 
-        edges.iter().any(|(_, child)| {
+        edges.iter().any(|(range, child)| {
             if child.is_terminal() {
                 return false;
             }
@@ -568,8 +568,9 @@ impl InternerGuard<'_> {
                 return false;
             }
 
-            let can_conflict =
-                references_excluded_value && node.var.conflicts_with(&child_node.var);
+            let can_conflict = (references_excluded_value
+                || excluded_values.iter().any(|value| range.contains(*value)))
+                && node.var.conflicts_with(&child_node.var);
 
             can_conflict || self.can_conflict(*child)
         })

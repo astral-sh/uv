@@ -3268,6 +3268,10 @@ mod test {
         right.or(not_linux);
         right.or(windows);
         assert_eq!(left, right);
+
+        let custom_linux = m("os_name != 'custom' and sys_platform == 'linux'");
+        assert!(custom_linux.is_disjoint(windows));
+        assert!(windows.is_disjoint(custom_linux));
     }
 
     #[test]
