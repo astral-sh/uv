@@ -45,7 +45,7 @@
 //! or a terminal `true`/`false` node. Interning allows the reduction rule that isomorphic nodes are
 //! merged to be applied globally.
 
-use std::cmp::Ordering;
+use std::cmp::{Ordering, min};
 use std::fmt;
 use std::ops::Bound;
 use std::sync::{LazyLock, Mutex, MutexGuard};
@@ -455,10 +455,15 @@ impl InternerGuard<'_> {
     /// Apply the global validity domain and collapse roots that are constant on that domain.
     pub(crate) fn finish(&mut self, node: NodeId) -> NodeId {
         // Conflicting string variables have the highest priority in the tree. If none occurs
-        // at the root, this marker cannot participate in the validity domain and can remain
-        // an ordinary Boolean tree.
+        // at the root, this marker cannot participate in the validity domain.
         if node.is_terminal() || !self.shared.node(node).var.is_conflicting_variable() {
             return node;
+        }
+        // A single conflicting variable (or the non-conflicting `os_name` and
+        // `platform_system` pair) does not need to be expanded across the validity domain.
+        // Projection also coalesces any redundant range boundaries left by prior operations.
+        if !self.can_conflict(node) {
+            return self.project(node);
         }
         let validity = self.exclusions().not();
         let masked = self.mask(node, validity);
@@ -472,13 +477,24 @@ impl InternerGuard<'_> {
             // extra)`). Normalize that result back to its Boolean tree so it remains canonical
             // with a marker that never mentioned the platform.
             let projected = self.project(masked);
-            if projected.is_terminal() || !self.shared.node(projected).var.is_conflicting_variable()
-            {
+            if !self.can_conflict(projected) {
                 projected
             } else {
                 self.mask(projected, validity)
             }
         }
+    }
+
+    /// Returns `true` if a marker tree can contain a known-incompatible pair of variables.
+    fn can_conflict(&self, node: NodeId) -> bool {
+        if node.is_terminal() {
+            return false;
+        }
+
+        let node = self.shared.node(node);
+        node.children.nodes().any(|child| {
+            !child.is_terminal() && node.var.conflicts_with(&self.shared.node(child).var)
+        })
     }
 
     /// Replace all reachable Boolean terminals while retaining unreachable edges.
@@ -609,7 +625,7 @@ impl InternerGuard<'_> {
         let children = node.children.map(value, |child| {
             self.project_cached(groups[assignments[&child]], compatible_cache)
         });
-        let projected = self.create_node(node.var.clone(), children);
+        let projected = self.create_node(node.var.clone(), children.coalesce());
         self.state.projection_cache.insert(value, projected);
         self.state.projection_cache.insert(projected, projected);
         projected
@@ -728,9 +744,95 @@ impl InternerGuard<'_> {
             return disjoint;
         }
 
-        let disjoint = self.disjointness(xi, yi);
+        let disjoint = if !xi.is_terminal()
+            && !yi.is_terminal()
+            && !self.can_conflict(xi)
+            && !self.can_conflict(yi)
+            && self
+                .shared
+                .node(xi)
+                .var
+                .conflicts_with(&self.shared.node(yi).var)
+        {
+            // Singleton platform predicates remain Boolean until they are combined. Account
+            // for the validity domain here without materializing their conjunction.
+            let validity = self.exclusions().not();
+            self.disjointness_under_validity(xi, yi, validity)
+        } else {
+            self.disjointness(xi, yi)
+        };
         self.state.disjointness_cache.insert(key, disjoint);
         disjoint
+    }
+
+    /// Returns `true` if two marker trees are disjoint under the global validity domain.
+    fn disjointness_under_validity(&mut self, xi: NodeId, yi: NodeId, validity: NodeId) -> bool {
+        if xi.is_dont_care() || yi.is_dont_care() || validity.is_dont_care() {
+            return true;
+        }
+        if xi.is_false() || yi.is_false() || validity.is_false() {
+            return true;
+        }
+        if validity.is_true() {
+            return self.disjointness(xi, yi);
+        }
+        if xi.is_true() {
+            return self.disjointness(yi, validity);
+        }
+        if yi.is_true() || xi == yi {
+            return self.disjointness(xi, validity);
+        }
+        if xi.not() == yi {
+            return true;
+        }
+
+        let x = self.shared.node(xi);
+        let y = self.shared.node(yi);
+        let domain = self.shared.node(validity);
+        let variable = min(&x.var, min(&y.var, &domain.var));
+
+        match (
+            &x.var == variable,
+            &y.var == variable,
+            &domain.var == variable,
+        ) {
+            (true, false, false) => x
+                .children
+                .nodes()
+                .all(|child| self.disjointness_under_validity(child.negate(xi), yi, validity)),
+            (false, true, false) => y
+                .children
+                .nodes()
+                .all(|child| self.disjointness_under_validity(xi, child.negate(yi), validity)),
+            (false, false, true) => domain
+                .children
+                .nodes()
+                .all(|child| self.disjointness_under_validity(xi, yi, child.negate(validity))),
+            (true, true, false) => x.children.is_disjoint(xi, &y.children, yi, |x, y| {
+                self.disjointness_under_validity(x, y, validity)
+            }),
+            (true, false, true) => {
+                x.children
+                    .is_disjoint(xi, &domain.children, validity, |x, validity| {
+                        self.disjointness_under_validity(x, yi, validity)
+                    })
+            }
+            (false, true, true) => {
+                y.children
+                    .is_disjoint(yi, &domain.children, validity, |y, validity| {
+                        self.disjointness_under_validity(xi, y, validity)
+                    })
+            }
+            (true, true, true) => x.children.is_disjoint_three(
+                xi,
+                &y.children,
+                yi,
+                &domain.children,
+                validity,
+                |x, y, validity| self.disjointness_under_validity(x, y, validity),
+            ),
+            (false, false, false) => false,
+        }
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
@@ -774,7 +876,9 @@ impl InternerGuard<'_> {
                 .nodes()
                 .all(|y| self.disjointness(y.negate(yi), xi)),
             // X and Y represent the same variable, their merged edges must be unsatisfiable.
-            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
+            Ordering::Equal => x
+                .children
+                .is_disjoint(xi, &y.children, yi, |x, y| self.disjointness(x, y)),
         }
     }
 
@@ -1463,6 +1567,24 @@ impl Variable {
         };
         marker.is_conflicting()
     }
+
+    /// Returns `true` if two variables can form a known-incompatible marker pair.
+    fn conflicts_with(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (
+                Self::String(
+                    CanonicalMarkerValueString::OsName | CanonicalMarkerValueString::PlatformSystem
+                ),
+                Self::String(CanonicalMarkerValueString::SysPlatform)
+            ) | (
+                Self::String(CanonicalMarkerValueString::SysPlatform),
+                Self::String(
+                    CanonicalMarkerValueString::OsName | CanonicalMarkerValueString::PlatformSystem
+                )
+            )
+        )
+    }
 }
 
 /// A decision node in an Algebraic Decision Diagram.
@@ -1859,15 +1981,15 @@ impl Edges {
         parent: NodeId,
         right_edges: &Self,
         right_parent: NodeId,
-        interner: &mut InternerGuard<'_>,
+        mut is_disjoint: impl FnMut(NodeId, NodeId) -> bool,
     ) -> bool {
         match (self, right_edges) {
             // For version or string variables, we have to split and check the overlapping ranges.
             (Self::Version { edges }, Self::Version { edges: right_edges }) => {
-                Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+                Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, is_disjoint)
             }
             (Self::String { edges }, Self::String { edges: right_edges }) => {
-                Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+                Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, is_disjoint)
             }
             // For boolean variables, we simply check the low and high edges.
             (
@@ -1877,8 +1999,8 @@ impl Edges {
                     low: right_low,
                 },
             ) => {
-                interner.disjointness(high.negate(parent), right_high.negate(right_parent))
-                    && interner.disjointness(low.negate(parent), right_low.negate(right_parent))
+                is_disjoint(high.negate(parent), right_high.negate(right_parent))
+                    && is_disjoint(low.negate(parent), right_low.negate(right_parent))
             }
             _ => unreachable!("cannot merge two `Edges` of different types"),
         }
@@ -1890,7 +2012,7 @@ impl Edges {
         left_parent: NodeId,
         right_edges: &SmallVec<(Ranges<T>, NodeId)>,
         right_parent: NodeId,
-        interner: &mut InternerGuard<'_>,
+        mut is_disjoint: impl FnMut(NodeId, NodeId) -> bool,
     ) -> bool
     where
         T: Clone + Ord,
@@ -1904,7 +2026,7 @@ impl Edges {
                 }
 
                 // Ensure the intersection is disjoint.
-                if !interner.disjointness(
+                if !is_disjoint(
                     left_child.negate(left_parent),
                     right_child.negate(right_parent),
                 ) {
@@ -1914,6 +2036,73 @@ impl Edges {
         }
 
         true
+    }
+
+    /// Returns `true` if every intersecting triple of string edges is disjoint.
+    fn is_disjoint_three(
+        &self,
+        parent: NodeId,
+        middle_edges: &Self,
+        middle_parent: NodeId,
+        right_edges: &Self,
+        right_parent: NodeId,
+        mut callback: impl FnMut(NodeId, NodeId, NodeId) -> bool,
+    ) -> bool {
+        let (
+            Self::String { edges },
+            Self::String {
+                edges: middle_edges,
+            },
+            Self::String { edges: right_edges },
+        ) = (self, middle_edges, right_edges)
+        else {
+            return false;
+        };
+
+        edges.iter().all(|(left_range, left_child)| {
+            middle_edges.iter().all(|(middle_range, middle_child)| {
+                let intersection = left_range.intersection(middle_range);
+                intersection.is_empty()
+                    || right_edges.iter().all(|(right_range, right_child)| {
+                        intersection.is_disjoint(right_range)
+                            || callback(
+                                left_child.negate(parent),
+                                middle_child.negate(middle_parent),
+                                right_child.negate(right_parent),
+                            )
+                    })
+            })
+        })
+    }
+
+    /// Merge adjacent range edges that point to the same node.
+    fn coalesce(self) -> Self {
+        match self {
+            Self::Version { edges } => Self::Version {
+                edges: Self::coalesce_ranges(edges),
+            },
+            Self::String { edges } => Self::String {
+                edges: Self::coalesce_ranges(edges),
+            },
+            Self::Boolean { .. } => self,
+        }
+    }
+
+    /// Merge adjacent ranges that point to the same node.
+    fn coalesce_ranges<T>(edges: SmallVec<(Ranges<T>, NodeId)>) -> SmallVec<(Ranges<T>, NodeId)>
+    where
+        T: Clone + Ord,
+    {
+        let mut combined = SmallVec::new();
+        for (range, node) in edges {
+            match combined.last_mut() {
+                Some((previous, child)) if *child == node && can_conjoin(previous, &range) => {
+                    *previous = previous.union(&range);
+                }
+                _ => combined.push((range, node)),
+            }
+        }
+        combined
     }
 
     // Apply the given function to all direct children of this node.
@@ -2298,11 +2487,14 @@ mod tests {
     }
 
     #[test]
-    fn non_conflicting_markers_remain_boolean() {
+    fn markers_without_conflicting_pair_remain_boolean() {
         let mut interner = INTERNER.lock();
         for marker in [
             "extra == 'foo'",
             "python_version >= '3.9'",
+            "os_name == 'nt'",
+            "sys_platform == 'linux'",
+            "platform_system == 'FreeBSD'",
             "platform_machine == 'aarch64'",
             "implementation_name == 'pypy'",
         ] {
@@ -2310,6 +2502,19 @@ mod tests {
             let raw = interner.expression_raw(expression);
             assert_eq!(interner.finish(raw), raw);
         }
+
+        let os_name = interner.expression_raw(
+            MarkerExpression::from_str("os_name == 'nt'")
+                .unwrap()
+                .unwrap(),
+        );
+        let platform_system = interner.expression_raw(
+            MarkerExpression::from_str("platform_system == 'NetBSD'")
+                .unwrap()
+                .unwrap(),
+        );
+        let raw = interner.and_cached(os_name, platform_system);
+        assert_eq!(interner.finish(raw), raw);
     }
 
     #[test]
@@ -2319,6 +2524,15 @@ mod tests {
         let netbsd = expr("platform_system == 'NetBSD'");
 
         let mut interner = INTERNER.lock();
+        interner.exclusions();
+        for (left, right) in [(windows, linux), (windows, netbsd)] {
+            let key = if left <= right {
+                (left, right)
+            } else {
+                (right, left)
+            };
+            interner.state.disjointness_cache.remove(&key);
+        }
         let nodes = INTERNER.shared.nodes.count();
         let cache = interner.state.disjointness_cache.len();
         assert!(interner.is_disjoint(windows, linux));
@@ -2328,6 +2542,31 @@ mod tests {
         assert!(!interner.is_disjoint(netbsd, windows));
         assert_eq!(interner.state.disjointness_cache.len(), cache + 2);
         assert_eq!(INTERNER.shared.nodes.count(), nodes);
+    }
+
+    #[test]
+    fn disjointness_respects_validity_domain() {
+        let windows = expr("os_name == 'nt'");
+        let posix = expr("os_name == 'posix'");
+        let linux = expr("sys_platform == 'linux'");
+        let win32 = expr("sys_platform == 'win32'");
+        let ios = expr("sys_platform == 'ios'");
+        let not_linux = expr("sys_platform != 'linux'");
+        let netbsd = expr("platform_system == 'NetBSD'");
+        let platform_ios = expr("platform_system == 'iOS'");
+
+        let mut interner = INTERNER.lock();
+        for (left, right, expected) in [
+            (windows, linux, true),
+            (posix, win32, true),
+            (netbsd, linux, true),
+            (platform_ios, ios, false),
+            (windows, netbsd, false),
+            (windows, not_linux, false),
+        ] {
+            assert_eq!(interner.is_disjoint(left, right), expected);
+            assert_eq!(interner.is_disjoint(right, left), expected);
+        }
     }
 
     #[test]
