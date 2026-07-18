@@ -52,6 +52,7 @@ struct CommandPrintData {
 struct PythonPrintData {
     implementation: String,
     version: StringVersion,
+    key: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -338,6 +339,7 @@ fn render_list_json(
                 PythonPrintData {
                     implementation: implementation.to_string(),
                     version: interpreter.python_full_version().clone(),
+                    key: interpreter.key().to_string(),
                 }
             },
         })
