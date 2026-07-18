@@ -103,10 +103,10 @@ pub(crate) async fn list(
                 ToolListFormat::Text => writeln!(printer.stderr(), "No tools installed")?,
                 ToolListFormat::Json => render_list_json(
                     outdated,
-                    FxHashMap::default(),
+                    &FxHashMap::default(),
                     printer,
-                    Vec::new(),
-                    installed_tools,
+                    &[],
+                    &installed_tools,
                 )?,
             }
             return Ok(ExitStatus::Success);
@@ -122,10 +122,10 @@ pub(crate) async fn list(
             ToolListFormat::Text => writeln!(printer.stderr(), "No tools installed")?,
             ToolListFormat::Json => render_list_json(
                 outdated,
-                FxHashMap::default(),
+                &FxHashMap::default(),
                 printer,
-                Vec::new(),
-                installed_tools,
+                &[],
+                &installed_tools,
             )?,
         }
         return Ok(ExitStatus::Success);
@@ -257,9 +257,9 @@ pub(crate) async fn list(
             .into_iter()
             .filter(|(name, _, _, version)| {
                 latest
-                    .get(&name)
+                    .get(name)
                     .and_then(Option::as_ref)
-                    .is_some_and(|filename| filename.version() > &version)
+                    .is_some_and(|filename| filename.version() > version)
             })
             .collect::<Vec<_>>()
     } else {
@@ -274,13 +274,13 @@ pub(crate) async fn list(
             show_python,
             show_with,
             show_paths,
-            latest,
+            &latest,
             printer,
-            valid_tools,
-            installed_tools,
+            &valid_tools,
+            &installed_tools,
         )?,
         ToolListFormat::Json => {
-            render_list_json(outdated, latest, printer, valid_tools, installed_tools)?
+            render_list_json(outdated, &latest, printer, &valid_tools, &installed_tools)?;
         }
     }
 
@@ -289,10 +289,10 @@ pub(crate) async fn list(
 
 fn render_list_json(
     outdated: bool,
-    latest: FxHashMap<PackageName, Option<DistFilename>>,
+    latest: &FxHashMap<PackageName, Option<DistFilename>>,
     printer: Printer,
-    valid_tools: Vec<(PackageName, Tool, ToolEnvironment, Version)>,
-    installed_tools: InstalledTools,
+    valid_tools: &[(PackageName, Tool, ToolEnvironment, Version)],
+    installed_tools: &InstalledTools,
 ) -> Result<()> {
     let tools = valid_tools
         .iter()
@@ -301,14 +301,14 @@ fn render_list_json(
             version: version.clone(),
             latest_version: if outdated {
                 latest
-                    .get(&name)
+                    .get(name)
                     .and_then(Option::as_ref)
                     .map(|filename| filename.version().clone())
             } else {
                 // when we don't list outdated tools, we do not know the latest version
                 None
             },
-            path: installed_tools.tool_dir(&name),
+            path: installed_tools.tool_dir(name),
             commands: tool
                 .entrypoints()
                 .iter()
@@ -362,6 +362,7 @@ fn render_list_json(
     Ok(())
 }
 
+#[expect(clippy::fn_params_excessive_bools)]
 fn render_list_text(
     outdated: bool,
     show_version_specifiers: bool,
@@ -369,17 +370,17 @@ fn render_list_text(
     show_python: bool,
     show_with: bool,
     show_paths: bool,
-    latest: FxHashMap<PackageName, Option<DistFilename>>,
+    latest: &FxHashMap<PackageName, Option<DistFilename>>,
     printer: Printer,
-    valid_tools: Vec<(PackageName, Tool, ToolEnvironment, Version)>,
-    installed_tools: InstalledTools,
+    valid_tools: &[(PackageName, Tool, ToolEnvironment, Version)],
+    installed_tools: &InstalledTools,
 ) -> Result<()> {
     for (name, tool, tool_env, version) in valid_tools {
         let version_specifier = show_version_specifiers
             .then(|| {
                 tool.requirements()
                     .iter()
-                    .filter(|req| req.name == name)
+                    .filter(|req| req.name == *name)
                     .map(|req| req.source.to_string())
                     .filter(|s| !s.is_empty())
                     .peekable()
@@ -395,7 +396,7 @@ fn render_list_text(
             .then(|| {
                 tool.requirements()
                     .iter()
-                    .filter(|req| req.name == name)
+                    .filter(|req| req.name == *name)
                     .flat_map(|req| req.extras.iter()) // Flatten the extras from all matching requirements
                     .peekable()
             })
@@ -422,7 +423,7 @@ fn render_list_text(
             .then(|| {
                 tool.requirements()
                     .iter()
-                    .filter(|req| req.name != name)
+                    .filter(|req| req.name != *name)
                     .peekable()
             })
             .take_if(|requirements| requirements.peek().is_some())
@@ -436,7 +437,7 @@ fn render_list_text(
 
         let latest_version = if outdated {
             latest
-                .get(&name)
+                .get(name)
                 .and_then(Option::as_ref)
                 .map(|filename| format!(" [latest: {}]", filename.version()))
                 .unwrap_or_default()
@@ -452,7 +453,7 @@ fn render_list_text(
                     "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}{python_version}{latest_version}"
                 )
                 .bold(),
-                installed_tools.tool_dir(&name).simplified_display().cyan(),
+                installed_tools.tool_dir(name).simplified_display().cyan(),
             )?;
         } else {
             writeln!(
