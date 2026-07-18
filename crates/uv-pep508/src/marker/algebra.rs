@@ -1447,7 +1447,7 @@ impl Variable {
     ///
     /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
     /// never be true at the same time.
-    fn is_conflicting_variable(&self) -> bool {
+    pub(super) fn is_conflicting_variable(&self) -> bool {
         let Self::String(marker) = self else {
             return false;
         };

@@ -917,11 +917,22 @@ impl MarkerTree {
 
     /// Returns the underlying [`MarkerTreeKind`] of the root node.
     pub fn kind(self) -> MarkerTreeKind<'static> {
-        let tree = Self(INTERNER.lock().project(self.0));
-        if tree.is_true() {
+        if self.is_true() {
             return MarkerTreeKind::True;
         }
 
+        if self.is_false() {
+            return MarkerTreeKind::False;
+        }
+
+        let tree = if INTERNER.shared.node(self.0).var.is_conflicting_variable() {
+            Self(INTERNER.lock().project(self.0))
+        } else {
+            self
+        };
+        if tree.is_true() {
+            return MarkerTreeKind::True;
+        }
         if tree.is_false() {
             return MarkerTreeKind::False;
         }
@@ -1855,12 +1866,15 @@ impl schemars::JsonSchema for MarkerTree {
 mod test {
     use std::ops::Bound;
     use std::str::FromStr;
+    use std::sync::mpsc;
+    use std::time::Duration;
 
     use insta::assert_snapshot;
 
     use uv_normalize::ExtraName;
     use uv_pep440::Version;
 
+    use super::{INTERNER, MarkerTreeKind};
     use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use crate::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 
@@ -1887,6 +1901,27 @@ mod test {
             sys_platform: "linux",
         })
         .unwrap()
+    }
+
+    #[test]
+    fn non_conflicting_kind_does_not_lock_interner() {
+        let extra = m("extra == 'foo'");
+        let guard = INTERNER.lock();
+        let (sender, receiver) = mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            sender
+                .send([
+                    matches!(MarkerTree::TRUE.kind(), MarkerTreeKind::True),
+                    matches!(MarkerTree::FALSE.kind(), MarkerTreeKind::False),
+                    matches!(extra.kind(), MarkerTreeKind::Extra(_)),
+                ])
+                .unwrap();
+        });
+
+        let result = receiver.recv_timeout(Duration::from_secs(5));
+        drop(guard);
+        thread.join().unwrap();
+        assert_eq!(result.unwrap(), [true, true, true]);
     }
 
     /// Copied from <https://github.com/pypa/packaging/blob/85ff971a250dc01db188ef9775499c15553a8c95/tests/test_markers.py#L175-L221>
