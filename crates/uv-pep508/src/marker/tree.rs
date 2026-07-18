@@ -12,7 +12,7 @@ use version_ranges::Ranges;
 use uv_normalize::{ExtraName, GroupName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 
-use super::algebra::{Edges, INTERNER, NodeId, Variable};
+use super::algebra::{Edges, INTERNER, InternerGuard, NodeId, Variable};
 use super::simplify;
 #[cfg(test)]
 use crate::Pep508ErrorSource;
@@ -1310,8 +1310,8 @@ impl MarkerTree {
     #[must_use]
     pub fn restrict(self, assumption: Self) -> Self {
         let mut interner = INTERNER.lock();
-        let value = interner.project(self.0);
-        let assumption = interner.project(assumption.0);
+        let value = self.project_if_needed(&mut interner);
+        let assumption = assumption.project_if_needed(&mut interner);
         let node = interner.restrict(value, assumption);
         Self(interner.finish(node))
     }
@@ -1391,7 +1391,7 @@ impl MarkerTree {
     #[must_use]
     pub fn without_extras(self) -> Self {
         let mut interner = INTERNER.lock();
-        let value = interner.project(self.0);
+        let value = self.project_if_needed(&mut interner);
         let node = interner.without_extras(value);
         Self(interner.finish(node))
     }
@@ -1403,9 +1403,21 @@ impl MarkerTree {
     #[must_use]
     pub fn only_extras(self) -> Self {
         let mut interner = INTERNER.lock();
-        let value = interner.project(self.0);
+        let value = self.project_if_needed(&mut interner);
         let node = interner.only_extras(value);
         Self(interner.finish(node))
+    }
+
+    /// Project this marker only if it can contain don't-care edges.
+    fn project_if_needed(self, interner: &mut InternerGuard<'_>) -> NodeId {
+        if self.is_true()
+            || self.is_false()
+            || !INTERNER.shared.node(self.0).var.is_conflicting_variable()
+        {
+            self.0
+        } else {
+            interner.project(self.0)
+        }
     }
 
     /// Calls the provided function on every `extra` in this tree.
@@ -1953,6 +1965,24 @@ mod test {
         drop(guard);
         thread.join().unwrap();
         assert_eq!(result.unwrap(), [true, true, true, true, true]);
+    }
+
+    #[test]
+    fn non_conflicting_transformations_do_not_project() {
+        let marker = m(
+            "(platform_machine == 'x86_64' and implementation_name == 'cpython' and extra == 'one') \
+             or (platform_machine == 'aarch64' and implementation_name == 'pypy' and extra == 'two')",
+        );
+        let assumption = m("platform_machine == 'x86_64'");
+        assert!(INTERNER.shared.projection(marker.0).is_none());
+        assert!(INTERNER.shared.projection(assumption.0).is_none());
+
+        let _ = marker.without_extras();
+        let _ = marker.only_extras();
+        let _ = marker.restrict(assumption);
+
+        assert!(INTERNER.shared.projection(marker.0).is_none());
+        assert!(INTERNER.shared.projection(assumption.0).is_none());
     }
 
     /// Copied from <https://github.com/pypa/packaging/blob/85ff971a250dc01db188ef9775499c15553a8c95/tests/test_markers.py#L175-L221>
