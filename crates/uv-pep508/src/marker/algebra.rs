@@ -902,6 +902,17 @@ impl InternerGuard<'_> {
             return disjoint;
         }
 
+        // Resolver forks often share a validity-masked platform prefix and differ only in a
+        // lower-order marker. If those suffixes are already disjoint, avoid traversing the
+        // complete validity domain (and retaining a quadratic number of pair-cache entries).
+        if let (Some(left), Some(right)) = (
+            self.non_conflicting_suffix(xi),
+            self.non_conflicting_suffix(yi),
+        ) && self.disjointness(left, right)
+        {
+            return true;
+        }
+
         let disjoint = if trees_conflict && !left_can_conflict && !right_can_conflict {
             // Boolean platform predicates remain unmasked until they are combined. Account
             // for the validity domain here without materializing their conjunction.
@@ -912,6 +923,36 @@ impl InternerGuard<'_> {
         };
         self.state.disjointness_cache.insert(key, disjoint);
         disjoint
+    }
+
+    /// Returns the common non-conflicting subtree implied by every reachable platform branch.
+    fn non_conflicting_suffix(&self, node: NodeId) -> Option<NodeId> {
+        fn visit(interner: &InternerShared, node: NodeId, suffix: &mut Option<NodeId>) -> bool {
+            if node.is_false() || node.is_dont_care() {
+                return true;
+            }
+            if node.is_true() {
+                return false;
+            }
+
+            let current = interner.node(node);
+            if !current.var.is_conflicting_variable() {
+                return if let Some(existing) = suffix {
+                    *existing == node
+                } else {
+                    *suffix = Some(node);
+                    true
+                };
+            }
+
+            current
+                .children
+                .nodes()
+                .all(|child| visit(interner, child.negate(node), suffix))
+        }
+
+        let mut suffix = None;
+        visit(self.shared, node, &mut suffix).then_some(suffix)?
     }
 
     /// Returns `true` if two marker trees are disjoint under the global validity domain.
@@ -2739,6 +2780,40 @@ mod tests {
         assert!(interner.is_disjoint(x86, arm));
         assert_eq!(interner.state.disjointness_cache.len(), cache + 1);
         assert_eq!(INTERNER.shared.nodes.count(), nodes);
+    }
+
+    #[test]
+    fn disjointness_short_circuits_common_suffixes() {
+        let windows = expr("os_name == 'nt'");
+        let linux = expr("sys_platform == 'linux'");
+        let platform = INTERNER.lock().or(windows, linux);
+        let machines = (0..32)
+            .map(|index| expr(&format!("platform_machine == 'suffix-machine-{index}'")))
+            .collect::<Vec<_>>();
+        let markers = machines
+            .iter()
+            .map(|machine| INTERNER.lock().and(platform, *machine))
+            .collect::<Vec<_>>();
+        let negated = INTERNER.lock().and(platform, machines[0].not());
+
+        let mut interner = INTERNER.lock();
+        assert_eq!(interner.non_conflicting_suffix(platform), None);
+        assert_eq!(
+            interner.non_conflicting_suffix(negated),
+            Some(machines[0].not())
+        );
+        for (marker, machine) in markers.iter().zip(&machines) {
+            assert_eq!(interner.non_conflicting_suffix(*marker), Some(*machine));
+        }
+        let nodes = INTERNER.shared.nodes.count();
+        let cache = interner.state.disjointness_cache.len();
+        for (index, left) in markers.iter().enumerate() {
+            for right in &markers[index + 1..] {
+                assert!(interner.is_disjoint(*left, *right));
+            }
+        }
+        assert_eq!(INTERNER.shared.nodes.count(), nodes);
+        assert_eq!(interner.state.disjointness_cache.len(), cache);
     }
 
     #[test]
