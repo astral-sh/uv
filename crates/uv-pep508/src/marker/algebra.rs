@@ -772,21 +772,29 @@ impl InternerGuard<'_> {
     /// Returns `true` if there is no environment in which both marker trees can apply,
     /// i.e. their conjunction is always `false`.
     pub(crate) fn is_disjoint(&mut self, xi: NodeId, yi: NodeId) -> bool {
+        let roots_conflict = !xi.is_terminal()
+            && !yi.is_terminal()
+            && self
+                .shared
+                .node(xi)
+                .var
+                .conflicts_with(&self.shared.node(yi).var);
+        let left_can_conflict = self.can_conflict(xi);
+        let right_can_conflict = self.can_conflict(yi);
+        let validity_sensitive = left_can_conflict || right_can_conflict || roots_conflict;
+
+        // Ordinary Boolean trees are cheap to compare, and caching every pair can otherwise
+        // retain a quadratic number of entries during requirement and wheel selection.
+        if !validity_sensitive {
+            return self.disjointness(xi, yi);
+        }
+
         let key = if xi <= yi { (xi, yi) } else { (yi, xi) };
         if let Some(&disjoint) = self.state.disjointness_cache.get(&key) {
             return disjoint;
         }
 
-        let disjoint = if !xi.is_terminal()
-            && !yi.is_terminal()
-            && !self.can_conflict(xi)
-            && !self.can_conflict(yi)
-            && self
-                .shared
-                .node(xi)
-                .var
-                .conflicts_with(&self.shared.node(yi).var)
-        {
+        let disjoint = if roots_conflict && !left_can_conflict && !right_can_conflict {
             // Singleton platform predicates remain Boolean until they are combined. Account
             // for the validity domain here without materializing their conjunction.
             let validity = self.exclusions().not();
@@ -2555,6 +2563,8 @@ mod tests {
         let windows = expr("os_name == 'nt'");
         let linux = expr("sys_platform == 'linux'");
         let netbsd = expr("platform_system == 'NetBSD'");
+        let x86 = expr("platform_machine == 'x86_64'");
+        let arm = expr("platform_machine == 'aarch64'");
 
         let mut interner = INTERNER.lock();
         interner.exclusions();
@@ -2573,7 +2583,9 @@ mod tests {
         assert_eq!(interner.state.disjointness_cache.len(), cache + 1);
         assert!(!interner.is_disjoint(windows, netbsd));
         assert!(!interner.is_disjoint(netbsd, windows));
-        assert_eq!(interner.state.disjointness_cache.len(), cache + 2);
+        assert_eq!(interner.state.disjointness_cache.len(), cache + 1);
+        assert!(interner.is_disjoint(x86, arm));
+        assert_eq!(interner.state.disjointness_cache.len(), cache + 1);
         assert_eq!(INTERNER.shared.nodes.count(), nodes);
     }
 
