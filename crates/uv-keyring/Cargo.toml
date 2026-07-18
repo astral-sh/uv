@@ -16,12 +16,12 @@ workspace = true
 default = ["apple-native", "secret-service", "windows-native"]
 native-auth = []
 
-## Use the built-in Keychain Services on macOS
-apple-native = ["dep:security-framework"]
-## Use the secret-service on *nix.
-secret-service = ["dep:secret-service"]
-## Use the built-in credential store on Windows
-windows-native = ["dep:windows", "dep:byteorder"]
+## Use the built-in Keychain Services on macOS (also enable native-auth tests).
+apple-native = ["dep:security-framework", "native-auth"]
+## Use the secret-service on *nix (also enable native-auth tests).
+secret-service = ["dep:secret-service", "native-auth"]
+## Use the built-in credential store on Windows (also enable native-auth tests).
+windows-native = ["dep:windows", "dep:byteorder", "native-auth"]
 
 [dependencies]
 async-trait = { workspace = true }
