@@ -162,7 +162,6 @@ fn cache_current_dir_inside_cache() -> Result<()> {
     uv_snapshot!(context.filters(), context.command()
         .arg("cache")
         .arg("dir")
-        .arg("--no-config")
         .current_dir(context.cache_dir.path()), @"
     success: false
     exit_code: 2
@@ -207,7 +206,6 @@ fn cache_current_dir_inside_symlinked_cache() -> Result<()> {
     command
         .arg("cache")
         .arg("dir")
-        .arg("--no-config")
         .arg("--cache-dir")
         .arg(cache_link.path());
     context.add_shared_env(&mut command, false);

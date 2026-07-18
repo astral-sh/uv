@@ -299,6 +299,112 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    /// Find the install path of the workspace containing the given path without discovering its
+    /// members.
+    ///
+    /// This is intended for settings discovery, which only needs the workspace root and must not
+    /// require an async runtime.
+    pub fn discover_install_path(
+        path: &Path,
+        options: &DiscoveryOptions,
+        cache: &Cache,
+    ) -> Result<PathBuf, WorkspaceError> {
+        let path = std::path::absolute(path).map_err(WorkspaceErrorKind::Normalize)?;
+        let path = normalize_path(&path);
+
+        let project_path = path
+            .ancestors()
+            .find(|path| path.join("pyproject.toml").is_file())
+            .ok_or(WorkspaceErrorKind::MissingPyprojectToml)?
+            .to_path_buf();
+
+        let pyproject_path = project_path.join("pyproject.toml");
+        let contents = fs_err::read_to_string(&pyproject_path)?;
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
+            .map_err(|err| WorkspaceErrorKind::Toml(pyproject_path.clone(), Box::new(err)))?;
+
+        if pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.managed)
+            == Some(false)
+        {
+            return Err(WorkspaceErrorKind::NonWorkspace(project_path).into());
+        }
+
+        if pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.workspace.as_ref())
+            .is_some()
+        {
+            return Ok(project_path);
+        }
+
+        if pyproject_toml.project.is_none() {
+            return Err(WorkspaceErrorKind::MissingProject(pyproject_path).into());
+        }
+
+        let external_cache_root = if options.stop_discovery_at.is_none() {
+            let cache_root = if cache.root().is_absolute() {
+                cache.root().to_path_buf()
+            } else {
+                CWD.join(cache.root())
+            };
+            Some(normalize_path(&cache_root).into_owned())
+        } else {
+            None
+        };
+        if external_cache_root
+            .as_ref()
+            .is_some_and(|cache_root| project_path.starts_with(cache_root))
+        {
+            return Ok(project_path);
+        }
+
+        for workspace_root in project_path
+            .ancestors()
+            .take_while(|path| {
+                options
+                    .stop_discovery_at
+                    .as_deref()
+                    .and_then(Path::parent)
+                    .is_none_or(|stop_discovery_at| stop_discovery_at != *path)
+            })
+            .skip(1)
+        {
+            let pyproject_path = workspace_root.join("pyproject.toml");
+            if !pyproject_path.is_file() {
+                continue;
+            }
+
+            let contents = fs_err::read_to_string(&pyproject_path)?;
+            let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
+                .map_err(|err| WorkspaceErrorKind::Toml(pyproject_path.clone(), Box::new(err)))?;
+
+            let Some(workspace) = pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.workspace.as_ref())
+            else {
+                return Ok(project_path);
+            };
+
+            if is_included_in_workspace(&project_path, workspace_root, workspace)?
+                && !is_excluded_from_workspace(&project_path, workspace_root, workspace)?
+            {
+                return Ok(workspace_root.to_path_buf());
+            }
+
+            return Ok(project_path);
+        }
+
+        Ok(project_path)
+    }
+
     /// Find the workspace containing the given path.
     ///
     /// Unlike the [`ProjectWorkspace`] discovery, this does not require a current project. It also
@@ -2691,6 +2797,54 @@ mod tests {
         .expect("cached workspace member ignores invalid change in the meantime");
 
         assert!(Arc::ptr_eq(&root_workspace, &member_project.workspace));
+
+        Ok(())
+    }
+
+    #[test]
+    fn discover_install_path_without_members() -> Result<()> {
+        let root = tempfile::TempDir::new()?;
+        let root = ChildPath::new(root.path());
+        let member = root.child("packages").child("member");
+        let excluded = root.child("packages").child("excluded");
+
+        root.child("pyproject.toml").write_str(
+            r#"
+            [tool.uv.workspace]
+            members = ["packages/*", "missing"]
+            exclude = ["packages/excluded"]
+            "#,
+        )?;
+        member.child("pyproject.toml").write_str(
+            r#"
+            [project]
+            name = "member"
+            version = "0.1.0"
+            "#,
+        )?;
+        excluded.child("pyproject.toml").write_str(
+            r#"
+            [project]
+            name = "excluded"
+            version = "0.1.0"
+            "#,
+        )?;
+
+        let cache = Cache::from_path(env::temp_dir().join("uv-workspace-cache"));
+        let options = DiscoveryOptions::default();
+
+        assert_eq!(
+            Workspace::discover_install_path(root.as_ref(), &options, &cache)?,
+            root.path()
+        );
+        assert_eq!(
+            Workspace::discover_install_path(member.as_ref(), &options, &cache)?,
+            root.path()
+        );
+        assert_eq!(
+            Workspace::discover_install_path(excluded.as_ref(), &options, &cache)?,
+            excluded.path()
+        );
 
         Ok(())
     }

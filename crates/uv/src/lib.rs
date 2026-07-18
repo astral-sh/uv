@@ -84,6 +84,25 @@ impl GlobalInitialization {
     }
 }
 
+fn is_synchronous_command(command: &Commands) -> bool {
+    matches!(
+        command,
+        Commands::Self_(SelfNamespace {
+            command: SelfCommand::Version { .. },
+        }) | Commands::Tool(ToolNamespace {
+            command: ToolCommand::Dir(_),
+        }) | Commands::Auth(AuthNamespace {
+            command: AuthCommand::Dir(_),
+        }) | Commands::Help(_)
+            | Commands::Cache(CacheNamespace {
+                command: CacheCommand::Dir | CacheCommand::Size(_),
+            })
+            | Commands::Python(PythonNamespace {
+                command: PythonCommand::Dir(_),
+            })
+    )
+}
+
 /// uv was installed through an external package manager and cannot update itself.
 #[cfg(not(feature = "self-update"))]
 #[derive(Debug, thiserror::Error)]
@@ -316,6 +335,17 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         FilesystemOptions::user()
             .map_err(map_settings_error)?
             .combine(FilesystemOptions::system().map_err(map_settings_error)?)
+    } else if is_synchronous_command(&cli.command) {
+        let install_path = Workspace::discover_install_path(
+            &project_dir,
+            &DiscoveryOptions::default(),
+            &discovery_cache,
+        )
+        .unwrap_or_else(|_| project_dir.to_path_buf());
+        let project = FilesystemOptions::find(&install_path).map_err(map_settings_error)?;
+        let system = FilesystemOptions::system().map_err(map_settings_error)?;
+        let user = FilesystemOptions::user().map_err(map_settings_error)?;
+        project.combine(user).combine(system)
     } else if let Ok(workspace) = Workspace::discover(
         &project_dir,
         &DiscoveryOptions::default(),
@@ -3045,26 +3075,7 @@ where
 
     // These command arms, and the configuration paths selected here, do not perform async I/O.
     // Avoid creating a Tokio runtime and its dedicated thread for them.
-    let synchronous = matches!(
-        &*cli.command,
-        Commands::Self_(SelfNamespace {
-            command: SelfCommand::Version { .. },
-        }) | Commands::Tool(ToolNamespace {
-            command: ToolCommand::Dir(_),
-        })
-    ) || ((cli.top_level.no_config || cli.top_level.config_file.is_some())
-        && matches!(
-            &*cli.command,
-            Commands::Auth(AuthNamespace {
-                command: AuthCommand::Dir(_),
-            }) | Commands::Help(_)
-                | Commands::Cache(CacheNamespace {
-                    command: CacheCommand::Dir | CacheCommand::Size(_),
-                })
-                | Commands::Python(PythonNamespace {
-                    command: PythonCommand::Dir(_),
-                })
-        ));
+    let synchronous = is_synchronous_command(&cli.command);
 
     let result = if synchronous {
         futures::executor::block_on(Box::pin(run(cli, GlobalInitialization::Initialize)))

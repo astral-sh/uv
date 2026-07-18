@@ -10,7 +10,7 @@ fn cache_size_empty_raw() {
     // Clean cache first to ensure truly empty state
     context.clean().assert().success();
 
-    uv_snapshot!(context.cache_size().arg("--preview").arg("--no-config"), @"
+    uv_snapshot!(context.cache_size().arg("--preview"), @"
     success: true
     exit_code: 0
     ----- stdout -----
