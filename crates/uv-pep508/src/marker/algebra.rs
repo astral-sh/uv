@@ -48,6 +48,7 @@
 use std::cmp::{Ordering, min};
 use std::fmt;
 use std::ops::Bound;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
@@ -83,8 +84,14 @@ pub(crate) struct Interner {
 /// The shared part of an [`Interner`], which can be accessed without a lock.
 #[derive(Default)]
 pub(crate) struct InternerShared {
-    /// A list of unique [`Node`]s.
-    nodes: boxcar::Vec<Node>,
+    /// A list of unique [`Node`]s and their cached Boolean projections.
+    nodes: boxcar::Vec<InternedNode>,
+}
+
+/// A unique node and the cached projection for each complemented-edge orientation.
+struct InternedNode {
+    node: Node,
+    projections: [AtomicUsize; 2],
 }
 
 /// The mutable [`Interner`] state, stored behind a lock.
@@ -107,9 +114,6 @@ struct InternerState {
     /// A cache for replacing reachable terminal values while retaining don't-care edges.
     terminal_cache: FxHashMap<(NodeId, NodeId), NodeId>,
 
-    /// A cache for projecting ternary trees back to Boolean marker trees.
-    projection_cache: FxHashMap<NodeId, NodeId>,
-
     /// A cache for disjointness checks between two marker trees.
     disjointness_cache: FxHashMap<(NodeId, NodeId), bool>,
 }
@@ -117,7 +121,28 @@ struct InternerState {
 impl InternerShared {
     /// Returns the node for the given [`NodeId`].
     pub(crate) fn node(&self, id: NodeId) -> &Node {
-        &self.nodes[id.index()]
+        &self.nodes[id.index()].node
+    }
+
+    /// Returns the cached Boolean projection for the given [`NodeId`], if one exists.
+    pub(crate) fn projection(&self, id: NodeId) -> Option<NodeId> {
+        if id.is_terminal() {
+            return Some(id);
+        }
+
+        let projection = self.nodes[id.index()].projections[usize::from(id.is_complement())]
+            .load(AtomicOrdering::Acquire);
+        (projection != usize::MAX).then_some(NodeId(projection))
+    }
+
+    /// Cache the Boolean projection for the given [`NodeId`].
+    fn cache_projection(&self, id: NodeId, projection: NodeId) {
+        if id.is_terminal() {
+            return;
+        }
+
+        self.nodes[id.index()].projections[usize::from(id.is_complement())]
+            .store(projection.0, AtomicOrdering::Release);
     }
 }
 
@@ -166,11 +191,15 @@ impl InternerGuard<'_> {
         }
 
         // Insert the node.
-        let id = self
-            .state
-            .unique
-            .entry(node.clone())
-            .or_insert_with(|| NodeId::new(self.shared.nodes.push(node), false));
+        let id = self.state.unique.entry(node.clone()).or_insert_with(|| {
+            NodeId::new(
+                self.shared.nodes.push(InternedNode {
+                    node,
+                    projections: [AtomicUsize::new(usize::MAX), AtomicUsize::new(usize::MAX)],
+                }),
+                false,
+            )
+        });
 
         if flipped { id.not() } else { *id }
     }
@@ -587,7 +616,7 @@ impl InternerGuard<'_> {
         if value.is_terminal() {
             return value;
         }
-        if let Some(&projected) = self.state.projection_cache.get(&value) {
+        if let Some(projected) = self.shared.projection(value) {
             return projected;
         }
 
@@ -617,8 +646,10 @@ impl InternerGuard<'_> {
         }
         if let [group] = groups.as_slice() {
             let projected = self.project_cached(*group, compatible_cache);
-            self.state.projection_cache.insert(value, projected);
-            self.state.projection_cache.insert(projected, projected);
+            self.shared.cache_projection(value, projected);
+            self.shared.cache_projection(projected, projected);
+            self.shared
+                .cache_projection(projected.not(), projected.not());
             return projected;
         }
 
@@ -626,8 +657,10 @@ impl InternerGuard<'_> {
             self.project_cached(groups[assignments[&child]], compatible_cache)
         });
         let projected = self.create_node(node.var.clone(), children.coalesce());
-        self.state.projection_cache.insert(value, projected);
-        self.state.projection_cache.insert(projected, projected);
+        self.shared.cache_projection(value, projected);
+        self.shared.cache_projection(projected, projected);
+        self.shared
+            .cache_projection(projected.not(), projected.not());
         projected
     }
 

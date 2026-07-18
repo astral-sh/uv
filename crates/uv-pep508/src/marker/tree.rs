@@ -926,7 +926,11 @@ impl MarkerTree {
         }
 
         let tree = if INTERNER.shared.node(self.0).var.is_conflicting_variable() {
-            Self(INTERNER.lock().project(self.0))
+            if let Some(projected) = INTERNER.shared.projection(self.0) {
+                Self(projected)
+            } else {
+                Self(INTERNER.lock().project(self.0))
+            }
         } else {
             self
         };
@@ -1922,6 +1926,33 @@ mod test {
         drop(guard);
         thread.join().unwrap();
         assert_eq!(result.unwrap(), [true, true, true]);
+    }
+
+    #[test]
+    fn projected_platform_kind_does_not_lock_interner() {
+        let singleton = m("sys_platform == 'linux'");
+        let compound = m("sys_platform == 'linux' or platform_system == 'FreeBSD'");
+        let _ = compound.kind();
+
+        let guard = INTERNER.lock();
+        let (sender, receiver) = mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            let environment = env37();
+            sender
+                .send([
+                    matches!(singleton.kind(), MarkerTreeKind::String(_)),
+                    matches!(singleton.negate().kind(), MarkerTreeKind::String(_)),
+                    matches!(compound.kind(), MarkerTreeKind::String(_)),
+                    singleton.evaluate(&environment, &[]),
+                    compound.evaluate(&environment, &[]),
+                ])
+                .unwrap();
+        });
+
+        let result = receiver.recv_timeout(Duration::from_secs(5));
+        drop(guard);
+        thread.join().unwrap();
+        assert_eq!(result.unwrap(), [true, true, true, true, true]);
     }
 
     /// Copied from <https://github.com/pypa/packaging/blob/85ff971a250dc01db188ef9775499c15553a8c95/tests/test_markers.py#L175-L221>
