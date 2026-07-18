@@ -27,11 +27,10 @@ use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
-    AuthCommand, AuthDirArgs, AuthHelperCommand, AuthNamespace, BuildBackendCommand, CacheCommand,
-    CacheNamespace, Cli, Commands, HelpArgs, PipCommand, PipNamespace, ProjectCommand,
-    PythonCommand, PythonDirArgs, PythonNamespace, SelfCommand, SelfNamespace, SizeArgs,
-    ToolCommand, ToolDirArgs, ToolNamespace, TopLevelArgs, VersionFormat, WorkspaceCommand,
-    WorkspaceNamespace, compat::CompatArgs,
+    AuthCommand, AuthHelperCommand, AuthNamespace, BuildBackendCommand, CacheCommand,
+    CacheNamespace, Cli, Commands, PipCommand, PipNamespace, ProjectCommand, PythonCommand,
+    PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
+    WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
@@ -40,7 +39,7 @@ use uv_fs::{CWD, Simplified, normalize_path};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::{ConfigDiscovery, PythonRequest};
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -86,470 +85,34 @@ impl GlobalInitialization {
 }
 
 #[derive(Clone, Copy)]
-enum IsolatedBehavior {
-    CommandSpecific,
-    Deprecated,
-    IgnoredPreview,
-    IgnoredInit,
-}
-
-#[derive(Clone, Copy)]
-struct CommandPolicy {
-    isolated: IsolatedBehavior,
-    uses_user_configuration: bool,
-}
-
-impl CommandPolicy {
-    fn from_command(command: &Commands) -> Self {
-        let isolated = match command {
-            // Supports `--isolated` as its own argument, so we can't warn either way.
-            Commands::Tool(ToolNamespace {
-                command: ToolCommand::Uvx(_) | ToolCommand::Run(_),
-            }) => IsolatedBehavior::CommandSpecific,
-
-            // Supports `--isolated` as its own argument, so we can't warn either way.
-            Commands::Project(command)
-                if matches!(**command, ProjectCommand::Run(_) | ProjectCommand::Check(_)) =>
-            {
-                IsolatedBehavior::CommandSpecific
-            }
-
-            // `--isolated` moved to `--no-workspace`.
-            Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
-                IsolatedBehavior::IgnoredInit
-            }
-
-            // Preview APIs ignore `--isolated`.
-            Commands::Project(_) | Commands::Tool(_) | Commands::Python(_) => {
-                IsolatedBehavior::IgnoredPreview
-            }
-
-            // Non-preview APIs continue to support `--isolated`.
-            _ => IsolatedBehavior::Deprecated,
-        };
-
-        Self {
-            isolated,
-            uses_user_configuration: matches!(command, Commands::Tool(_) | Commands::Self_(_)),
-        }
-    }
-
-    fn resolve_isolated(self, isolated: bool) -> bool {
-        if !isolated {
-            return false;
-        }
-
-        match self.isolated {
-            IsolatedBehavior::CommandSpecific => false,
-            IsolatedBehavior::Deprecated => {
-                warn_user!(
-                    "The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files."
-                );
-                true
-            }
-            IsolatedBehavior::IgnoredPreview => {
-                warn_user!(
-                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files."
-                );
-                false
-            }
-            IsolatedBehavior::IgnoredInit => {
-                warn_user!(
-                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace."
-                );
-                false
-            }
-        }
-    }
-}
-
-/// Whether a command can run directly or requires a Tokio runtime.
-///
-/// Commands default to the asynchronous path unless they are explicitly extracted into a
-/// [`SyncCommand`].
 enum CommandExecution {
-    Sync {
-        command: SyncCommand,
-        top_level: TopLevelArgs,
-        policy: CommandPolicy,
-    },
-    Async {
-        cli: Cli,
-        policy: CommandPolicy,
-    },
-}
-
-enum SyncCommand {
-    AuthDir(AuthDirArgs),
-    Help(HelpArgs),
-    CacheDir,
-    CacheSize(SizeArgs),
-    SelfVersion {
-        short: bool,
-        output_format: VersionFormat,
-    },
-    ToolDir(ToolDirArgs),
-    PythonDir(PythonDirArgs),
+    Synchronous,
+    Asynchronous,
 }
 
 impl CommandExecution {
-    /// Extract commands whose complete initialization and execution paths are synchronous.
-    fn from_cli(cli: Cli) -> Self {
-        let Cli { command, top_level } = cli;
-        let policy = CommandPolicy::from_command(command.as_ref());
-        let command = match *command {
-            Commands::Auth(AuthNamespace {
-                command: AuthCommand::Dir(args),
-            }) => SyncCommand::AuthDir(args),
-            Commands::Help(args) => SyncCommand::Help(args),
-            Commands::Cache(CacheNamespace {
-                command: CacheCommand::Dir,
-            }) => SyncCommand::CacheDir,
-            Commands::Cache(CacheNamespace {
-                command: CacheCommand::Size(args),
-            }) => SyncCommand::CacheSize(args),
-            Commands::Self_(SelfNamespace {
-                command:
-                    SelfCommand::Version {
-                        short,
-                        output_format,
-                    },
-            }) => SyncCommand::SelfVersion {
-                short,
-                output_format,
-            },
-            Commands::Tool(ToolNamespace {
-                command: ToolCommand::Dir(args),
-            }) => SyncCommand::ToolDir(args),
-            Commands::Python(PythonNamespace {
-                command: PythonCommand::Dir(args),
-            }) => SyncCommand::PythonDir(args),
-            command => {
-                return Self::Async {
-                    cli: Cli {
-                        command: Box::new(command),
-                        top_level,
-                    },
-                    policy,
-                };
-            }
-        };
-        Self::Sync {
+    fn from_command(command: &Commands) -> Self {
+        if matches!(
             command,
-            top_level,
-            policy,
-        }
-    }
-}
-
-fn set_working_directory(top_level: &TopLevelArgs) -> Result<()> {
-    // Respect `UV_WORKING_DIRECTORY` for backwards compatibility.
-    if let Some(directory) =
-        top_level.global_args.directory.clone().or_else(|| {
-            std::env::var_os(EnvVars::UV_WORKING_DIRECTORY).map(std::path::PathBuf::from)
-        })
-    {
-        // Switch directories as early as possible.
-        std::env::set_current_dir(directory)?;
-    }
-
-    Ok(())
-}
-
-/// Initialize process state needed before filesystem configuration can be discovered.
-fn initialize_run_environment(
-    top_level: &TopLevelArgs,
-    global_initialization: GlobalInitialization,
-) -> Result<(EnvironmentOptions, Preview)> {
-    // Load environment variables not handled by Clap.
-    let environment = EnvironmentOptions::new()?;
-
-    // Resolve preview flags before config discovery for decisions that affect the discovery root.
-    let preview = settings::resolve_preview(&top_level.global_args, None, &environment);
-
-    if global_initialization.needs_initialization() {
-        // Make the early preview flags globally available.
-        uv_preview::set(preview)?;
-
-        // Configure the `tracing` crate, which controls internal logging.
-        #[cfg(feature = "tracing-durations-export")]
-        let (durations_layer, _duration_guard) =
-            logging::setup_durations(environment.tracing_durations_file.as_ref())?;
-        #[cfg(not(feature = "tracing-durations-export"))]
-        let durations_layer = None::<tracing_subscriber::layer::Identity>;
-        logging::setup_logging(
-            match top_level.global_args.verbose {
-                0 => logging::Level::Off,
-                1 => logging::Level::DebugUv,
-                2 => logging::Level::TraceUv,
-                3.. => logging::Level::TraceAll,
-            },
-            durations_layer,
-            resolve_color(&top_level.global_args),
-            environment.log_context.unwrap_or_default(),
-        )?;
-    }
-
-    Ok((environment, preview))
-}
-
-/// Validate an explicit `--project` path against the current preview policy.
-fn validate_project_directory(
-    project_path: Option<&Path>,
-    project_dir: &Path,
-    preview: Preview,
-) -> Result<()> {
-    let Some(project_path) = project_path else {
-        return Ok(());
-    };
-
-    if !project_dir.exists() {
-        if preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-            bail!(
-                "Project directory `{}` does not exist",
-                project_path.user_display()
-            );
-        }
-        warn_user_once!(
-            "Project directory `{}` does not exist. \
-            This will become an error in a future release. \
-            Use `--preview-features project-directory-must-exist` to error on this now.",
-            project_path.user_display()
-        );
-    } else if !project_dir.is_dir() {
-        // `--project path/to/pyproject.toml` is resolved to its parent above,
-        // so this only triggers for other file types (see #18508).
-        if preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-            bail!(
-                "Project path `{}` is not a directory",
-                project_path.user_display()
-            );
-        }
-        warn_user_once!(
-            "Project path `{}` is not a directory. \
-            This will become an error in a future release. \
-            Use `--preview-features project-directory-must-exist` to error on this now.",
-            project_path.user_display()
-        );
-    }
-
-    Ok(())
-}
-
-/// The configuration source selected after applying command and global-argument policy.
-#[derive(Clone, Copy)]
-enum ConfigurationPlan<'a> {
-    Disabled,
-    Explicit(&'a Path),
-    User,
-    Project,
-}
-
-impl<'a> ConfigurationPlan<'a> {
-    fn from_args(
-        top_level: &'a TopLevelArgs,
-        policy: CommandPolicy,
-        config_discovery: ConfigDiscovery,
-    ) -> Self {
-        let deprecated_isolated = policy.resolve_isolated(top_level.global_args.isolated);
-
-        if let Some(config_file) = top_level.config_file.as_deref() {
-            Self::Explicit(config_file)
-        } else if deprecated_isolated || !config_discovery.enabled() {
-            Self::Disabled
-        } else if policy.uses_user_configuration {
-            Self::User
+            Commands::Self_(SelfNamespace {
+                command: SelfCommand::Version { .. },
+            }) | Commands::Tool(ToolNamespace {
+                command: ToolCommand::Dir(_),
+            }) | Commands::Auth(AuthNamespace {
+                command: AuthCommand::Dir(_),
+            }) | Commands::Help(_)
+                | Commands::Cache(CacheNamespace {
+                    command: CacheCommand::Dir | CacheCommand::Size(_),
+                })
+                | Commands::Python(PythonNamespace {
+                    command: PythonCommand::Dir(_),
+                })
+        ) {
+            Self::Synchronous
         } else {
-            Self::Project
+            Self::Asynchronous
         }
     }
-
-    const fn requires_project(self) -> bool {
-        matches!(self, Self::Project)
-    }
-
-    fn load(self, project_install_path: &Path) -> Result<Option<FilesystemOptions>> {
-        match self {
-            Self::Disabled => Ok(None),
-            Self::Explicit(config_file) => Ok(Some(load_config_file(config_file)?)),
-            Self::User => load_user_configuration(),
-            Self::Project => load_project_configuration(project_install_path),
-        }
-    }
-}
-
-fn load_config_file(config_file: &Path) -> Result<FilesystemOptions> {
-    if config_file
-        .file_name()
-        .is_some_and(|file_name| file_name == "pyproject.toml")
-    {
-        warn_user!(
-            "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
-        );
-    }
-
-    FilesystemOptions::from_file(config_file).map_err(map_settings_error)
-}
-
-fn load_user_configuration() -> Result<Option<FilesystemOptions>> {
-    Ok(FilesystemOptions::user()
-        .map_err(map_settings_error)?
-        .combine(FilesystemOptions::system().map_err(map_settings_error)?))
-}
-
-fn load_project_configuration(install_path: &Path) -> Result<Option<FilesystemOptions>> {
-    let project = FilesystemOptions::find(install_path).map_err(map_settings_error)?;
-    let system = FilesystemOptions::system().map_err(map_settings_error)?;
-    let user = FilesystemOptions::user().map_err(map_settings_error)?;
-    Ok(project.combine(user).combine(system))
-}
-
-struct RunContext {
-    globals: GlobalSettings,
-    cache: Cache,
-    printer: Printer,
-}
-
-/// Resolve the settings and process state shared by synchronous and asynchronous commands.
-///
-/// Keeping this initialization common ensures that bypassing Tokio does not change configuration
-/// precedence, validation, or global process setup.
-fn initialize_run_context(
-    top_level: &TopLevelArgs,
-    filesystem: Option<&FilesystemOptions>,
-    environment: &EnvironmentOptions,
-    project_dir: &Path,
-    global_initialization: GlobalInitialization,
-) -> Result<RunContext> {
-    // Resolve the global settings.
-    let globals = GlobalSettings::resolve(&top_level.global_args, filesystem, environment);
-
-    if global_initialization.needs_initialization() {
-        // Set the global flags.
-        uv_flags::init(EnvironmentFlags::from(environment))
-            .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
-    }
-
-    debug!("uv {}", uv_cli::version::uv_self_version());
-    if let Some(config_file) = top_level.config_file.as_ref() {
-        debug!("Using configuration file: {}", config_file.user_display());
-    }
-    if globals.preview.all_enabled() {
-        debug!("All preview features are enabled");
-    } else if globals.preview.any_enabled() {
-        debug!(
-            "The following preview features are enabled: {}",
-            globals.preview
-        );
-    }
-
-    // Adjust open file limits on Unix if the preview feature is enabled.
-    #[cfg(unix)]
-    if global_initialization.needs_initialization()
-        && globals.preview.is_enabled(PreviewFeature::AdjustUlimit)
-    {
-        match uv_unix::adjust_open_file_limit() {
-            Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
-            // TODO(zanieb): When moving out of preview, consider changing this to a log instead of
-            // a warning because it's okay if we fail here.
-            Err(err) => warn_user!("{err}"),
-        }
-    }
-
-    // Resolve the cache settings.
-    let cache_settings = CacheSettings::resolve(top_level.cache_args.as_ref().clone(), filesystem);
-
-    if global_initialization.needs_initialization() {
-        // Set and finalize the global preview configuration.
-        uv_preview::set(globals.preview)?;
-        uv_preview::finalize()?;
-    }
-
-    // Enforce the required version.
-    if let Some(required_version) = globals.required_version.as_ref() {
-        let package_version = uv_pep440::Version::from_str(uv_version::version())?;
-        if !required_version.contains(&package_version) {
-            return Err(required_version_error(required_version, &package_version));
-        }
-    }
-
-    // Configure the `Printer`, which controls user-facing output in the CLI.
-    let printer = Printer::new(globals.quiet, globals.verbose, globals.no_progress);
-
-    // Configure the `warn!` macros, which control user-facing warnings in the CLI.
-    if globals.quiet > 0 {
-        uv_warnings::disable();
-    } else {
-        uv_warnings::enable();
-    }
-
-    anstream::ColorChoice::write_global(globals.color.into());
-
-    if global_initialization.needs_initialization() {
-        miette::set_hook(Box::new(|_| {
-            Box::new(
-                miette::MietteHandlerOpts::new()
-                    .break_words(false)
-                    .word_separator(textwrap::WordSeparator::AsciiSpace)
-                    .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                    .wrap_lines(std::env::var(EnvVars::UV_NO_WRAP).is_err())
-                    .build(),
-            )
-        }))?;
-    }
-
-    // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
-    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
-
-    // Write out any resolved settings.
-    if globals.show_settings {
-        writeln!(printer.stdout(), "{globals:#?}")?;
-        writeln!(printer.stdout(), "{cache_settings:#?}")?;
-    }
-
-    // Configure the cache.
-    if cache_settings.no_cache {
-        debug!("Disabling the uv cache due to `--no-cache`");
-    }
-    let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
-    let cache_dir = std::path::absolute(cache.root())?;
-    // PEP 517 hooks run from uv-managed source trees, including source distributions extracted
-    // into the cache, and can invoke uv recursively.
-    let project_is_in_build_dir =
-        std::env::var_os(EnvVars::UV_INTERNAL__BUILD_DIR).is_some_and(|build_dir| {
-            std::path::absolute(build_dir).is_ok_and(|build_dir| {
-                project_dir.starts_with(&build_dir)
-                    || fs_err::canonicalize(project_dir).is_ok_and(|project_dir| {
-                        fs_err::canonicalize(build_dir)
-                            .is_ok_and(|build_dir| project_dir.starts_with(build_dir))
-                    })
-            })
-        });
-    if !project_is_in_build_dir {
-        if project_dir.starts_with(&cache_dir) {
-            bail!(
-                "The project directory `{}` is inside the cache directory `{}`",
-                project_dir.user_display(),
-                cache_dir.user_display()
-            );
-        }
-        if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
-            && let Ok(project_dir) = fs_err::canonicalize(project_dir)
-            && project_dir.starts_with(&cache_dir)
-        {
-            bail!(
-                "The project directory `{}` is inside the cache directory `{}`",
-                project_dir.user_display(),
-                cache_dir.user_display()
-            );
-        }
-    }
-
-    Ok(RunContext {
-        globals,
-        cache,
-        printer,
-    })
 }
 
 /// uv was installed through an external package manager and cannot update itself.
@@ -575,155 +138,16 @@ impl uv_errors::Hint for ExternallyInstalledError {
     }
 }
 
-/// Execute a command without creating or entering an async runtime.
-///
-/// Any command that introduces async work must be moved back to [`CommandExecution::Async`].
-#[instrument(name = "run", skip_all)]
-fn run_sync(
-    command: SyncCommand,
-    top_level: &TopLevelArgs,
-    policy: CommandPolicy,
-    global_initialization: GlobalInitialization,
-) -> Result<ExitStatus> {
-    let config_discovery = ConfigDiscovery::from_args(top_level.no_config);
-
-    // Enable flag to pick up warnings generated by workspace loading.
-    if top_level.global_args.quiet == 0 {
-        uv_warnings::enable();
-    }
-
-    set_working_directory(top_level)?;
-
-    let (environment, early_preview) =
-        initialize_run_environment(top_level, global_initialization)?;
-
-    // Determine the project directory.
-    //
-    // If `--project` points to a `pyproject.toml` file, resolve to its parent directory,
-    // since downstream code (e.g., `FilesystemOptions::find`) expects a directory.
-    let project_dir: Cow<'_, Path> = if let Some(project) = &top_level.global_args.project {
-        let path = normalize_path(std::path::absolute(project)?);
-        if let Some(name) = path.file_name()
-            && name == "pyproject.toml"
-            && path.is_file()
-            && let Some(parent) = path.parent()
-        {
-            Cow::Owned(parent.to_path_buf())
-        } else {
-            path
-        }
-    } else {
-        Cow::Borrowed(&*CWD)
-    };
-
-    validate_project_directory(
-        top_level.global_args.project.as_deref(),
-        &project_dir,
-        early_preview,
-    )?;
-
-    let configuration_plan = ConfigurationPlan::from_args(top_level, policy, config_discovery);
-
-    // Pass the (possibly non-existent) cache dir path to the initial workspace discovery.
-    let discovery_cache = Cache::from_settings(
-        top_level.cache_args.no_cache,
-        top_level.cache_args.cache_dir.clone(),
-    )?;
-    let install_path = if configuration_plan.requires_project() {
-        Some(
-            Workspace::discover_install_path(
-                &project_dir,
-                &DiscoveryOptions::default(),
-                &discovery_cache,
-            )
-            .unwrap_or_else(|_| project_dir.to_path_buf()),
-        )
-    } else {
-        None
-    };
-    let filesystem =
-        configuration_plan.load(install_path.as_deref().unwrap_or(project_dir.as_ref()))?;
-
-    let RunContext {
-        globals,
-        cache,
-        printer,
-    } = initialize_run_context(
-        top_level,
-        filesystem.as_ref(),
-        &environment,
-        &project_dir,
-        global_initialization,
-    )?;
-
-    macro_rules! show_settings {
-        ($arg:expr) => {
-            if globals.show_settings {
-                writeln!(printer.stdout(), "{:#?}", $arg)?;
-                return Ok(ExitStatus::Success);
-            }
-        };
-    }
-
-    match command {
-        SyncCommand::AuthDir(args) => {
-            commands::auth_dir(args.service.as_ref(), printer)?;
-            Ok(ExitStatus::Success)
-        }
-        SyncCommand::Help(args) => commands::help(
-            args.command.unwrap_or_default().as_slice(),
-            printer,
-            args.no_pager,
-        ),
-        SyncCommand::CacheDir => commands::cache_dir(&cache, printer),
-        SyncCommand::CacheSize(args) => {
-            commands::cache_size(&cache, args.human, printer, globals.preview)
-        }
-        SyncCommand::SelfVersion {
-            short,
-            output_format,
-        } => {
-            commands::self_version(short, output_format, printer)?;
-            Ok(ExitStatus::Success)
-        }
-        SyncCommand::ToolDir(args) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolDirSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            commands::tool_dir(args.bin, globals.preview, printer)?;
-            Ok(ExitStatus::Success)
-        }
-        SyncCommand::PythonDir(args) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonDirSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            commands::python_dir(args.bin, printer)?;
-            Ok(ExitStatus::Success)
-        }
-    }
-}
-
 #[doc(hidden)]
 pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Result<ExitStatus> {
-    match CommandExecution::from_cli(cli) {
-        CommandExecution::Sync {
-            command,
-            top_level,
-            policy,
-        } => run_sync(command, &top_level, policy, global_initialization),
-        CommandExecution::Async { cli, policy } => {
-            Box::pin(run_async(cli, policy, global_initialization)).await
-        }
-    }
+    let execution = CommandExecution::from_command(&cli.command);
+    Box::pin(run_with_execution(cli, execution, global_initialization)).await
 }
 
-/// Execute a command that was classified as requiring a Tokio runtime.
 #[instrument(name = "run", skip_all)]
-async fn run_async(
+async fn run_with_execution(
     cli: Cli,
-    policy: CommandPolicy,
+    execution: CommandExecution,
     global_initialization: GlobalInitialization,
 ) -> Result<ExitStatus> {
     let config_discovery = ConfigDiscovery::from_args(cli.top_level.no_config);
@@ -733,7 +157,16 @@ async fn run_async(
         uv_warnings::enable();
     }
 
-    set_working_directory(&cli.top_level)?;
+    // Respect `UV_WORKING_DIRECTORY` for backwards compatibility.
+    let directory =
+        cli.top_level.global_args.directory.clone().or_else(|| {
+            std::env::var_os(EnvVars::UV_WORKING_DIRECTORY).map(std::path::PathBuf::from)
+        });
+
+    // Switch directories as early as possible.
+    if let Some(directory) = directory.as_ref() {
+        std::env::set_current_dir(directory)?;
+    }
 
     // Parse the external command, if necessary.
     let parsed_run_command = if let Commands::Project(command) = &*cli.command
@@ -752,8 +185,36 @@ async fn run_async(
         None
     };
 
-    let (environment, early_preview) =
-        initialize_run_environment(&cli.top_level, global_initialization)?;
+    // Load environment variables not handled by Clap.
+    let environment = EnvironmentOptions::new()?;
+
+    // Resolve preview flags before config discovery for decisions that affect the discovery root.
+    let early_preview = settings::resolve_preview(&cli.top_level.global_args, None, &environment);
+
+    if global_initialization.needs_initialization() {
+        // Make the early preview flags globally available.
+        uv_preview::set(early_preview)?;
+    }
+
+    if global_initialization.needs_initialization() {
+        // Configure the `tracing` crate, which controls internal logging.
+        #[cfg(feature = "tracing-durations-export")]
+        let (durations_layer, _duration_guard) =
+            logging::setup_durations(environment.tracing_durations_file.as_ref())?;
+        #[cfg(not(feature = "tracing-durations-export"))]
+        let durations_layer = None::<tracing_subscriber::layer::Identity>;
+        logging::setup_logging(
+            match cli.top_level.global_args.verbose {
+                0 => logging::Level::Off,
+                1 => logging::Level::DebugUv,
+                2 => logging::Level::TraceUv,
+                3.. => logging::Level::TraceAll,
+            },
+            durations_layer,
+            resolve_color(&cli.top_level.global_args),
+            environment.log_context.unwrap_or_default(),
+        )?;
+    }
 
     // Determine the project directory.
     //
@@ -789,14 +250,88 @@ async fn run_async(
     );
 
     if !skip_project_validation {
-        validate_project_directory(
-            cli.top_level.global_args.project.as_deref(),
-            &project_dir,
-            early_preview,
-        )?;
+        if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
+            if !project_dir.exists() {
+                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                    bail!(
+                        "Project directory `{}` does not exist",
+                        project_path.user_display()
+                    );
+                }
+                warn_user_once!(
+                    "Project directory `{}` does not exist. \
+                    This will become an error in a future release. \
+                    Use `--preview-features project-directory-must-exist` to error on this now.",
+                    project_path.user_display()
+                );
+            } else if !project_dir.is_dir() {
+                // `--project path/to/pyproject.toml` is resolved to its parent above,
+                // so this only triggers for other file types (see #18508).
+                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                    bail!(
+                        "Project path `{}` is not a directory",
+                        project_path.user_display()
+                    );
+                }
+                warn_user_once!(
+                    "Project path `{}` is not a directory. \
+                    This will become an error in a future release. \
+                    Use `--preview-features project-directory-must-exist` to error on this now.",
+                    project_path.user_display()
+                );
+            }
+        }
     }
 
-    let configuration_plan = ConfigurationPlan::from_args(&cli.top_level, policy, config_discovery);
+    // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
+    let deprecated_isolated = if cli.top_level.global_args.isolated {
+        match &*cli.command {
+            // Supports `--isolated` as its own argument, so we can't warn either way.
+            Commands::Tool(ToolNamespace {
+                command: ToolCommand::Uvx(_) | ToolCommand::Run(_),
+            }) => false,
+
+            // Supports `--isolated` as its own argument, so we can't warn either way.
+            Commands::Project(command)
+                if matches!(**command, ProjectCommand::Run(_) | ProjectCommand::Check(_)) =>
+            {
+                false
+            }
+
+            // `--isolated` moved to `--no-workspace`.
+            Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace."
+                );
+                false
+            }
+
+            // Preview APIs. Ignore `--isolated` and warn.
+            Commands::Project(_) | Commands::Tool(_) | Commands::Python(_) => {
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
+                false
+            }
+
+            // Non-preview APIs. Continue to support `--isolated`, but warn.
+            _ => {
+                warn_user!(
+                    "The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
+                true
+            }
+        }
+    } else {
+        false
+    };
+
+    // Load configuration from the filesystem, prioritizing (in order):
+    // 1. The configuration file specified on the command-line.
+    // 2. The nearest configuration file (`uv.toml` or `pyproject.toml`) above the workspace root.
+    //    If found, this file is combined with the user configuration file.
+    // 3. The nearest configuration file (`uv.toml` or `pyproject.toml`) in the directory tree,
+    //    starting from the current directory.
 
     // Pass the (possibly non-existent) cache dir path to the initial workspace discovery.
     let discovery_cache = Cache::from_settings(
@@ -804,21 +339,53 @@ async fn run_async(
         cli.top_level.cache_args.cache_dir.clone(),
     )?;
     let workspace_cache = WorkspaceCache::default();
-    let install_path = if configuration_plan.requires_project() {
-        Workspace::discover(
+    let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
+        if config_file
+            .file_name()
+            .is_some_and(|file_name| file_name == "pyproject.toml")
+        {
+            warn_user!(
+                "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
+            );
+        }
+        Some(FilesystemOptions::from_file(config_file).map_err(map_settings_error)?)
+    } else if deprecated_isolated || !config_discovery.enabled() {
+        None
+    } else if matches!(&*cli.command, Commands::Tool(_) | Commands::Self_(_)) {
+        // For commands that operate at the user-level, ignore local configuration.
+        FilesystemOptions::user()
+            .map_err(map_settings_error)?
+            .combine(FilesystemOptions::system().map_err(map_settings_error)?)
+    } else if matches!(execution, CommandExecution::Synchronous) {
+        let install_path = Workspace::discover_install_path(
             &project_dir,
             &DiscoveryOptions::default(),
             &discovery_cache,
-            &workspace_cache,
         )
-        .await
-        .ok()
-        .map(|workspace| workspace.install_path().clone())
+        .unwrap_or_else(|_| project_dir.to_path_buf());
+        let project = FilesystemOptions::find(&install_path).map_err(map_settings_error)?;
+        let system = FilesystemOptions::system().map_err(map_settings_error)?;
+        let user = FilesystemOptions::user().map_err(map_settings_error)?;
+        project.combine(user).combine(system)
+    } else if let Ok(workspace) = Workspace::discover(
+        &project_dir,
+        &DiscoveryOptions::default(),
+        &discovery_cache,
+        &workspace_cache,
+    )
+    .await
+    {
+        let project =
+            FilesystemOptions::find(workspace.install_path()).map_err(map_settings_error)?;
+        let system = FilesystemOptions::system().map_err(map_settings_error)?;
+        let user = FilesystemOptions::user().map_err(map_settings_error)?;
+        project.combine(user).combine(system)
     } else {
-        None
+        let project = FilesystemOptions::find(&project_dir).map_err(map_settings_error)?;
+        let system = FilesystemOptions::system().map_err(map_settings_error)?;
+        let user = FilesystemOptions::user().map_err(map_settings_error)?;
+        project.combine(user).combine(system)
     };
-    let filesystem =
-        configuration_plan.load(install_path.as_deref().unwrap_or(project_dir.as_ref()))?;
 
     // If the target is a remote script, download it.
     // If the target is a PEP 723 script, parse it.
@@ -959,21 +526,91 @@ async fn run_async(
         .map(FilesystemOptions::from)
         .combine(filesystem);
 
-    // This check happens after the first (fallible) workspace discovery, which we need to resolve
-    // the settings that go into the cache constructor, but the check happens before the first
-    // workspace discovery that's used beyond settings discovery.
-    let RunContext {
-        globals,
-        cache,
-        printer,
-    } = initialize_run_context(
-        &cli.top_level,
+    // Resolve the global settings.
+    let globals = GlobalSettings::resolve(
+        &cli.top_level.global_args,
         filesystem.as_ref(),
         &environment,
-        &project_dir,
-        global_initialization,
-    )?;
+    );
 
+    if global_initialization.needs_initialization() {
+        // Set the global flags.
+        uv_flags::init(EnvironmentFlags::from(&environment))
+            .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
+    }
+
+    debug!("uv {}", uv_cli::version::uv_self_version());
+    if let Some(config_file) = cli.top_level.config_file.as_ref() {
+        debug!("Using configuration file: {}", config_file.user_display());
+    }
+    if globals.preview.all_enabled() {
+        debug!("All preview features are enabled");
+    } else if globals.preview.any_enabled() {
+        debug!(
+            "The following preview features are enabled: {}",
+            globals.preview
+        );
+    }
+
+    // Adjust open file limits on Unix if the preview feature is enabled.
+    #[cfg(unix)]
+    if global_initialization.needs_initialization()
+        && globals.preview.is_enabled(PreviewFeature::AdjustUlimit)
+    {
+        match uv_unix::adjust_open_file_limit() {
+            Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
+            // TODO(zanieb): When moving out of preview, consider changing this to a log instead of
+            // a warning because it's okay if we fail here.
+            Err(err) => warn_user!("{err}"),
+        }
+    }
+
+    // Resolve the cache settings.
+    let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
+
+    if global_initialization.needs_initialization() {
+        // Set and finalize the global preview configuration.
+        uv_preview::set(globals.preview)?;
+        uv_preview::finalize()?;
+    }
+
+    // Enforce the required version.
+    if let Some(required_version) = globals.required_version.as_ref() {
+        let package_version = uv_pep440::Version::from_str(uv_version::version())?;
+        if !required_version.contains(&package_version) {
+            return Err(required_version_error(required_version, &package_version));
+        }
+    }
+
+    // Configure the `Printer`, which controls user-facing output in the CLI.
+    let printer = Printer::new(globals.quiet, globals.verbose, globals.no_progress);
+
+    // Configure the `warn!` macros, which control user-facing warnings in the CLI.
+    if globals.quiet > 0 {
+        uv_warnings::disable();
+    } else {
+        uv_warnings::enable();
+    }
+
+    anstream::ColorChoice::write_global(globals.color.into());
+
+    if global_initialization.needs_initialization() {
+        miette::set_hook(Box::new(|_| {
+            Box::new(
+                miette::MietteHandlerOpts::new()
+                    .break_words(false)
+                    .word_separator(textwrap::WordSeparator::AsciiSpace)
+                    .word_splitter(textwrap::WordSplitter::NoHyphenation)
+                    .wrap_lines(std::env::var(EnvVars::UV_NO_WRAP).is_err())
+                    .build(),
+            )
+        }))?;
+    }
+
+    // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
+    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
+
+    // Write out any resolved settings.
     macro_rules! show_settings {
         ($arg:expr) => {
             if globals.show_settings {
@@ -981,6 +618,54 @@ async fn run_async(
                 return Ok(ExitStatus::Success);
             }
         };
+        ($arg:expr, false) => {
+            if globals.show_settings {
+                writeln!(printer.stdout(), "{:#?}", $arg)?;
+            }
+        };
+    }
+    show_settings!(globals, false);
+    show_settings!(cache_settings, false);
+
+    // Configure the cache.
+    if cache_settings.no_cache {
+        debug!("Disabling the uv cache due to `--no-cache`");
+    }
+    let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+    // This check happens after the first (fallible) workspace discovery, which we need to resolve
+    // the settings that go into the cache constructor, but the check happens before the first
+    // workspace discovery that's used beyond settings discovery.
+    let cache_dir = std::path::absolute(cache.root())?;
+    // PEP 517 hooks run from uv-managed source trees, including source distributions extracted
+    // into the cache, and can invoke uv recursively.
+    let project_is_in_build_dir =
+        std::env::var_os(EnvVars::UV_INTERNAL__BUILD_DIR).is_some_and(|build_dir| {
+            std::path::absolute(build_dir).is_ok_and(|build_dir| {
+                project_dir.starts_with(&build_dir)
+                    || fs_err::canonicalize(&*project_dir).is_ok_and(|project_dir| {
+                        fs_err::canonicalize(build_dir)
+                            .is_ok_and(|build_dir| project_dir.starts_with(build_dir))
+                    })
+            })
+        });
+    if !project_is_in_build_dir {
+        if project_dir.starts_with(&cache_dir) {
+            bail!(
+                "The project directory `{}` is inside the cache directory `{}`",
+                project_dir.user_display(),
+                cache_dir.user_display()
+            );
+        }
+        if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
+            && let Ok(project_dir) = fs_err::canonicalize(&*project_dir)
+            && project_dir.starts_with(&cache_dir)
+        {
+            bail!(
+                "The project directory `{}` is inside the cache directory `{}`",
+                project_dir.user_display(),
+                cache_dir.user_display()
+            );
+        }
     }
 
     // Workspace discovery excludes the cache root, so only reuse the earlier discovery when the
@@ -1058,8 +743,11 @@ async fn run_async(
             .await
         }
         Commands::Auth(AuthNamespace {
-            command: AuthCommand::Dir(_),
-        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
+            command: AuthCommand::Dir(args),
+        }) => {
+            commands::auth_dir(args.service.as_ref(), printer)?;
+            Ok(ExitStatus::Success)
+        }
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Helper(args),
         }) => {
@@ -1076,9 +764,11 @@ async fn run_async(
                 }
             }
         }
-        Commands::Help(_) => {
-            unreachable!("synchronous commands are dispatched before starting the async path")
-        }
+        Commands::Help(args) => commands::help(
+            args.command.unwrap_or_default().as_slice(),
+            printer,
+            args.no_pager,
+        ),
         Commands::Pip(PipNamespace {
             command: PipCommand::Compile(args),
         }) => {
@@ -1641,10 +1331,10 @@ async fn run_async(
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
-        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
+        }) => commands::cache_dir(&cache, printer),
         Commands::Cache(CacheNamespace {
-            command: CacheCommand::Size(_),
-        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
+            command: CacheCommand::Size(args),
+        }) => commands::cache_size(&cache, args.human, printer, globals.preview),
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::BuildSettings::resolve(args, filesystem, environment);
@@ -1826,10 +1516,13 @@ async fn run_async(
         Commands::Self_(SelfNamespace {
             command:
                 SelfCommand::Version {
-                    short: _,
-                    output_format: _,
+                    short,
+                    output_format,
                 },
-        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
+        }) => {
+            commands::self_version(short, output_format, printer)?;
+            Ok(ExitStatus::Success)
+        }
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
             return Err(ExternallyInstalledError {
@@ -2143,8 +1836,15 @@ async fn run_async(
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
-            command: ToolCommand::Dir(_),
-        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
+            command: ToolCommand::Dir(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolDirSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::tool_dir(args.bin, globals.preview, printer)?;
+            Ok(ExitStatus::Success)
+        }
         Commands::Python(PythonNamespace {
             command: PythonCommand::List(args),
         }) => {
@@ -2321,8 +2021,15 @@ async fn run_async(
             .await
         }
         Commands::Python(PythonNamespace {
-            command: PythonCommand::Dir(_),
-        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
+            command: PythonCommand::Dir(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::PythonDirSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::python_dir(args.bin, printer)?;
+            Ok(ExitStatus::Success)
+        }
         Commands::Python(PythonNamespace {
             command: PythonCommand::UpdateShell,
         }) => {
@@ -3387,18 +3094,26 @@ where
         cli.top_level.global_args.no_progress,
     );
 
-    let result = match CommandExecution::from_cli(cli) {
-        CommandExecution::Sync {
-            command,
-            top_level,
-            policy,
-        } => run_sync(
-            command,
-            &top_level,
-            policy,
-            GlobalInitialization::Initialize,
-        ),
-        CommandExecution::Async { cli, policy } => {
+    // These command arms, and the configuration paths selected here, do not perform async I/O.
+    // Avoid creating a Tokio runtime and its dedicated thread for them.
+    let execution = CommandExecution::from_command(&cli.command);
+
+    let result = match execution {
+        CommandExecution::Synchronous => {
+            match Box::pin(run_with_execution(
+                cli,
+                execution,
+                GlobalInitialization::Initialize,
+            ))
+            .now_or_never()
+            {
+                Some(result) => result,
+                None => Err(anyhow!(
+                    "command classified as synchronous attempted to perform asynchronous work"
+                )),
+            }
+        }
+        CommandExecution::Asynchronous => {
             // See `min_stack_size` doc comment about `main2`.
             let min_stack_size = min_stack_size();
             let main2 = move || {
@@ -3408,9 +3123,9 @@ where
                     .build()
                     .expect("Failed building the Runtime");
                 // Box the large main future to avoid stack overflows.
-                let result = runtime.block_on(Box::pin(run_async(
+                let result = runtime.block_on(Box::pin(run_with_execution(
                     cli,
-                    policy,
+                    execution,
                     GlobalInitialization::Initialize,
                 )));
                 // Avoid waiting for pending tasks to complete.
