@@ -1277,7 +1277,11 @@ impl MarkerTree {
     pub fn simplify_python_versions(self, lower: Bound<&Version>, upper: Bound<&Version>) -> Self {
         let mut interner = INTERNER.lock();
         let node = interner.simplify_python_versions(self.0, lower, upper);
-        Self(interner.finish(node))
+        if node == self.0 {
+            self
+        } else {
+            Self(interner.finish(node))
+        }
     }
 
     /// Complexify marker tree by requiring the given Python version range
@@ -2022,6 +2026,17 @@ mod test {
 
     #[test]
     fn simplify_python_versions() {
+        let platform = m(
+            "(os_name == 'nt' or sys_platform == 'linux') and platform_machine == 'simplify-machine'",
+        );
+        assert_eq!(
+            platform.simplify_python_versions(
+                Bound::Included(Version::new([3, 9])).as_ref(),
+                Bound::Unbounded.as_ref(),
+            ),
+            platform
+        );
+
         assert_eq!(
             m("(extra == 'foo' and sys_platform == 'win32') or extra == 'foo'")
                 .simplify_extras(&["foo".parse().unwrap()]),
