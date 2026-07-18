@@ -380,10 +380,23 @@ pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
     tempfile::Builder::new().tempfile_in(path)
 }
 
+/// Return a [`NamedTempFile`] in the specified directory without blocking the async runtime.
+#[cfg(feature = "tokio")]
+pub async fn tempfile_in_async(path: &Path) -> io::Result<NamedTempFile<fs_err::tokio::File>> {
+    let path = path.to_path_buf();
+    let temp_file = tokio::task::spawn_blocking(move || tempfile_in(&path))
+        .await
+        .map_err(io::Error::other)??;
+    let (file, path) = temp_file.into_parts();
+    let file = fs_err::File::from_parts(file, path.to_path_buf());
+    let file = fs_err::tokio::File::from_std(file);
+    Ok(NamedTempFile::from_parts(file, path))
+}
+
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 #[cfg(feature = "tokio")]
 pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
-    let temp_file = tempfile_in(
+    let temp_file = tempfile_in_async(
         path.as_ref()
             .parent()
             .expect("Write path must have a parent"),
