@@ -491,17 +491,7 @@ impl InternerGuard<'_> {
         // A single conflicting variable (or the non-conflicting `os_name` and
         // `platform_system` pair) does not need to be expanded across the validity domain.
         if !self.can_conflict(node) {
-            let current = self.shared.node(node);
-            let projected = if current.children.is_coalesced() {
-                node
-            } else {
-                let children = current.children.clone().coalesce();
-                self.create_node(current.var.clone(), children).negate(node)
-            };
-            self.shared.cache_projection(projected, projected);
-            self.shared
-                .cache_projection(projected.not(), projected.not());
-            return projected;
+            return self.coalesce_boolean(node);
         }
         let validity = self.exclusions().not();
         let masked = self.mask(node, validity);
@@ -574,6 +564,29 @@ impl InternerGuard<'_> {
 
             can_conflict || self.can_conflict(*child)
         })
+    }
+
+    /// Recursively coalesce a Boolean marker tree without performing ternary projection.
+    fn coalesce_boolean(&mut self, value: NodeId) -> NodeId {
+        if value.is_terminal() {
+            return value;
+        }
+        if let Some(projected) = self.shared.projection(value) {
+            return projected;
+        }
+
+        let node = self.shared.node(value);
+        let children = node
+            .children
+            .map(value, |child| self.coalesce_boolean(child))
+            .coalesce();
+        let projected = self.create_node(node.var.clone(), children);
+        self.shared.cache_projection(value, projected);
+        self.shared.cache_projection(value.not(), projected.not());
+        self.shared.cache_projection(projected, projected);
+        self.shared
+            .cache_projection(projected.not(), projected.not());
+        projected
     }
 
     /// Replace all reachable Boolean terminals while retaining unreachable edges.
@@ -2177,25 +2190,6 @@ impl Edges {
             },
             Self::Boolean { .. } => self,
         }
-    }
-
-    /// Returns `true` if no adjacent range edges can be merged.
-    fn is_coalesced(&self) -> bool {
-        match self {
-            Self::Version { edges } => Self::ranges_are_coalesced(edges),
-            Self::String { edges } => Self::ranges_are_coalesced(edges),
-            Self::Boolean { .. } => true,
-        }
-    }
-
-    /// Returns `true` if no adjacent ranges point to the same node.
-    fn ranges_are_coalesced<T>(edges: &SmallVec<(Ranges<T>, NodeId)>) -> bool
-    where
-        T: Clone + Ord,
-    {
-        edges
-            .windows(2)
-            .all(|edges| edges[0].1 != edges[1].1 || !can_conjoin(&edges[0].0, &edges[1].0))
     }
 
     /// Merge adjacent ranges that point to the same node.

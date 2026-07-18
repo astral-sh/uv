@@ -1880,6 +1880,7 @@ impl schemars::JsonSchema for MarkerTree {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
     use std::ops::Bound;
     use std::str::FromStr;
     use std::sync::mpsc;
@@ -1970,10 +1971,10 @@ mod test {
     #[test]
     fn non_conflicting_transformations_do_not_project() {
         let marker = m(
-            "(platform_machine == 'x86_64' and implementation_name == 'cpython' and extra == 'one') \
-             or (platform_machine == 'aarch64' and implementation_name == 'pypy' and extra == 'two')",
+            "(platform_machine == 'projection-x86_64' and implementation_name == 'projection-cpython' and extra == 'projection-one') \
+             or (platform_machine == 'projection-aarch64' and implementation_name == 'projection-pypy' and extra == 'projection-two')",
         );
-        let assumption = m("platform_machine == 'x86_64'");
+        let assumption = m("platform_machine == 'projection-x86_64'");
         assert!(INTERNER.shared.projection(marker.0).is_none());
         assert!(INTERNER.shared.projection(assumption.0).is_none());
 
@@ -3272,6 +3273,23 @@ mod test {
         let custom_linux = m("os_name != 'custom' and sys_platform == 'linux'");
         assert!(custom_linux.is_disjoint(windows));
         assert!(windows.is_disjoint(custom_linux));
+
+        let pypy = m("implementation_name == 'pypy'");
+        let pypy_freebsd_or_windows = m(
+            "(implementation_name == 'pypy' and platform_system == 'FreeBSD') or os_name == 'nt'",
+        );
+        let netbsd = m("platform_system == 'NetBSD'");
+
+        let mut left = pypy;
+        left.or(pypy_freebsd_or_windows);
+        left.or(netbsd);
+        let mut right = pypy_freebsd_or_windows;
+        right.or(netbsd);
+        right.or(pypy);
+
+        assert_eq!(left, right);
+        assert_eq!(left.cmp(&right), std::cmp::Ordering::Equal);
+        assert_eq!(HashSet::from([left, right]).len(), 1);
     }
 
     #[test]
