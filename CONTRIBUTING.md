@@ -271,9 +271,11 @@ To preview any changes to the documentation locally:
 
 1. Install the [Rust toolchain](https://www.rust-lang.org/tools/install).
 
-2. Run `cargo dev generate-all`, to update any auto-generated documentation.
+2. Install [Node](https://nodejs.org/en/download) - needed to run Prettier to format the docs
 
-3. Run the development server with:
+3. Run `cargo dev generate-all`, to update any auto-generated documentation.
+
+4. Run the development server with:
 
    ```shell
    uv run --only-group docs mkdocs serve -f mkdocs.yml
