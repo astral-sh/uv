@@ -1757,6 +1757,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.install_mirrors,
                 args.args,
                 args.filesystem,
+                args.output_format,
                 client_builder.subcommand(vec!["tool".to_owned(), "upgrade".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,

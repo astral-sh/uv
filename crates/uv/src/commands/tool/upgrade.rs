@@ -1,12 +1,14 @@
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
 use tracing::{debug, trace};
 
 use uv_cache::Cache;
+use uv_cli::ToolUpgradeFormat;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -25,6 +27,7 @@ use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
@@ -49,6 +52,7 @@ pub(crate) async fn upgrade(
     install_mirrors: PythonInstallMirrors,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
+    output_format: ToolUpgradeFormat,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -59,6 +63,15 @@ pub(crate) async fn upgrade(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if matches!(output_format, ToolUpgradeFormat::Json)
+        && !preview.is_enabled(PreviewFeature::JsonOutput)
+    {
+        warn_user!(
+            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
+        );
+    }
+
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
 
@@ -83,8 +96,18 @@ pub(crate) async fn upgrade(
         }
     };
 
+    let mut reports = Vec::new();
+
     if names.is_empty() {
-        writeln!(printer.stderr(), "Nothing to upgrade")?;
+        match output_format {
+            ToolUpgradeFormat::Text => {
+                writeln!(printer.stderr(), "Nothing to upgrade")?;
+            }
+            ToolUpgradeFormat::Json => {
+                let output = serde_json::to_string_pretty(&Report::new(reports))?;
+                writeln!(printer.stdout_important(), "{output}")?;
+            }
+        }
         return Ok(ExitStatus::Success);
     }
 
@@ -113,15 +136,6 @@ pub(crate) async fn upgrade(
         None
     };
 
-    // Determine whether we applied any upgrades.
-    let mut did_upgrade_tool = vec![];
-
-    // Determine whether we applied any upgrades.
-    let mut did_upgrade_environment = vec![];
-
-    // Constraints that caused upgrades to be skipped or altered.
-    let mut collected_constraints: Vec<(PackageName, UpgradeConstraint)> = Vec::new();
-
     let mut errors = Vec::new();
     for (name, constraints) in &names {
         debug!("Upgrading tool: `{name}`");
@@ -145,23 +159,19 @@ pub(crate) async fn upgrade(
 
         match result {
             Ok(report) => {
-                match report.outcome {
-                    UpgradeOutcome::UpgradeEnvironment => {
-                        did_upgrade_environment.push(name);
-                    }
-                    UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeDependencies => {
-                        did_upgrade_tool.push(name);
-                    }
-                    UpgradeOutcome::NoOp => {
-                        debug!("Upgrading `{name}` was a no-op");
-                    }
+                if matches!(report.outcome, UpgradeOutcome::NoOp) {
+                    debug!("Upgrading `{name}` was a no-op");
                 }
 
-                if let Some(constraint) = report.constraint.clone() {
-                    collected_constraints.push((name.clone(), constraint));
-                }
+                reports.push(report);
             }
             Err(err) => {
+                reports.push(UpgradeReport {
+                    name: name.clone(),
+                    outcome: UpgradeOutcome::Failed,
+                    constraint: None,
+                    error: Some(anstream::adapter::strip_str(&err.to_string()).to_string()),
+                });
                 errors.push((name, err));
             }
         }
@@ -180,41 +190,62 @@ pub(crate) async fn upgrade(
                 ErrorOptions::default().with_stream(printer.stderr()),
             )?;
         }
+
+        if matches!(output_format, ToolUpgradeFormat::Json) {
+            let output = serde_json::to_string_pretty(&Report::new(reports))?;
+            writeln!(printer.stdout_important(), "{output}")?;
+        }
+
         return Ok(ExitStatus::Failure);
     }
 
-    if did_upgrade_tool.is_empty() && did_upgrade_environment.is_empty() {
-        writeln!(printer.stderr(), "Nothing to upgrade")?;
-    }
-
-    if let Some(python_request) = python_request {
-        if !did_upgrade_environment.is_empty() {
-            let tools = did_upgrade_environment
+    match output_format {
+        ToolUpgradeFormat::Text => {
+            if reports
                 .iter()
-                .map(|name| format!("`{}`", name.cyan()))
-                .collect::<Vec<_>>();
-            let s = if tools.len() > 1 { "s" } else { "" };
-            writeln!(
-                printer.stderr(),
-                "Upgraded tool environment{s} for {} to {}",
-                conjunction(tools),
-                python_request.cyan(),
-            )?;
+                .all(|report| matches!(report.outcome, UpgradeOutcome::NoOp))
+            {
+                writeln!(printer.stderr(), "Nothing to upgrade")?;
+            }
+
+            if let Some(python_request) = python_request {
+                let tools = reports
+                    .iter()
+                    .filter(|report| matches!(report.outcome, UpgradeOutcome::UpgradeEnvironment))
+                    .map(|report| format!("`{}`", report.name.cyan()))
+                    .collect_vec();
+                if !tools.is_empty() {
+                    let s = if tools.len() > 1 { "s" } else { "" };
+                    writeln!(
+                        printer.stderr(),
+                        "Upgraded tool environment{s} for {} to {}",
+                        conjunction(tools),
+                        python_request.cyan(),
+                    )?;
+                }
+            }
+
+            if reports.iter().any(|report| report.constraint.is_some()) {
+                writeln!(printer.stderr())?;
+            }
+
+            for report in reports.iter().filter(|report| report.constraint.is_some()) {
+                if let Some(constraint) = &report.constraint {
+                    constraint.print(&report.name, printer)?;
+                }
+            }
         }
-    }
-
-    if !collected_constraints.is_empty() {
-        writeln!(printer.stderr())?;
-    }
-
-    for (name, constraint) in collected_constraints {
-        constraint.print(&name, printer)?;
+        ToolUpgradeFormat::Json => {
+            let output = serde_json::to_string_pretty(&Report::new(reports))?;
+            writeln!(printer.stdout_important(), "{output}")?;
+        }
     }
 
     Ok(ExitStatus::Success)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 enum UpgradeOutcome {
     /// The tool itself was upgraded.
     UpgradeTool,
@@ -224,9 +255,26 @@ enum UpgradeOutcome {
     UpgradeEnvironment,
     /// The tool was already up-to-date.
     NoOp,
+    /// The tool failed to upgrade.
+    Failed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Debug, Default)]
+#[serde(rename_all = "snake_case")]
+enum SchemaVersion {
+    /// An unstable, experimental schema.
+    #[default]
+    Preview,
+}
+
+#[derive(Serialize, Debug, Default)]
+struct SchemaReport {
+    /// The version of the schema.
+    version: SchemaVersion,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 enum UpgradeConstraint {
     /// The tool remains pinned to an exact version, so an upgrade was skipped.
     PinnedVersion { version: Version },
@@ -253,10 +301,31 @@ impl UpgradeConstraint {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct UpgradeReport {
+    name: PackageName,
     outcome: UpgradeOutcome,
+    #[serde(skip_serializing_if = "Option::is_none")]
     constraint: Option<UpgradeConstraint>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct Report {
+    /// The schema of this report.
+    schema: SchemaReport,
+    /// The reports for the attempted tool upgrades.
+    upgrades: Vec<UpgradeReport>,
+}
+
+impl Report {
+    fn new(upgrades: Vec<UpgradeReport>) -> Self {
+        Self {
+            schema: SchemaReport::default(),
+            upgrades,
+        }
+    }
 }
 
 /// Upgrade a specific tool.
@@ -612,12 +681,16 @@ async fn upgrade_tool(
             pinned_requirement_version(&existing_tool_receipt, name)
                 .map(|version| UpgradeConstraint::PinnedVersion { version })
         }
-        UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
+        UpgradeOutcome::UpgradeTool
+        | UpgradeOutcome::UpgradeEnvironment
+        | UpgradeOutcome::Failed => None,
     };
 
     Ok(UpgradeReport {
+        name: name.clone(),
         outcome,
         constraint,
+        error: None,
     })
 }
 
