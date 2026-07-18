@@ -473,7 +473,7 @@ impl InternerGuard<'_> {
             {
                 projected
             } else {
-                masked
+                self.mask(projected, validity)
             }
         }
     }

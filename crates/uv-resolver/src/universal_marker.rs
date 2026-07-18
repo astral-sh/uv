@@ -1076,6 +1076,26 @@ mod tests {
             MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression");
         assert!(!UniversalMarker::from_combined(pep508).has_conflict_marker());
         assert!(UniversalMarker::new(pep508, create_extra_marker("foo")).has_conflict_marker());
+
+        let freebsd =
+            MarkerTree::from_str("platform_system == 'FreeBSD'").expect("valid marker expression");
+        let netbsd =
+            MarkerTree::from_str("implementation_name == 'pypy' and platform_system == 'NetBSD'")
+                .expect("valid marker expression");
+        let pypy =
+            MarkerTree::from_str("implementation_name == 'pypy'").expect("valid marker expression");
+        let extra = MarkerTree::from_str("extra == 'x'").expect("valid marker expression");
+
+        let mut positive = netbsd;
+        positive.and(extra);
+        let mut negative = netbsd;
+        negative.and(extra.negate());
+        let mut combined = freebsd;
+        combined.or(positive);
+        combined.or(negative);
+        combined.or(pypy);
+
+        assert!(!UniversalMarker::from_combined(combined).has_conflict_marker());
     }
 
     #[test]

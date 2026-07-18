@@ -3169,6 +3169,23 @@ mod test {
         right.and(extra);
         left.or(right);
         assert_eq!(left, extra);
+
+        let freebsd = m("platform_system == 'FreeBSD'");
+        let netbsd = m("implementation_name == 'pypy' and platform_system == 'NetBSD'");
+        let pypy = m("implementation_name == 'pypy'");
+
+        let mut positive = netbsd;
+        positive.and(extra);
+        let mut negative = netbsd;
+        negative.and(extra.negate());
+
+        let mut combined = freebsd;
+        combined.or(positive);
+        combined.or(negative);
+        combined.or(pypy);
+        let without_extras = combined.without_extras();
+        assert_eq!(combined, without_extras);
+        assert_eq!(combined.cmp(&without_extras), std::cmp::Ordering::Equal);
     }
 
     #[test]
