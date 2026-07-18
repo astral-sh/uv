@@ -3126,6 +3126,14 @@ mod test {
         right_win32.and(win32);
         right_linux.or(right_win32);
         assert_eq!(left, right_linux);
+
+        let extra = m("extra == 'foo'");
+        let mut left = windows;
+        left.and(extra);
+        let mut right = windows.negate();
+        right.and(extra);
+        left.or(right);
+        assert_eq!(left, extra);
     }
 
     #[test]

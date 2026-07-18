@@ -451,7 +451,10 @@ impl InternerGuard<'_> {
 
     /// Apply the global validity domain and collapse roots that are constant on that domain.
     pub(crate) fn finish(&mut self, node: NodeId) -> NodeId {
-        if node.is_terminal() {
+        // Conflicting string variables have the highest priority in the tree. If none occurs
+        // at the root, this marker cannot participate in the validity domain and can remain
+        // an ordinary Boolean tree.
+        if node.is_terminal() || !self.shared.node(node).var.is_conflicting_variable() {
             return node;
         }
         let validity = self.exclusions().not();
@@ -461,7 +464,17 @@ impl InternerGuard<'_> {
         } else if masked == self.mask(NodeId::FALSE, validity) {
             NodeId::FALSE
         } else {
-            masked
+            // Platform branches can collapse to a marker that does not itself depend on a
+            // conflicting variable (for example, `(windows and extra) or (not windows and
+            // extra)`). Normalize that result back to its Boolean tree so it remains canonical
+            // with a marker that never mentioned the platform.
+            let projected = self.project(masked);
+            if projected.is_terminal() || !self.shared.node(projected).var.is_conflicting_variable()
+            {
+                projected
+            } else {
+                masked
+            }
         }
     }
 
@@ -2332,6 +2345,21 @@ mod tests {
                 interner.mask(projected, validity),
                 interner.mask(marker, validity)
             );
+        }
+    }
+
+    #[test]
+    fn non_conflicting_markers_remain_boolean() {
+        let mut interner = INTERNER.lock();
+        for marker in [
+            "extra == 'foo'",
+            "python_version >= '3.9'",
+            "platform_machine == 'aarch64'",
+            "implementation_name == 'pypy'",
+        ] {
+            let expression = MarkerExpression::from_str(marker).unwrap().unwrap();
+            let raw = interner.expression_raw(expression);
+            assert_eq!(interner.finish(raw), raw);
         }
     }
 
