@@ -92,6 +92,7 @@ pub(crate) struct InternerShared {
 struct InternedNode {
     node: Node,
     projections: [AtomicUsize; 2],
+    can_conflict: bool,
 }
 
 /// The mutable [`Interner`] state, stored behind a lock.
@@ -122,6 +123,62 @@ impl InternerShared {
     /// Returns the node for the given [`NodeId`].
     pub(crate) fn node(&self, id: NodeId) -> &Node {
         &self.nodes[id.index()].node
+    }
+
+    /// Returns `true` if the given marker can reach a known-incompatible pair of variables.
+    fn can_conflict(&self, id: NodeId) -> bool {
+        !id.is_terminal() && self.nodes[id.index()].can_conflict
+    }
+
+    /// Returns `true` if a new node can reach a known-incompatible pair of variables.
+    fn node_can_conflict(&self, node: &Node) -> bool {
+        if !node.var.is_conflicting_variable() {
+            return false;
+        }
+        let Edges::String { edges } = &node.children else {
+            return false;
+        };
+
+        let excluded_values: &[&str] = match node.var {
+            Variable::String(CanonicalMarkerValueString::OsName) => &["nt", "posix"],
+            Variable::String(CanonicalMarkerValueString::SysPlatform) => &[
+                "linux",
+                "darwin",
+                "ios",
+                "win32",
+                "aix",
+                "android",
+                "emscripten",
+                "cygwin",
+                "wasi",
+            ],
+            _ => &[],
+        };
+        let references_excluded_value = edges.iter().any(|(range, _)| {
+            range.iter().any(|(start, end)| {
+                [start, end].into_iter().any(|bound| {
+                    matches!(bound, Bound::Included(value) | Bound::Excluded(value)
+                        if excluded_values.contains(&value.as_ref()))
+                })
+            })
+        });
+
+        edges.iter().any(|(range, child)| {
+            if child.is_terminal() {
+                return false;
+            }
+
+            let child_node = self.node(*child);
+            if !child_node.var.is_conflicting_variable() {
+                return false;
+            }
+
+            let can_conflict = (references_excluded_value
+                || excluded_values.iter().any(|value| range.contains(*value)))
+                && node.var.conflicts_with(&child_node.var);
+
+            can_conflict || self.can_conflict(*child)
+        })
     }
 
     /// Returns the cached Boolean projection for the given [`NodeId`], if one exists.
@@ -192,10 +249,12 @@ impl InternerGuard<'_> {
 
         // Insert the node.
         let id = self.state.unique.entry(node.clone()).or_insert_with(|| {
+            let can_conflict = self.shared.node_can_conflict(&node);
             NodeId::new(
                 self.shared.nodes.push(InternedNode {
                     node,
                     projections: [AtomicUsize::new(usize::MAX), AtomicUsize::new(usize::MAX)],
+                    can_conflict,
                 }),
                 false,
             )
@@ -515,55 +574,7 @@ impl InternerGuard<'_> {
 
     /// Returns `true` if a marker tree can contain a known-incompatible pair of variables.
     fn can_conflict(&self, node: NodeId) -> bool {
-        if node.is_terminal() {
-            return false;
-        }
-
-        let node = self.shared.node(node);
-        let Edges::String { edges } = &node.children else {
-            return false;
-        };
-
-        let excluded_values: &[&str] = match node.var {
-            Variable::String(CanonicalMarkerValueString::OsName) => &["nt", "posix"],
-            Variable::String(CanonicalMarkerValueString::SysPlatform) => &[
-                "linux",
-                "darwin",
-                "ios",
-                "win32",
-                "aix",
-                "android",
-                "emscripten",
-                "cygwin",
-                "wasi",
-            ],
-            _ => &[],
-        };
-        let references_excluded_value = edges.iter().any(|(range, _)| {
-            range.iter().any(|(start, end)| {
-                [start, end].into_iter().any(|bound| {
-                    matches!(bound, Bound::Included(value) | Bound::Excluded(value)
-                        if excluded_values.contains(&value.as_ref()))
-                })
-            })
-        });
-
-        edges.iter().any(|(range, child)| {
-            if child.is_terminal() {
-                return false;
-            }
-
-            let child_node = self.shared.node(*child);
-            if !child_node.var.is_conflicting_variable() {
-                return false;
-            }
-
-            let can_conflict = (references_excluded_value
-                || excluded_values.iter().any(|value| range.contains(*value)))
-                && node.var.conflicts_with(&child_node.var);
-
-            can_conflict || self.can_conflict(*child)
-        })
+        self.shared.can_conflict(node)
     }
 
     /// Recursively coalesce a Boolean marker tree without performing ternary projection.
@@ -2640,6 +2651,7 @@ mod tests {
             custom = interner.or_cached(custom, alternative);
         }
         assert!(!interner.can_conflict(custom));
+        assert!(!interner.can_conflict(custom.not()));
         assert_eq!(interner.finish(custom), custom);
 
         let os_name = interner.expression_raw(
@@ -2660,6 +2672,7 @@ mod tests {
         let nested = interner.and_cached(os_name, sys_platform);
         let nested = interner.and_cached(nested, platform_system);
         assert!(interner.can_conflict(nested));
+        assert!(interner.can_conflict(nested.not()));
         assert!(interner.finish(nested).is_false());
     }
 
