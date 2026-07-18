@@ -1489,7 +1489,7 @@ impl NodeId {
     pub(crate) const FALSE: Self = Self(1);
 
     // The terminal node representing an unreachable assignment.
-    pub(crate) const DONT_CARE: Self = Self(2);
+    const DONT_CARE: Self = Self(2);
 
     /// Create a new, optionally complemented, [`NodeId`] with the given index.
     fn new(index: usize, complement: bool) -> Self {
