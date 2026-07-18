@@ -812,6 +812,16 @@ impl MarkerTree {
         Self(INTERNER.lock().expression(expr))
     }
 
+    /// Returns an unmasked marker tree for use while parsing a compound expression.
+    pub(super) fn expression_raw(expr: MarkerExpression) -> Self {
+        Self(INTERNER.lock().expression_raw(expr))
+    }
+
+    /// Applies the global validity domain after parsing a compound expression.
+    pub(super) fn finish(self) -> Self {
+        Self(INTERNER.lock().finish(self.0))
+    }
+
     /// Whether the marker always evaluates to `true`.
     ///
     /// If this method returns `true`, it is definitively known that the marker will
@@ -841,16 +851,22 @@ impl MarkerTree {
 
     /// Combine this marker tree with the one given via a conjunction.
     pub fn and(&mut self, tree: Self) {
-        let mut interner = INTERNER.lock();
-        let node = interner.and(self.0, tree.0);
-        self.0 = interner.simplify_exclusions(node, self.0, tree.0);
+        self.0 = INTERNER.lock().and(self.0, tree.0);
+    }
+
+    /// Combine two unmasked marker trees while parsing.
+    pub(super) fn and_raw(&mut self, tree: Self) {
+        self.0 = INTERNER.lock().and_cached(self.0, tree.0);
     }
 
     /// Combine this marker tree with the one given via a disjunction.
     pub fn or(&mut self, tree: Self) {
-        let mut interner = INTERNER.lock();
-        let node = interner.or(self.0, tree.0);
-        self.0 = interner.simplify_exclusions(node, self.0, tree.0);
+        self.0 = INTERNER.lock().or(self.0, tree.0);
+    }
+
+    /// Combine two unmasked marker trees while parsing.
+    pub(super) fn or_raw(&mut self, tree: Self) {
+        self.0 = INTERNER.lock().or_cached(self.0, tree.0);
     }
 
     /// Sets this to a marker equivalent to the implication of this one and the
@@ -901,22 +917,23 @@ impl MarkerTree {
 
     /// Returns the underlying [`MarkerTreeKind`] of the root node.
     pub fn kind(self) -> MarkerTreeKind<'static> {
-        if self.is_true() {
+        let tree = Self(INTERNER.lock().project(self.0));
+        if tree.is_true() {
             return MarkerTreeKind::True;
         }
 
-        if self.is_false() {
+        if tree.is_false() {
             return MarkerTreeKind::False;
         }
 
-        let node = INTERNER.shared.node(self.0);
+        let node = INTERNER.shared.node(tree.0);
         match &node.var {
             Variable::Version(key) => {
                 let Edges::Version { edges: ref map } = node.children else {
                     unreachable!()
                 };
                 MarkerTreeKind::Version(VersionMarkerTree {
-                    id: self.0,
+                    id: tree.0,
                     key: *key,
                     map,
                 })
@@ -926,7 +943,7 @@ impl MarkerTree {
                     unreachable!()
                 };
                 MarkerTreeKind::String(StringMarkerTree {
-                    id: self.0,
+                    id: tree.0,
                     key: *key,
                     map,
                 })
@@ -938,8 +955,8 @@ impl MarkerTree {
                 MarkerTreeKind::In(InMarkerTree {
                     key: *key,
                     value,
-                    high: high.negate(self.0),
-                    low: low.negate(self.0),
+                    high: high.negate(tree.0),
+                    low: low.negate(tree.0),
                 })
             }
             Variable::Contains { key, value } => {
@@ -949,8 +966,8 @@ impl MarkerTree {
                 MarkerTreeKind::Contains(ContainsMarkerTree {
                     key: *key,
                     value,
-                    high: high.negate(self.0),
-                    low: low.negate(self.0),
+                    high: high.negate(tree.0),
+                    low: low.negate(tree.0),
                 })
             }
             Variable::List(key) => {
@@ -959,8 +976,8 @@ impl MarkerTree {
                 };
                 MarkerTreeKind::List(ListMarkerTree {
                     pair: key,
-                    high: high.negate(self.0),
-                    low: low.negate(self.0),
+                    high: high.negate(tree.0),
+                    low: low.negate(tree.0),
                 })
             }
             Variable::Extra(name) => {
@@ -969,8 +986,8 @@ impl MarkerTree {
                 };
                 MarkerTreeKind::Extra(ExtraMarkerTree {
                     name,
-                    high: high.negate(self.0),
-                    low: low.negate(self.0),
+                    high: high.negate(tree.0),
+                    low: low.negate(tree.0),
                 })
             }
         }
@@ -1243,11 +1260,9 @@ impl MarkerTree {
     /// should reconstitute all relevant markers from the source data.)
     #[must_use]
     pub fn simplify_python_versions(self, lower: Bound<&Version>, upper: Bound<&Version>) -> Self {
-        Self(
-            INTERNER
-                .lock()
-                .simplify_python_versions(self.0, lower, upper),
-        )
+        let mut interner = INTERNER.lock();
+        let node = interner.simplify_python_versions(self.0, lower, upper);
+        Self(interner.finish(node))
     }
 
     /// Complexify marker tree by requiring the given Python version range
@@ -1263,11 +1278,9 @@ impl MarkerTree {
         lower: Bound<&Version>,
         upper: Bound<&Version>,
     ) -> Self {
-        Self(
-            INTERNER
-                .lock()
-                .complexify_python_versions(self.0, lower, upper),
-        )
+        let mut interner = INTERNER.lock();
+        let node = interner.complexify_python_versions(self.0, lower, upper);
+        Self(interner.finish(node))
     }
 
     /// Restrict this marker by assuming that `assumption` is true.
@@ -1281,7 +1294,11 @@ impl MarkerTree {
     /// `sys_platform == 'linux'` produces `python_version < '3.11'`.
     #[must_use]
     pub fn restrict(self, assumption: Self) -> Self {
-        Self(INTERNER.lock().restrict(self.0, assumption.0))
+        let mut interner = INTERNER.lock();
+        let value = interner.project(self.0);
+        let assumption = interner.project(assumption.0);
+        let node = interner.restrict(value, assumption);
+        Self(interner.finish(node))
     }
 
     /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
@@ -1358,7 +1375,10 @@ impl MarkerTree {
     /// is always true is returned.
     #[must_use]
     pub fn without_extras(self) -> Self {
-        Self(INTERNER.lock().without_extras(self.0))
+        let mut interner = INTERNER.lock();
+        let value = interner.project(self.0);
+        let node = interner.without_extras(value);
+        Self(interner.finish(node))
     }
 
     /// Returns a new `MarkerTree` where only `extra` expressions are removed.
@@ -1367,7 +1387,10 @@ impl MarkerTree {
     /// that is always true is returned.
     #[must_use]
     pub fn only_extras(self) -> Self {
-        Self(INTERNER.lock().only_extras(self.0))
+        let mut interner = INTERNER.lock();
+        let value = interner.project(self.0);
+        let node = interner.only_extras(value);
+        Self(interner.finish(node))
     }
 
     /// Calls the provided function on every `extra` in this tree.
@@ -1419,17 +1442,21 @@ impl MarkerTree {
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
-        Self(INTERNER.lock().restrict_by(self.0, &|var| match var {
+        let mut interner = INTERNER.lock();
+        let node = interner.restrict_by(self.0, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(true),
             _ => None,
-        }))
+        });
+        Self(interner.finish(node))
     }
 
     fn simplify_not_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
-        Self(INTERNER.lock().restrict_by(self.0, &|var| match var {
+        let mut interner = INTERNER.lock();
+        let node = interner.restrict_by(self.0, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(false),
             _ => None,
-        }))
+        });
+        Self(interner.finish(node))
     }
 }
 
@@ -3068,6 +3095,37 @@ mod test {
         assert_eq!(marker, m("os_name != 'nt'"));
         let serialized = marker.try_to_string().unwrap();
         assert_eq!(marker, m(&serialized));
+
+        let contents = marker.contents().unwrap();
+        assert_eq!(contents.as_ref(), &marker);
+        assert_eq!(MarkerTree::from(contents), marker);
+
+        let windows = m("os_name == 'nt'");
+        let not_linux = m("sys_platform != 'linux'");
+        let freebsd = m("platform_system == 'FreeBSD'");
+
+        let mut left = windows;
+        left.and(not_linux);
+        left.and(freebsd);
+
+        let mut right = not_linux;
+        right.and(freebsd);
+        right.and(windows);
+        assert_eq!(left, right);
+
+        let linux = m("sys_platform == 'linux'");
+        let win32 = m("sys_platform == 'win32'");
+
+        let mut left = linux;
+        left.or(win32);
+        left.and(windows);
+
+        let mut right_linux = windows;
+        right_linux.and(linux);
+        let mut right_win32 = windows;
+        right_win32.and(win32);
+        right_linux.or(right_win32);
+        assert_eq!(left, right_linux);
     }
 
     #[test]

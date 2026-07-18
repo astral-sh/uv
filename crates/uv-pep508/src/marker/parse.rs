@@ -585,7 +585,7 @@ fn parse_marker_expr<T: Pep508Url>(
         cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
     } else {
-        Ok(parse_marker_key_op_value(cursor, reporter)?.map(MarkerTree::expression))
+        Ok(parse_marker_key_op_value(cursor, reporter)?.map(MarkerTree::expression_raw))
     }
 }
 
@@ -597,7 +597,13 @@ fn parse_marker_and<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    parse_marker_op(cursor, "and", MarkerTree::and, parse_marker_expr, reporter)
+    parse_marker_op(
+        cursor,
+        "and",
+        MarkerTree::and_raw,
+        parse_marker_expr,
+        reporter,
+    )
 }
 
 /// ```text
@@ -611,7 +617,7 @@ fn parse_marker_or<T: Pep508Url>(
     parse_marker_op(
         cursor,
         "or",
-        MarkerTree::or,
+        MarkerTree::or_raw,
         |cursor, reporter| parse_marker_and(cursor, reporter),
         reporter,
     )
@@ -682,7 +688,7 @@ pub(crate) fn parse_markers_cursor<T: Pep508Url>(
         });
     }
 
-    Ok(marker)
+    Ok(marker.map(MarkerTree::finish))
 }
 
 /// Parses markers such as `python_version < '3.8'` or
