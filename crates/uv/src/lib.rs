@@ -40,7 +40,7 @@ use uv_fs::{CWD, Simplified, normalize_path};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
-use uv_preview::PreviewFeature;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::{ConfigDiscovery, PythonRequest};
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -85,6 +85,84 @@ impl GlobalInitialization {
     }
 }
 
+#[derive(Clone, Copy)]
+enum IsolatedBehavior {
+    CommandSpecific,
+    Deprecated,
+    IgnoredPreview,
+    IgnoredInit,
+}
+
+#[derive(Clone, Copy)]
+struct CommandPolicy {
+    isolated: IsolatedBehavior,
+    uses_user_configuration: bool,
+}
+
+impl CommandPolicy {
+    fn from_command(command: &Commands) -> Self {
+        let isolated = match command {
+            // Supports `--isolated` as its own argument, so we can't warn either way.
+            Commands::Tool(ToolNamespace {
+                command: ToolCommand::Uvx(_) | ToolCommand::Run(_),
+            }) => IsolatedBehavior::CommandSpecific,
+
+            // Supports `--isolated` as its own argument, so we can't warn either way.
+            Commands::Project(command)
+                if matches!(**command, ProjectCommand::Run(_) | ProjectCommand::Check(_)) =>
+            {
+                IsolatedBehavior::CommandSpecific
+            }
+
+            // `--isolated` moved to `--no-workspace`.
+            Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
+                IsolatedBehavior::IgnoredInit
+            }
+
+            // Preview APIs ignore `--isolated`.
+            Commands::Project(_) | Commands::Tool(_) | Commands::Python(_) => {
+                IsolatedBehavior::IgnoredPreview
+            }
+
+            // Non-preview APIs continue to support `--isolated`.
+            _ => IsolatedBehavior::Deprecated,
+        };
+
+        Self {
+            isolated,
+            uses_user_configuration: matches!(command, Commands::Tool(_) | Commands::Self_(_)),
+        }
+    }
+
+    fn resolve_isolated(self, isolated: bool) -> bool {
+        if !isolated {
+            return false;
+        }
+
+        match self.isolated {
+            IsolatedBehavior::CommandSpecific => false,
+            IsolatedBehavior::Deprecated => {
+                warn_user!(
+                    "The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
+                true
+            }
+            IsolatedBehavior::IgnoredPreview => {
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
+                false
+            }
+            IsolatedBehavior::IgnoredInit => {
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace."
+                );
+                false
+            }
+        }
+    }
+}
+
 /// Whether a command can run directly or requires a Tokio runtime.
 ///
 /// Commands default to the asynchronous path unless they are explicitly extracted into a
@@ -93,8 +171,12 @@ enum CommandExecution {
     Sync {
         command: SyncCommand,
         top_level: TopLevelArgs,
+        policy: CommandPolicy,
     },
-    Async(Cli),
+    Async {
+        cli: Cli,
+        policy: CommandPolicy,
+    },
 }
 
 enum SyncCommand {
@@ -114,6 +196,7 @@ impl CommandExecution {
     /// Extract commands whose complete initialization and execution paths are synchronous.
     fn from_cli(cli: Cli) -> Self {
         let Cli { command, top_level } = cli;
+        let policy = CommandPolicy::from_command(command.as_ref());
         let command = match *command {
             Commands::Auth(AuthNamespace {
                 command: AuthCommand::Dir(args),
@@ -142,14 +225,183 @@ impl CommandExecution {
                 command: PythonCommand::Dir(args),
             }) => SyncCommand::PythonDir(args),
             command => {
-                return Self::Async(Cli {
-                    command: Box::new(command),
-                    top_level,
-                });
+                return Self::Async {
+                    cli: Cli {
+                        command: Box::new(command),
+                        top_level,
+                    },
+                    policy,
+                };
             }
         };
-        Self::Sync { command, top_level }
+        Self::Sync {
+            command,
+            top_level,
+            policy,
+        }
     }
+}
+
+fn set_working_directory(top_level: &TopLevelArgs) -> Result<()> {
+    // Respect `UV_WORKING_DIRECTORY` for backwards compatibility.
+    if let Some(directory) =
+        top_level.global_args.directory.clone().or_else(|| {
+            std::env::var_os(EnvVars::UV_WORKING_DIRECTORY).map(std::path::PathBuf::from)
+        })
+    {
+        // Switch directories as early as possible.
+        std::env::set_current_dir(directory)?;
+    }
+
+    Ok(())
+}
+
+/// Initialize process state needed before filesystem configuration can be discovered.
+fn initialize_run_environment(
+    top_level: &TopLevelArgs,
+    global_initialization: GlobalInitialization,
+) -> Result<(EnvironmentOptions, Preview)> {
+    // Load environment variables not handled by Clap.
+    let environment = EnvironmentOptions::new()?;
+
+    // Resolve preview flags before config discovery for decisions that affect the discovery root.
+    let preview = settings::resolve_preview(&top_level.global_args, None, &environment);
+
+    if global_initialization.needs_initialization() {
+        // Make the early preview flags globally available.
+        uv_preview::set(preview)?;
+
+        // Configure the `tracing` crate, which controls internal logging.
+        #[cfg(feature = "tracing-durations-export")]
+        let (durations_layer, _duration_guard) =
+            logging::setup_durations(environment.tracing_durations_file.as_ref())?;
+        #[cfg(not(feature = "tracing-durations-export"))]
+        let durations_layer = None::<tracing_subscriber::layer::Identity>;
+        logging::setup_logging(
+            match top_level.global_args.verbose {
+                0 => logging::Level::Off,
+                1 => logging::Level::DebugUv,
+                2 => logging::Level::TraceUv,
+                3.. => logging::Level::TraceAll,
+            },
+            durations_layer,
+            resolve_color(&top_level.global_args),
+            environment.log_context.unwrap_or_default(),
+        )?;
+    }
+
+    Ok((environment, preview))
+}
+
+/// Validate an explicit `--project` path against the current preview policy.
+fn validate_project_directory(
+    project_path: Option<&Path>,
+    project_dir: &Path,
+    preview: Preview,
+) -> Result<()> {
+    let Some(project_path) = project_path else {
+        return Ok(());
+    };
+
+    if !project_dir.exists() {
+        if preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+            bail!(
+                "Project directory `{}` does not exist",
+                project_path.user_display()
+            );
+        }
+        warn_user_once!(
+            "Project directory `{}` does not exist. \
+            This will become an error in a future release. \
+            Use `--preview-features project-directory-must-exist` to error on this now.",
+            project_path.user_display()
+        );
+    } else if !project_dir.is_dir() {
+        // `--project path/to/pyproject.toml` is resolved to its parent above,
+        // so this only triggers for other file types (see #18508).
+        if preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+            bail!(
+                "Project path `{}` is not a directory",
+                project_path.user_display()
+            );
+        }
+        warn_user_once!(
+            "Project path `{}` is not a directory. \
+            This will become an error in a future release. \
+            Use `--preview-features project-directory-must-exist` to error on this now.",
+            project_path.user_display()
+        );
+    }
+
+    Ok(())
+}
+
+/// The configuration source selected after applying command and global-argument policy.
+#[derive(Clone, Copy)]
+enum ConfigurationPlan<'a> {
+    Disabled,
+    Explicit(&'a Path),
+    User,
+    Project,
+}
+
+impl<'a> ConfigurationPlan<'a> {
+    fn from_args(
+        top_level: &'a TopLevelArgs,
+        policy: CommandPolicy,
+        config_discovery: ConfigDiscovery,
+    ) -> Self {
+        let deprecated_isolated = policy.resolve_isolated(top_level.global_args.isolated);
+
+        if let Some(config_file) = top_level.config_file.as_deref() {
+            Self::Explicit(config_file)
+        } else if deprecated_isolated || !config_discovery.enabled() {
+            Self::Disabled
+        } else if policy.uses_user_configuration {
+            Self::User
+        } else {
+            Self::Project
+        }
+    }
+
+    const fn requires_project(self) -> bool {
+        matches!(self, Self::Project)
+    }
+
+    fn load(self, project_install_path: &Path) -> Result<Option<FilesystemOptions>> {
+        match self {
+            Self::Disabled => Ok(None),
+            Self::Explicit(config_file) => Ok(Some(load_config_file(config_file)?)),
+            Self::User => load_user_configuration(),
+            Self::Project => load_project_configuration(project_install_path),
+        }
+    }
+}
+
+fn load_config_file(config_file: &Path) -> Result<FilesystemOptions> {
+    if config_file
+        .file_name()
+        .is_some_and(|file_name| file_name == "pyproject.toml")
+    {
+        warn_user!(
+            "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
+        );
+    }
+
+    FilesystemOptions::from_file(config_file).map_err(map_settings_error)
+}
+
+fn load_user_configuration() -> Result<Option<FilesystemOptions>> {
+    Ok(FilesystemOptions::user()
+        .map_err(map_settings_error)?
+        .combine(FilesystemOptions::system().map_err(map_settings_error)?))
+}
+
+fn load_project_configuration(install_path: &Path) -> Result<Option<FilesystemOptions>> {
+    let project = FilesystemOptions::find(install_path).map_err(map_settings_error)?;
+    let system = FilesystemOptions::system().map_err(map_settings_error)?;
+    let user = FilesystemOptions::user().map_err(map_settings_error)?;
+    Ok(project.combine(user).combine(system))
 }
 
 struct RunContext {
@@ -330,6 +582,7 @@ impl uv_errors::Hint for ExternallyInstalledError {
 fn run_sync(
     command: SyncCommand,
     top_level: &TopLevelArgs,
+    policy: CommandPolicy,
     global_initialization: GlobalInitialization,
 ) -> Result<ExitStatus> {
     let config_discovery = ConfigDiscovery::from_args(top_level.no_config);
@@ -339,47 +592,10 @@ fn run_sync(
         uv_warnings::enable();
     }
 
-    // Respect `UV_WORKING_DIRECTORY` for backwards compatibility.
-    let directory =
-        top_level.global_args.directory.clone().or_else(|| {
-            std::env::var_os(EnvVars::UV_WORKING_DIRECTORY).map(std::path::PathBuf::from)
-        });
+    set_working_directory(top_level)?;
 
-    // Switch directories as early as possible.
-    if let Some(directory) = directory.as_ref() {
-        std::env::set_current_dir(directory)?;
-    }
-
-    // Load environment variables not handled by Clap.
-    let environment = EnvironmentOptions::new()?;
-
-    // Resolve preview flags before config discovery for decisions that affect the discovery root.
-    let early_preview = settings::resolve_preview(&top_level.global_args, None, &environment);
-
-    if global_initialization.needs_initialization() {
-        // Make the early preview flags globally available.
-        uv_preview::set(early_preview)?;
-    }
-
-    if global_initialization.needs_initialization() {
-        // Configure the `tracing` crate, which controls internal logging.
-        #[cfg(feature = "tracing-durations-export")]
-        let (durations_layer, _duration_guard) =
-            logging::setup_durations(environment.tracing_durations_file.as_ref())?;
-        #[cfg(not(feature = "tracing-durations-export"))]
-        let durations_layer = None::<tracing_subscriber::layer::Identity>;
-        logging::setup_logging(
-            match top_level.global_args.verbose {
-                0 => logging::Level::Off,
-                1 => logging::Level::DebugUv,
-                2 => logging::Level::TraceUv,
-                3.. => logging::Level::TraceAll,
-            },
-            durations_layer,
-            resolve_color(&top_level.global_args),
-            environment.log_context.unwrap_or_default(),
-        )?;
-    }
+    let (environment, early_preview) =
+        initialize_run_environment(top_level, global_initialization)?;
 
     // Determine the project directory.
     //
@@ -400,103 +616,33 @@ fn run_sync(
         Cow::Borrowed(&*CWD)
     };
 
-    // Validate that the project directory exists if explicitly provided via `--project`.
-    if let Some(project_path) = top_level.global_args.project.as_ref() {
-        if !project_dir.exists() {
-            if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-                bail!(
-                    "Project directory `{}` does not exist",
-                    project_path.user_display()
-                );
-            }
-            warn_user_once!(
-                "Project directory `{}` does not exist. \
-                This will become an error in a future release. \
-                Use `--preview-features project-directory-must-exist` to error on this now.",
-                project_path.user_display()
-            );
-        } else if !project_dir.is_dir() {
-            // `--project path/to/pyproject.toml` is resolved to its parent above,
-            // so this only triggers for other file types (see #18508).
-            if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-                bail!(
-                    "Project path `{}` is not a directory",
-                    project_path.user_display()
-                );
-            }
-            warn_user_once!(
-                "Project path `{}` is not a directory. \
-                This will become an error in a future release. \
-                Use `--preview-features project-directory-must-exist` to error on this now.",
-                project_path.user_display()
-            );
-        }
-    }
+    validate_project_directory(
+        top_level.global_args.project.as_deref(),
+        &project_dir,
+        early_preview,
+    )?;
 
-    // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
-    let deprecated_isolated = if top_level.global_args.isolated {
-        if matches!(
-            &command,
-            SyncCommand::ToolDir(_) | SyncCommand::PythonDir(_)
-        ) {
-            warn_user!(
-                "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files."
-            );
-            false
-        } else {
-            warn_user!(
-                "The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files."
-            );
-            true
-        }
-    } else {
-        false
-    };
-
-    // Load configuration from the filesystem, prioritizing (in order):
-    // 1. The configuration file specified on the command-line.
-    // 2. The nearest configuration file (`uv.toml` or `pyproject.toml`) above the workspace root.
-    //    If found, this file is combined with the user configuration file.
-    // 3. The nearest configuration file (`uv.toml` or `pyproject.toml`) in the directory tree,
-    //    starting from the current directory.
+    let configuration_plan = ConfigurationPlan::from_args(top_level, policy, config_discovery);
 
     // Pass the (possibly non-existent) cache dir path to the initial workspace discovery.
     let discovery_cache = Cache::from_settings(
         top_level.cache_args.no_cache,
         top_level.cache_args.cache_dir.clone(),
     )?;
-    let filesystem = if let Some(config_file) = top_level.config_file.as_ref() {
-        if config_file
-            .file_name()
-            .is_some_and(|file_name| file_name == "pyproject.toml")
-        {
-            warn_user!(
-                "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
-            );
-        }
-        Some(FilesystemOptions::from_file(config_file).map_err(map_settings_error)?)
-    } else if deprecated_isolated || !config_discovery.enabled() {
-        None
-    } else if matches!(
-        &command,
-        SyncCommand::SelfVersion { .. } | SyncCommand::ToolDir(_)
-    ) {
-        // For commands that operate at the user-level, ignore local configuration.
-        FilesystemOptions::user()
-            .map_err(map_settings_error)?
-            .combine(FilesystemOptions::system().map_err(map_settings_error)?)
-    } else {
-        let install_path = Workspace::discover_install_path(
-            &project_dir,
-            &DiscoveryOptions::default(),
-            &discovery_cache,
+    let install_path = if configuration_plan.requires_project() {
+        Some(
+            Workspace::discover_install_path(
+                &project_dir,
+                &DiscoveryOptions::default(),
+                &discovery_cache,
+            )
+            .unwrap_or_else(|_| project_dir.to_path_buf()),
         )
-        .unwrap_or_else(|_| project_dir.to_path_buf());
-        let project = FilesystemOptions::find(&install_path).map_err(map_settings_error)?;
-        let system = FilesystemOptions::system().map_err(map_settings_error)?;
-        let user = FilesystemOptions::user().map_err(map_settings_error)?;
-        project.combine(user).combine(system)
+    } else {
+        None
     };
+    let filesystem =
+        configuration_plan.load(install_path.as_deref().unwrap_or(project_dir.as_ref()))?;
 
     let RunContext {
         globals,
@@ -562,16 +708,24 @@ fn run_sync(
 #[doc(hidden)]
 pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Result<ExitStatus> {
     match CommandExecution::from_cli(cli) {
-        CommandExecution::Sync { command, top_level } => {
-            run_sync(command, &top_level, global_initialization)
+        CommandExecution::Sync {
+            command,
+            top_level,
+            policy,
+        } => run_sync(command, &top_level, policy, global_initialization),
+        CommandExecution::Async { cli, policy } => {
+            Box::pin(run_async(cli, policy, global_initialization)).await
         }
-        CommandExecution::Async(cli) => Box::pin(run_async(cli, global_initialization)).await,
     }
 }
 
 /// Execute a command that was classified as requiring a Tokio runtime.
 #[instrument(name = "run", skip_all)]
-async fn run_async(cli: Cli, global_initialization: GlobalInitialization) -> Result<ExitStatus> {
+async fn run_async(
+    cli: Cli,
+    policy: CommandPolicy,
+    global_initialization: GlobalInitialization,
+) -> Result<ExitStatus> {
     let config_discovery = ConfigDiscovery::from_args(cli.top_level.no_config);
 
     // Enable flag to pick up warnings generated by workspace loading.
@@ -579,16 +733,7 @@ async fn run_async(cli: Cli, global_initialization: GlobalInitialization) -> Res
         uv_warnings::enable();
     }
 
-    // Respect `UV_WORKING_DIRECTORY` for backwards compatibility.
-    let directory =
-        cli.top_level.global_args.directory.clone().or_else(|| {
-            std::env::var_os(EnvVars::UV_WORKING_DIRECTORY).map(std::path::PathBuf::from)
-        });
-
-    // Switch directories as early as possible.
-    if let Some(directory) = directory.as_ref() {
-        std::env::set_current_dir(directory)?;
-    }
+    set_working_directory(&cli.top_level)?;
 
     // Parse the external command, if necessary.
     let parsed_run_command = if let Commands::Project(command) = &*cli.command
@@ -607,36 +752,8 @@ async fn run_async(cli: Cli, global_initialization: GlobalInitialization) -> Res
         None
     };
 
-    // Load environment variables not handled by Clap.
-    let environment = EnvironmentOptions::new()?;
-
-    // Resolve preview flags before config discovery for decisions that affect the discovery root.
-    let early_preview = settings::resolve_preview(&cli.top_level.global_args, None, &environment);
-
-    if global_initialization.needs_initialization() {
-        // Make the early preview flags globally available.
-        uv_preview::set(early_preview)?;
-    }
-
-    if global_initialization.needs_initialization() {
-        // Configure the `tracing` crate, which controls internal logging.
-        #[cfg(feature = "tracing-durations-export")]
-        let (durations_layer, _duration_guard) =
-            logging::setup_durations(environment.tracing_durations_file.as_ref())?;
-        #[cfg(not(feature = "tracing-durations-export"))]
-        let durations_layer = None::<tracing_subscriber::layer::Identity>;
-        logging::setup_logging(
-            match cli.top_level.global_args.verbose {
-                0 => logging::Level::Off,
-                1 => logging::Level::DebugUv,
-                2 => logging::Level::TraceUv,
-                3.. => logging::Level::TraceAll,
-            },
-            durations_layer,
-            resolve_color(&cli.top_level.global_args),
-            environment.log_context.unwrap_or_default(),
-        )?;
-    }
+    let (environment, early_preview) =
+        initialize_run_environment(&cli.top_level, global_initialization)?;
 
     // Determine the project directory.
     //
@@ -672,88 +789,14 @@ async fn run_async(cli: Cli, global_initialization: GlobalInitialization) -> Res
     );
 
     if !skip_project_validation {
-        if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
-            if !project_dir.exists() {
-                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-                    bail!(
-                        "Project directory `{}` does not exist",
-                        project_path.user_display()
-                    );
-                }
-                warn_user_once!(
-                    "Project directory `{}` does not exist. \
-                    This will become an error in a future release. \
-                    Use `--preview-features project-directory-must-exist` to error on this now.",
-                    project_path.user_display()
-                );
-            } else if !project_dir.is_dir() {
-                // `--project path/to/pyproject.toml` is resolved to its parent above,
-                // so this only triggers for other file types (see #18508).
-                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-                    bail!(
-                        "Project path `{}` is not a directory",
-                        project_path.user_display()
-                    );
-                }
-                warn_user_once!(
-                    "Project path `{}` is not a directory. \
-                    This will become an error in a future release. \
-                    Use `--preview-features project-directory-must-exist` to error on this now.",
-                    project_path.user_display()
-                );
-            }
-        }
+        validate_project_directory(
+            cli.top_level.global_args.project.as_deref(),
+            &project_dir,
+            early_preview,
+        )?;
     }
 
-    // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
-    let deprecated_isolated = if cli.top_level.global_args.isolated {
-        match &*cli.command {
-            // Supports `--isolated` as its own argument, so we can't warn either way.
-            Commands::Tool(ToolNamespace {
-                command: ToolCommand::Uvx(_) | ToolCommand::Run(_),
-            }) => false,
-
-            // Supports `--isolated` as its own argument, so we can't warn either way.
-            Commands::Project(command)
-                if matches!(**command, ProjectCommand::Run(_) | ProjectCommand::Check(_)) =>
-            {
-                false
-            }
-
-            // `--isolated` moved to `--no-workspace`.
-            Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
-                warn_user!(
-                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace."
-                );
-                false
-            }
-
-            // Preview APIs. Ignore `--isolated` and warn.
-            Commands::Project(_) | Commands::Tool(_) | Commands::Python(_) => {
-                warn_user!(
-                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files."
-                );
-                false
-            }
-
-            // Non-preview APIs. Continue to support `--isolated`, but warn.
-            _ => {
-                warn_user!(
-                    "The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files."
-                );
-                true
-            }
-        }
-    } else {
-        false
-    };
-
-    // Load configuration from the filesystem, prioritizing (in order):
-    // 1. The configuration file specified on the command-line.
-    // 2. The nearest configuration file (`uv.toml` or `pyproject.toml`) above the workspace root.
-    //    If found, this file is combined with the user configuration file.
-    // 3. The nearest configuration file (`uv.toml` or `pyproject.toml`) in the directory tree,
-    //    starting from the current directory.
+    let configuration_plan = ConfigurationPlan::from_args(&cli.top_level, policy, config_discovery);
 
     // Pass the (possibly non-existent) cache dir path to the initial workspace discovery.
     let discovery_cache = Cache::from_settings(
@@ -761,42 +804,21 @@ async fn run_async(cli: Cli, global_initialization: GlobalInitialization) -> Res
         cli.top_level.cache_args.cache_dir.clone(),
     )?;
     let workspace_cache = WorkspaceCache::default();
-    let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
-        if config_file
-            .file_name()
-            .is_some_and(|file_name| file_name == "pyproject.toml")
-        {
-            warn_user!(
-                "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
-            );
-        }
-        Some(FilesystemOptions::from_file(config_file).map_err(map_settings_error)?)
-    } else if deprecated_isolated || !config_discovery.enabled() {
-        None
-    } else if matches!(&*cli.command, Commands::Tool(_) | Commands::Self_(_)) {
-        // For commands that operate at the user-level, ignore local configuration.
-        FilesystemOptions::user()
-            .map_err(map_settings_error)?
-            .combine(FilesystemOptions::system().map_err(map_settings_error)?)
-    } else if let Ok(workspace) = Workspace::discover(
-        &project_dir,
-        &DiscoveryOptions::default(),
-        &discovery_cache,
-        &workspace_cache,
-    )
-    .await
-    {
-        let project =
-            FilesystemOptions::find(workspace.install_path()).map_err(map_settings_error)?;
-        let system = FilesystemOptions::system().map_err(map_settings_error)?;
-        let user = FilesystemOptions::user().map_err(map_settings_error)?;
-        project.combine(user).combine(system)
+    let install_path = if configuration_plan.requires_project() {
+        Workspace::discover(
+            &project_dir,
+            &DiscoveryOptions::default(),
+            &discovery_cache,
+            &workspace_cache,
+        )
+        .await
+        .ok()
+        .map(|workspace| workspace.install_path().clone())
     } else {
-        let project = FilesystemOptions::find(&project_dir).map_err(map_settings_error)?;
-        let system = FilesystemOptions::system().map_err(map_settings_error)?;
-        let user = FilesystemOptions::user().map_err(map_settings_error)?;
-        project.combine(user).combine(system)
+        None
     };
+    let filesystem =
+        configuration_plan.load(install_path.as_deref().unwrap_or(project_dir.as_ref()))?;
 
     // If the target is a remote script, download it.
     // If the target is a PEP 723 script, parse it.
@@ -3366,10 +3388,17 @@ where
     );
 
     let result = match CommandExecution::from_cli(cli) {
-        CommandExecution::Sync { command, top_level } => {
-            run_sync(command, &top_level, GlobalInitialization::Initialize)
-        }
-        CommandExecution::Async(cli) => {
+        CommandExecution::Sync {
+            command,
+            top_level,
+            policy,
+        } => run_sync(
+            command,
+            &top_level,
+            policy,
+            GlobalInitialization::Initialize,
+        ),
+        CommandExecution::Async { cli, policy } => {
             // See `min_stack_size` doc comment about `main2`.
             let min_stack_size = min_stack_size();
             let main2 = move || {
@@ -3379,8 +3408,11 @@ where
                     .build()
                     .expect("Failed building the Runtime");
                 // Box the large main future to avoid stack overflows.
-                let result =
-                    runtime.block_on(Box::pin(run_async(cli, GlobalInitialization::Initialize)));
+                let result = runtime.block_on(Box::pin(run_async(
+                    cli,
+                    policy,
+                    GlobalInitialization::Initialize,
+                )));
                 // Avoid waiting for pending tasks to complete.
                 //
                 // The resolver may have kicked off HTTP requests during resolution that
