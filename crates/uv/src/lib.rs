@@ -27,10 +27,11 @@ use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
-    AuthCommand, AuthHelperCommand, AuthNamespace, BuildBackendCommand, CacheCommand,
-    CacheNamespace, Cli, Commands, PipCommand, PipNamespace, ProjectCommand, PythonCommand,
-    PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
-    WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
+    AuthCommand, AuthDirArgs, AuthHelperCommand, AuthNamespace, BuildBackendCommand, CacheCommand,
+    CacheNamespace, Cli, Commands, HelpArgs, PipCommand, PipNamespace, ProjectCommand,
+    PythonCommand, PythonDirArgs, PythonNamespace, SelfCommand, SelfNamespace, SizeArgs,
+    ToolCommand, ToolDirArgs, ToolNamespace, TopLevelArgs, VersionFormat, WorkspaceCommand,
+    WorkspaceNamespace, compat::CompatArgs,
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
@@ -84,23 +85,224 @@ impl GlobalInitialization {
     }
 }
 
-fn is_synchronous_command(command: &Commands) -> bool {
-    matches!(
-        command,
-        Commands::Self_(SelfNamespace {
-            command: SelfCommand::Version { .. },
-        }) | Commands::Tool(ToolNamespace {
-            command: ToolCommand::Dir(_),
-        }) | Commands::Auth(AuthNamespace {
-            command: AuthCommand::Dir(_),
-        }) | Commands::Help(_)
-            | Commands::Cache(CacheNamespace {
-                command: CacheCommand::Dir | CacheCommand::Size(_),
+enum CommandExecution {
+    Sync(SyncCli),
+    Async(AsyncCli),
+}
+
+struct AsyncCli(Cli);
+
+struct SyncCli {
+    command: SyncCommand,
+    top_level: TopLevelArgs,
+}
+
+enum SyncCommand {
+    AuthDir(AuthDirArgs),
+    Help(HelpArgs),
+    CacheDir,
+    CacheSize(SizeArgs),
+    SelfVersion {
+        short: bool,
+        output_format: VersionFormat,
+    },
+    ToolDir(ToolDirArgs),
+    PythonDir(PythonDirArgs),
+}
+
+impl CommandExecution {
+    fn from_cli(cli: Cli) -> Self {
+        let Cli { command, top_level } = cli;
+        let command = match *command {
+            Commands::Auth(AuthNamespace {
+                command: AuthCommand::Dir(args),
+            }) => SyncCommand::AuthDir(args),
+            Commands::Help(args) => SyncCommand::Help(args),
+            Commands::Cache(CacheNamespace {
+                command: CacheCommand::Dir,
+            }) => SyncCommand::CacheDir,
+            Commands::Cache(CacheNamespace {
+                command: CacheCommand::Size(args),
+            }) => SyncCommand::CacheSize(args),
+            Commands::Self_(SelfNamespace {
+                command:
+                    SelfCommand::Version {
+                        short,
+                        output_format,
+                    },
+            }) => SyncCommand::SelfVersion {
+                short,
+                output_format,
+            },
+            Commands::Tool(ToolNamespace {
+                command: ToolCommand::Dir(args),
+            }) => SyncCommand::ToolDir(args),
+            Commands::Python(PythonNamespace {
+                command: PythonCommand::Dir(args),
+            }) => SyncCommand::PythonDir(args),
+            command => {
+                return Self::Async(AsyncCli(Cli {
+                    command: Box::new(command),
+                    top_level,
+                }));
+            }
+        };
+        Self::Sync(SyncCli { command, top_level })
+    }
+}
+
+impl SyncCommand {
+    const fn uses_user_configuration(&self) -> bool {
+        matches!(self, Self::SelfVersion { .. } | Self::ToolDir(_))
+    }
+
+    const fn is_preview_api(&self) -> bool {
+        matches!(self, Self::ToolDir(_) | Self::PythonDir(_))
+    }
+}
+
+struct RunContext {
+    globals: GlobalSettings,
+    cache: Cache,
+    printer: Printer,
+}
+
+fn initialize_run_context(
+    top_level: &TopLevelArgs,
+    filesystem: Option<&FilesystemOptions>,
+    environment: &EnvironmentOptions,
+    project_dir: &Path,
+    global_initialization: GlobalInitialization,
+) -> Result<RunContext> {
+    // Resolve the global settings.
+    let globals = GlobalSettings::resolve(&top_level.global_args, filesystem, environment);
+
+    if global_initialization.needs_initialization() {
+        // Set the global flags.
+        uv_flags::init(EnvironmentFlags::from(environment))
+            .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
+    }
+
+    debug!("uv {}", uv_cli::version::uv_self_version());
+    if let Some(config_file) = top_level.config_file.as_ref() {
+        debug!("Using configuration file: {}", config_file.user_display());
+    }
+    if globals.preview.all_enabled() {
+        debug!("All preview features are enabled");
+    } else if globals.preview.any_enabled() {
+        debug!(
+            "The following preview features are enabled: {}",
+            globals.preview
+        );
+    }
+
+    // Adjust open file limits on Unix if the preview feature is enabled.
+    #[cfg(unix)]
+    if global_initialization.needs_initialization()
+        && globals.preview.is_enabled(PreviewFeature::AdjustUlimit)
+    {
+        match uv_unix::adjust_open_file_limit() {
+            Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
+            // TODO(zanieb): When moving out of preview, consider changing this to a log instead of
+            // a warning because it's okay if we fail here.
+            Err(err) => warn_user!("{err}"),
+        }
+    }
+
+    // Resolve the cache settings.
+    let cache_settings = CacheSettings::resolve(top_level.cache_args.as_ref().clone(), filesystem);
+
+    if global_initialization.needs_initialization() {
+        // Set and finalize the global preview configuration.
+        uv_preview::set(globals.preview)?;
+        uv_preview::finalize()?;
+    }
+
+    // Enforce the required version.
+    if let Some(required_version) = globals.required_version.as_ref() {
+        let package_version = uv_pep440::Version::from_str(uv_version::version())?;
+        if !required_version.contains(&package_version) {
+            return Err(required_version_error(required_version, &package_version));
+        }
+    }
+
+    // Configure the `Printer`, which controls user-facing output in the CLI.
+    let printer = Printer::new(globals.quiet, globals.verbose, globals.no_progress);
+
+    // Configure the `warn!` macros, which control user-facing warnings in the CLI.
+    if globals.quiet > 0 {
+        uv_warnings::disable();
+    } else {
+        uv_warnings::enable();
+    }
+
+    anstream::ColorChoice::write_global(globals.color.into());
+
+    if global_initialization.needs_initialization() {
+        miette::set_hook(Box::new(|_| {
+            Box::new(
+                miette::MietteHandlerOpts::new()
+                    .break_words(false)
+                    .word_separator(textwrap::WordSeparator::AsciiSpace)
+                    .word_splitter(textwrap::WordSplitter::NoHyphenation)
+                    .wrap_lines(std::env::var(EnvVars::UV_NO_WRAP).is_err())
+                    .build(),
+            )
+        }))?;
+    }
+
+    // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
+    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
+
+    // Write out any resolved settings.
+    if globals.show_settings {
+        writeln!(printer.stdout(), "{globals:#?}")?;
+        writeln!(printer.stdout(), "{cache_settings:#?}")?;
+    }
+
+    // Configure the cache.
+    if cache_settings.no_cache {
+        debug!("Disabling the uv cache due to `--no-cache`");
+    }
+    let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+    let cache_dir = std::path::absolute(cache.root())?;
+    // PEP 517 hooks run from uv-managed source trees, including source distributions extracted
+    // into the cache, and can invoke uv recursively.
+    let project_is_in_build_dir =
+        std::env::var_os(EnvVars::UV_INTERNAL__BUILD_DIR).is_some_and(|build_dir| {
+            std::path::absolute(build_dir).is_ok_and(|build_dir| {
+                project_dir.starts_with(&build_dir)
+                    || fs_err::canonicalize(project_dir).is_ok_and(|project_dir| {
+                        fs_err::canonicalize(build_dir)
+                            .is_ok_and(|build_dir| project_dir.starts_with(build_dir))
+                    })
             })
-            | Commands::Python(PythonNamespace {
-                command: PythonCommand::Dir(_),
-            })
-    )
+        });
+    if !project_is_in_build_dir {
+        if project_dir.starts_with(&cache_dir) {
+            bail!(
+                "The project directory `{}` is inside the cache directory `{}`",
+                project_dir.user_display(),
+                cache_dir.user_display()
+            );
+        }
+        if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
+            && let Ok(project_dir) = fs_err::canonicalize(project_dir)
+            && project_dir.starts_with(&cache_dir)
+        {
+            bail!(
+                "The project directory `{}` is inside the cache directory `{}`",
+                project_dir.user_display(),
+                cache_dir.user_display()
+            );
+        }
+    }
+
+    Ok(RunContext {
+        globals,
+        cache,
+        printer,
+    })
 }
 
 /// uv was installed through an external package manager and cannot update itself.
@@ -126,9 +328,245 @@ impl uv_errors::Hint for ExternallyInstalledError {
     }
 }
 
-#[instrument(skip_all)]
+#[instrument(name = "run", skip_all)]
+fn run_sync(cli: SyncCli, global_initialization: GlobalInitialization) -> Result<ExitStatus> {
+    let SyncCli { command, top_level } = cli;
+    let config_discovery = ConfigDiscovery::from_args(top_level.no_config);
+
+    // Enable flag to pick up warnings generated by workspace loading.
+    if top_level.global_args.quiet == 0 {
+        uv_warnings::enable();
+    }
+
+    // Respect `UV_WORKING_DIRECTORY` for backwards compatibility.
+    let directory =
+        top_level.global_args.directory.clone().or_else(|| {
+            std::env::var_os(EnvVars::UV_WORKING_DIRECTORY).map(std::path::PathBuf::from)
+        });
+
+    // Switch directories as early as possible.
+    if let Some(directory) = directory.as_ref() {
+        std::env::set_current_dir(directory)?;
+    }
+
+    // Load environment variables not handled by Clap.
+    let environment = EnvironmentOptions::new()?;
+
+    // Resolve preview flags before config discovery for decisions that affect the discovery root.
+    let early_preview = settings::resolve_preview(&top_level.global_args, None, &environment);
+
+    if global_initialization.needs_initialization() {
+        // Make the early preview flags globally available.
+        uv_preview::set(early_preview)?;
+    }
+
+    if global_initialization.needs_initialization() {
+        // Configure the `tracing` crate, which controls internal logging.
+        #[cfg(feature = "tracing-durations-export")]
+        let (durations_layer, _duration_guard) =
+            logging::setup_durations(environment.tracing_durations_file.as_ref())?;
+        #[cfg(not(feature = "tracing-durations-export"))]
+        let durations_layer = None::<tracing_subscriber::layer::Identity>;
+        logging::setup_logging(
+            match top_level.global_args.verbose {
+                0 => logging::Level::Off,
+                1 => logging::Level::DebugUv,
+                2 => logging::Level::TraceUv,
+                3.. => logging::Level::TraceAll,
+            },
+            durations_layer,
+            resolve_color(&top_level.global_args),
+            environment.log_context.unwrap_or_default(),
+        )?;
+    }
+
+    // Determine the project directory.
+    //
+    // If `--project` points to a `pyproject.toml` file, resolve to its parent directory,
+    // since downstream code (e.g., `FilesystemOptions::find`) expects a directory.
+    let project_dir: Cow<'_, Path> = if let Some(project) = &top_level.global_args.project {
+        let path = normalize_path(std::path::absolute(project)?);
+        if let Some(name) = path.file_name()
+            && name == "pyproject.toml"
+            && path.is_file()
+            && let Some(parent) = path.parent()
+        {
+            Cow::Owned(parent.to_path_buf())
+        } else {
+            path
+        }
+    } else {
+        Cow::Borrowed(&*CWD)
+    };
+
+    // Validate that the project directory exists if explicitly provided via `--project`.
+    if let Some(project_path) = top_level.global_args.project.as_ref() {
+        if !project_dir.exists() {
+            if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                bail!(
+                    "Project directory `{}` does not exist",
+                    project_path.user_display()
+                );
+            }
+            warn_user_once!(
+                "Project directory `{}` does not exist. \
+                This will become an error in a future release. \
+                Use `--preview-features project-directory-must-exist` to error on this now.",
+                project_path.user_display()
+            );
+        } else if !project_dir.is_dir() {
+            // `--project path/to/pyproject.toml` is resolved to its parent above,
+            // so this only triggers for other file types (see #18508).
+            if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                bail!(
+                    "Project path `{}` is not a directory",
+                    project_path.user_display()
+                );
+            }
+            warn_user_once!(
+                "Project path `{}` is not a directory. \
+                This will become an error in a future release. \
+                Use `--preview-features project-directory-must-exist` to error on this now.",
+                project_path.user_display()
+            );
+        }
+    }
+
+    // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
+    let deprecated_isolated = if top_level.global_args.isolated {
+        if command.is_preview_api() {
+            warn_user!(
+                "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files."
+            );
+            false
+        } else {
+            warn_user!(
+                "The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files."
+            );
+            true
+        }
+    } else {
+        false
+    };
+
+    // Load configuration from the filesystem, prioritizing (in order):
+    // 1. The configuration file specified on the command-line.
+    // 2. The nearest configuration file (`uv.toml` or `pyproject.toml`) above the workspace root.
+    //    If found, this file is combined with the user configuration file.
+    // 3. The nearest configuration file (`uv.toml` or `pyproject.toml`) in the directory tree,
+    //    starting from the current directory.
+
+    // Pass the (possibly non-existent) cache dir path to the initial workspace discovery.
+    let discovery_cache = Cache::from_settings(
+        top_level.cache_args.no_cache,
+        top_level.cache_args.cache_dir.clone(),
+    )?;
+    let filesystem = if let Some(config_file) = top_level.config_file.as_ref() {
+        if config_file
+            .file_name()
+            .is_some_and(|file_name| file_name == "pyproject.toml")
+        {
+            warn_user!(
+                "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
+            );
+        }
+        Some(FilesystemOptions::from_file(config_file).map_err(map_settings_error)?)
+    } else if deprecated_isolated || !config_discovery.enabled() {
+        None
+    } else if command.uses_user_configuration() {
+        // For commands that operate at the user-level, ignore local configuration.
+        FilesystemOptions::user()
+            .map_err(map_settings_error)?
+            .combine(FilesystemOptions::system().map_err(map_settings_error)?)
+    } else {
+        let install_path = Workspace::discover_install_path(
+            &project_dir,
+            &DiscoveryOptions::default(),
+            &discovery_cache,
+        )
+        .unwrap_or_else(|_| project_dir.to_path_buf());
+        let project = FilesystemOptions::find(&install_path).map_err(map_settings_error)?;
+        let system = FilesystemOptions::system().map_err(map_settings_error)?;
+        let user = FilesystemOptions::user().map_err(map_settings_error)?;
+        project.combine(user).combine(system)
+    };
+
+    let RunContext {
+        globals,
+        cache,
+        printer,
+    } = initialize_run_context(
+        &top_level,
+        filesystem.as_ref(),
+        &environment,
+        &project_dir,
+        global_initialization,
+    )?;
+
+    macro_rules! show_settings {
+        ($arg:expr) => {
+            if globals.show_settings {
+                writeln!(printer.stdout(), "{:#?}", $arg)?;
+                return Ok(ExitStatus::Success);
+            }
+        };
+    }
+
+    match command {
+        SyncCommand::AuthDir(args) => {
+            commands::auth_dir(args.service.as_ref(), printer)?;
+            Ok(ExitStatus::Success)
+        }
+        SyncCommand::Help(args) => commands::help(
+            args.command.unwrap_or_default().as_slice(),
+            printer,
+            args.no_pager,
+        ),
+        SyncCommand::CacheDir => commands::cache_dir(&cache, printer),
+        SyncCommand::CacheSize(args) => {
+            commands::cache_size(&cache, args.human, printer, globals.preview)
+        }
+        SyncCommand::SelfVersion {
+            short,
+            output_format,
+        } => {
+            commands::self_version(short, output_format, printer)?;
+            Ok(ExitStatus::Success)
+        }
+        SyncCommand::ToolDir(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolDirSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::tool_dir(args.bin, globals.preview, printer)?;
+            Ok(ExitStatus::Success)
+        }
+        SyncCommand::PythonDir(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::PythonDirSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::python_dir(args.bin, printer)?;
+            Ok(ExitStatus::Success)
+        }
+    }
+}
+
 #[doc(hidden)]
 pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Result<ExitStatus> {
+    match CommandExecution::from_cli(cli) {
+        CommandExecution::Sync(cli) => run_sync(cli, global_initialization),
+        CommandExecution::Async(cli) => Box::pin(run_async(cli, global_initialization)).await,
+    }
+}
+
+#[instrument(name = "run", skip_all)]
+#[doc(hidden)]
+async fn run_async(
+    cli: AsyncCli,
+    global_initialization: GlobalInitialization,
+) -> Result<ExitStatus> {
+    let AsyncCli(cli) = cli;
     let config_discovery = ConfigDiscovery::from_args(cli.top_level.no_config);
 
     // Enable flag to pick up warnings generated by workspace loading.
@@ -335,17 +773,6 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         FilesystemOptions::user()
             .map_err(map_settings_error)?
             .combine(FilesystemOptions::system().map_err(map_settings_error)?)
-    } else if is_synchronous_command(&cli.command) {
-        let install_path = Workspace::discover_install_path(
-            &project_dir,
-            &DiscoveryOptions::default(),
-            &discovery_cache,
-        )
-        .unwrap_or_else(|_| project_dir.to_path_buf());
-        let project = FilesystemOptions::find(&install_path).map_err(map_settings_error)?;
-        let system = FilesystemOptions::system().map_err(map_settings_error)?;
-        let user = FilesystemOptions::user().map_err(map_settings_error)?;
-        project.combine(user).combine(system)
     } else if let Ok(workspace) = Workspace::discover(
         &project_dir,
         &DiscoveryOptions::default(),
@@ -505,91 +932,21 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         .map(FilesystemOptions::from)
         .combine(filesystem);
 
-    // Resolve the global settings.
-    let globals = GlobalSettings::resolve(
-        &cli.top_level.global_args,
+    // This check happens after the first (fallible) workspace discovery, which we need to resolve
+    // the settings that go into the cache constructor, but the check happens before the first
+    // workspace discovery that's used beyond settings discovery.
+    let RunContext {
+        globals,
+        cache,
+        printer,
+    } = initialize_run_context(
+        &cli.top_level,
         filesystem.as_ref(),
         &environment,
-    );
+        &project_dir,
+        global_initialization,
+    )?;
 
-    if global_initialization.needs_initialization() {
-        // Set the global flags.
-        uv_flags::init(EnvironmentFlags::from(&environment))
-            .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
-    }
-
-    debug!("uv {}", uv_cli::version::uv_self_version());
-    if let Some(config_file) = cli.top_level.config_file.as_ref() {
-        debug!("Using configuration file: {}", config_file.user_display());
-    }
-    if globals.preview.all_enabled() {
-        debug!("All preview features are enabled");
-    } else if globals.preview.any_enabled() {
-        debug!(
-            "The following preview features are enabled: {}",
-            globals.preview
-        );
-    }
-
-    // Adjust open file limits on Unix if the preview feature is enabled.
-    #[cfg(unix)]
-    if global_initialization.needs_initialization()
-        && globals.preview.is_enabled(PreviewFeature::AdjustUlimit)
-    {
-        match uv_unix::adjust_open_file_limit() {
-            Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
-            // TODO(zanieb): When moving out of preview, consider changing this to a log instead of
-            // a warning because it's okay if we fail here.
-            Err(err) => warn_user!("{err}"),
-        }
-    }
-
-    // Resolve the cache settings.
-    let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
-
-    if global_initialization.needs_initialization() {
-        // Set and finalize the global preview configuration.
-        uv_preview::set(globals.preview)?;
-        uv_preview::finalize()?;
-    }
-
-    // Enforce the required version.
-    if let Some(required_version) = globals.required_version.as_ref() {
-        let package_version = uv_pep440::Version::from_str(uv_version::version())?;
-        if !required_version.contains(&package_version) {
-            return Err(required_version_error(required_version, &package_version));
-        }
-    }
-
-    // Configure the `Printer`, which controls user-facing output in the CLI.
-    let printer = Printer::new(globals.quiet, globals.verbose, globals.no_progress);
-
-    // Configure the `warn!` macros, which control user-facing warnings in the CLI.
-    if globals.quiet > 0 {
-        uv_warnings::disable();
-    } else {
-        uv_warnings::enable();
-    }
-
-    anstream::ColorChoice::write_global(globals.color.into());
-
-    if global_initialization.needs_initialization() {
-        miette::set_hook(Box::new(|_| {
-            Box::new(
-                miette::MietteHandlerOpts::new()
-                    .break_words(false)
-                    .word_separator(textwrap::WordSeparator::AsciiSpace)
-                    .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                    .wrap_lines(std::env::var(EnvVars::UV_NO_WRAP).is_err())
-                    .build(),
-            )
-        }))?;
-    }
-
-    // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
-    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
-
-    // Write out any resolved settings.
     macro_rules! show_settings {
         ($arg:expr) => {
             if globals.show_settings {
@@ -597,54 +954,6 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 return Ok(ExitStatus::Success);
             }
         };
-        ($arg:expr, false) => {
-            if globals.show_settings {
-                writeln!(printer.stdout(), "{:#?}", $arg)?;
-            }
-        };
-    }
-    show_settings!(globals, false);
-    show_settings!(cache_settings, false);
-
-    // Configure the cache.
-    if cache_settings.no_cache {
-        debug!("Disabling the uv cache due to `--no-cache`");
-    }
-    let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
-    // This check happens after the first (fallible) workspace discovery, which we need to resolve
-    // the settings that go into the cache constructor, but the check happens before the first
-    // workspace discovery that's used beyond settings discovery.
-    let cache_dir = std::path::absolute(cache.root())?;
-    // PEP 517 hooks run from uv-managed source trees, including source distributions extracted
-    // into the cache, and can invoke uv recursively.
-    let project_is_in_build_dir =
-        std::env::var_os(EnvVars::UV_INTERNAL__BUILD_DIR).is_some_and(|build_dir| {
-            std::path::absolute(build_dir).is_ok_and(|build_dir| {
-                project_dir.starts_with(&build_dir)
-                    || fs_err::canonicalize(&*project_dir).is_ok_and(|project_dir| {
-                        fs_err::canonicalize(build_dir)
-                            .is_ok_and(|build_dir| project_dir.starts_with(build_dir))
-                    })
-            })
-        });
-    if !project_is_in_build_dir {
-        if project_dir.starts_with(&cache_dir) {
-            bail!(
-                "The project directory `{}` is inside the cache directory `{}`",
-                project_dir.user_display(),
-                cache_dir.user_display()
-            );
-        }
-        if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
-            && let Ok(project_dir) = fs_err::canonicalize(&*project_dir)
-            && project_dir.starts_with(&cache_dir)
-        {
-            bail!(
-                "The project directory `{}` is inside the cache directory `{}`",
-                project_dir.user_display(),
-                cache_dir.user_display()
-            );
-        }
     }
 
     // Workspace discovery excludes the cache root, so only reuse the earlier discovery when the
@@ -722,11 +1031,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             .await
         }
         Commands::Auth(AuthNamespace {
-            command: AuthCommand::Dir(args),
-        }) => {
-            commands::auth_dir(args.service.as_ref(), printer)?;
-            Ok(ExitStatus::Success)
-        }
+            command: AuthCommand::Dir(_),
+        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Helper(args),
         }) => {
@@ -743,11 +1049,9 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 }
             }
         }
-        Commands::Help(args) => commands::help(
-            args.command.unwrap_or_default().as_slice(),
-            printer,
-            args.no_pager,
-        ),
+        Commands::Help(_) => {
+            unreachable!("synchronous commands are dispatched before starting the async path")
+        }
         Commands::Pip(PipNamespace {
             command: PipCommand::Compile(args),
         }) => {
@@ -1310,10 +1614,10 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
-        }) => commands::cache_dir(&cache, printer),
+        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
         Commands::Cache(CacheNamespace {
-            command: CacheCommand::Size(args),
-        }) => commands::cache_size(&cache, args.human, printer, globals.preview),
+            command: CacheCommand::Size(_),
+        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::BuildSettings::resolve(args, filesystem, environment);
@@ -1495,13 +1799,10 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         Commands::Self_(SelfNamespace {
             command:
                 SelfCommand::Version {
-                    short,
-                    output_format,
+                    short: _,
+                    output_format: _,
                 },
-        }) => {
-            commands::self_version(short, output_format, printer)?;
-            Ok(ExitStatus::Success)
-        }
+        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
             return Err(ExternallyInstalledError {
@@ -1815,15 +2116,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
-            command: ToolCommand::Dir(args),
-        }) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolDirSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            commands::tool_dir(args.bin, globals.preview, printer)?;
-            Ok(ExitStatus::Success)
-        }
+            command: ToolCommand::Dir(_),
+        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
         Commands::Python(PythonNamespace {
             command: PythonCommand::List(args),
         }) => {
@@ -2000,15 +2294,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             .await
         }
         Commands::Python(PythonNamespace {
-            command: PythonCommand::Dir(args),
-        }) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonDirSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            commands::python_dir(args.bin, printer)?;
-            Ok(ExitStatus::Success)
-        }
+            command: PythonCommand::Dir(_),
+        }) => unreachable!("synchronous commands are dispatched before starting the async path"),
         Commands::Python(PythonNamespace {
             command: PythonCommand::UpdateShell,
         }) => {
@@ -3073,38 +3360,36 @@ where
         cli.top_level.global_args.no_progress,
     );
 
-    // These command arms, and the configuration paths selected here, do not perform async I/O.
-    // Avoid creating a Tokio runtime and its dedicated thread for them.
-    let synchronous = is_synchronous_command(&cli.command);
-
-    let result = if synchronous {
-        futures::executor::block_on(Box::pin(run(cli, GlobalInitialization::Initialize)))
-    } else {
-        // See `min_stack_size` doc comment about `main2`.
-        let min_stack_size = min_stack_size();
-        let main2 = move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .thread_stack_size(min_stack_size)
-                .build()
-                .expect("Failed building the Runtime");
-            // Box the large main future to avoid stack overflows.
-            let result = runtime.block_on(Box::pin(run(cli, GlobalInitialization::Initialize)));
-            // Avoid waiting for pending tasks to complete.
-            //
-            // The resolver may have kicked off HTTP requests during resolution that
-            // turned out to be unnecessary. Waiting for those to complete can cause
-            // the CLI to hang before exiting.
-            runtime.shutdown_background();
-            result
-        };
-        std::thread::Builder::new()
-            .name("main2".to_owned())
-            .stack_size(min_stack_size)
-            .spawn(main2)
-            .expect("Tokio executor failed, was there a panic?")
-            .join()
-            .expect("Tokio executor failed, was there a panic?")
+    let result = match CommandExecution::from_cli(cli) {
+        CommandExecution::Sync(cli) => run_sync(cli, GlobalInitialization::Initialize),
+        CommandExecution::Async(cli) => {
+            // See `min_stack_size` doc comment about `main2`.
+            let min_stack_size = min_stack_size();
+            let main2 = move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .thread_stack_size(min_stack_size)
+                    .build()
+                    .expect("Failed building the Runtime");
+                // Box the large main future to avoid stack overflows.
+                let result =
+                    runtime.block_on(Box::pin(run_async(cli, GlobalInitialization::Initialize)));
+                // Avoid waiting for pending tasks to complete.
+                //
+                // The resolver may have kicked off HTTP requests during resolution that
+                // turned out to be unnecessary. Waiting for those to complete can cause
+                // the CLI to hang before exiting.
+                runtime.shutdown_background();
+                result
+            };
+            std::thread::Builder::new()
+                .name("main2".to_owned())
+                .stack_size(min_stack_size)
+                .spawn(main2)
+                .expect("Tokio executor failed, was there a panic?")
+                .join()
+                .expect("Tokio executor failed, was there a panic?")
+        }
     };
 
     match result {
@@ -3134,5 +3419,38 @@ where
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, CommandExecution};
+    use clap::Parser;
+
+    #[test]
+    fn command_execution_classifies_sync_commands() {
+        let commands: &[&[&str]] = &[
+            &["uv", "auth", "dir"],
+            &["uv", "help", "--no-pager"],
+            &["uv", "cache", "dir"],
+            &["uv", "cache", "size"],
+            &["uv", "self", "version"],
+            &["uv", "tool", "dir"],
+            &["uv", "python", "dir"],
+        ];
+
+        for args in commands {
+            let cli = Cli::try_parse_from(*args).expect("valid command");
+            assert!(matches!(
+                CommandExecution::from_cli(cli),
+                CommandExecution::Sync(_)
+            ));
+        }
+
+        let cli = Cli::try_parse_from(["uv", "venv"]).expect("valid command");
+        assert!(matches!(
+            CommandExecution::from_cli(cli),
+            CommandExecution::Async(_)
+        ));
     }
 }
