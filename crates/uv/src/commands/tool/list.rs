@@ -251,6 +251,21 @@ pub(crate) async fn list(
         FxHashMap::default()
     };
 
+    // If `--outdated` is set, skip tools that are up-to-date.
+    let valid_tools = if outdated {
+        valid_tools
+            .into_iter()
+            .filter(|(name, _, _, version)| {
+                latest
+                    .get(&name)
+                    .and_then(Option::as_ref)
+                    .is_some_and(|filename| filename.version() > &version)
+            })
+            .collect::<Vec<_>>()
+    } else {
+        valid_tools
+    };
+
     match output_format {
         ToolListFormat::Text => render_list_text(
             outdated,
@@ -281,14 +296,6 @@ fn render_list_json(
 ) -> Result<()> {
     let tools = valid_tools
         .iter()
-        .filter(|(name, _, _, version)| {
-            // skip up-to-date entries if we want outdated tools
-            !outdated
-                || latest
-                    .get(&name)
-                    .and_then(Option::as_ref)
-                    .is_some_and(|filename| filename.version() > &version)
-        })
         .map(|(name, tool, tool_env, version)| ToolPrintData {
             name: name.to_string(),
             version: version.clone(),
@@ -368,17 +375,6 @@ fn render_list_text(
     installed_tools: InstalledTools,
 ) -> Result<()> {
     for (name, tool, tool_env, version) in valid_tools {
-        // If `--outdated` is set, skip tools that are up-to-date.
-        if outdated {
-            let is_outdated = latest
-                .get(&name)
-                .and_then(Option::as_ref)
-                .is_some_and(|filename| filename.version() > &version);
-            if !is_outdated {
-                continue;
-            }
-        }
-
         let version_specifier = show_version_specifiers
             .then(|| {
                 tool.requirements()
