@@ -53,7 +53,7 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
 use itertools::{Either, Itertools};
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use rustc_hash::{FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
 use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
@@ -86,9 +86,6 @@ pub(crate) struct Interner {
 pub(crate) struct InternerShared {
     /// A list of unique [`Node`]s and their cached Boolean projections.
     nodes: boxcar::Vec<InternedNode>,
-
-    /// Canonical marker trees for projected children that can reach an exclusion.
-    canonical_projections: papaya::HashMap<NodeId, NodeId, FxBuildHasher>,
 }
 
 /// A unique node and the cached projection for each complemented-edge orientation.
@@ -97,6 +94,7 @@ struct InternedNode {
     projections: [AtomicUsize; 2],
     can_conflict: bool,
     conflicting_variables: u8,
+    contains_dont_care: bool,
 }
 
 const OS_NAME_VARIABLE: u8 = 1;
@@ -136,13 +134,24 @@ impl InternerShared {
     }
 
     /// Returns `true` if the given marker can reach a known-incompatible pair of variables.
-    pub(crate) fn can_conflict(&self, id: NodeId) -> bool {
+    fn can_conflict(&self, id: NodeId) -> bool {
         !id.is_terminal() && self.nodes[id.index()].can_conflict
     }
 
-    /// Returns the canonical marker for a projected child, if it has already been computed.
+    /// Returns the canonical marker for a projected child, if one is needed.
     pub(crate) fn canonical_projection(&self, id: NodeId) -> Option<NodeId> {
-        self.canonical_projections.pin().get(&id).copied()
+        if id.is_terminal() || self.contains_dont_care(id) || !self.can_conflict(id) {
+            return None;
+        }
+
+        let projection = self.nodes[id.index()].projections[usize::from(id.is_complement())]
+            .load(AtomicOrdering::Acquire);
+        (projection != usize::MAX).then_some(NodeId(projection))
+    }
+
+    /// Returns `true` if the given marker contains a don't-care edge.
+    fn contains_dont_care(&self, id: NodeId) -> bool {
+        id.is_dont_care() || (!id.is_terminal() && self.nodes[id.index()].contains_dont_care)
     }
 
     /// Returns `true` if two marker trees can contain a known-incompatible pair of variables.
@@ -256,6 +265,9 @@ impl InternerShared {
         if id.is_terminal() {
             return Some(id);
         }
+        if !self.contains_dont_care(id) && self.can_conflict(id) {
+            return Some(id);
+        }
 
         let projection = self.nodes[id.index()].projections[usize::from(id.is_complement())]
             .load(AtomicOrdering::Acquire);
@@ -265,6 +277,19 @@ impl InternerShared {
     /// Cache the Boolean projection for the given [`NodeId`].
     fn cache_projection(&self, id: NodeId, projection: NodeId) {
         if id.is_terminal() {
+            return;
+        }
+        if !self.contains_dont_care(id) && self.can_conflict(id) {
+            return;
+        }
+
+        self.nodes[id.index()].projections[usize::from(id.is_complement())]
+            .store(projection.0, AtomicOrdering::Release);
+    }
+
+    /// Cache the canonical marker for a Boolean projected child.
+    fn cache_canonical_projection(&self, id: NodeId, projection: NodeId) {
+        if id.is_terminal() || self.contains_dont_care(id) || !self.can_conflict(id) {
             return;
         }
 
@@ -321,12 +346,17 @@ impl InternerGuard<'_> {
         let id = self.state.unique.entry(node.clone()).or_insert_with(|| {
             let can_conflict = self.shared.node_can_conflict(&node);
             let conflicting_variables = self.shared.node_conflicting_variables(&node);
+            let contains_dont_care = node
+                .children
+                .nodes()
+                .any(|child| self.shared.contains_dont_care(child));
             NodeId::new(
                 self.shared.nodes.push(InternedNode {
                     node,
                     projections: [AtomicUsize::new(usize::MAX), AtomicUsize::new(usize::MAX)],
                     can_conflict,
                     conflicting_variables,
+                    contains_dont_care,
                 }),
                 false,
             )
@@ -626,7 +656,7 @@ impl InternerGuard<'_> {
         }
         let validity = self.exclusions().not();
         let masked = self.mask(node, validity);
-        if masked == self.mask(NodeId::TRUE, validity) {
+        let canonical = if masked == self.mask(NodeId::TRUE, validity) {
             NodeId::TRUE
         } else if masked == self.mask(NodeId::FALSE, validity) {
             NodeId::FALSE
@@ -641,17 +671,49 @@ impl InternerGuard<'_> {
             } else {
                 self.mask(projected, validity)
             }
-        }
+        };
+        self.cache_projected_children(canonical, validity);
+        canonical
     }
 
-    /// Apply the validity domain to a projected child and cache the canonical result.
-    pub(crate) fn finish_projection(&mut self, node: NodeId) -> NodeId {
-        let canonical = self.finish(node);
-        self.shared
-            .canonical_projections
-            .pin()
-            .insert(node, canonical);
-        canonical
+    /// Cache the canonical form of every conflicting subtree in a Boolean projection.
+    fn cache_projected_children(&mut self, value: NodeId, validity: NodeId) {
+        let root = self.project(value);
+        self.shared.cache_projection(value.not(), root.not());
+        if root.is_terminal() {
+            return;
+        }
+        let mut pending = self
+            .shared
+            .node(root)
+            .children
+            .nodes()
+            .map(|child| child.negate(root))
+            .collect_vec();
+        let mut visited = FxHashSet::default();
+
+        while let Some(projected) = pending.pop() {
+            if projected.is_terminal() || !visited.insert(projected) {
+                continue;
+            }
+
+            let node = self.shared.node(projected);
+            pending.extend(node.children.nodes().map(|child| child.negate(projected)));
+
+            if !self.can_conflict(projected)
+                || self.shared.canonical_projection(projected).is_some()
+            {
+                continue;
+            }
+
+            let canonical = self.mask(projected, validity);
+            self.shared.cache_canonical_projection(projected, canonical);
+            self.shared
+                .cache_canonical_projection(projected.not(), canonical.not());
+            self.shared.cache_projection(canonical, projected);
+            self.shared
+                .cache_projection(canonical.not(), projected.not());
+        }
     }
 
     /// Returns `true` if a marker tree can contain a known-incompatible pair of variables.
