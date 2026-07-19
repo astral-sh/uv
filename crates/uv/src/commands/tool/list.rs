@@ -358,7 +358,7 @@ fn render_list_json(
         },
         tools,
     };
-    writeln!(printer.stdout(), "{}", serde_json::to_string(&data)?)?;
+    writeln!(printer.stdout(), "{}", serde_json::to_string_pretty(&data)?)?;
     Ok(())
 }
 
