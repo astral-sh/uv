@@ -3,7 +3,9 @@ use smallvec::SmallVec;
 use std::ops::Bound;
 
 use uv_pep440::{LowerBound, UpperBound, Version};
-use uv_pep508::{CanonicalMarkerValueVersion, MarkerTree, MarkerTreeKind};
+use uv_pep508::{
+    CanonicalMarkerValueString, CanonicalMarkerValueVersion, MarkerTree, MarkerTreeKind,
+};
 
 use uv_distribution_types::RequiresPythonRange;
 
@@ -34,6 +36,18 @@ pub(crate) fn requires_python(tree: MarkerTree) -> Option<RequiresPythonRange> {
                     }
                 }
             },
+            MarkerTreeKind::String(marker)
+                if matches!(
+                    marker.key(),
+                    CanonicalMarkerValueString::OsName
+                        | CanonicalMarkerValueString::SysPlatform
+                        | CanonicalMarkerValueString::PlatformSystem
+                ) =>
+            {
+                for (_, tree) in marker.projected_children() {
+                    collect_python_markers(tree, markers, range);
+                }
+            }
             MarkerTreeKind::String(marker) => {
                 for (_, tree) in marker.children() {
                     collect_python_markers(tree, markers, range);
@@ -185,5 +199,20 @@ mod tests {
             MarkerTree::from_str("python_full_version > '3.8' or python_full_version <= '3.8'")
                 .unwrap();
         assert_eq!(requires_python(tree), None);
+
+        // Python bounds below validity-sensitive string markers are collected without
+        // materializing their projected children.
+        let tree = MarkerTree::from_str(
+            "os_name != 'posix' and ((platform_system != 'FreeBSD' and \
+             sys_platform != 'darwin' and python_full_version >= '3.10') or \
+             (sys_platform == 'darwin' and python_full_version >= '3.11' and extra == 'dev'))",
+        )
+        .unwrap();
+        let range = requires_python(tree).unwrap();
+        assert_eq!(
+            *range.lower(),
+            LowerBound::new(Bound::Included(Version::from_str("3.10").unwrap()))
+        );
+        assert_eq!(*range.upper(), UpperBound::new(Bound::Unbounded));
     }
 }

@@ -677,7 +677,7 @@ impl ResolverOutput {
                 }
                 MarkerTreeKind::String(marker) => {
                     set.insert(MarkerParam::String(marker.key()));
-                    for (_, tree) in marker.children() {
+                    for (_, tree) in marker.projected_children() {
                         add_marker_params_from_tree(tree, set);
                     }
                 }
