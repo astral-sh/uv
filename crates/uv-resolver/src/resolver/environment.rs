@@ -528,7 +528,7 @@ impl std::fmt::Display for ResolverEnvironment {
 /// 3. The dependency is unconditional in the "parent" fork and thus cannot provoke new forks.
 ///
 /// This enum encapsulates those possibilities. In the first case, a helper is
-/// returned to help management the nuts and bolts of forking.
+/// returned to manage the nuts and bolts of forking.
 #[derive(Debug)]
 pub(crate) enum ForkingPossibility<'d> {
     Possible(Forker<'d>),
@@ -544,8 +544,8 @@ impl<'d> ForkingPossibility<'d> {
         } else if marker.is_true() || !env.included_by_marker(marker.negate()) {
             ForkingPossibility::NoForkingPossible
         } else {
-            // All forks visited by this forker are contained within the original parent, so the
-            // forker can drop conditions implied by the parent while the dependency keeps its original.
+            // Every child fork is contained within the parent, so the forker can drop conditions
+            // implied by the parent while the dependency keeps its original marker.
             let marker = env
                 .fork_markers()
                 .map_or(marker, |parent| marker.restrict_bounded(parent));

@@ -563,7 +563,7 @@ impl InternerGuard<'_> {
         self.restrict_cached(value, assumption, &mut cache)
     }
 
-    /// Restrict a marker without increasing the size of its decision diagram.
+    /// Restrict a marker if doing so removes decision nodes without adding edges.
     pub(crate) fn restrict_bounded(&mut self, value: NodeId, assumption: NodeId) -> NodeId {
         const MAX_RESTRICTION_NODES: usize = 32;
         const MAX_RESTRICTION_EDGES: usize = 128;
@@ -610,20 +610,18 @@ impl InternerGuard<'_> {
         let mut pending = vec![node];
         let mut edges = 0;
         while let Some(node) = pending.pop() {
-            if matches!(node, NodeId::TRUE | NodeId::FALSE) {
+            if matches!(node, NodeId::TRUE | NodeId::FALSE) || !seen.insert(node.index()) {
                 continue;
             }
-            if seen.insert(node.index()) {
-                if seen.len() > node_limit {
+            if seen.len() > node_limit {
+                return None;
+            }
+            for child in self.shared.node(node).children.nodes() {
+                edges += 1;
+                if edges > edge_limit {
                     return None;
                 }
-                for child in self.shared.node(node).children.nodes() {
-                    edges += 1;
-                    if edges > edge_limit {
-                        return None;
-                    }
-                    pending.push(child);
-                }
+                pending.push(child);
             }
         }
         Some((seen.len(), edges))

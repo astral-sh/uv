@@ -11,6 +11,9 @@ unconditional within the Linux parent and cannot provoke a fork.
 [resolver_options]
 universal = true
 
+[testgen]
+disable = true
+
 [expected]
 satisfiable = true
 

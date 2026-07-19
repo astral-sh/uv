@@ -1280,7 +1280,8 @@ impl MarkerTree {
         Self(INTERNER.lock().restrict(self.0, assumption.0))
     }
 
-    /// Restrict this marker like [`Self::restrict`] without increasing the size of its tree.
+    /// Restrict this marker like [`Self::restrict`] if doing so removes decision nodes without
+    /// adding edges. Returns the original marker for complex inputs.
     #[must_use]
     pub fn restrict_bounded(self, assumption: Self) -> Self {
         Self(INTERNER.lock().restrict_bounded(self.0, assumption.0))
