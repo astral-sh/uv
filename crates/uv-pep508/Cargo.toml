@@ -25,6 +25,7 @@ arcstr = { workspace = true}
 boxcar = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
+papaya = { workspace = true }
 regex = { workspace = true }
 rkyv = { workspace = true, optional = true }
 rustc-hash = { workspace = true }

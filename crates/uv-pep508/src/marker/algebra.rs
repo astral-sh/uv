@@ -53,7 +53,7 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
 use itertools::{Either, Itertools};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use version_ranges::Ranges;
 
 use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
@@ -86,6 +86,9 @@ pub(crate) struct Interner {
 pub(crate) struct InternerShared {
     /// A list of unique [`Node`]s and their cached Boolean projections.
     nodes: boxcar::Vec<InternedNode>,
+
+    /// Canonical marker trees for projected children that can reach an exclusion.
+    canonical_projections: papaya::HashMap<NodeId, NodeId, FxBuildHasher>,
 }
 
 /// A unique node and the cached projection for each complemented-edge orientation.
@@ -133,8 +136,13 @@ impl InternerShared {
     }
 
     /// Returns `true` if the given marker can reach a known-incompatible pair of variables.
-    fn can_conflict(&self, id: NodeId) -> bool {
+    pub(crate) fn can_conflict(&self, id: NodeId) -> bool {
         !id.is_terminal() && self.nodes[id.index()].can_conflict
+    }
+
+    /// Returns the canonical marker for a projected child, if it has already been computed.
+    pub(crate) fn canonical_projection(&self, id: NodeId) -> Option<NodeId> {
+        self.canonical_projections.pin().get(&id).copied()
     }
 
     /// Returns `true` if two marker trees can contain a known-incompatible pair of variables.
@@ -634,6 +642,16 @@ impl InternerGuard<'_> {
                 self.mask(projected, validity)
             }
         }
+    }
+
+    /// Apply the validity domain to a projected child and cache the canonical result.
+    pub(crate) fn finish_projection(&mut self, node: NodeId) -> NodeId {
+        let canonical = self.finish(node);
+        self.shared
+            .canonical_projections
+            .pin()
+            .insert(node, canonical);
+        canonical
     }
 
     /// Returns `true` if a marker tree can contain a known-incompatible pair of variables.

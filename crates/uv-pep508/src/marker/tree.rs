@@ -1592,9 +1592,18 @@ impl StringMarkerTree<'_> {
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
     pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<ArcStr>, MarkerTree)> {
-        self.map
-            .iter()
-            .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
+        self.map.iter().map(|(range, node)| {
+            let child = node.negate(self.id);
+            let child = if INTERNER.shared.can_conflict(child) {
+                INTERNER
+                    .shared
+                    .canonical_projection(child)
+                    .unwrap_or_else(|| INTERNER.lock().finish_projection(child))
+            } else {
+                child
+            };
+            (range, MarkerTree(child))
+        })
     }
 }
 
@@ -1970,6 +1979,57 @@ mod test {
         drop(guard);
         thread.join().unwrap();
         assert_eq!(result.unwrap(), [true, true, true, true, true]);
+    }
+
+    #[test]
+    fn projected_platform_children_are_canonical() {
+        let marker = m(
+            "os_name != 'posix' and ((platform_system != 'FreeBSD' and sys_platform != 'darwin') \
+             or (sys_platform == 'darwin' and extra == 'y'))",
+        );
+        let MarkerTreeKind::String(kind) = marker.kind() else {
+            panic!("expected a string marker");
+        };
+        let child = kind
+            .children()
+            .find_map(|(range, child)| (!range.contains("posix")).then_some(child))
+            .unwrap();
+        let reparsed = m(&child.try_to_string().unwrap());
+        let freebsd = m("platform_system == 'FreeBSD'");
+
+        assert_eq!(child, reparsed);
+        assert_eq!(child.cmp(&reparsed), std::cmp::Ordering::Equal);
+        assert_eq!(HashSet::from([child, reparsed]).len(), 1);
+        assert!(child.is_disjoint(freebsd));
+        assert!(freebsd.is_disjoint(child));
+    }
+
+    #[test]
+    fn projected_platform_children_do_not_lock_interner() {
+        let marker = m(
+            "os_name != 'posix' and ((platform_system != 'FreeBSD' and sys_platform != 'darwin') \
+             or (sys_platform == 'darwin' and extra == 'y'))",
+        );
+        let negated = marker.negate();
+        let _ = marker.try_to_string();
+        let _ = negated.try_to_string();
+
+        let guard = INTERNER.lock();
+        let (sender, receiver) = mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            let environment = env37();
+            sender
+                .send([
+                    marker.evaluate(&environment, &[]),
+                    negated.evaluate(&environment, &[]),
+                ])
+                .unwrap();
+        });
+
+        let result = receiver.recv_timeout(Duration::from_secs(5));
+        drop(guard);
+        thread.join().unwrap();
+        assert_eq!(result.unwrap(), [true, false]);
     }
 
     #[test]
