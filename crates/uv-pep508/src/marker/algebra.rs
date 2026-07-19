@@ -1012,6 +1012,16 @@ impl InternerGuard<'_> {
             return self.disjointness(xi, yi);
         }
 
+        // A validity-masked tree compared with an ordinary tree can produce a quadratic number
+        // of distinct requirement/wheel pairs. The ordinary tree cannot distinguish unreachable
+        // platform branches, so compare against the cached Boolean projection and avoid both the
+        // expanded validity diagram and permanent pair-cache retention.
+        if !trees_conflict && left_can_conflict != right_can_conflict {
+            let left = self.shared.projection(xi).unwrap_or(xi);
+            let right = self.shared.projection(yi).unwrap_or(yi);
+            return self.disjointness(left, right);
+        }
+
         let key = if xi <= yi { (xi, yi) } else { (yi, xi) };
         if let Some(&disjoint) = self.state.disjointness_cache.get(&key) {
             return disjoint;
@@ -2994,6 +3004,42 @@ mod tests {
         for (index, left) in markers.iter().enumerate() {
             for right in &markers[index + 1..] {
                 assert!(interner.is_disjoint(*left, *right));
+            }
+        }
+        assert_eq!(INTERNER.shared.nodes.count(), nodes);
+        assert_eq!(interner.state.disjointness_cache.len(), cache);
+    }
+
+    #[test]
+    fn disjointness_does_not_cache_one_sided_platform_checks() {
+        let windows = expr("os_name == 'nt'");
+        let linux = expr("sys_platform == 'linux'");
+        let extras = (0..64)
+            .map(|index| expr(&format!("extra == 'disjoint-extra-{index}'")))
+            .collect::<Vec<_>>();
+        let machines = (0..64)
+            .map(|index| expr(&format!("platform_machine == 'disjoint-machine-{index}'")))
+            .collect::<Vec<_>>();
+
+        let mut interner = INTERNER.lock();
+        let platform = interner.or(windows, linux);
+        let markers = extras
+            .iter()
+            .map(|extra| interner.and(platform, *extra))
+            .collect::<Vec<_>>();
+        assert!(markers.iter().all(|marker| interner.can_conflict(*marker)));
+        assert!(
+            machines
+                .iter()
+                .all(|machine| !interner.can_conflict(*machine))
+        );
+
+        let nodes = INTERNER.shared.nodes.count();
+        let cache = interner.state.disjointness_cache.len();
+        for marker in markers {
+            for machine in &machines {
+                assert!(!interner.is_disjoint(marker, *machine));
+                assert!(!interner.is_disjoint(*machine, marker));
             }
         }
         assert_eq!(INTERNER.shared.nodes.count(), nodes);
