@@ -566,6 +566,7 @@ impl InternerGuard<'_> {
     /// Restrict a marker without increasing the size of its decision diagram.
     pub(crate) fn restrict_bounded(&mut self, value: NodeId, assumption: NodeId) -> NodeId {
         const MAX_RESTRICTION_NODES: usize = 32;
+        const MAX_RESTRICTION_EDGES: usize = 128;
 
         if assumption.is_true() || matches!(value, NodeId::TRUE | NodeId::FALSE) {
             return value;
@@ -574,34 +575,50 @@ impl InternerGuard<'_> {
         // Restriction can create a large number of intermediate nodes even when the final tree
         // would be discarded. Since the global interner retains those nodes, avoid attempting the
         // optimization for complex inputs.
-        let Some(value_nodes) = self.node_count(value, MAX_RESTRICTION_NODES) else {
+        let Some(value_nodes) =
+            self.node_count(value, MAX_RESTRICTION_NODES, MAX_RESTRICTION_EDGES)
+        else {
             return value;
         };
-        if self.node_count(assumption, MAX_RESTRICTION_NODES).is_none() {
+        if self
+            .node_count(assumption, MAX_RESTRICTION_NODES, MAX_RESTRICTION_EDGES)
+            .is_none()
+        {
             return value;
         }
 
         let restricted = self.restrict(value, assumption);
-        if self.node_count(restricted, value_nodes - 1).is_some() {
+        if self
+            .node_count(restricted, value_nodes - 1, MAX_RESTRICTION_EDGES)
+            .is_some()
+        {
             restricted
         } else {
             value
         }
     }
 
-    /// Return the number of unique decision nodes reachable from `node`, up to `limit`.
-    fn node_count(&self, node: NodeId, limit: usize) -> Option<usize> {
+    /// Return the number of unique decision nodes reachable from `node`, up to the given node and
+    /// edge limits.
+    fn node_count(&self, node: NodeId, node_limit: usize, edge_limit: usize) -> Option<usize> {
         let mut seen = FxHashSet::default();
         let mut pending = vec![node];
+        let mut edges = 0;
         while let Some(node) = pending.pop() {
             if matches!(node, NodeId::TRUE | NodeId::FALSE) {
                 continue;
             }
             if seen.insert(node.index()) {
-                if seen.len() > limit {
+                if seen.len() > node_limit {
                     return None;
                 }
-                pending.extend(self.shared.node(node).children.nodes());
+                for child in self.shared.node(node).children.nodes() {
+                    edges += 1;
+                    if edges > edge_limit {
+                        return None;
+                    }
+                    pending.push(child);
+                }
             }
         }
         Some(seen.len())
@@ -2034,6 +2051,26 @@ mod tests {
         let first_or_second = interner.or(first, second);
         let assumption = interner.or(first_or_second, third);
 
+        let nodes_before = interner.state.unique.len();
+        let restricted = interner.restrict_bounded(value, assumption);
+        assert_eq!(interner.state.unique.len(), nodes_before);
+        assert_eq!(restricted, value);
+    }
+
+    #[test]
+    fn restrict_bounded_does_not_intersect_wide_range_edges() {
+        let mut value = NodeId::FALSE;
+        let mut assumption = NodeId::FALSE;
+        for index in 0..65 {
+            let value_expression = expr(&format!("platform_version == 'value-{}'", index * 2));
+            let assumption_expression =
+                expr(&format!("platform_version == 'value-{}'", index * 2 + 1));
+            let mut interner = INTERNER.lock();
+            value = interner.or(value, value_expression);
+            assumption = interner.or(assumption, assumption_expression);
+        }
+
+        let mut interner = INTERNER.lock();
         let nodes_before = interner.state.unique.len();
         let restricted = interner.restrict_bounded(value, assumption);
         assert_eq!(interner.state.unique.len(), nodes_before);
