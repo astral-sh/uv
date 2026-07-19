@@ -1276,8 +1276,9 @@ impl MarkerTree {
     #[must_use]
     pub fn simplify_python_versions(self, lower: Bound<&Version>, upper: Bound<&Version>) -> Self {
         let mut interner = INTERNER.lock();
-        let node = interner.simplify_python_versions(self.0, lower, upper);
-        if node == self.0 {
+        let value = self.project_if_needed(&mut interner);
+        let node = interner.simplify_python_versions(value, lower, upper);
+        if node == value {
             self
         } else {
             Self(interner.finish(node))
@@ -1298,8 +1299,13 @@ impl MarkerTree {
         upper: Bound<&Version>,
     ) -> Self {
         let mut interner = INTERNER.lock();
-        let node = interner.complexify_python_versions(self.0, lower, upper);
-        Self(interner.finish(node))
+        let value = self.project_if_needed(&mut interner);
+        let node = interner.complexify_python_versions(value, lower, upper);
+        if node == value {
+            self
+        } else {
+            Self(interner.finish(node))
+        }
     }
 
     /// Restrict this marker by assuming that `assumption` is true.
@@ -3691,6 +3697,17 @@ mod test {
 
     #[test]
     fn complexified_markers() {
+        let lower = Bound::Included(Version::new([3, 9]));
+        let upper = Bound::Excluded(Version::new([3, 13]));
+        let platform = m(
+            "(os_name == 'nt' or sys_platform == 'linux') and platform_machine == 'complexify-machine'",
+        );
+        let complexified = platform.complexify_python_versions(lower.as_ref(), upper.as_ref());
+        assert_eq!(
+            complexified.complexify_python_versions(lower.as_ref(), upper.as_ref()),
+            complexified
+        );
+
         // Takes optional lower (inclusive) and upper (exclusive)
         // bounds representing `requires-python` and a "simplified"
         // marker, and returns the "complexified" marker. That is, a
