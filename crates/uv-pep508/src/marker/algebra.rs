@@ -565,20 +565,32 @@ impl InternerGuard<'_> {
 
     /// Restrict a marker without increasing the size of its decision diagram.
     pub(crate) fn restrict_bounded(&mut self, value: NodeId, assumption: NodeId) -> NodeId {
+        const MAX_RESTRICTION_NODES: usize = 32;
+
         if assumption.is_true() || matches!(value, NodeId::TRUE | NodeId::FALSE) {
             return value;
         }
 
+        // Restriction can create a large number of intermediate nodes even when the final tree
+        // would be discarded. Since the global interner retains those nodes, avoid attempting the
+        // optimization for complex inputs.
+        let Some(value_nodes) = self.node_count(value, MAX_RESTRICTION_NODES) else {
+            return value;
+        };
+        if self.node_count(assumption, MAX_RESTRICTION_NODES).is_none() {
+            return value;
+        }
+
         let restricted = self.restrict(value, assumption);
-        if self.node_count(restricted) < self.node_count(value) {
+        if self.node_count(restricted, value_nodes - 1).is_some() {
             restricted
         } else {
             value
         }
     }
 
-    /// Return the number of unique decision nodes reachable from `node`.
-    fn node_count(&self, node: NodeId) -> usize {
+    /// Return the number of unique decision nodes reachable from `node`, up to `limit`.
+    fn node_count(&self, node: NodeId, limit: usize) -> Option<usize> {
         let mut seen = FxHashSet::default();
         let mut pending = vec![node];
         while let Some(node) = pending.pop() {
@@ -586,10 +598,13 @@ impl InternerGuard<'_> {
                 continue;
             }
             if seen.insert(node.index()) {
+                if seen.len() > limit {
+                    return None;
+                }
                 pending.extend(self.shared.node(node).children.nodes());
             }
         }
-        seen.len()
+        Some(seen.len())
     }
 
     fn restrict_cached(
@@ -1676,24 +1691,38 @@ impl Edges {
     fn map(&self, parent: NodeId, mut f: impl FnMut(NodeId) -> NodeId) -> Self {
         match self {
             Self::Version { edges: map } => Self::Version {
-                edges: map
-                    .iter()
-                    .cloned()
-                    .map(|(range, node)| (range, f(node.negate(parent))))
-                    .collect(),
+                edges: Self::map_ranges(map, parent, &mut f),
             },
             Self::String { edges: map } => Self::String {
-                edges: map
-                    .iter()
-                    .cloned()
-                    .map(|(range, node)| (range, f(node.negate(parent))))
-                    .collect(),
+                edges: Self::map_ranges(map, parent, &mut f),
             },
             Self::Boolean { high, low } => Self::Boolean {
                 low: f(low.negate(parent)),
                 high: f(high.negate(parent)),
             },
         }
+    }
+
+    /// Map range edges while preserving the reduced-ADD invariant that adjacent, equal children
+    /// are represented by a single edge.
+    fn map_ranges<T: Clone + Ord>(
+        edges: &SmallVec<(Ranges<T>, NodeId)>,
+        parent: NodeId,
+        mut f: impl FnMut(NodeId) -> NodeId,
+    ) -> SmallVec<(Ranges<T>, NodeId)> {
+        let mut mapped = SmallVec::new();
+        for (range, node) in edges {
+            let node = f(node.negate(parent));
+            match mapped.last_mut() {
+                Some((previous_range, previous_node))
+                    if *previous_node == node && can_conjoin(previous_range, range) =>
+                {
+                    *previous_range = previous_range.union(range);
+                }
+                _ => mapped.push((range.clone(), node)),
+            }
+        }
+        mapped
     }
 
     // Returns an iterator over all direct children of this node.
@@ -1968,6 +1997,47 @@ mod tests {
         assert_eq!(os_leq_bar, os_geq_bar);
         assert_eq!(m().and(os_geq_bar, os_leq_bar), os_geq_bar);
         assert_eq!(m().or(os_geq_bar, os_leq_bar), os_geq_bar);
+    }
+
+    #[test]
+    fn restrict_bounded_does_not_intern_complex_markers() {
+        let os_not_posix = expr("os_name != 'posix'");
+        let system_darwin = expr("platform_system == 'Darwin'");
+        let version = expr("platform_version != 'v681-2'");
+        let sys_darwin = expr("sys_platform == 'darwin'");
+        let system_linux = expr("platform_system == 'Linux'");
+
+        let mut interner = INTERNER.lock();
+        let first = interner.and(os_not_posix, system_darwin);
+        let second = interner.and(version, os_not_posix);
+        let third = interner.and(sys_darwin, system_linux);
+        let first_or_second = interner.or(first, second);
+        let mut value = interner.or(first_or_second, third);
+        drop(interner);
+
+        for index in 0..33 {
+            let value_extra = expr(&format!("extra == 'value-{index}'"));
+            value = INTERNER.lock().and(value, value_extra);
+        }
+
+        let system_windows = expr("platform_system == 'Windows'");
+        let version_eq = expr("platform_version == 'v681-2'");
+        let os_java = expr("os_name == 'java'");
+        let sys_win32 = expr("sys_platform == 'win32'");
+        let machine = expr("platform_machine == 'x86_64'");
+        let system_not_darwin = expr("platform_system != 'Darwin'");
+
+        let mut interner = INTERNER.lock();
+        let first = interner.and(system_windows, version_eq);
+        let second = interner.and(os_java, sys_win32);
+        let third = interner.and(machine, system_not_darwin);
+        let first_or_second = interner.or(first, second);
+        let assumption = interner.or(first_or_second, third);
+
+        let nodes_before = interner.state.unique.len();
+        let restricted = interner.restrict_bounded(value, assumption);
+        assert_eq!(interner.state.unique.len(), nodes_before);
+        assert_eq!(restricted, value);
     }
 
     #[test]

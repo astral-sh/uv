@@ -2013,6 +2013,27 @@ mod test {
             reconstructed.and(assumption);
             assert_eq!(reconstructed, expected);
         }
+
+        let marker = m("(os_name != 'posix' and platform_system == 'Darwin') or \
+             (platform_version != 'v681-2' and os_name != 'posix') or \
+             (sys_platform == 'darwin' and platform_system == 'Linux')");
+        let assumption = m(
+            "(platform_system == 'Windows' and platform_version == 'v681-2') or \
+             (os_name == 'java' and sys_platform == 'win32') or \
+             (platform_machine == 'x86_64' and platform_system != 'Darwin')",
+        );
+        let restricted = marker.restrict_bounded(assumption);
+        let mut expected = marker;
+        expected.and(assumption);
+        let mut reconstructed = restricted;
+        reconstructed.and(assumption);
+        assert_eq!(reconstructed, expected);
+        assert_eq!(
+            reconstructed,
+            m(&reconstructed
+                .try_to_string()
+                .expect("non-empty restricted marker")),
+        );
     }
 
     #[test]

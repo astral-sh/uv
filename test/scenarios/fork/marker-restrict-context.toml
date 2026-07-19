@@ -3,7 +3,9 @@ description = '''
 This scenario checks that dependency markers are simplified using the parent
 fork before creating child forks. The Linux branch selects two versions of
 `b` on complementary architecture and Python markers, while both dependencies
-also include a Darwin branch that cannot be reached from the Linux parent.
+also include a Darwin branch that cannot be reached from the Linux parent. It
+also contains two syntactically different `c` requirements that are both
+unconditional within the Linux parent and cannot provoke a fork.
 '''
 
 [resolver_options]
@@ -22,8 +24,13 @@ requires = [
 requires = [
   "b<2 ; (sys_platform == 'linux' and (platform_machine != 'x86_64' or python_version < '3.13')) or sys_platform == 'darwin'",
   "b>=2 ; (sys_platform == 'linux' and platform_machine == 'x86_64' and python_version >= '3.13') or sys_platform == 'darwin'",
+  "c>=1 ; sys_platform == 'linux'",
+  "c<3 ; sys_platform == 'linux' or sys_platform == 'darwin'",
 ]
 [packages.a.versions."2.0.0"]
 
 [packages.b.versions."1.0.0"]
 [packages.b.versions."2.0.0"]
+
+[packages.c.versions."1.0.0"]
+[packages.c.versions."2.0.0"]

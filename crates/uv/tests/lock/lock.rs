@@ -18,6 +18,51 @@ use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 #[cfg(feature = "test-universal")]
 use uv_test::{download_to_disk, venv_bin_path};
 
+/// A dependency that is unconditional within a parent fork must not be reported as a diverging
+/// package when a sibling dependency creates a real fork.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_contextual_fork_marker_trace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/marker-restrict-context.toml");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          "a<2 ; sys_platform == 'linux'",
+          "a>=2 ; sys_platform != 'linux'",
+        ]
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let output = context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::RUST_LOG, "uv_resolver=debug")
+        .arg("--verbose")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .output()?;
+    assert!(output.status.success());
+
+    let stderr = String::from_utf8(output.stderr)?;
+    let forks = stderr
+        .lines()
+        .filter(|line| line.contains("Splitting resolution on"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_snapshot!(forks, @"
+    DEBUG Splitting resolution on project==0.1.0 over a into 2 resolutions with separate markers
+    DEBUG Splitting resolution on a==1.0.0 over b into 2 resolutions with separate markers
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_wheel_registry() -> Result<()> {

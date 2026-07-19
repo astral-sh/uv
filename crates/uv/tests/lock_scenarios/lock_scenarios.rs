@@ -2634,7 +2634,9 @@ fn fork_marker_limited_inherit() -> Result<()> {
 /// This scenario checks that dependency markers are simplified using the parent
 /// fork before creating child forks. The Linux branch selects two versions of
 /// `b` on complementary architecture and Python markers, while both dependencies
-/// also include a Darwin branch that cannot be reached from the Linux parent.
+/// also include a Darwin branch that cannot be reached from the Linux parent. It
+/// also contains two syntactically different `c` requirements that are both
+/// unconditional within the Linux parent and cannot provoke a fork.
 ///
 ///
 /// ```text
@@ -2650,12 +2652,21 @@ fn fork_marker_limited_inherit() -> Result<()> {
 /// │   ├── a-1.0.0
 /// │   │   ├── requires b<2 ; (python_full_version < '3.13' and sys_platform == 'linux') or (platform_machine != 'x86_64' and sys_platform == 'linux') or sys_platform == 'darwin'
 /// │   │   │   └── satisfied by b-1.0.0
-/// │   │   └── requires b>=2 ; (python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux') or sys_platform == 'darwin'
-/// │   │       └── satisfied by b-2.0.0
+/// │   │   ├── requires b>=2 ; (python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux') or sys_platform == 'darwin'
+/// │   │   │   └── satisfied by b-2.0.0
+/// │   │   ├── requires c>=1 ; sys_platform == 'linux'
+/// │   │   │   ├── satisfied by c-1.0.0
+/// │   │   │   └── satisfied by c-2.0.0
+/// │   │   └── requires c<3 ; sys_platform == 'darwin' or sys_platform == 'linux'
+/// │   │       ├── satisfied by c-1.0.0
+/// │   │       └── satisfied by c-2.0.0
 /// │   └── a-2.0.0
-/// └── b
-///     ├── b-1.0.0
-///     └── b-2.0.0
+/// ├── b
+/// │   ├── b-1.0.0
+/// │   └── b-2.0.0
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0
 /// ```
 #[test]
 fn fork_marker_restrict_context() -> Result<()> {
@@ -2687,7 +2698,7 @@ fn fork_marker_restrict_context() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 6 packages in [TIME]
     "
     );
 
@@ -2717,10 +2728,11 @@ fn fork_marker_restrict_context() -> Result<()> {
         dependencies = [
             { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13' or platform_machine != 'x86_64'" },
             { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.13' and platform_machine == 'x86_64'" },
+            { name = "c" },
         ]
-        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:56b651e6dc2f66bd4b76142bf6c3b9ccd119d7dea6299779d53fb036e2ce43bb", upload-time = "2024-03-24T00:00:00Z" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:8e9a2869178130fa7e6208d30929b44d75a65c2e194fb5393a31540085f69131", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
-            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:02038cb16423a695b074aedd0e375db4b1e506b1f61e8d40c2ec889b14379ddf", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:e906d0697d7abe5265466fd65407ab87a7762ae991f961050b40da5295070d1c", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -2757,6 +2769,15 @@ fn fork_marker_restrict_context() -> Result<()> {
         sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:18fb09ba28eba255186405065e027093a6e952fa71eb565b4c46d619fdb60809", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/b-2.0.0-py3-none-any.whl", hash = "sha256:04cc57f7563029528b6d23283933b244b6f52ba1543fad54687c586d6e639fc4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0.tar.gz", hash = "sha256:72db9a21521acaa8ff10d0ce3bb4b68bc6b275bcb77bdb3debd95388f5120021", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-2.0.0-py3-none-any.whl", hash = "sha256:4a585f74490e3c09faafdb7df1ebb51d5e41c67b82ef08b5b5fd2f4c251b4b23", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
