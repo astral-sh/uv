@@ -562,6 +562,12 @@ impl InternerGuard<'_> {
 
     /// Returns a decision node representing the disjunction of two nodes.
     pub(crate) fn or(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
+        if xi.is_false() {
+            return yi;
+        }
+        if yi.is_false() || xi == yi {
+            return xi;
+        }
         let node = self.or_cached(xi, yi);
         self.finish(node)
     }
@@ -574,6 +580,12 @@ impl InternerGuard<'_> {
 
     /// Returns a decision node representing the conjunction of two nodes.
     pub(crate) fn and(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
+        if xi.is_true() {
+            return yi;
+        }
+        if yi.is_true() || xi == yi {
+            return xi;
+        }
         let node = self.and_cached(xi, yi);
         self.finish(node)
     }
@@ -696,15 +708,14 @@ impl InternerGuard<'_> {
             if projected.is_terminal() || !visited.insert(projected) {
                 continue;
             }
-
-            let node = self.shared.node(projected);
-            pending.extend(node.children.nodes().map(|child| child.negate(projected)));
-
             if !self.can_conflict(projected)
                 || self.shared.canonical_projection(projected).is_some()
             {
                 continue;
             }
+
+            let node = self.shared.node(projected);
+            pending.extend(node.children.nodes().map(|child| child.negate(projected)));
 
             let canonical = self.mask(projected, validity);
             self.shared.cache_canonical_projection(projected, canonical);
@@ -2874,6 +2885,54 @@ mod tests {
         assert!(interner.can_conflict(nested));
         assert!(interner.can_conflict(nested.not()));
         assert!(interner.finish(nested).is_false());
+    }
+
+    #[test]
+    fn cached_marker_combinations_preserve_non_conflicting_suffixes() {
+        let windows = expr("os_name == 'nt'");
+        let linux = expr("sys_platform == 'linux'");
+        let guard = expr("extra != 'cached-guard'");
+
+        let mut interner = INTERNER.lock();
+        let platform = interner.or(windows, linux);
+        let mut suffix = NodeId::FALSE;
+        for index in 0..64 {
+            let machine = interner.expression(
+                MarkerExpression::from_str(&format!("platform_machine == 'cached-{index}'"))
+                    .unwrap()
+                    .unwrap(),
+            );
+            let implementation = interner.expression(
+                MarkerExpression::from_str(&format!("implementation_name == 'cached-{index}'"))
+                    .unwrap()
+                    .unwrap(),
+            );
+            let extra = interner.expression(
+                MarkerExpression::from_str(&format!("extra == 'cached-{index}'"))
+                    .unwrap()
+                    .unwrap(),
+            );
+            let alternative = interner.and_cached(machine, implementation);
+            let alternative = interner.and_cached(alternative, extra);
+            suffix = interner.or_cached(suffix, alternative);
+        }
+        let marker = interner.and(platform, suffix);
+        let combined = interner.and(marker, guard);
+
+        let nodes = INTERNER.shared.nodes.count();
+        let cache = interner.state.cache.len();
+        let mask_cache = interner.state.mask_cache.len();
+        for _ in 0..32 {
+            assert_eq!(interner.and(marker, guard), combined);
+            assert_eq!(interner.and(marker, marker), marker);
+            assert_eq!(interner.and(marker, NodeId::TRUE), marker);
+            assert_eq!(interner.and(NodeId::TRUE, marker), marker);
+            assert_eq!(interner.or(marker, NodeId::FALSE), marker);
+            assert_eq!(interner.or(NodeId::FALSE, marker), marker);
+        }
+        assert_eq!(INTERNER.shared.nodes.count(), nodes);
+        assert_eq!(interner.state.cache.len(), cache);
+        assert_eq!(interner.state.mask_cache.len(), mask_cache);
     }
 
     #[test]
