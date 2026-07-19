@@ -1062,6 +1062,10 @@ pub enum ProjectCommand {
     /// When used in a project, the project environment will be created and updated before invoking
     /// the command.
     ///
+    /// By default, this environment is synced with development dependencies. To prevent development
+    /// dependencies from being installed (e.g., in a production environment), use the `--no-dev`
+    /// flag, use the `--no-sync` flag, or set `UV_NO_DEV=1`.
+    ///
     /// When used outside a project, if a virtual environment can be found in the current directory
     /// or a parent directory, the command will be run in that environment. Otherwise, the command
     /// will be run in the environment of the discovered interpreter.
