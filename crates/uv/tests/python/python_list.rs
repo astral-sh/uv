@@ -131,6 +131,359 @@ fn python_list() {
     ");
 }
 
+#[test]
+fn python_list_json() {
+    let mut context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace();
+
+    uv_snapshot!(context.filters(), context.python_list()
+    .arg("--output-format=json")
+    .env(EnvVars::UV_PYTHON_SEARCH_PATH, ""), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    []
+
+    ----- stderr -----
+    "###);
+
+    // We show all interpreters
+    uv_snapshot!(context.filters(), context.python_list().arg("--output-format=json"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+     {
+     "key": "cpython-3.12.[X]-[PLATFORM]",
+     "version": "3.12.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 12,
+     "patch": 10
+     },
+     "path": "[PYTHON-3.12]",
+     "symlink": "[PYTHON-3.12]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     },
+     {
+     "key": "cpython-3.11.[X]-[PLATFORM]",
+     "version": "3.11.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 11,
+     "patch": 11
+     },
+     "path": "[PYTHON-3.11]",
+     "symlink": "[PYTHON-3.11]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     }
+    ]
+
+    ----- stderr -----
+    "###);
+
+    // Request Python 3.12
+    uv_snapshot!(context.filters(), context.python_list()
+    .arg("--output-format=json")
+    .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+     {
+     "key": "cpython-3.12.[X]-[PLATFORM]",
+     "version": "3.12.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 12,
+     "patch": 10
+     },
+     "path": "[PYTHON-3.12]",
+     "symlink": "[PYTHON-3.12]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     }
+    ]
+
+    ----- stderr -----
+    "###);
+
+    // Request Python 3.11
+    uv_snapshot!(context.filters(), context.python_list()
+    .arg("--output-format=json")
+    .arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+     {
+     "key": "cpython-3.11.[X]-[PLATFORM]",
+     "version": "3.11.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 11,
+     "patch": 11
+     },
+     "path": "[PYTHON-3.11]",
+     "symlink": "[PYTHON-3.11]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     }
+    ]
+
+    ----- stderr -----
+    "###);
+
+    // Request CPython
+    uv_snapshot!(context.filters(), context.python_list()
+    .arg("--output-format=json")
+    .arg("cpython"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+     {
+     "key": "cpython-3.12.[X]-[PLATFORM]",
+     "version": "3.12.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 12,
+     "patch": 10
+     },
+     "path": "[PYTHON-3.12]",
+     "symlink": "[PYTHON-3.12]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     },
+     {
+     "key": "cpython-3.11.[X]-[PLATFORM]",
+     "version": "3.11.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 11,
+     "patch": 11
+     },
+     "path": "[PYTHON-3.11]",
+     "symlink": "[PYTHON-3.11]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     }
+    ]
+
+    ----- stderr -----
+    "###);
+
+    // Request CPython 3.12
+    uv_snapshot!(context.filters(), context.python_list()
+    .arg("--output-format=json")
+    .arg("cpython@3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+     {
+     "key": "cpython-3.12.[X]-[PLATFORM]",
+     "version": "3.12.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 12,
+     "patch": 10
+     },
+     "path": "[PYTHON-3.12]",
+     "symlink": "[PYTHON-3.12]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     }
+    ]
+
+    ----- stderr -----
+    "###);
+
+    // Request CPython 3.12 via partial key syntax
+    uv_snapshot!(context.filters(), context.python_list()
+    .arg("--output-format=json")
+    .arg("cpython-3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+     {
+     "key": "cpython-3.12.[X]-[PLATFORM]",
+     "version": "3.12.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 12,
+     "patch": 10
+     },
+     "path": "[PYTHON-3.12]",
+     "symlink": "[PYTHON-3.12]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     }
+    ]
+
+    ----- stderr -----
+    "###);
+
+    // Request CPython 3.12 for the current platform
+    let os = Os::from_env();
+    let arch = Arch::from_env();
+
+    uv_snapshot!(context.filters(), context.python_list()
+    .arg("--output-format=json")
+    .arg(format!("cpython-3.12-{os}-{arch}")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+     {
+     "key": "cpython-3.12.[X]-[PLATFORM]",
+     "version": "3.12.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 12,
+     "patch": 10
+     },
+     "path": "[PYTHON-3.12]",
+     "symlink": "[PYTHON-3.12]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     }
+    ]
+
+    ----- stderr -----
+    "###);
+
+    // Request PyPy (which should be missing)
+    uv_snapshot!(context.filters(), context.python_list()
+    .arg("--output-format=json")
+    .arg("pypy"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    []
+
+    ----- stderr -----
+    "###);
+
+    // Swap the order of the Python versions
+    context.python_versions.reverse();
+
+    uv_snapshot!(context.filters(), context.python_list().arg("--output-format=json"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+     {
+     "key": "cpython-3.12.[X]-[PLATFORM]",
+     "version": "3.12.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 12,
+     "patch": 10
+     },
+     "path": "[PYTHON-3.12]",
+     "symlink": "[PYTHON-3.12]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     },
+     {
+     "key": "cpython-3.11.[X]-[PLATFORM]",
+     "version": "3.11.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 11,
+     "patch": 11
+     },
+     "path": "[PYTHON-3.11]",
+     "symlink": "[PYTHON-3.11]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     }
+    ]
+
+    ----- stderr -----
+    "###);
+
+    // Request Python 3.11
+    uv_snapshot!(context.filters(), context.python_list()
+    .arg("--output-format=json")
+    .arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+     {
+     "key": "cpython-3.11.[X]-[PLATFORM]",
+     "version": "3.11.[X]",
+     "version_parts": {
+     "major": 3,
+     "minor": 11,
+     "patch": 11
+     },
+     "path": "[PYTHON-3.11]",
+     "symlink": "[PYTHON-3.11]",
+     "url": null,
+     "os": "linux",
+     "variant": "default",
+     "implementation": "cpython",
+     "arch": "x86_64",
+     "libc": "gnu"
+     }
+    ]
+
+    ----- stderr -----
+    "###);
+}
+
 #[cfg(unix)]
 #[test]
 fn python_list_ignores_noncritical_explicit_path_errors() -> Result<()> {
