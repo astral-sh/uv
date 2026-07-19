@@ -2224,6 +2224,20 @@ mod test {
         let assumption = m("sys_platform == 'linux' or python_version >= '3.12'");
         assert_eq!(marker.restrict(assumption), marker);
 
+        let marker = m(
+            "(extra != 'foo' and platform_system != 'NetBSD' and sys_platform != 'win32') or \
+             (os_name != 'posix' and sys_platform == 'ios')",
+        );
+        let assumption = m("(platform_system != 'NetBSD' or os_name == 'nt') and \
+             (sys_platform != 'wasi' or implementation_name == 'pypy')");
+        let simplified = marker.restrict(assumption);
+        assert_eq!(simplified.restrict(assumption), simplified);
+        let mut reconstructed = simplified;
+        reconstructed.and(assumption);
+        let mut expected = marker;
+        expected.and(assumption);
+        assert_eq!(reconstructed, expected);
+
         for (marker, assumption) in [
             ("python_version < '3.11'", "sys_platform == 'linux'"),
             ("sys_platform == 'linux'", "python_version < '3.11'"),
@@ -3412,6 +3426,41 @@ mod test {
         let custom_linux = m("os_name == 'custom' and sys_platform == 'linux'");
         assert!(freebsd.is_disjoint(custom_linux));
         assert!(custom_linux.is_disjoint(freebsd));
+
+        let scoped_linux = m(
+            "(python_version != '3.8' and sys_platform == 'linux' and extra != 'foo') or \
+             (os_name == 'posix' and sys_platform == 'linux' and extra != 'foo')",
+        );
+        assert!(scoped_linux.is_disjoint(freebsd));
+        assert!(freebsd.is_disjoint(scoped_linux));
+
+        let os_name = m("(os_name == 'nt' or sys_platform == 'linux') and extra == 'foo'");
+        let os_name_with_invalid = m(
+            "((os_name == 'nt' or sys_platform == 'linux') and extra == 'foo') or \
+             (sys_platform == 'linux' and platform_system == 'FreeBSD' and extra != 'foo')",
+        );
+        assert_eq!(os_name, os_name_with_invalid);
+        assert_eq!(
+            os_name.cmp(&os_name_with_invalid),
+            std::cmp::Ordering::Equal
+        );
+        assert_eq!(HashSet::from([os_name, os_name_with_invalid]).len(), 1);
+
+        let platform_system =
+            m("(sys_platform == 'linux' or platform_system == 'FreeBSD') and extra == 'foo'");
+        let platform_system_with_invalid = m(
+            "((sys_platform == 'linux' or platform_system == 'FreeBSD') and extra == 'foo') or \
+             (os_name == 'nt' and sys_platform == 'linux' and extra != 'foo')",
+        );
+        assert_eq!(platform_system, platform_system_with_invalid);
+        assert_eq!(
+            platform_system.cmp(&platform_system_with_invalid),
+            std::cmp::Ordering::Equal
+        );
+        assert_eq!(
+            HashSet::from([platform_system, platform_system_with_invalid]).len(),
+            1
+        );
 
         let pypy = m("implementation_name == 'pypy'");
         let pypy_freebsd_or_windows = m(

@@ -101,6 +101,8 @@ struct InternedNode {
 const OS_NAME_VARIABLE: u8 = 1;
 const SYS_PLATFORM_VARIABLE: u8 = 1 << 1;
 const PLATFORM_SYSTEM_VARIABLE: u8 = 1 << 2;
+const OS_NAME_DOMAIN: u8 = 1;
+const PLATFORM_SYSTEM_DOMAIN: u8 = 1 << 1;
 const BSD_SYSTEMS: &[&str] = &["FreeBSD", "NetBSD", "OpenBSD", "SunOS"];
 const BSD_AND_IOS_SYSTEMS: &[&str] = &["FreeBSD", "NetBSD", "OpenBSD", "SunOS", "iOS", "iPadOS"];
 
@@ -115,8 +117,8 @@ struct InternerState {
     /// Note that `OR` is implemented in terms of `AND`.
     cache: FxHashMap<(NodeId, NodeId), NodeId>,
 
-    /// The [`NodeId`] for the disjunction of known, mutually incompatible markers.
-    exclusions: Option<NodeId>,
+    /// The [`NodeId`]s for the disjunction of known, mutually incompatible markers.
+    exclusions: Option<Exclusions>,
 
     /// A cache for applying a validity domain to a marker tree.
     mask_cache: FxHashMap<(NodeId, NodeId), NodeId>,
@@ -126,6 +128,13 @@ struct InternerState {
 
     /// A cache for disjointness checks between two marker trees.
     disjointness_cache: FxHashMap<(NodeId, NodeId), bool>,
+}
+
+/// The known platform exclusions, split by the variables they constrain.
+struct Exclusions {
+    all: NodeId,
+    os_name: NodeId,
+    platform_system: NodeId,
 }
 
 impl InternerShared {
@@ -146,6 +155,40 @@ impl InternerShared {
         let systems = OS_NAME_VARIABLE | PLATFORM_SYSTEM_VARIABLE;
         (left & SYS_PLATFORM_VARIABLE != 0 && right & systems != 0)
             || (right & SYS_PLATFORM_VARIABLE != 0 && left & systems != 0)
+    }
+
+    /// Returns `true` if combining two trees introduces an exclusion domain neither covers.
+    fn trees_require_validity(&self, left: NodeId, right: NodeId) -> bool {
+        let left_variables = self.conflicting_variables(left);
+        let right_variables = self.conflicting_variables(right);
+        let left_domain = if self.can_conflict(left) {
+            Self::required_domain(left_variables)
+        } else {
+            0
+        };
+        let right_domain = if self.can_conflict(right) {
+            Self::required_domain(right_variables)
+        } else {
+            0
+        };
+        let covered = left_domain | right_domain;
+        Self::required_domain(left_variables | right_variables) & !covered != 0
+    }
+
+    /// Returns the exclusion domains required by the given conflicting variables.
+    fn required_domain(variables: u8) -> u8 {
+        let mut domain = 0;
+        if variables & (OS_NAME_VARIABLE | SYS_PLATFORM_VARIABLE)
+            == OS_NAME_VARIABLE | SYS_PLATFORM_VARIABLE
+        {
+            domain |= OS_NAME_DOMAIN;
+        }
+        if variables & (SYS_PLATFORM_VARIABLE | PLATFORM_SYSTEM_VARIABLE)
+            == SYS_PLATFORM_VARIABLE | PLATFORM_SYSTEM_VARIABLE
+        {
+            domain |= PLATFORM_SYSTEM_DOMAIN;
+        }
+        domain
     }
 
     /// Returns the conflicting variables reachable from a marker tree.
@@ -642,7 +685,7 @@ impl InternerGuard<'_> {
         if !self.can_conflict(node) {
             return self.coalesce_boolean(node);
         }
-        let validity = self.exclusions().not();
+        let validity = self.exclusions_for(node).not();
         let masked = self.mask(node, validity);
         let canonical = if masked == self.mask(NodeId::TRUE, validity) {
             NodeId::TRUE
@@ -657,7 +700,8 @@ impl InternerGuard<'_> {
             if !self.can_conflict(projected) {
                 projected
             } else {
-                self.mask(projected, validity)
+                let projected_validity = self.exclusions_for(projected).not();
+                self.mask(projected, projected_validity)
             }
         };
         let projected = self.project(canonical);
@@ -977,9 +1021,9 @@ impl InternerGuard<'_> {
             return true;
         }
 
-        let disjoint = if trees_conflict && !left_can_conflict && !right_can_conflict {
-            // Boolean platform predicates remain unmasked until they are combined. Account
-            // for the validity domain here without materializing their conjunction.
+        let disjoint = if trees_conflict && self.shared.trees_require_validity(xi, yi) {
+            // Combining platform predicates can introduce an exclusion domain that neither
+            // operand covers. Account for it without materializing their conjunction.
             let validity = self.exclusions().not();
             self.disjointness_under_validity(xi, yi, validity)
         } else {
@@ -1171,6 +1215,16 @@ impl InternerGuard<'_> {
     /// outside of `assumption` is unspecified, which lets us eliminate decisions that are only
     /// needed to restate the assumption.
     pub(crate) fn restrict(&mut self, value: NodeId, assumption: NodeId) -> NodeId {
+        let variables = self.shared.conflicting_variables(value)
+            | self.shared.conflicting_variables(assumption);
+        let assumption = if InternerShared::required_domain(variables)
+            == OS_NAME_DOMAIN | PLATFORM_SYSTEM_DOMAIN
+        {
+            let validity = self.exclusions().not();
+            self.and_cached(assumption, validity)
+        } else {
+            assumption
+        };
         let mut cache = FxHashMap::default();
         self.restrict_cached(value, assumption, &mut cache)
     }
@@ -1617,8 +1671,8 @@ impl InternerGuard<'_> {
             node
         }
 
-        if let Some(exclusions) = self.state.exclusions {
-            return exclusions;
+        if let Some(exclusions) = &self.state.exclusions {
+            return exclusions.all;
         }
         let mut tree = NodeId::FALSE;
         // These operations omit known-incompatibility checks, so their results must not be reused
@@ -1715,12 +1769,18 @@ impl InternerGuard<'_> {
         // Pairs of `os_name` and `sys_platform` that are known to be incompatible.
         //
         // For example: `os_name == 'nt' and sys_platform == 'darwin'`
-        let mut pairs = vec![
+        let os_name_pairs = [
             (os_name_nt, sys_platform_linux),
             (os_name_nt, sys_platform_darwin),
             (os_name_nt, sys_platform_ios),
             (os_name_posix, sys_platform_win32),
         ];
+        for (left, right) in os_name_pairs {
+            let conjunction = conjunction(self, &mut cache, left, right);
+            tree = disjunction(self, &mut cache, tree, conjunction);
+        }
+        let os_name = tree;
+        tree = NodeId::FALSE;
 
         // Pairs of `platform_system` and `sys_platform` that are known to be incompatible.
         //
@@ -1751,17 +1811,34 @@ impl InternerGuard<'_> {
                 {
                     continue;
                 }
-                pairs.push((platform_system, sys_platform));
+                let conjunction = conjunction(self, &mut cache, platform_system, sys_platform);
+                tree = disjunction(self, &mut cache, tree, conjunction);
             }
         }
 
-        for (a, b) in pairs {
-            let a_and_b = conjunction(self, &mut cache, a, b);
-            tree = disjunction(self, &mut cache, tree, a_and_b);
-        }
+        let platform_system = tree;
+        let all = disjunction(self, &mut cache, os_name, platform_system);
 
-        self.state.exclusions = Some(tree);
-        tree
+        self.state.exclusions = Some(Exclusions {
+            all,
+            os_name,
+            platform_system,
+        });
+        all
+    }
+
+    /// The exclusions relevant to the conflicting variables reachable from `node`.
+    fn exclusions_for(&mut self, node: NodeId) -> NodeId {
+        self.exclusions();
+        let Some(exclusions) = &self.state.exclusions else {
+            return NodeId::FALSE;
+        };
+        let domain = InternerShared::required_domain(self.shared.conflicting_variables(node));
+        match domain {
+            OS_NAME_DOMAIN => exclusions.os_name,
+            PLATFORM_SYSTEM_DOMAIN => exclusions.platform_system,
+            _ => exclusions.all,
+        }
     }
 }
 
@@ -2610,7 +2687,9 @@ impl fmt::Debug for NodeId {
 
 #[cfg(test)]
 mod tests {
-    use super::{Edges, INTERNER, NodeId};
+    use super::{
+        Edges, INTERNER, NodeId, OS_NAME_VARIABLE, PLATFORM_SYSTEM_VARIABLE, SYS_PLATFORM_VARIABLE,
+    };
     use crate::MarkerExpression;
 
     fn expr(s: &str) -> NodeId {
@@ -2833,6 +2912,54 @@ mod tests {
         assert!(interner.can_conflict(nested));
         assert!(interner.can_conflict(nested.not()));
         assert!(interner.finish(nested).is_false());
+    }
+
+    #[test]
+    fn markers_only_expand_relevant_exclusion_domains() {
+        let mut interner = INTERNER.lock();
+        let windows = interner.expression_raw(
+            MarkerExpression::from_str("os_name == 'nt'")
+                .unwrap()
+                .unwrap(),
+        );
+        let linux = interner.expression_raw(
+            MarkerExpression::from_str("sys_platform == 'linux'")
+                .unwrap()
+                .unwrap(),
+        );
+        let freebsd = interner.expression_raw(
+            MarkerExpression::from_str("platform_system == 'FreeBSD'")
+                .unwrap()
+                .unwrap(),
+        );
+        let extra = interner.expression_raw(
+            MarkerExpression::from_str("extra != 'scoped-extra'")
+                .unwrap()
+                .unwrap(),
+        );
+
+        let os_name = interner.or_cached(windows, linux);
+        let os_name = interner.and_cached(os_name, extra);
+        let os_name = interner.finish(os_name);
+        assert_eq!(
+            interner.shared.conflicting_variables(os_name),
+            OS_NAME_VARIABLE | SYS_PLATFORM_VARIABLE
+        );
+
+        let platform_system = interner.or_cached(linux, freebsd);
+        let platform_system = interner.and_cached(platform_system, extra);
+        let platform_system = interner.finish(platform_system);
+        assert_eq!(
+            interner.shared.conflicting_variables(platform_system),
+            SYS_PLATFORM_VARIABLE | PLATFORM_SYSTEM_VARIABLE
+        );
+
+        let all = interner.or_cached(os_name, platform_system);
+        let all = interner.finish(all);
+        assert_eq!(
+            interner.shared.conflicting_variables(all),
+            OS_NAME_VARIABLE | SYS_PLATFORM_VARIABLE | PLATFORM_SYSTEM_VARIABLE
+        );
     }
 
     #[test]
