@@ -311,9 +311,15 @@ impl Cache {
     ///
     /// The caller must hold the main cache lock while claiming, so that a removal operation
     /// (which requires the exclusive main lock) cannot run between the decision to use an
-    /// entry and the claim. Claims are best-effort: paths outside the cache are ignored, and
-    /// failures are logged and ignored.
-    fn claim_in_use<'a>(&self, paths: impl IntoIterator<Item = &'a Path>) -> Vec<LockedFile> {
+    /// entry and the claim. Paths outside the cache are ignored.
+    ///
+    /// Returns `None` if any cache-resident path could not be claimed (e.g., its lock is held
+    /// exclusively by a concurrent forced removal); the caller must then retain the main lock,
+    /// since the unclaimed entry would otherwise be unprotected.
+    fn claim_in_use<'a>(
+        &self,
+        paths: impl IntoIterator<Item = &'a Path>,
+    ) -> Option<Vec<LockedFile>> {
         /// The number of times to retry a claim whose lock file was unlinked mid-acquisition.
         const MAX_ATTEMPTS: usize = 4;
 
@@ -325,7 +331,7 @@ impl Cache {
             if let Some(parent) = lock_path.parent() {
                 if let Err(err) = create_in_use_lock_dir(parent, &self.root) {
                     warn!("Failed to create in-use lock directory: {err}");
-                    continue;
+                    return None;
                 }
             }
             let mut attempts = 0;
@@ -336,8 +342,7 @@ impl Cache {
                     lock_path.simplified_display(),
                 ) else {
                     // The lock is held exclusively by a removal operation (e.g., a concurrent
-                    // `uv cache prune --force`); the entry may be removed out from under us,
-                    // as it would have been before in-use locks existed.
+                    // `uv cache prune --force`).
                     break false;
                 };
                 // A concurrent forced removal (which doesn't hold the main lock) may have
@@ -357,9 +362,10 @@ impl Cache {
                     "Failed to mark cache entry as in use: `{}`",
                     lock_path.simplified_display()
                 );
+                return None;
             }
         }
-        claims
+        Some(claims)
     }
 
     /// Claim the cache entries a child process runs from as in use, then release the main
@@ -387,7 +393,13 @@ impl Cache {
         if !uv_preview::try_is_enabled(PreviewFeature::CacheAutoprune).unwrap_or(false) {
             return Vec::new();
         }
-        let claims = self.claim_in_use(paths);
+        // If any entry could not be claimed, retain the main lock: it protects the unclaimed
+        // entry (as it did before in-use locks existed), at the cost of blocking cache
+        // maintenance for this process's lifetime.
+        let Some(claims) = self.claim_in_use(paths) else {
+            debug!("Retaining the main cache lock: not all cache entries could be claimed");
+            return Vec::new();
+        };
         if let Some(lock_file) = &self.lock_file {
             lock_file.release();
         }
@@ -940,7 +952,7 @@ impl Cache {
             &archive_root,
             environment_archives,
             &mut references,
-        );
+        )?;
 
         Ok(references)
     }
@@ -1065,15 +1077,33 @@ impl Cache {
         // to paths outside the cache.
         let archive_root = fs_err::canonicalize(&self.root)?.join(CacheBucket::Archive.to_str());
 
-        // Remove any archives that are no longer referenced, unless they are in use by a
-        // running process.
+        // Collect references from within in-use environments (e.g., site-packages symlinks
+        // into wheel archives under `--link-mode=symlink`), so that archives a running child
+        // depends on are retained even after the package's bucket links are removed.
         let in_use = self.in_use_entries(CacheBucket::Archive)?;
+        let in_use_environments = self.in_use_entries(CacheBucket::Environments)?;
+        let mut internal_references = FxHashMap::default();
+        let environments_root = self.bucket(CacheBucket::Environments);
+        let in_use_dirs = in_use.iter().map(|entry| archive_root.join(entry)).chain(
+            in_use_environments
+                .iter()
+                .map(|entry| environments_root.join(entry)),
+        );
+        collect_environment_archive_references(
+            &archive_root,
+            in_use_dirs,
+            &mut internal_references,
+        )?;
+
+        // Remove any archives that are no longer referenced, unless they are in use by a
+        // running process (or referenced from within an in-use environment).
         for (target, references) in references {
             if target.starts_with(&archive_root) && references.iter().all(|path| !path.exists()) {
                 if target
                     .file_name()
                     .and_then(|file_name| file_name.to_str())
                     .is_some_and(|file_name| in_use.contains(file_name))
+                    || internal_references.contains_key(&target)
                 {
                     debug!("Retaining in-use cache entry: {}", target.display());
                     continue;
@@ -1224,19 +1254,22 @@ impl Cache {
 
         // Fourth, remove any unused archives (by searching for archives that are not symlinked),
         // except those that are in use by a running process (e.g., a cached environment that a
-        // `uv run`-launched process is running from). In-use environment archives are walked
-        // for internal symlinks (e.g., under `--link-mode=symlink`), so the wheel archives a
-        // running child's environment depends on are retained as well.
+        // `uv run`-launched process is running from). In-use environments — both environment
+        // archives and environments resident in the environments bucket (e.g., script
+        // environments) — are walked for internal symlinks (e.g., under `--link-mode=symlink`),
+        // so the wheel archives a running child's environment depends on are retained as well.
         let mut references = self.find_archive_references()?;
         let in_use = self.in_use_entries(CacheBucket::Archive)?;
-        if !in_use.is_empty()
+        if (!in_use.is_empty() || !in_use_environments.is_empty())
             && let Ok(archive_root) = fs_err::canonicalize(self.bucket(CacheBucket::Archive))
         {
-            let in_use_archives = in_use
-                .iter()
-                .map(|entry| archive_root.join(entry))
-                .collect();
-            collect_environment_archive_references(&archive_root, in_use_archives, &mut references);
+            let environments_root = self.bucket(CacheBucket::Environments);
+            let in_use_dirs = in_use.iter().map(|entry| archive_root.join(entry)).chain(
+                in_use_environments
+                    .iter()
+                    .map(|entry| environments_root.join(entry)),
+            );
+            collect_environment_archive_references(&archive_root, in_use_dirs, &mut references)?;
         }
         summary += self.remove_unreferenced_archives(&references, &in_use)?;
 
@@ -1529,34 +1562,34 @@ fn create_in_use_lock_dir(lock_dir: &Path, root: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// Collect references arising from symlinks within the given environment archives (e.g., an
+/// Collect references arising from symlinks within the given environment directories (e.g., an
 /// environment's site-packages symlinks into wheel archives under `--link-mode=symlink`),
 /// normalized to top-level archive entries.
 ///
 /// Wheel archives contain no further archive references, so a single level of indirection
 /// suffices.
+///
+/// Fails closed: a traversal error is an error (which aborts the removal operation), not an
+/// incomplete reference set, since the set guards against removal. Dangling symlinks are
+/// tolerated, since they contribute no reference.
 fn collect_environment_archive_references(
     archive_root: &Path,
-    environment_archives: FxHashSet<PathBuf>,
+    environment_dirs: impl IntoIterator<Item = PathBuf>,
     references: &mut FxHashMap<PathBuf, Vec<PathBuf>>,
-) {
-    for archive in environment_archives {
-        if !archive.is_dir() {
+) -> Result<(), io::Error> {
+    for dir in environment_dirs {
+        if !dir.is_dir() {
             continue;
         }
-        for entry in walkdir::WalkDir::new(&archive) {
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(err) => {
-                    debug!("Failed to walk cached environment: {err}");
-                    continue;
-                }
-            };
+        for entry in walkdir::WalkDir::new(&dir) {
+            let entry = entry?;
             if !entry.path_is_symlink() {
                 continue;
             }
-            let Ok(inner) = fs_err::canonicalize(entry.path()) else {
-                continue;
+            let inner = match fs_err::canonicalize(entry.path()) {
+                Ok(inner) => inner,
+                Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                Err(err) => return Err(err),
             };
             let Some(inner) = archive_entry(archive_root, &inner) else {
                 continue;
@@ -1567,6 +1600,7 @@ fn collect_environment_archive_references(
                 .push(entry.path().to_path_buf());
         }
     }
+    Ok(())
 }
 
 /// Returns the top-level entry in the archive bucket that contains `target`, if any.
@@ -2420,7 +2454,9 @@ mod tests {
         fs_err::write(dangling.join("payload.txt"), "payload").unwrap();
 
         let cache = Cache::from_path(cache_root.path());
-        let claims = cache.claim_in_use(std::iter::once(environment.as_path()));
+        let claims = cache
+            .claim_in_use(std::iter::once(environment.as_path()))
+            .unwrap();
         assert_eq!(claims.len(), 1);
 
         let summary = cache.prune_unreferenced_archives().unwrap();
@@ -2452,24 +2488,27 @@ mod tests {
         let in_use_archive = archives.join("in-use-environment");
         let other_archive = archives.join("other-environment");
 
-        // Two environment links; only the first archive is claimed.
+        // Two environments, each linking to its own archive; only the first is claimed.
         fs_err::create_dir_all(&in_use_archive).unwrap();
         fs_err::write(in_use_archive.join("payload.txt"), "payload").unwrap();
         fs_err::create_dir_all(&other_archive).unwrap();
         fs_err::write(other_archive.join("payload.txt"), "payload").unwrap();
-        fs_err::create_dir_all(environments.join("digest")).unwrap();
-        fs_err::os::unix::fs::symlink(&in_use_archive, environments.join("digest").join("a"))
+        fs_err::create_dir_all(environments.join("digest-a")).unwrap();
+        fs_err::os::unix::fs::symlink(&in_use_archive, environments.join("digest-a").join("link"))
             .unwrap();
-        fs_err::os::unix::fs::symlink(&other_archive, environments.join("digest").join("b"))
+        fs_err::create_dir_all(environments.join("digest-b")).unwrap();
+        fs_err::os::unix::fs::symlink(&other_archive, environments.join("digest-b").join("link"))
             .unwrap();
 
         let cache = Cache::from_path(cache_root.path());
         // Claim through the environments-bucket path, as `uv run` does for script and
         // centralized environments, and through the archive path, as for cached environments.
-        let claims = cache.claim_in_use([
-            environments.join("digest").as_path(),
-            in_use_archive.as_path(),
-        ]);
+        let claims = cache
+            .claim_in_use([
+                environments.join("digest-a").as_path(),
+                in_use_archive.as_path(),
+            ])
+            .unwrap();
         assert_eq!(claims.len(), 2);
 
         let summary = cache.prune(false).unwrap();
@@ -2477,8 +2516,9 @@ mod tests {
         // The claimed environment directory and archive are retained; the unclaimed
         // environment is removed along with its archive.
         assert!(summary.num_files > 0);
-        assert!(environments.join("digest").exists());
+        assert!(environments.join("digest-a").exists());
         assert!(in_use_archive.join("payload.txt").is_file());
+        assert!(!environments.join("digest-b").exists());
         assert!(!other_archive.exists());
     }
 
@@ -2506,13 +2546,105 @@ mod tests {
             .unwrap();
 
         let cache = Cache::from_path(cache_root.path());
-        let claims = cache.claim_in_use(std::iter::once(environment.as_path()));
+        let claims = cache
+            .claim_in_use(std::iter::once(environment.as_path()))
+            .unwrap();
         assert_eq!(claims.len(), 1);
 
         cache.prune(false).unwrap();
 
         assert!(environment.exists());
         assert!(wheel.join("payload.txt").is_file());
+    }
+
+    /// `uv cache prune` must retain the wheel archives referenced by the internal symlinks of
+    /// an in-use environment resident in the environments bucket (e.g., a script environment
+    /// under `--link-mode=symlink`), even when nothing else references them.
+    #[test]
+    #[cfg(unix)]
+    fn prune_retains_in_use_environment_internal_references() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let archives = cache_root.path().join(CacheBucket::Archive.to_str());
+        let environments = cache_root.path().join(CacheBucket::Environments.to_str());
+        let environment = environments.join("digest");
+        let wheel = archives.join("wheel");
+
+        // A script environment (a real directory in the environments bucket) whose
+        // site-packages symlink into a wheel archive that nothing else references.
+        fs_err::create_dir_all(&wheel).unwrap();
+        fs_err::write(wheel.join("payload.txt"), "payload").unwrap();
+        let site_packages = environment.join("lib").join("site-packages");
+        fs_err::create_dir_all(&site_packages).unwrap();
+        fs_err::os::unix::fs::symlink(wheel.join("payload.txt"), site_packages.join("module.py"))
+            .unwrap();
+
+        let cache = Cache::from_path(cache_root.path());
+        let claims = cache
+            .claim_in_use(std::iter::once(environment.as_path()))
+            .unwrap();
+        assert_eq!(claims.len(), 1);
+
+        cache.prune(true).unwrap();
+
+        assert!(environment.exists());
+        assert!(wheel.join("payload.txt").is_file());
+
+        // Once the claim is released, both are removed.
+        drop(claims);
+        cache.prune(true).unwrap();
+        assert!(!environment.exists());
+        assert!(!wheel.exists());
+    }
+
+    /// Package-scoped removal (`uv cache clean <package>`) must retain archives referenced by
+    /// an in-use environment's internal symlinks, even after the package's bucket links are
+    /// removed.
+    #[test]
+    #[cfg(unix)]
+    fn remove_retains_in_use_environment_internal_references() {
+        use std::str::FromStr;
+
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let archives = cache_root.path().join(CacheBucket::Archive.to_str());
+        let environments = cache_root.path().join(CacheBucket::Environments.to_str());
+        let wheels = cache_root.path().join(CacheBucket::Wheels.to_str());
+        let environment = environments.join("digest");
+        let wheel = archives.join("wheel");
+
+        // A wheel archive linked from the wheels bucket for `anyio`, and also referenced from
+        // within an in-use script environment.
+        fs_err::create_dir_all(&wheel).unwrap();
+        fs_err::write(wheel.join("payload.txt"), "payload").unwrap();
+        fs_err::create_dir_all(wheels.join("pypi").join("anyio")).unwrap();
+        fs_err::os::unix::fs::symlink(&wheel, wheels.join("pypi").join("anyio").join("link"))
+            .unwrap();
+        let site_packages = environment.join("lib").join("site-packages");
+        fs_err::create_dir_all(&site_packages).unwrap();
+        fs_err::os::unix::fs::symlink(wheel.join("payload.txt"), site_packages.join("module.py"))
+            .unwrap();
+
+        let cache = Cache::from_path(cache_root.path());
+        let claims = cache
+            .claim_in_use(std::iter::once(environment.as_path()))
+            .unwrap();
+        assert_eq!(claims.len(), 1);
+
+        let name = uv_normalize::PackageName::from_str("anyio").unwrap();
+        cache.remove(&name).unwrap();
+
+        // The bucket link is gone, but the archive survives via the in-use environment's
+        // internal reference.
+        assert!(!wheels.join("pypi").join("anyio").exists());
+        assert!(wheel.join("payload.txt").is_file());
+
+        // Once the claim is released, a prune deletes the now-unreferenced archive.
+        drop(claims);
+        cache.prune(false).unwrap();
+        assert!(!wheel.exists());
     }
 
     /// `uv cache prune` must retain an outdated (non-current) bucket directory while a running
@@ -2566,11 +2698,13 @@ mod tests {
             .join("entry");
         fs_err::create_dir_all(locks_entry.parent().unwrap()).unwrap();
         fs_err::write(&locks_entry, []).unwrap();
-        let claims = cache.claim_in_use([
-            outside.path().join("dir").as_path(),
-            cache_root.path(),
-            locks_entry.as_path(),
-        ]);
+        let claims = cache
+            .claim_in_use([
+                outside.path().join("dir").as_path(),
+                cache_root.path(),
+                locks_entry.as_path(),
+            ])
+            .unwrap();
         assert_eq!(claims.len(), 0);
 
         // A released claim leaves a lock file behind; once the cache entry is gone, a removal
@@ -2580,7 +2714,9 @@ mod tests {
             .join(CacheBucket::Archive.to_str())
             .join("entry");
         fs_err::create_dir_all(&archive).unwrap();
-        let claims = cache.claim_in_use(std::iter::once(archive.as_path()));
+        let claims = cache
+            .claim_in_use(std::iter::once(archive.as_path()))
+            .unwrap();
         assert_eq!(claims.len(), 1);
         drop(claims);
 
