@@ -1280,6 +1280,12 @@ impl MarkerTree {
         Self(INTERNER.lock().restrict(self.0, assumption.0))
     }
 
+    /// Restrict this marker like [`Self::restrict`] without increasing the size of its tree.
+    #[must_use]
+    pub fn restrict_bounded(self, assumption: Self) -> Self {
+        Self(INTERNER.lock().restrict_bounded(self.0, assumption.0))
+    }
+
     /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
     ///
     /// Any `extra` markers that are always `true` given the provided extras will be removed.
@@ -1968,6 +1974,7 @@ mod test {
 
         let simplified = marker.restrict(environment);
         assert_eq!(simplified, m("python_version < '3.11'"));
+        assert_eq!(marker.restrict_bounded(environment), simplified);
 
         let mut reconstructed = simplified;
         reconstructed.and(environment);
@@ -1977,6 +1984,11 @@ mod test {
         let marker = m("python_version >= '3.12'");
         let assumption = m("sys_platform == 'linux' or python_version >= '3.12'");
         assert_eq!(marker.restrict(assumption), marker);
+
+        let marker = m("python_version >= '3.10' and python_version < '3.13'");
+        let assumption = m("python_version >= '3.10'");
+        assert_eq!(marker.restrict(assumption), m("python_version < '3.13'"));
+        assert_eq!(marker.restrict_bounded(assumption), marker);
 
         for (marker, assumption) in [
             ("python_version < '3.11'", "sys_platform == 'linux'"),

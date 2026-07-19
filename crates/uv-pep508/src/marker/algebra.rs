@@ -52,7 +52,7 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
 use itertools::{Either, Itertools};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
 use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
@@ -561,6 +561,35 @@ impl InternerGuard<'_> {
     pub(crate) fn restrict(&mut self, value: NodeId, assumption: NodeId) -> NodeId {
         let mut cache = FxHashMap::default();
         self.restrict_cached(value, assumption, &mut cache)
+    }
+
+    /// Restrict a marker without increasing the size of its decision diagram.
+    pub(crate) fn restrict_bounded(&mut self, value: NodeId, assumption: NodeId) -> NodeId {
+        if assumption.is_true() || matches!(value, NodeId::TRUE | NodeId::FALSE) {
+            return value;
+        }
+
+        let restricted = self.restrict(value, assumption);
+        if self.node_count(restricted) < self.node_count(value) {
+            restricted
+        } else {
+            value
+        }
+    }
+
+    /// Return the number of unique decision nodes reachable from `node`.
+    fn node_count(&self, node: NodeId) -> usize {
+        let mut seen = FxHashSet::default();
+        let mut pending = vec![node];
+        while let Some(node) = pending.pop() {
+            if matches!(node, NodeId::TRUE | NodeId::FALSE) {
+                continue;
+            }
+            if seen.insert(node.index()) {
+                pending.extend(self.shared.node(node).children.nodes());
+            }
+        }
+        seen.len()
     }
 
     fn restrict_cached(
