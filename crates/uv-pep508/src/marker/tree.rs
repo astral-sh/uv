@@ -1480,20 +1480,30 @@ impl MarkerTree {
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
         let mut interner = INTERNER.lock();
-        let node = interner.restrict_by(self.0, &|var| match var {
+        let value = self.project_if_needed(&mut interner);
+        let node = interner.restrict_by(value, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(true),
             _ => None,
         });
-        Self(interner.finish(node))
+        if node == value {
+            self
+        } else {
+            Self(interner.finish(node))
+        }
     }
 
     fn simplify_not_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
         let mut interner = INTERNER.lock();
-        let node = interner.restrict_by(self.0, &|var| match var {
+        let value = self.project_if_needed(&mut interner);
+        let node = interner.restrict_by(value, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(false),
             _ => None,
         });
-        Self(interner.finish(node))
+        if node == value {
+            self
+        } else {
+            Self(interner.finish(node))
+        }
     }
 }
 
@@ -2618,6 +2628,14 @@ mod test {
 
     #[test]
     fn test_simplify_extras() {
+        let platform = m(
+            "(os_name == 'nt' or sys_platform == 'linux') and platform_machine == 'simplify-extra-machine'",
+        );
+        assert_eq!(
+            platform.simplify_extras(&[ExtraName::from_str("dev").unwrap()]),
+            platform
+        );
+
         // Given `os_name == "nt" and extra == "dev"`, simplify to `os_name == "nt"`.
         let markers = MarkerTree::from_str(r#"os_name == "nt" and extra == "dev""#).unwrap();
         let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
@@ -2669,6 +2687,14 @@ mod test {
 
     #[test]
     fn test_simplify_not_extras() {
+        let platform = m(
+            "(os_name == 'nt' or sys_platform == 'linux') and platform_machine == 'simplify-not-extra-machine'",
+        );
+        assert_eq!(
+            platform.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]),
+            platform
+        );
+
         // Given `os_name == "nt" and extra != "dev"`, simplify to `os_name == "nt"`.
         let markers = MarkerTree::from_str(r#"os_name == "nt" and extra != "dev""#).unwrap();
         let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
