@@ -47,13 +47,15 @@
 
 use std::cmp::{Ordering, min};
 use std::fmt;
+use std::hash::BuildHasher;
 use std::ops::Bound;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
+use hashbrown::HashTable;
 use itertools::{Either, Itertools};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use version_ranges::Ranges;
 
 use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
@@ -94,7 +96,6 @@ struct InternedNode {
     projections: [AtomicUsize; 2],
     can_conflict: bool,
     conflicting_variables: u8,
-    contains_dont_care: bool,
 }
 
 const OS_NAME_VARIABLE: u8 = 1;
@@ -108,7 +109,7 @@ const BSD_AND_IOS_SYSTEMS: &[&str] = &["FreeBSD", "NetBSD", "OpenBSD", "SunOS", 
 struct InternerState {
     /// A map from a [`Node`] to a unique [`NodeId`], representing an index
     /// into [`InternerShared`].
-    unique: FxHashMap<Node, NodeId>,
+    unique: HashTable<NodeId>,
 
     /// A cache for `AND` operations between two nodes.
     /// Note that `OR` is implemented in terms of `AND`.
@@ -134,24 +135,8 @@ impl InternerShared {
     }
 
     /// Returns `true` if the given marker can reach a known-incompatible pair of variables.
-    fn can_conflict(&self, id: NodeId) -> bool {
+    pub(crate) fn can_conflict(&self, id: NodeId) -> bool {
         !id.is_terminal() && self.nodes[id.index()].can_conflict
-    }
-
-    /// Returns the canonical marker for a projected child, if one is needed.
-    pub(crate) fn canonical_projection(&self, id: NodeId) -> Option<NodeId> {
-        if id.is_terminal() || self.contains_dont_care(id) || !self.can_conflict(id) {
-            return None;
-        }
-
-        let projection = self.nodes[id.index()].projections[usize::from(id.is_complement())]
-            .load(AtomicOrdering::Acquire);
-        (projection != usize::MAX).then_some(NodeId(projection))
-    }
-
-    /// Returns `true` if the given marker contains a don't-care edge.
-    fn contains_dont_care(&self, id: NodeId) -> bool {
-        id.is_dont_care() || (!id.is_terminal() && self.nodes[id.index()].contains_dont_care)
     }
 
     /// Returns `true` if two marker trees can contain a known-incompatible pair of variables.
@@ -265,9 +250,6 @@ impl InternerShared {
         if id.is_terminal() {
             return Some(id);
         }
-        if !self.contains_dont_care(id) && self.can_conflict(id) {
-            return Some(id);
-        }
 
         let projection = self.nodes[id.index()].projections[usize::from(id.is_complement())]
             .load(AtomicOrdering::Acquire);
@@ -277,19 +259,6 @@ impl InternerShared {
     /// Cache the Boolean projection for the given [`NodeId`].
     fn cache_projection(&self, id: NodeId, projection: NodeId) {
         if id.is_terminal() {
-            return;
-        }
-        if !self.contains_dont_care(id) && self.can_conflict(id) {
-            return;
-        }
-
-        self.nodes[id.index()].projections[usize::from(id.is_complement())]
-            .store(projection.0, AtomicOrdering::Release);
-    }
-
-    /// Cache the canonical marker for a Boolean projected child.
-    fn cache_canonical_projection(&self, id: NodeId, projection: NodeId) {
-        if id.is_terminal() || self.contains_dont_care(id) || !self.can_conflict(id) {
             return;
         }
 
@@ -343,26 +312,33 @@ impl InternerGuard<'_> {
         }
 
         // Insert the node.
-        let id = self.state.unique.entry(node.clone()).or_insert_with(|| {
+        let hasher = FxBuildHasher;
+        let hash = hasher.hash_one(&node);
+        let id = if let Some(&id) = self
+            .state
+            .unique
+            .find(hash, |id| self.shared.node(*id) == &node)
+        {
+            id
+        } else {
             let can_conflict = self.shared.node_can_conflict(&node);
             let conflicting_variables = self.shared.node_conflicting_variables(&node);
-            let contains_dont_care = node
-                .children
-                .nodes()
-                .any(|child| self.shared.contains_dont_care(child));
-            NodeId::new(
+            let id = NodeId::new(
                 self.shared.nodes.push(InternedNode {
                     node,
                     projections: [AtomicUsize::new(usize::MAX), AtomicUsize::new(usize::MAX)],
                     can_conflict,
                     conflicting_variables,
-                    contains_dont_care,
                 }),
                 false,
-            )
-        });
+            );
+            self.state
+                .unique
+                .insert_unique(hash, id, |id| hasher.hash_one(self.shared.node(*id)));
+            id
+        };
 
-        if flipped { id.not() } else { *id }
+        if flipped { id.not() } else { id }
     }
 
     /// Returns a decision node for a single marker expression.
@@ -684,47 +660,10 @@ impl InternerGuard<'_> {
                 self.mask(projected, validity)
             }
         };
-        self.cache_projected_children(canonical, validity);
+        let projected = self.project(canonical);
+        self.shared
+            .cache_projection(canonical.not(), projected.not());
         canonical
-    }
-
-    /// Cache the canonical form of every conflicting subtree in a Boolean projection.
-    fn cache_projected_children(&mut self, value: NodeId, validity: NodeId) {
-        let root = self.project(value);
-        self.shared.cache_projection(value.not(), root.not());
-        if root.is_terminal() {
-            return;
-        }
-        let mut pending = self
-            .shared
-            .node(root)
-            .children
-            .nodes()
-            .map(|child| child.negate(root))
-            .collect_vec();
-        let mut visited = FxHashSet::default();
-
-        while let Some(projected) = pending.pop() {
-            if projected.is_terminal() || !visited.insert(projected) {
-                continue;
-            }
-            if !self.can_conflict(projected)
-                || self.shared.canonical_projection(projected).is_some()
-            {
-                continue;
-            }
-
-            let node = self.shared.node(projected);
-            pending.extend(node.children.nodes().map(|child| child.negate(projected)));
-
-            let canonical = self.mask(projected, validity);
-            self.shared.cache_canonical_projection(projected, canonical);
-            self.shared
-                .cache_canonical_projection(projected.not(), canonical.not());
-            self.shared.cache_projection(canonical, projected);
-            self.shared
-                .cache_projection(canonical.not(), projected.not());
-        }
     }
 
     /// Returns `true` if a marker tree can contain a known-incompatible pair of variables.
@@ -1983,9 +1922,8 @@ impl NodeId {
     }
 }
 
-/// A [`SmallVec`] with enough elements to hold two constant edges, as well as the
-/// ranges in-between.
-type SmallVec<T> = smallvec::SmallVec<[T; 5]>;
+/// A [`SmallVec`] with enough elements to hold a constant edge and its complement.
+type SmallVec<T> = smallvec::SmallVec<[T; 3]>;
 
 /// The edges of a decision node.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]

@@ -92,7 +92,7 @@ fn collect_dnf(
             }
         }
         MarkerTreeKind::String(marker) => {
-            for (tree, range) in collect_edges(marker.children()) {
+            for (tree, range) in collect_edges(marker.raw_children()) {
                 // Detect whether the range for this edge can be simplified as an inequality.
                 if let Some(excluded) = range_inequality(&range) {
                     let current = path.len();

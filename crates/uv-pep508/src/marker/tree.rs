@@ -1077,7 +1077,7 @@ impl MarkerTree {
                 }
             }
             MarkerTreeKind::String(marker) => {
-                for (range, tree) in marker.children() {
+                for (range, tree) in marker.raw_children() {
                     let l_string = env.get_string(marker.key());
 
                     if matches!(
@@ -1152,7 +1152,7 @@ impl MarkerTree {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
             MarkerTreeKind::String(marker) => marker
-                .children()
+                .raw_children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
             MarkerTreeKind::In(marker) => marker
                 .children()
@@ -1178,7 +1178,7 @@ impl MarkerTree {
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::String(marker) => marker
-                .children()
+                .raw_children()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::In(marker) => marker
                 .children()
@@ -1444,7 +1444,7 @@ impl MarkerTree {
                     }
                 }
                 MarkerTreeKind::String(kind) => {
-                    for (tree, _) in simplify::collect_edges(kind.children()) {
+                    for (tree, _) in simplify::collect_edges(kind.raw_children()) {
                         imp(tree, f);
                     }
                 }
@@ -1608,11 +1608,23 @@ impl StringMarkerTree<'_> {
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
     pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<ArcStr>, MarkerTree)> {
-        self.map.iter().map(|(range, node)| {
-            let child = node.negate(self.id);
-            let child = INTERNER.shared.canonical_projection(child).unwrap_or(child);
-            (range, MarkerTree(child))
+        self.raw_children().map(|(range, child)| {
+            let child = if INTERNER.shared.can_conflict(child.0) {
+                child.finish()
+            } else {
+                child
+            };
+            (range, child)
         })
+    }
+
+    /// The projected edges of this node for read-only traversal.
+    pub(super) fn raw_children(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (&Ranges<ArcStr>, MarkerTree)> {
+        self.map
+            .iter()
+            .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
     }
 }
 
@@ -1626,7 +1638,7 @@ impl Ord for StringMarkerTree<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
             .cmp(&other.key())
-            .then_with(|| self.children().cmp(other.children()))
+            .then_with(|| self.raw_children().cmp(other.raw_children()))
     }
 }
 
@@ -1999,6 +2011,10 @@ mod test {
         let MarkerTreeKind::String(kind) = marker.kind() else {
             panic!("expected a string marker");
         };
+        let raw_child = kind
+            .raw_children()
+            .find_map(|(range, child)| (!range.contains("posix")).then_some(child))
+            .unwrap();
         let child = kind
             .children()
             .find_map(|(range, child)| (!range.contains("posix")).then_some(child))
@@ -2006,6 +2022,7 @@ mod test {
         let reparsed = m(&child.try_to_string().unwrap());
         let freebsd = m("platform_system == 'FreeBSD'");
 
+        assert_ne!(raw_child, child);
         assert_eq!(child, reparsed);
         assert_eq!(child.cmp(&reparsed), std::cmp::Ordering::Equal);
         assert_eq!(HashSet::from([child, reparsed]).len(), 1);
@@ -2044,6 +2061,10 @@ mod test {
                 .send([
                     marker.evaluate(&environment, &[]),
                     negated.evaluate(&environment, &[]),
+                    marker.evaluate_optional_environment(None, &[]),
+                    negated.evaluate_optional_environment(None, &[]),
+                    marker.evaluate_only_extras(&[]),
+                    negated.evaluate_only_extras(&[]),
                 ])
                 .unwrap();
         });
@@ -2051,7 +2072,7 @@ mod test {
         let result = receiver.recv_timeout(Duration::from_secs(5));
         drop(guard);
         thread.join().unwrap();
-        assert_eq!(result.unwrap(), [true, false]);
+        assert_eq!(result.unwrap(), [true, false, true, true, false, false]);
     }
 
     #[test]

@@ -23,6 +23,7 @@ uv-redacted = { workspace = true }
 
 arcstr = { workspace = true}
 boxcar = { workspace = true }
+hashbrown = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
 regex = { workspace = true }
