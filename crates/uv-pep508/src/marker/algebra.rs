@@ -575,13 +575,13 @@ impl InternerGuard<'_> {
         // Restriction can create a large number of intermediate nodes even when the final tree
         // would be discarded. Since the global interner retains those nodes, avoid attempting the
         // optimization for complex inputs.
-        let Some(value_nodes) =
-            self.node_count(value, MAX_RESTRICTION_NODES, MAX_RESTRICTION_EDGES)
+        let Some((value_nodes, value_edges)) =
+            self.node_and_edge_count(value, MAX_RESTRICTION_NODES, MAX_RESTRICTION_EDGES)
         else {
             return value;
         };
         if self
-            .node_count(assumption, MAX_RESTRICTION_NODES, MAX_RESTRICTION_EDGES)
+            .node_and_edge_count(assumption, MAX_RESTRICTION_NODES, MAX_RESTRICTION_EDGES)
             .is_none()
         {
             return value;
@@ -589,7 +589,7 @@ impl InternerGuard<'_> {
 
         let restricted = self.restrict(value, assumption);
         if self
-            .node_count(restricted, value_nodes - 1, MAX_RESTRICTION_EDGES)
+            .node_and_edge_count(restricted, value_nodes - 1, value_edges)
             .is_some()
         {
             restricted
@@ -598,9 +598,14 @@ impl InternerGuard<'_> {
         }
     }
 
-    /// Return the number of unique decision nodes reachable from `node`, up to the given node and
-    /// edge limits.
-    fn node_count(&self, node: NodeId, node_limit: usize, edge_limit: usize) -> Option<usize> {
+    /// Return the number of unique decision nodes and edges reachable from `node`, up to the given
+    /// limits.
+    fn node_and_edge_count(
+        &self,
+        node: NodeId,
+        node_limit: usize,
+        edge_limit: usize,
+    ) -> Option<(usize, usize)> {
         let mut seen = FxHashSet::default();
         let mut pending = vec![node];
         let mut edges = 0;
@@ -621,7 +626,7 @@ impl InternerGuard<'_> {
                 }
             }
         }
-        Some(seen.len())
+        Some((seen.len(), edges))
     }
 
     fn restrict_cached(

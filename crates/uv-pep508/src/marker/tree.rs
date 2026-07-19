@@ -2034,6 +2034,19 @@ mod test {
                 .try_to_string()
                 .expect("non-empty restricted marker")),
         );
+
+        let marker = m(
+            "(platform_release != 'v2878-3' and platform_system != 'FreeBSD') or \
+             (sys_platform == 'linux' and platform_version != 'v2878-1') or \
+             (platform_machine != 'armv7l' and platform_system != 'Linux') or \
+             (platform_version != 'v2878-1' and os_name == 'java')",
+        );
+        let assumption = m(
+            "(platform_system != 'FreeBSD' and implementation_name != 'pypy') or \
+             (os_name == 'nt' and platform_machine == 'x86_64') or \
+             (platform_machine == 'x86_64' and platform_system == 'Darwin')",
+        );
+        assert_eq!(marker.restrict_bounded(assumption), marker);
     }
 
     #[test]
