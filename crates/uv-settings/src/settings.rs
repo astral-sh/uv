@@ -2914,6 +2914,27 @@ impl uv_options_metadata::OptionsMetadata for PreviewOption {
 }
 
 #[cfg(feature = "schemars")]
+struct ConflictingPreviewOptions;
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ConflictingPreviewOptions {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("ConflictingPreviewOptions")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "object",
+            "properties": {
+                "preview": {},
+                "preview-features": {},
+            },
+            "required": ["preview", "preview-features"],
+        })
+    }
+}
+
+#[cfg(feature = "schemars")]
 impl schemars::JsonSchema for PreviewOption {
     fn schema_name() -> Cow<'static, str> {
         Cow::Borrowed("PreviewOption")
@@ -2923,14 +2944,9 @@ impl schemars::JsonSchema for PreviewOption {
         let mut schema = <PreviewOptionsDefinition as schemars::JsonSchema>::json_schema(generator);
         schema.insert(
             "not".to_string(),
-            schemars::json_schema!({
-                "properties": {
-                    "preview": {},
-                    "preview-features": {},
-                },
-                "required": ["preview", "preview-features"],
-            })
-            .into(),
+            generator
+                .subschema_for::<ConflictingPreviewOptions>()
+                .into(),
         );
         schema
     }

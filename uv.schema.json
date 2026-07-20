@@ -594,11 +594,7 @@
   },
   "additionalProperties": false,
   "not": {
-    "properties": {
-      "preview": {},
-      "preview-features": {}
-    },
-    "required": ["preview", "preview-features"]
+    "$ref": "#/definitions/ConflictingPreviewOptions"
   },
   "definitions": {
     "AddBoundsKind": {
@@ -825,6 +821,14 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettingValue"
       }
+    },
+    "ConflictingPreviewOptions": {
+      "type": "object",
+      "properties": {
+        "preview": {},
+        "preview-features": {}
+      },
+      "required": ["preview", "preview-features"]
     },
     "DefaultGroups": {
       "description": "Either the literal \"all\" or a list of groups",
