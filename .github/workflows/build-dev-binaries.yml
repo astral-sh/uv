@@ -19,6 +19,8 @@ jobs:
     name: "linux libc"
     timeout-minutes: 10
     runs-on: github-ubuntu-24.04-x86_64-8
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -28,18 +30,16 @@ jobs:
         run: ./scripts/install-mold.sh
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install nightly-2026-07-13 --profile minimal
+        run: rustup toolchain install --profile minimal
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo +nightly-2026-07-13 build --profile no-debug-nightly -Z checksum-freshness
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -54,6 +54,8 @@ jobs:
     name: "linux aarch64"
     timeout-minutes: 10
     runs-on: github-ubuntu-24.04-aarch64-4
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -63,18 +65,16 @@ jobs:
         run: ./scripts/install-mold.sh
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install nightly-2026-07-13 --profile minimal
+        run: rustup toolchain install --profile minimal
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo +nightly-2026-07-13 build --profile no-debug-nightly -Z checksum-freshness
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -89,6 +89,8 @@ jobs:
     name: "linux armv7 gnueabihf"
     timeout-minutes: 15
     runs-on: github-ubuntu-24.04-x86_64-8
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -103,11 +105,9 @@ jobs:
           sudo apt-get install gcc-arm-linux-gnueabihf
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install nightly-2026-07-13 --profile minimal --target armv7-unknown-linux-gnueabihf
+        run: rustup toolchain install --profile minimal --target armv7-unknown-linux-gnueabihf
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -116,7 +116,7 @@ jobs:
       - name: "Build"
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        run: cargo +nightly-2026-07-13 build --profile no-debug-nightly -Z checksum-freshness --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -131,6 +131,8 @@ jobs:
     name: "linux musl"
     timeout-minutes: 10
     runs-on: github-ubuntu-24.04-x86_64-8
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -143,18 +145,16 @@ jobs:
         run: sudo apt-get install musl-tools
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install nightly-2026-07-13 --profile minimal --target x86_64-unknown-linux-musl
+        run: rustup toolchain install --profile minimal --target x86_64-unknown-linux-musl
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo +nightly-2026-07-13 build --profile no-debug-nightly -Z checksum-freshness --target x86_64-unknown-linux-musl --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -169,24 +169,24 @@ jobs:
     name: "macos aarch64"
     timeout-minutes: 10
     runs-on: macos-14 # github-macos-14-aarch64-3
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install nightly-2026-07-13 --profile minimal
+        run: rustup toolchain install --profile minimal
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
           cache-bin: false
       - name: "Build"
-        run: cargo +nightly-2026-07-13 build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -201,24 +201,24 @@ jobs:
     name: "macos x86_64"
     timeout-minutes: 10
     runs-on: macos-latest-large # github-macos-14-x86_64-12
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install nightly-2026-07-13 --profile minimal
+        run: rustup toolchain install --profile minimal
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
           cache-bin: false
       - name: "Build"
-        run: cargo +nightly-2026-07-13 build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -233,6 +233,8 @@ jobs:
     name: "windows x86_64"
     timeout-minutes: 10
     runs-on: windows-latest
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -248,11 +250,9 @@ jobs:
 
       - name: "Install Rust toolchain"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: rustup toolchain install nightly-2026-07-13 --profile minimal
+        run: rustup toolchain install --profile minimal
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           workspaces: ${{ env.UV_WORKSPACE }}
@@ -261,7 +261,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo +nightly-2026-07-13 build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -276,6 +276,8 @@ jobs:
     name: "windows aarch64"
     timeout-minutes: 10
     runs-on: windows-11-arm
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -291,11 +293,9 @@ jobs:
 
       - name: "Install Rust toolchain"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: rustup toolchain install nightly-2026-07-13 --profile minimal
+        run: rustup toolchain install --profile minimal
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           workspaces: ${{ env.UV_WORKSPACE }}
@@ -304,7 +304,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo +nightly-2026-07-13 build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -346,6 +346,8 @@ jobs:
     name: "android aarch64"
     timeout-minutes: 10
     runs-on: github-ubuntu-24.04-x86_64-8
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -375,18 +377,16 @@ jobs:
           fi
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install nightly-2026-07-13 --profile minimal --target aarch64-linux-android
+        run: rustup toolchain install --profile minimal --target aarch64-linux-android
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        env:
-          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo +nightly-2026-07-13 build --profile no-debug-nightly -Z checksum-freshness --target aarch64-linux-android --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target aarch64-linux-android --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
