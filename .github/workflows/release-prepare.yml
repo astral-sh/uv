@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: automations
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      id-token: write # for the credential broker
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -34,10 +34,21 @@ jobs:
         with:
           save-if: false
 
+      - name: "Get uv token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv
+          permissions: |
+            contents: write
+            pull_requests: write
+
       - name: "Configure Git"
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "astral-automations-bot[bot]"
+          git config user.email "305554984+astral-automations-bot[bot]@users.noreply.github.com"
 
       - name: "Bump version"
         run: |
@@ -47,7 +58,7 @@ jobs:
             ./scripts/release.sh
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_BUMP: ${{ inputs.bump }}
 
@@ -115,4 +126,4 @@ jobs:
               --fill-first
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
