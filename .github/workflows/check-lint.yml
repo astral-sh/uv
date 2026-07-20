@@ -30,7 +30,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
-          version: "0.11.28"
+          version: "0.11.29"
       - run: uvx ruff check .
 
   ty:
@@ -43,7 +43,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
-          version: "0.11.28"
+          version: "0.11.29"
       # `uv check` checks the entire repository; keep this scoped to the Python package.
       - run: uvx ty check python/uv
       - name: "Check scrolls"
@@ -85,7 +85,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
-          version: "0.11.28"
+          version: "0.11.29"
       - name: "Validate pyproject and uv schema"
         # Replace the bundled `uv` schema with the checked-in schema. validate-pyproject requires
         # an absolute `$id` to resolve the schema's internal references.
