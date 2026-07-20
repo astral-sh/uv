@@ -109,7 +109,6 @@ plugins:
           - guides/tools.md
           - guides/projects.md
           - guides/package.md
-          - guides/contributing.md
         Integrations:
           - guides/integration/docker.md
           - guides/integration/jupyter.md
@@ -161,6 +160,7 @@ plugins:
           - reference/storage.md
           - reference/environment.md
           - reference/installer.md
+          - reference/contributing.md
 extra_css:
   - stylesheets/extra.css
 extra_javascript:
@@ -214,7 +214,6 @@ nav:
           - Dependabot: guides/integration/dependabot.md
           - AWS Lambda: guides/integration/aws-lambda.md
           - Coiled: guides/integration/coiled.md
-      - Contributing: guides/contributing.md
   - Concepts:
       - concepts/index.md
       - Projects:
@@ -264,6 +263,7 @@ nav:
           - reference/troubleshooting/index.md
           - Build failures: reference/troubleshooting/build-failures.md
           - Reproducible examples: reference/troubleshooting/reproducible-examples.md
+      - Contributing: reference/contributing.md
       - Internals:
           - reference/internals/index.md
           - Resolver: reference/internals/resolver.md
