@@ -27,7 +27,7 @@ use futures::StreamExt;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use predicates::prelude::predicate;
-use regex::Regex;
+use regex::{Regex, regex};
 use tokio::io::AsyncWriteExt;
 
 use uv_cache::{Cache, CacheBucket};
@@ -1909,9 +1909,6 @@ impl TestContext {
     ///
     /// This assumes that a lock has already been performed.
     pub fn diff_lock(&self, change: impl Fn(&Self) -> Command) -> String {
-        static TRIM_TRAILING_WHITESPACE: std::sync::LazyLock<Regex> =
-            std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s+$").unwrap());
-
         let lock_path = ChildPath::new(self.temp_dir.join("uv.lock"));
         let old_lock = fs_err::read_to_string(&lock_path).unwrap();
         let (snapshot, output) = run_and_format(
@@ -1982,9 +1979,6 @@ impl TestContext {
 /// Creates a "unified" diff between the two line-oriented strings suitable
 /// for snapshotting.
 pub fn diff_snapshot(old: &str, new: &str, context_radius: usize) -> String {
-    static TRIM_TRAILING_WHITESPACE: std::sync::LazyLock<Regex> =
-        std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s+$").unwrap());
-
     let diff = similar::TextDiff::from_lines(old, new);
     let unified = diff
         .unified_diff()
@@ -1994,9 +1988,7 @@ pub fn diff_snapshot(old: &str, new: &str, context_radius: usize) -> String {
     // Not totally clear why, but some lines end up containing only
     // whitespace in the diff, even though they don't appear in the
     // original data. So just strip them here.
-    TRIM_TRAILING_WHITESPACE
-        .replace_all(&unified, "")
-        .into_owned()
+    regex!(r"(?m)^\s+$").replace_all(&unified, "").into_owned()
 }
 
 /// Assert a snapshot of the diff between `old` and a command's output.

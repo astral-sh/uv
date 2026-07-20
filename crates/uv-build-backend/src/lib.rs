@@ -479,7 +479,7 @@ mod tests {
     use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
-    use regex::Regex;
+    use regex::regex;
     use sha2::Digest;
     use std::io::BufReader;
     use std::iter;
@@ -756,8 +756,7 @@ mod tests {
 
         // Redact the uv_build version to keep the hash stable across releases
         let pyproject_toml = fs_err::read_to_string(src.path().join("pyproject.toml")).unwrap();
-        let current_requires =
-            Regex::new(r#"requires = \["uv_build>=[0-9.]+,<[0-9.]+"\]"#).unwrap();
+        let current_requires = regex!(r#"requires = \["uv_build>=[0-9.]+,<[0-9.]+"\]"#);
         let mocked_requires = r#"requires = ["uv_build>=1,<2"]"#;
         let pyproject_toml = current_requires.replace(pyproject_toml.as_str(), mocked_requires);
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml.as_bytes()).unwrap();

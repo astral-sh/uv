@@ -196,7 +196,7 @@ rand = { version = "0.9.4" }
 rayon = { version = "1.10.0" }
 ref-cast = { version = "1.0.24" }
 reflink-copy = { version = "0.1.19" }
-regex = { version = "1.10.6" }
+regex = { version = "1.13.0" }
 regex-automata = { version = "0.4.8", default-features = false, features = [
   "dfa-build",
   "dfa-search",
