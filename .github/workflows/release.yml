@@ -356,6 +356,7 @@ jobs:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
           repository: astral-sh/uv
+          # Workflow permission is required to create a release tag after `main` advances across workflow changes.
           permissions: |
             contents: write
             workflows: write
