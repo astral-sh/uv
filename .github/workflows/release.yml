@@ -322,10 +322,8 @@ jobs:
       name: release
     permissions:
       "attestations": "write"
-      "contents": "write"
+      "contents": "read"
       "id-token": "write"
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -351,8 +349,19 @@ jobs:
             artifacts/*.ps1
             artifacts/*.zip
             artifacts/*.tar.gz
+      - name: Get release token
+        id: release-token
+        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv
+          permissions: |
+            contents: write
+            workflows: write
       - name: Create GitHub Release
         env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
           PRERELEASE_FLAG: "${{ fromJson(needs.host.outputs.val).announcement_is_prerelease && '--prerelease' || '' }}"
           ANNOUNCEMENT_TITLE: "${{ fromJson(needs.host.outputs.val).announcement_title }}"
           ANNOUNCEMENT_BODY: "${{ fromJson(needs.host.outputs.val).announcement_github_body }}"
