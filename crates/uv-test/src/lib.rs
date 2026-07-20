@@ -1040,7 +1040,10 @@ impl TestContext {
 
         // Filter non-deterministic temporary directory names
         // Note we apply this _after_ all the full paths to avoid breaking their matching
-        filters.push((r"(\\|\/)\.tmp.*(\\|\/)".to_string(), "/[TMP]/".to_string()));
+        filters.push((
+            r#"(\\|/)\.tmp[^\\/\s"'`]*"#.to_string(),
+            "/[TMP]".to_string(),
+        ));
 
         // Account for platform prefix differences `file://` (Unix) vs `file:///` (Windows)
         filters.push((r"file:///".to_string(), "file://".to_string()));

@@ -16,7 +16,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   # renovate: datasource=github-releases depName=astral-sh/hawk
-  HAWK_VERSION: 0.1.7
+  HAWK_VERSION: 0.1.8
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
@@ -177,7 +177,7 @@ jobs:
           curl --proto '=https' --tlsv1.2 -LsSf \
             "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
       - name: "Hawk"
-        run: cargo +1.97.0 hawk --target-dir target/hawk -D warnings
+        run: cargo +1.97.0 hawk check --target-dir target/hawk -D warnings
 
   shear:
     name: "cargo shear"

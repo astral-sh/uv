@@ -1739,7 +1739,9 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
 
 #[test]
 fn run_with_overlay_interpreter() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1797,7 +1799,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1819,7 +1821,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1833,7 +1835,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     }, {
             assert_snapshot!(
                 context.read("main"), @r#"
-            #![CACHE_DIR]/builds-v0/[TMP]/python
+            #![CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
             # -*- coding: utf-8 -*-
             import sys
             from foo import main
@@ -1864,7 +1866,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -1882,7 +1884,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -1906,7 +1908,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1920,7 +1922,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1945,7 +1947,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     }, {
             assert_snapshot!(
                 context.read("main"), @r#"
-            #![CACHE_DIR]/builds-v0/[TMP]/python
+            #![CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
             # -*- coding: utf-8 -*-
             import sys
             from foo import main
@@ -1965,7 +1967,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -1977,7 +1979,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -3711,7 +3713,7 @@ fn run_no_project() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[PYTHON]
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/[PYTHON]
 
     ----- stderr -----
     ");
