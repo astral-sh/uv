@@ -32,6 +32,10 @@ Released on 2026-07-20.
 - Prevent skipped tar-wheel entries from causing unrelated files to be removed during uninstall ([#20429](https://github.com/astral-sh/uv/pull/20429))
 - Preserve literal `extends-environment` paths in `pyvenv.cfg` on Unix ([#20466](https://github.com/astral-sh/uv/pull/20466))
 
+### Documentation
+
+- Add a contribution guide ([#20511](https://github.com/astral-sh/uv/pull/20511), [#20552](https://github.com/astral-sh/uv/pull/20552))
+
 ## 0.11.29
 
 Released on 2026-07-15.
