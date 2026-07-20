@@ -2942,6 +2942,8 @@ impl schemars::JsonSchema for PreviewOption {
 
     fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
         let mut schema = <PreviewOptionsDefinition as schemars::JsonSchema>::json_schema(generator);
+        // Keep this constraint in a referenced schema to avoid a fastjsonschema code-generation
+        // bug. See: https://github.com/astral-sh/uv/pull/20547.
         schema.insert(
             "not".to_string(),
             generator
