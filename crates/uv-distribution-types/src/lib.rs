@@ -409,6 +409,9 @@ impl Dist {
                 })))
             }
             DistExtension::Source(ext) => {
+                if !ext.is_pep625_compliant() {
+                    return Err(Error::NotPep625Filename(url.verbatim().to_string()));
+                }
                 Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
                     name,
                     location: Box::new(location),
@@ -461,6 +464,10 @@ impl Dist {
                 })))
             }
             DistExtension::Source(ext) => {
+                if !ext.is_pep625_compliant() {
+                    return Err(Error::NotPep625Filename(url.verbatim().to_string()));
+                }
+
                 // If there is a version in the filename, record it.
                 let version = url
                     .filename()
@@ -704,17 +711,6 @@ impl BuiltDist {
 }
 
 impl SourceDist {
-    /// Returns the [`SourceDistExtension`] of the distribution, if it has one.
-    pub fn extension(&self) -> Option<SourceDistExtension> {
-        match self {
-            Self::Registry(source_dist) => Some(source_dist.ext),
-            Self::DirectUrl(source_dist) => Some(source_dist.ext),
-            Self::GitPath(source_dist) => Some(source_dist.ext),
-            Self::Path(source_dist) => Some(source_dist.ext),
-            Self::GitDirectory(_) | Self::Directory(_) => None,
-        }
-    }
-
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     fn index(&self) -> Option<&IndexUrl> {
         match self {

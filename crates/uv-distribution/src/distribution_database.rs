@@ -17,7 +17,7 @@ use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_distribution_filename::{SourceDistExtension, WheelFilename};
+use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashPolicy, Hashed, IndexUrl,
     InstalledDist, Name, SourceDist, ToUrlError,
@@ -31,7 +31,6 @@ use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
-use uv_warnings::warn_user_once;
 
 use crate::archive::Archive;
 use crate::error::PythonVersion;
@@ -437,34 +436,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        // Warn if the source distribution isn't PEP 625 compliant.
-        // We do this here instead of in `SourceDistExtension::from_path` to minimize log volume:
-        // a non-compliant distribution isn't a huge problem if it's not actually being
-        // materialized into a wheel. Observe that we also allow no extension, since we expect that
-        // for directory and Git installs.
-        // NOTE: Observe that we also allow `.zip` sdists here, which are not PEP 625 compliant.
-        // This is because they were allowed on PyPI until relatively recently (2020).
-        if let Some(extension) = dist.extension()
-            && !matches!(
-                extension,
-                SourceDistExtension::TarGz | SourceDistExtension::Zip
-            )
-        {
-            if matches!(dist, SourceDist::Registry(_)) {
-                // Observe that we display a slightly different warning when the sdist comes
-                // from a registry, since that suggests that the user has inadvertently
-                // (rather than explicitly) depended on a non-compliant sdist.
-                warn_user_once!(
-                    "{dist} uses a legacy source distribution format ('.{extension}') that is not compliant with PEP 625. A future version of uv will reject this source distribution. Consider upgrading to a newer version of {package}",
-                    package = dist.name(),
-                );
-            } else {
-                warn_user_once!(
-                    "{dist} is not a standards-compliant source distribution: expected '.tar.gz' but found '.{extension}'. A future version of uv will reject source distributions that do not meet the requirements specified in PEP 625",
-                );
-            }
-        }
-
         let built_wheel = self
             .builder
             .download_and_build(&BuildableSource::Dist(dist), tags, hashes, &self.client)
@@ -714,8 +685,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
-        let query_url = &url.clone();
-
         let download = |response: reqwest::Response| {
             async {
                 let size = size.or_else(|| content_length(&response));
@@ -744,7 +713,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         match extension {
                             WheelExtension::Whl => {
-                                uv_extract::stream::unzip(query_url, &mut reader, temp_dir.path())
+                                uv_extract::stream::unzip(&mut reader, temp_dir.path())
                                     .await
                                     .map_err(|err| Error::Extract(filename.to_string(), err))?
                             }
@@ -757,7 +726,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     }
                     None => match extension {
                         WheelExtension::Whl => {
-                            uv_extract::stream::unzip(query_url, &mut hasher, temp_dir.path())
+                            uv_extract::stream::unzip(&mut hasher, temp_dir.path())
                                 .await
                                 .map_err(|err| Error::Extract(filename.to_string(), err))?
                         }
@@ -1127,11 +1096,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Unzip the wheel to a temporary directory.
             let files = match extension {
-                WheelExtension::Whl => {
-                    uv_extract::stream::unzip(path.display(), &mut hasher, temp_dir.path())
-                        .await
-                        .map_err(|err| Error::Extract(filename.to_string(), err))?
-                }
+                WheelExtension::Whl => uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+                    .await
+                    .map_err(|err| Error::Extract(filename.to_string(), err))?,
                 WheelExtension::WhlZst => {
                     uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                         .await

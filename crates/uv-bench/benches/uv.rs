@@ -27,7 +27,6 @@ use uv_resolver::Manifest;
 
 const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
 const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
-const MANY_FILES_SDIST_FILENAME: &str = "manyfiles-0.0.0.tar.gz";
 const MANY_FILES_SDIST_TOP_LEVEL: &str = "manyfiles-0.0.0";
 const MANY_FILES_SDIST_FILE_COUNT: usize = 10_000;
 
@@ -126,7 +125,6 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
             |(archive, extracted_sdist)| {
                 let files = runtime
                     .block_on(uv_extract::stream::archive(
-                        MANY_FILES_SDIST_FILENAME,
                         archive,
                         SourceDistExtension::TarGz,
                         extracted_sdist.path(),
