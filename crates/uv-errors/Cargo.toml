@@ -1,6 +1,6 @@
 [package]
 name = "uv-errors"
-version = "0.0.62"
+version = "0.0.63"
 description = "Common error traits for uv."
 edition = { workspace = true }
 rust-version = { workspace = true }

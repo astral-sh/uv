@@ -3,6 +3,44 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.30
+
+Released on 2026-07-20.
+
+### Preview features
+
+- Support `--active` in `uv workspace metadata` ([#20500](https://github.com/astral-sh/uv/pull/20500))
+
+### Performance
+
+- Cache resolver Python requirement markers ([#20461](https://github.com/astral-sh/uv/pull/20461))
+- Compact cached distribution metadata ([#20463](https://github.com/astral-sh/uv/pull/20463))
+- Decode cached payloads on the cache-read pool ([#20464](https://github.com/astral-sh/uv/pull/20464))
+- Decode stale cache entries in one blocking task ([#20486](https://github.com/astral-sh/uv/pull/20486))
+- Further compact cached distribution metadata ([#20483](https://github.com/astral-sh/uv/pull/20483))
+- Isolate cache reads on a blocking pool ([#20427](https://github.com/astral-sh/uv/pull/20427))
+- Migrate lockfile serialization to `toml_writer` ([#20450](https://github.com/astral-sh/uv/pull/20450))
+- Reuse resolver fork markers while recording preferences ([#20462](https://github.com/astral-sh/uv/pull/20462))
+- Skip fully cutoff-excluded resolver candidates ([#20460](https://github.com/astral-sh/uv/pull/20460))
+
+### Bug fixes
+
+- Reuse centralized environments through workspace symlinks ([#20436](https://github.com/astral-sh/uv/pull/20436))
+- Stop escaping `extends-environment` in pyvenv.cfg ([#20466](https://github.com/astral-sh/uv/pull/20466))
+
+### Other changes
+
+- Add a nightly fast-build test profile ([#20456](https://github.com/astral-sh/uv/pull/20456))
+- Add contributing section to docs ([#20511](https://github.com/astral-sh/uv/pull/20511))
+- Allow Packse scenarios without generated tests ([#20469](https://github.com/astral-sh/uv/pull/20469))
+- Enable nightly Rust features for Windows tests ([#20452](https://github.com/astral-sh/uv/pull/20452))
+- Enable nightly Rust features for development builds ([#20458](https://github.com/astral-sh/uv/pull/20458))
+- Exclude skipped tar-wheel entries from RECORD healing ([#20429](https://github.com/astral-sh/uv/pull/20429))
+- Fix stale release job reference ([#20442](https://github.com/astral-sh/uv/pull/20442))
+- Support range requests in the Packse server ([#20473](https://github.com/astral-sh/uv/pull/20473))
+- Sync latest Python releases ([#20519](https://github.com/astral-sh/uv/pull/20519))
+- Use centralized crates.io publishing policies ([#20449](https://github.com/astral-sh/uv/pull/20449))
+
 ## 0.11.29
 
 Released on 2026-07-15.
@@ -977,4 +1015,5 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
 
