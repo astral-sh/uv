@@ -1120,6 +1120,13 @@ pub(crate) fn centralized_environments_enabled(
     true
 }
 
+/// Return whether `path` is lexically within `base`.
+fn is_path_lexically_within(path: &Path, base: &Path) -> bool {
+    // Normally only longer paths must be in the verbatim namespace, normalise both so the
+    // comparison works correctly regardless.
+    verbatim_path(path).starts_with(verbatim_path(base).as_ref())
+}
+
 /// Return whether `path` is a link into the current cache's environment bucket.
 pub(crate) fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
     let Ok(target) = fs_err::read_link(path) else {
@@ -1129,18 +1136,14 @@ pub(crate) fn is_centralized_environment_link(path: &Path, cache: &Cache) -> boo
         // If we can't resolve the cache directory, the environment can't be in the cache.
         return false;
     };
-    // Compare Windows paths in the verbatim namespace so long targets returned with `\\?\` match
-    // the cache root.
-    let starts_with =
-        |path: &Path, base: &Path| verbatim_path(path).starts_with(verbatim_path(base).as_ref());
-    if starts_with(&target, &environments) {
+    if is_path_lexically_within(&target, &environments) {
         return true;
     }
 
     // Resolve existing relative or indirect links; only lexical targets can be dangling.
     fs_err::canonicalize(path).is_ok_and(|target| {
         fs_err::canonicalize(&environments)
-            .is_ok_and(|environments| starts_with(&target, &environments))
+            .is_ok_and(|environments| is_path_lexically_within(&target, &environments))
     })
 }
 
