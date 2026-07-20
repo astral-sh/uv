@@ -131,7 +131,9 @@ fn workspace_metadata_simple() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn workspace_metadata_script() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
     let script = context.temp_dir.child("script.py");
     script.write_str(
         r#"# /// script
@@ -162,7 +164,7 @@ import iniconfig
       "environment": {
         "root": "[CACHE_DIR]/environments-v2/script-[HASH]",
         "python": {
-          "path": "[CACHE_DIR]/environments-v2/script-[HASH]/bin/python",
+          "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/[PYTHON]",
           "version": "3.12.[X]",
           "implementation": "cpython"
         }
@@ -579,7 +581,9 @@ fn workspace_metadata_sync_active_environment() -> Result<()> {
 
 #[test]
 fn workspace_metadata_module_owners_from_locked_wheels() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
 
     let gpu_a = context.temp_dir.child("gpu_a-0.1.0-py3-none-any.whl");
     write_wheel(gpu_a.path(), "gpu-a", "gpu_a-0.1.0", &[("gpu/a.py", "")])?;
@@ -640,7 +644,7 @@ dependencies = [
       "environment": {
         "root": "[VENV]/",
         "python": {
-          "path": "[VENV]/bin/python3",
+          "path": "[VENV]/[BIN]/[PYTHON]",
           "version": "3.12.[X]",
           "implementation": "cpython"
         }
