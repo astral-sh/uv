@@ -291,7 +291,7 @@ impl Pep723Script {
                 // Issue a warning for users who might not know that.
                 // TODO: There are a lot of mistakes we could consider detecting here, like
                 // `uv run` without `--script` when the file doesn't end in `.py`.
-                if !regex::Regex::new(r"\buv\b").unwrap().is_match(&shebang) {
+                if !regex::regex!(r"\buv\b").is_match(&shebang) {
                     warn_user!(
                         "If you execute {} directly, it might ignore its inline metadata.\nConsider replacing its shebang with: {}",
                         file.to_string_lossy().cyan(),

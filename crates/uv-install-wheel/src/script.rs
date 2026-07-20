@@ -1,10 +1,9 @@
 use configparser::ini::{Ini, IniDefault};
-use regex::Regex;
+use regex::regex;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
 use std::io;
 use std::path::Path;
-use std::sync::LazyLock;
 
 use crate::{Error, wheel};
 
@@ -32,11 +31,9 @@ impl Script {
         //  between the object reference and the left square bracket, between the extra names and the square brackets and colons delimiting them,
         //  and after the right square bracket."
         // – https://packaging.python.org/en/latest/specifications/entry-points/#file-format
-        static SCRIPT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r"^(?P<module>[\w\d_\-.]+)\s*:\s*(?P<function>[\w\d_\-.]+)(?:\s*\[\s*(?P<extras>(?:[^,]+,?\s*)+)\])?\s*$").unwrap()
-        });
-
-        let captures = SCRIPT_REGEX
+        let captures = regex!(
+            r"^(?P<module>[\w\d_\-.]+)\s*:\s*(?P<function>[\w\d_\-.]+)(?:\s*\[\s*(?P<extras>(?:[^,]+,?\s*)+)\])?\s*$"
+        )
             .captures(value)
             .ok_or_else(|| Error::InvalidWheel(format!("invalid console script: '{value}'")))?;
         if let Some(script_extras) = captures.name("extras") {

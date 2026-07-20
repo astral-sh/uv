@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use arcstr::ArcStr;
-use regex::Regex;
+use regex::regex;
 use thiserror::Error;
 use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
@@ -536,10 +536,7 @@ pub fn expand_env_vars(s: &str) -> Cow<'_, str> {
         project_root.to_string_lossy().to_string()
     });
 
-    static RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?P<var>\$\{(?P<name>[A-Z0-9_]+)})").unwrap());
-
-    RE.replace_all(s, |caps: &regex::Captures<'_>| {
+    regex!(r"(?P<var>\$\{(?P<name>[A-Z0-9_]+)})").replace_all(s, |caps: &regex::Captures<'_>| {
         let name = caps.name("name").unwrap().as_str();
         std::env::var(name).unwrap_or_else(|_| match name {
             "PROJECT_ROOT" => PROJECT_ROOT_FRAGMENT.to_string(),
