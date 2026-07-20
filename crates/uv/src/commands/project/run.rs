@@ -286,7 +286,7 @@ pub(crate) async fn run(
                 &groups.with_defaults(DefaultGroups::default()),
                 editable.clone(),
                 install_options,
-                modifications,
+                modifications.clone(),
                 python_platform.as_ref(),
                 (&settings).into(),
                 &client_builder,
@@ -416,7 +416,7 @@ pub(crate) async fn run(
                 match update_environment(
                     environment,
                     spec,
-                    modifications,
+                    modifications.clone(),
                     python_platform.as_ref(),
                     SourceTreeEditablePolicy::Project,
                     build_constraints.unwrap_or_default(),

@@ -1,0 +1,79 @@
+name = "remove-prune-graph"
+description = "Dependency graphs for subset-removal integration tests."
+
+[root]
+requires = []
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+
+[testgen]
+disable = true
+
+[packages.candidate.versions."1.0.0"]
+
+[packages.orphan-leaf.versions."1.0.0"]
+
+[packages.orphan.versions."1.0.0"]
+requires = ["orphan-leaf"]
+
+[packages.removed.versions."1.0.0"]
+requires = ["candidate", "orphan"]
+
+[packages.external.versions."1.0.0"]
+requires = ["candidate"]
+
+[packages.root-external.versions."1.0.0"]
+requires = ["removed"]
+
+[packages.bridge.versions."1.0.0".extras]
+foo = ["candidate"]
+
+[packages.edge-root.versions."1.0.0"]
+requires = ["bridge[foo]"]
+
+[packages.base-leaf.versions."1.0.0"]
+
+[packages.base-removed.versions."1.0.0"]
+requires = ["base-leaf"]
+
+[packages.base-extra-root.versions."1.0.0"]
+requires = ["base-leaf ; extra != 'foo'"]
+
+[packages.base-extra-root.versions."1.0.0".extras]
+foo = []
+
+[packages.base-external.versions."1.0.0"]
+requires = ["base-extra-root[foo]"]
+
+[packages.marker-root.versions."1.0.0"]
+requires = ["marker-candidate"]
+requires_python = ">=3.11"
+
+[packages.marker-candidate.versions."1.0.0"]
+requires_python = ">=3.11"
+
+[packages.marker-removed.versions."1.0.0"]
+requires = ["candidate ; python_version < '3.12'"]
+
+[packages.other.versions."1.0.0"]
+
+[packages.build-only.versions."1.0.0"]
+wheel = false
+
+[packages.cycle-root.versions."1.0.0"]
+requires = ["cycle-a"]
+
+[packages.cycle-a.versions."1.0.0"]
+requires = ["cycle-b"]
+
+[packages.cycle-b.versions."1.0.0"]
+requires = ["cycle-a"]
+
+[packages.cycle-external.versions."1.0.0"]
+requires = ["cycle-b"]
+
+[packages.b.versions."1.0.0".extras]
+foo = ["candidate"]

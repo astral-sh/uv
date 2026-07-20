@@ -61,7 +61,9 @@ pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
     Metadata, PylockToml, PylockTomlError, PylockTomlErrorKind, cyclonedx_json,
 };
-pub use crate::lock::installable::Installable;
+pub use crate::lock::installable::{
+    Installable, reachable_declared_package_names, reachable_direct_dependency_names,
+};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};

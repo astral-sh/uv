@@ -29,7 +29,7 @@ use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resol
 use uv_fs::{CWD, Simplified, normalize_path_under};
 use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record_into_iter};
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin, VerbatimUrl};
 use uv_platform_tags::Tags;
@@ -399,7 +399,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     Ok((resolution, hasher))
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) enum Modifications {
     /// Use `pip install` semantics, whereby existing installations are left as-is, unless they are
     /// marked for re-installation or upgrade.
@@ -412,6 +412,86 @@ pub(crate) enum Modifications {
     /// Ensures that the resulting environment is an exact match for the requirements, but may
     /// result in more changes than necessary.
     Exact,
+    /// Remove only packages that disappeared from the managed dependency graph.
+    ///
+    /// Packages that are still required by an unmanaged installed package are retained.
+    Prune {
+        roots: Vec<RemovalRoot>,
+        candidates: BTreeSet<PackageName>,
+        retained: BTreeSet<PackageName>,
+    },
+}
+
+impl Modifications {
+    pub(crate) fn prepare(self, site_packages: &SitePackages, venv: &PythonEnvironment) -> Self {
+        let Self::Prune {
+            roots,
+            mut candidates,
+            retained,
+        } = self
+        else {
+            return self;
+        };
+
+        let markers = venv.interpreter().to_resolver_marker_environment();
+        let removed_reachability = site_packages.reachable_packages(
+            roots.iter().map(|root| (&root.name, root.extras.as_ref())),
+            &markers,
+        );
+        candidates.extend(removed_reachability.packages().iter().cloned());
+        if !removed_reachability.incomplete().is_empty() {
+            debug!(
+                packages = %removed_reachability.incomplete().iter().join(", "),
+                "Unable to read complete dependency metadata; pruning based on available metadata"
+            );
+        }
+
+        let managed = candidates
+            .iter()
+            .chain(&retained)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let external_reachability = site_packages.reachable_packages(
+            site_packages
+                .iter()
+                .filter(|distribution| !managed.contains(distribution.name()))
+                .map(|distribution| (distribution.name(), &[] as &[ExtraName])),
+            &markers,
+        );
+
+        if !external_reachability.incomplete().is_empty() {
+            debug!(
+                packages = %external_reachability.incomplete().iter().join(", "),
+                "Unable to read complete dependency metadata; pruning based on available metadata"
+            );
+        }
+        candidates.retain(|candidate| {
+            !retained.contains(candidate) && !external_reachability.packages().contains(candidate)
+        });
+
+        Self::Prune {
+            roots,
+            candidates,
+            retained,
+        }
+    }
+
+    fn apply(&self, plan: &mut Plan) {
+        match self {
+            Self::Sufficient => plan.extraneous.clear(),
+            Self::Exact => {}
+            Self::Prune { candidates, .. } => plan
+                .extraneous
+                .retain(|distribution| candidates.contains(distribution.name())),
+        }
+    }
+}
+
+/// A direct dependency removed from the project.
+#[derive(Debug, Clone)]
+pub(crate) struct RemovalRoot {
+    pub(crate) name: PackageName,
+    pub(crate) extras: Box<[ExtraName]>,
 }
 
 /// A distribution which was or would be modified
@@ -617,15 +697,24 @@ impl InstallationPlan {
     /// Returns `true` if executing the plan would not modify the environment.
     pub(crate) fn is_noop(
         &self,
-        modifications: Modifications,
+        modifications: &Modifications,
         compile: Option<BytecodeCompilation>,
         dry_run: DryRun,
     ) -> bool {
         self.plan.cached.is_empty()
             && self.plan.remote.is_empty()
             && self.plan.reinstalls.is_empty()
-            && (self.plan.extraneous.is_empty()
-                || matches!(modifications, Modifications::Sufficient))
+            && self
+                .plan
+                .extraneous
+                .iter()
+                .all(|distribution| match modifications {
+                    Modifications::Sufficient => true,
+                    Modifications::Exact => false,
+                    Modifications::Prune { candidates, .. } => {
+                        !candidates.contains(distribution.name())
+                    }
+                })
             && (compile.is_none() || dry_run.enabled())
     }
 
@@ -633,7 +722,7 @@ impl InstallationPlan {
     pub(crate) fn finish_noop(
         self,
         resolution: &Resolution,
-        modifications: Modifications,
+        modifications: &Modifications,
         compile: Option<BytecodeCompilation>,
         logger: &dyn InstallLogger,
         dry_run: DryRun,
@@ -641,17 +730,10 @@ impl InstallationPlan {
     ) -> Result<Changelog, Error> {
         debug_assert!(self.is_noop(modifications, compile, dry_run));
 
-        let (plan, start) = self.into_parts();
+        let (mut plan, start) = self.into_parts();
+        modifications.apply(&mut plan);
         if dry_run.enabled() {
-            report_dry_run(
-                dry_run,
-                resolution,
-                plan,
-                modifications,
-                start,
-                logger,
-                printer,
-            )
+            report_dry_run(dry_run, resolution, plan, start, logger, printer)
         } else {
             logger.on_check(resolution.len(), start, printer, dry_run)?;
             Ok(Changelog::default())
@@ -691,6 +773,8 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
 ) -> Result<Changelog, Error> {
+    let modifications = modifications.prepare(&site_packages, venv);
+
     let plan = InstallationPlan::build(
         resolution,
         site_packages,
@@ -754,18 +838,11 @@ impl InstallationPlan {
         printer: Printer,
         preview: Preview,
     ) -> Result<Changelog, Error> {
-        let (plan, start) = self.into_parts();
+        let (mut plan, start) = self.into_parts();
+        modifications.apply(&mut plan);
 
         if dry_run.enabled() {
-            return report_dry_run(
-                dry_run,
-                resolution,
-                plan,
-                modifications,
-                start,
-                logger.as_ref(),
-                printer,
-            );
+            return report_dry_run(dry_run, resolution, plan, start, logger.as_ref(), printer);
         }
 
         let Plan {
@@ -774,12 +851,6 @@ impl InstallationPlan {
             reinstalls,
             extraneous,
         } = plan;
-
-        // If we're in `install` mode, ignore any extraneous distributions.
-        let extraneous = match modifications {
-            Modifications::Sufficient => vec![],
-            Modifications::Exact => extraneous,
-        };
 
         // Nothing to do.
         if remote.is_empty()
@@ -1256,7 +1327,6 @@ fn report_dry_run(
     dry_run: DryRun,
     resolution: &Resolution,
     plan: Plan,
-    modifications: Modifications,
     start: std::time::Instant,
     logger: &dyn InstallLogger,
     printer: Printer,
@@ -1267,12 +1337,6 @@ fn report_dry_run(
         reinstalls,
         extraneous,
     } = plan;
-
-    // If we're in `install` mode, ignore any extraneous distributions.
-    let extraneous = match modifications {
-        Modifications::Sufficient => vec![],
-        Modifications::Exact => extraneous,
-    };
 
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
