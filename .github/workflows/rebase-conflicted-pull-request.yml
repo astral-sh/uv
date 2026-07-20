@@ -21,7 +21,7 @@ permissions: {}
 jobs:
   rebase:
     name: "Rebase pull request #${{ inputs.number }}"
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04-4
     environment: automations
     timeout-minutes: 30
     permissions:
