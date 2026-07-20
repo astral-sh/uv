@@ -86,7 +86,7 @@ jobs:
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           version: "0.11.28"
-      - run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
+      - run: uvx --from 'validate-pyproject[all,store]' --with validate-pyproject-schema-store==2026.7.17 validate-pyproject pyproject.toml
 
   readme:
     timeout-minutes: 10
