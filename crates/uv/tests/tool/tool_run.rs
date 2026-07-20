@@ -1938,6 +1938,31 @@ fn tool_run_invalid_with() {
     ");
 }
 
+/// Invalid `--from` paths should mention `--from`, not `--with` (astral-sh/uv#8757).
+#[test]
+fn tool_run_invalid_from() {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context
+        .tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to resolve `--from` requirement
+      Caused by: Distribution not found at: file://[TEMP_DIR]/foo
+    ");
+}
+
 #[test]
 fn warn_no_executables_found() {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
