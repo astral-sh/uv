@@ -105,7 +105,9 @@ jobs:
           sudo apt-get install gcc-arm-linux-gnueabihf
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install --profile minimal --target armv7-unknown-linux-gnueabihf
+        run: |
+          rustup toolchain install --profile minimal
+          rustup target add armv7-unknown-linux-gnueabihf
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
@@ -145,7 +147,9 @@ jobs:
         run: sudo apt-get install musl-tools
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install --profile minimal --target x86_64-unknown-linux-musl
+        run: |
+          rustup toolchain install --profile minimal
+          rustup target add x86_64-unknown-linux-musl
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
@@ -377,7 +381,9 @@ jobs:
           fi
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install --profile minimal --target aarch64-linux-android
+        run: |
+          rustup toolchain install --profile minimal
+          rustup target add aarch64-linux-android
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
