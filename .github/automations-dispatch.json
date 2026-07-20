@@ -13,16 +13,6 @@
         "pull_request": ["ready_for_review"]
       },
       "workflow": "promote-pull-request.yml"
-    },
-    {
-      "repository": "uv-dev",
-      "on": {
-        "ost_actions_dispatch_v2_canary": ["dispatch"]
-      },
-      "conditions": {
-        "/canary/id": "20260720-c84739f"
-      },
-      "workflow": "sync-uv-dev.yml"
     }
   ]
 }
