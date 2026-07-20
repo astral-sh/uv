@@ -4,13 +4,9 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{
-    Concurrency, DependencyGroupsWithDefaults, DryRun, ExtrasSpecificationWithDefaults,
-};
+use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{
-    ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest,
-};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::Metadata;
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -29,7 +25,7 @@ use crate::commands::{ExitStatus, UvError, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
-use super::module_owners::{collect_module_owners, find_module_owners};
+use super::module_owners::collect_module_owners;
 
 /// Display metadata about the workspace.
 pub(crate) async fn metadata(
@@ -244,26 +240,6 @@ pub(crate) async fn metadata(
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
-}
-
-/// Build metadata from an existing lock and environment without synchronizing it.
-pub(crate) fn metadata_from_target(
-    environment: Option<&PythonEnvironment>,
-    target: InstallTarget<'_>,
-    extras: &ExtrasSpecificationWithDefaults,
-    groups: &DependencyGroupsWithDefaults,
-    settings: &ResolverSettings,
-) -> Result<Metadata> {
-    let mut export = metadata_for_target(target)?;
-    if let Some(environment) = environment {
-        let module_owners = find_module_owners(target, environment, extras, groups, settings)
-            .context("Failed to collect module owners")?;
-        export = export
-            .with_environment(environment)
-            .with_module_owners(module_owners);
-    }
-
-    Ok(export)
 }
 
 fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {

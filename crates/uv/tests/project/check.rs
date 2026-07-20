@@ -1231,49 +1231,6 @@ fn check_script_ignores_transitive_ty_for_tool_selection() -> Result<()> {
 }
 
 #[test]
-fn check_passes_workspace_metadata_to_ty() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-    "#})?;
-    context.temp_dir.child("main.py").write_str(indoc! {r"
-        x: int = 1
-    "})?;
-
-    uv_snapshot!(
-        context.filters(),
-        context
-            .check()
-            .arg("--ty-version")
-            .arg("0.0.17")
-            .arg("--verbose")
-            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug"),
-        @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    All checks passed!
-
-    ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    DEBUG `--exclude-newer` is ignored for pinned version `0.0.17`
-    DEBUG Using `ty==0.0.17`
-    DEBUG Passing workspace metadata to `ty check` via stdin
-    "
-    );
-
-    Ok(())
-}
-
-#[test]
 fn check_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

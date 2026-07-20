@@ -231,7 +231,6 @@ pub(crate) async fn check(
     };
 
     // Select an environment and, if we found a project, sync it before running checks.
-    let mut workspace_metadata = None;
     let mut locked_ty_path = None;
     let venv_path = if let Some(script) = &script {
         let extras = extras.with_defaults(DefaultExtras::default());
@@ -364,21 +363,6 @@ pub(crate) async fn check(
                 "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-
-        let lock = result.into_lock();
-        let metadata = crate::commands::workspace::metadata::metadata_from_target(
-            Some(&venv),
-            InstallTarget::Script {
-                script,
-                lock: &lock,
-            },
-            &extras,
-            &groups,
-            &settings.resolver,
-        )?;
-        let mut metadata = metadata.to_json()?;
-        metadata.push('\n');
-        workspace_metadata = Some(metadata);
 
         Some(venv.root().to_owned())
     } else if let Some(project) = &project {
@@ -606,30 +590,6 @@ pub(crate) async fn check(
             }
         }
 
-        let lock = result.into_lock();
-
-        let target = match project {
-            VirtualProject::Project(project) => InstallTarget::Project {
-                workspace: project.workspace(),
-                name: project.project_name(),
-                lock: &lock,
-            },
-            VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-                workspace,
-                lock: &lock,
-            },
-        };
-        let metadata = crate::commands::workspace::metadata::metadata_from_target(
-            (!no_sync).then_some(&venv),
-            target,
-            &extras,
-            &groups,
-            &settings.resolver,
-        )?;
-        let mut metadata = metadata.to_json()?;
-        metadata.push('\n');
-        workspace_metadata = Some(metadata);
-
         Some(venv.root().to_owned())
     } else {
         isolated_venv.map(|venv| venv.root().to_owned())
@@ -647,7 +607,6 @@ pub(crate) async fn check(
         &target_dir,
         script.as_ref().map(|script| script.path.as_path()),
         venv_path.as_deref(),
-        workspace_metadata,
         exclude_newer,
         show_version,
         &client_builder,
