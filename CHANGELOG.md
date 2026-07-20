@@ -9,7 +9,7 @@ Released on 2026-07-20.
 
 ### Python
 
-- Add managed CPython 3.15.0b4 downloads ([#20519](https://github.com/astral-sh/uv/pull/20519))
+- Add CPython 3.15.0b4 ([#20519](https://github.com/astral-sh/uv/pull/20519))
 
 ### Preview features
 
@@ -21,8 +21,7 @@ Released on 2026-07-20.
 - Skip resolver candidates whose files are all excluded by `exclude-newer` ([#20460](https://github.com/astral-sh/uv/pull/20460))
 - Limit parallel cache reads to reduce resolver scheduling and allocation overhead ([#20427](https://github.com/astral-sh/uv/pull/20427))
 - Accelerate lockfile serialization with `toml_writer` ([#20450](https://github.com/astral-sh/uv/pull/20450))
-- Compact cached Simple API distribution metadata ([#20463](https://github.com/astral-sh/uv/pull/20463))
-- Further compact cached Simple API distribution metadata and hashes ([#20483](https://github.com/astral-sh/uv/pull/20483))
+- Compact cached Simple API distribution metadata and hashes ([#20463](https://github.com/astral-sh/uv/pull/20463), [#20483](https://github.com/astral-sh/uv/pull/20483))
 - Decode stale cache entries in a single blocking task ([#20486](https://github.com/astral-sh/uv/pull/20486))
 - Decode cached payloads outside resolver workers ([#20464](https://github.com/astral-sh/uv/pull/20464))
 - Cache resolver Python requirement markers ([#20461](https://github.com/astral-sh/uv/pull/20461))
@@ -32,10 +31,6 @@ Released on 2026-07-20.
 
 - Prevent skipped tar-wheel entries from causing unrelated files to be removed during uninstall ([#20429](https://github.com/astral-sh/uv/pull/20429))
 - Preserve literal `extends-environment` paths in `pyvenv.cfg` on Unix ([#20466](https://github.com/astral-sh/uv/pull/20466))
-
-### Documentation
-
-- Add a contribution guide to the documentation ([#20511](https://github.com/astral-sh/uv/pull/20511))
 
 ## 0.11.29
 
@@ -1011,5 +1006,3 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
-
-
