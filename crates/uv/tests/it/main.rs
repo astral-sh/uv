@@ -16,6 +16,9 @@ mod ecosystem;
 
 mod help;
 
+#[cfg(all(feature = "test-python", feature = "test-pypi"))]
+mod json_schema;
+
 mod network;
 
 #[cfg(feature = "test-pypi")]
