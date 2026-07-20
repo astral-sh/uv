@@ -32,6 +32,24 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
+          save-if: false
+
+      - name: Prepare Rust dependencies
+        run: cargo fetch --locked
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        with:
+          tool: cargo-nextest
+
       - name: Prepare pull request branch
         env:
           BASE_REF: ${{ inputs.base-ref }}
