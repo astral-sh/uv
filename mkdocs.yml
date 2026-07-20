@@ -160,6 +160,7 @@ plugins:
           - reference/storage.md
           - reference/environment.md
           - reference/installer.md
+          - reference/contributing.md
 extra_css:
   - stylesheets/extra.css
 extra_javascript:
@@ -262,6 +263,7 @@ nav:
           - reference/troubleshooting/index.md
           - Build failures: reference/troubleshooting/build-failures.md
           - Reproducible examples: reference/troubleshooting/reproducible-examples.md
+      - Contributing: reference/contributing.md
       - Internals:
           - reference/internals/index.md
           - Resolver: reference/internals/resolver.md

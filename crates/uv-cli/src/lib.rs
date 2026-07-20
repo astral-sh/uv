@@ -8367,6 +8367,14 @@ pub struct MetadataArgs {
     #[arg(long)]
     pub sync: bool,
 
+    /// Sync dependencies to the active virtual environment.
+    ///
+    /// Instead of creating or updating the virtual environment for the project or script, the
+    /// active virtual environment will be preferred, if the `VIRTUAL_ENV` environment variable is
+    /// set.
+    #[arg(long)]
+    pub active: bool,
+
     /// The Python interpreter to use during resolution.
     ///
     /// A Python interpreter is required for building source distributions to determine package

@@ -2,10 +2,6 @@
 
 ## Finding ways to help
 
-We label issues that would be good for a first time contributor as
-[`good first issue`](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
-These usually do not require significant experience with Rust or the uv code base.
-
 We label issues that we think are a good opportunity for subsequent contributions as
 [`help wanted`](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22).
 These require varying levels of experience with Rust and uv. Often, we want to accomplish these
@@ -343,6 +339,9 @@ Changelog entries and version bumps are automated. First, run:
 ```shell
 ./scripts/release.sh
 ```
+
+If release preparation detects a new workspace crate, add it to
+[`astral-sh/crates-policies`](https://github.com/astral-sh/crates-policies).
 
 Then, editorialize the `CHANGELOG.md` file to ensure entries are consistently styled.
 

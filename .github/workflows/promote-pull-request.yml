@@ -1,0 +1,169 @@
+name: Promote pull request
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: "The uv-dev pull request number"
+        required: true
+        type: string
+      head_sha:
+        description: "The uv-dev pull request head SHA at dispatch time"
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: promote-pull-request-${{ inputs.pull_request }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: "Promote pull request #${{ inputs.pull_request }}"
+    if: github.repository == 'astral-sh/uv-dev'
+    runs-on: ubuntu-slim
+    environment: automations
+    timeout-minutes: 10
+    permissions:
+      id-token: write # for the credential broker
+      pull-requests: read # to verify the uv-dev pull request
+    steps:
+      - name: Verify pull request
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
+        run: |
+          gh pr view "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,state,isDraft,baseRefName,headRefName,isCrossRepository \
+            > "$RUNNER_TEMP/pull-request.json"
+
+          if ! jq --exit-status \
+            '.state == "OPEN" and (.isDraft | not) and (.isCrossRepository | not)' \
+            "$RUNNER_TEMP/pull-request.json" > /dev/null; then
+            echo "The uv-dev pull request is no longer ready; refusing to promote it." >&2
+            exit 1
+          fi
+
+          head_ref=$(jq --raw-output '.headRefName' "$RUNNER_TEMP/pull-request.json")
+          base_ref=$(jq --raw-output '.baseRefName' "$RUNNER_TEMP/pull-request.json")
+          git check-ref-format "refs/heads/$head_ref"
+          git check-ref-format "refs/heads/$base_ref"
+
+          {
+            echo "base_ref=$base_ref"
+            echo "head_ref=$head_ref"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Get promotion token
+        id: token
+        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repositories: |
+            astral-sh/uv
+            astral-sh/uv-dev
+          # GitHub requires write access to the uv-dev source branch when creating a
+          # cross-repository pull request, so `contents: write` is required for both repositories.
+          permissions: |
+            contents: write
+            pull_requests: write
+
+      - name: Promote pull request
+        id: promote
+        env:
+          BASE_REF: ${{ steps.verify.outputs.base_ref }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          HEAD_REF: ${{ steps.verify.outputs.head_ref }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
+        run: |
+          source_pull_request=$(gh api --method GET "repos/astral-sh/uv-dev/pulls/$PULL_REQUEST_NUMBER")
+          if ! jq --exit-status \
+            --arg base_ref "$BASE_REF" \
+            --arg head_ref "$HEAD_REF" \
+            '.state == "open" and (.draft | not) and .base.ref == $base_ref and .head.ref == $head_ref and .base.repo.id == 1302176231 and .head.repo.id == 1302176231' \
+            <<< "$source_pull_request" > /dev/null; then
+            echo "The uv-dev pull request is no longer ready on the expected branch; refusing to promote it." >&2
+            exit 1
+          fi
+
+          if ! gh api --method GET "repos/astral-sh/uv/git/ref/heads/$BASE_REF" --silent; then
+            echo "The upstream base branch $BASE_REF does not exist; refusing to promote." >&2
+            exit 1
+          fi
+
+          existing_pull_requests=$(
+            gh api \
+              --method GET \
+              repos/astral-sh/uv/pulls \
+              --raw-field state=all \
+              --raw-field head="astral-sh:$HEAD_REF" |
+              jq --compact-output '[.[] | select(.head.repo.id == 1302176231)]'
+          )
+          existing_count=$(jq 'length' <<< "$existing_pull_requests")
+          if (( existing_count > 1 )); then
+            echo "Found multiple upstream pull requests for $HEAD_REF; refusing to promote." >&2
+            exit 1
+          fi
+
+          if (( existing_count == 1 )); then
+            if ! jq --exit-status \
+              --arg base_ref "$BASE_REF" \
+              --arg head_ref "$HEAD_REF" \
+              '.[0].state == "open" and .[0].base.ref == $base_ref and .[0].head.ref == $head_ref and .[0].base.repo.id == 699532645 and .[0].head.repo.id == 1302176231' \
+              <<< "$existing_pull_requests" > /dev/null; then
+              echo "An upstream pull request already exists with a different state, base, or head; refusing to promote." >&2
+              exit 1
+            fi
+
+            upstream_pull_request=$(jq --compact-output '.[0]' <<< "$existing_pull_requests")
+          else
+            upstream_pull_request=$(
+              jq \
+                --arg base_ref "$BASE_REF" \
+                --arg head_ref "astral-sh:$HEAD_REF" \
+                '{title: .title, body: (.body // ""), base: $base_ref, head: $head_ref, head_repo: "astral-sh/uv-dev"}' \
+                "$RUNNER_TEMP/pull-request.json" |
+                gh api \
+                  --method POST \
+                  repos/astral-sh/uv/pulls \
+                  --input -
+            )
+          fi
+
+          upstream_number=$(jq --exit-status --raw-output '.number | select(type == "number")' <<< "$upstream_pull_request")
+          echo "number=$upstream_number" >> "$GITHUB_OUTPUT"
+
+      - name: Get uv-dev token
+        id: uv-dev-token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: |
+            pull_requests: write
+
+      - name: Close uv-dev pull request
+        env:
+          GH_TOKEN: ${{ steps.uv-dev-token.outputs.token }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
+          UPSTREAM_NUMBER: ${{ steps.promote.outputs.number }}
+        run: |
+          pull_request=$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,isDraft)
+          if ! jq --exit-status \
+            '.state == "OPEN" and (.isDraft | not)' \
+            <<< "$pull_request" > /dev/null; then
+            echo "The uv-dev pull request is no longer ready; refusing to close it." >&2
+            exit 1
+          fi
+
+          upstream_url="https://github.com/astral-sh/uv/pull/$UPSTREAM_NUMBER"
+          gh pr close "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --comment "Promoted to [#$UPSTREAM_NUMBER]($upstream_url)."
+
+          echo "Promoted uv-dev pull request #$PULL_REQUEST_NUMBER to [#$UPSTREAM_NUMBER]($upstream_url)." >> "$GITHUB_STEP_SUMMARY"

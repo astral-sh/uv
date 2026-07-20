@@ -34,7 +34,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
-          version: "0.11.28"
+          version: "0.11.29"
 
       - name: "Install Codex Security plugin"
         run: ./agents/scripts/install-codex-security.sh
@@ -49,9 +49,19 @@ jobs:
           gh pr diff "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             > .pull-request-review.diff
+
+          {
+            printf 'Pull request security review automation for #%s\n\n' "$PULL_REQUEST_NUMBER"
+            cat agents/prompts/pull-request-security-review.md
+          } > "$RUNNER_TEMP/pull-request-security-review-prompt.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        with:
+          tool: cargo-nextest
 
       - name: "Review pull request"
         id: review
@@ -65,8 +75,17 @@ jobs:
           codex-home: "agents/codex"
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
-          prompt-file: "agents/prompts/pull-request-security-review.md"
+          allow-bot-users: "astral-automations-bot[bot],renovate[bot]"
+          prompt-file: "${{ runner.temp }}/pull-request-security-review-prompt.md"
           output-schema-file: "agents/schemas/pull-request-security-review.json"
+
+      - name: "Upload Codex thread"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-pull-request-security-review-${{ github.run_id }}-${{ github.run_attempt }}
+          path: agents/codex/sessions
+          if-no-files-found: warn
 
   prepare:
     needs: review
@@ -84,7 +103,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
-          version: "0.11.28"
+          version: "0.11.29"
 
       - name: "Prepare review findings"
         id: comments
@@ -102,12 +121,23 @@ jobs:
 
   report:
     needs: prepare
-    if: needs.prepare.outputs.result != ''
+    if: needs.prepare.outputs.result != '' && fromJSON(needs.prepare.outputs.result).comments[0] != null
     runs-on: ubuntu-latest
+    environment: automations
     timeout-minutes: 5
     permissions:
-      pull-requests: write
+      id-token: write # for the credential broker
     steps:
+      - name: "Get uv token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv
+          permissions: |
+            pull_requests: write
+
       - name: "Publish review findings"
         run: |
           printf '%s\n' "$REVIEW_RESULT" > "$RUNNER_TEMP/review.json"
@@ -128,12 +158,17 @@ jobs:
             exit 0
           fi
 
-          gh api \
-            --method POST \
-            "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/reviews" \
-            --input "$RUNNER_TEMP/review.json"
+          jq --compact-output '.comments[]' "$RUNNER_TEMP/review.json" |
+          while IFS= read -r comment; do
+            printf '%s\n' "$comment" |
+              gh api \
+                --method POST \
+                "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments" \
+                --input - \
+                --silent
+          done
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           REVIEW_RESULT: ${{ needs.prepare.outputs.result }}

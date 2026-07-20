@@ -38,3 +38,10 @@ enabled = true
 [permissions.pull-request-review.network.domains]
 "api.github.com" = "allow"
 "github.com" = "allow"
+
+[permissions.pull-request-rebase]
+description = "Pull request rebase with workspace and Git metadata access."
+extends = ":workspace"
+
+[permissions.pull-request-rebase.filesystem.":workspace_roots"]
+".git" = "write"

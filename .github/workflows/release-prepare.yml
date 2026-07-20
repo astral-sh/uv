@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: automations
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      id-token: write # for the credential broker
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -34,10 +34,21 @@ jobs:
         with:
           save-if: false
 
+      - name: "Get uv token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv
+          permissions: |
+            contents: write
+            pull_requests: write
+
       - name: "Configure Git"
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "astral-automations-bot[bot]"
+          git config user.email "305554984+astral-automations-bot[bot]@users.noreply.github.com"
 
       - name: "Bump version"
         run: |
@@ -47,9 +58,16 @@ jobs:
             ./scripts/release.sh
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_BUMP: ${{ inputs.bump }}
+
+      - name: "Prepare Codex prompt"
+        run: |
+          {
+            printf 'Release preparation automation for %s\n\n' "$(uv version --short)"
+            cat agents/prompts/editorialize-changelog.md
+          } > "$RUNNER_TEMP/editorialize-changelog-prompt.md"
 
       - name: "Rewrite changelog"
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
@@ -58,8 +76,16 @@ jobs:
           model: gpt-5.6-sol
           permission-profile: ":read-only"
           safety-strategy: drop-sudo
-          prompt-file: "agents/prompts/editorialize-changelog.md"
+          prompt-file: "${{ runner.temp }}/editorialize-changelog-prompt.md"
           output-file: "${{ runner.temp }}/changelog-section.md"
+
+      - name: "Upload Codex thread"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-release-prepare-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ~/.codex/sessions
+          if-no-files-found: warn
 
       - name: "Apply changelog rewrite"
         run: |
@@ -100,4 +126,4 @@ jobs:
               --fill-first
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}

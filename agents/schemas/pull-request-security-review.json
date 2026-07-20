@@ -10,11 +10,6 @@
         "properties": {
           "title": { "type": "string" },
           "body": { "type": "string" },
-          "confidence_score": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
-          },
           "priority": {
             "type": "integer",
             "minimum": 0,
@@ -48,16 +43,9 @@
             "required": ["relative_file_path", "side", "line_range"]
           }
         },
-        "required": [
-          "title",
-          "body",
-          "confidence_score",
-          "priority",
-          "code_location"
-        ]
+        "required": ["title", "body", "priority", "code_location"]
       }
-    },
-    "summary": { "type": "string", "minLength": 1 }
+    }
   },
-  "required": ["findings", "summary"]
+  "required": ["findings"]
 }

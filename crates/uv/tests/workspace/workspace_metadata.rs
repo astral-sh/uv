@@ -8,6 +8,7 @@ use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
 use url::Url;
 
+use uv_static::EnvVars;
 use uv_test::{copy_dir_ignore, uv_snapshot};
 
 fn write_wheel(
@@ -130,7 +131,9 @@ fn workspace_metadata_simple() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn workspace_metadata_script() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
     let script = context.temp_dir.child("script.py");
     script.write_str(
         r#"# /// script
@@ -159,7 +162,12 @@ import iniconfig
       },
       "workspace_root": "[TEMP_DIR]/",
       "environment": {
-        "root": "[CACHE_DIR]/environments-v2/script-[HASH]"
+        "root": "[CACHE_DIR]/environments-v2/script-[HASH]",
+        "python": {
+          "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/[PYTHON]",
+          "version": "3.12.[X]",
+          "implementation": "cpython"
+        }
       },
       "script": {
         "path": "[TEMP_DIR]/script.py",
@@ -526,8 +534,56 @@ fn workspace_metadata_sync_centralized_environment() -> Result<()> {
 }
 
 #[test]
+fn workspace_metadata_sync_active_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]);
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.11")
+        .assert()
+        .success();
+    let active = context.temp_dir.child("active");
+    context
+        .venv()
+        .arg(active.path())
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, active.path())
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    assert_eq!(
+        metadata["environment"]["root"].as_str().map(Path::new),
+        Some(active.path())
+    );
+
+    Ok(())
+}
+
+#[test]
 fn workspace_metadata_module_owners_from_locked_wheels() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
 
     let gpu_a = context.temp_dir.child("gpu_a-0.1.0-py3-none-any.whl");
     write_wheel(gpu_a.path(), "gpu-a", "gpu_a-0.1.0", &[("gpu/a.py", "")])?;
@@ -586,7 +642,12 @@ dependencies = [
       },
       "workspace_root": "[TEMP_DIR]/",
       "environment": {
-        "root": "[VENV]/"
+        "root": "[VENV]/",
+        "python": {
+          "path": "[VENV]/[BIN]/[PYTHON]",
+          "version": "3.12.[X]",
+          "implementation": "cpython"
+        }
       },
       "workspace": {
         "path": "[TEMP_DIR]/",

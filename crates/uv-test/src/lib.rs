@@ -27,7 +27,7 @@ use futures::StreamExt;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use predicates::prelude::predicate;
-use regex::Regex;
+use regex::{Regex, regex};
 use tokio::io::AsyncWriteExt;
 
 use uv_cache::{Cache, CacheBucket};
@@ -44,7 +44,7 @@ static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
-const LATEST_PYTHON_3_15: &str = "3.15.0b3";
+const LATEST_PYTHON_3_15: &str = "3.15.0b4";
 const LATEST_PYTHON_3_14: &str = "3.14.6";
 const LATEST_PYTHON_3_13: &str = "3.13.14";
 pub const LATEST_PYTHON_3_12: &str = "3.12.13";
@@ -411,7 +411,6 @@ impl TestContext {
     /// depending on the specific machine used:
     /// - `home = foo/bar/baz/python3.X.X/bin`
     /// - `uv = X.Y.Z`
-    /// - `extends-environment = <path/to/parent/venv>`
     #[must_use]
     pub fn with_pyvenv_cfg_filters(mut self) -> Self {
         let added_filters = [
@@ -419,10 +418,6 @@ impl TestContext {
             (
                 r"uv = \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?".to_string(),
                 "uv = [UV_VERSION]".to_string(),
-            ),
-            (
-                r"extends-environment = .+".to_string(),
-                "extends-environment = [PARENT_VENV]".to_string(),
             ),
         ];
         for filter in added_filters {
@@ -1045,7 +1040,10 @@ impl TestContext {
 
         // Filter non-deterministic temporary directory names
         // Note we apply this _after_ all the full paths to avoid breaking their matching
-        filters.push((r"(\\|\/)\.tmp.*(\\|\/)".to_string(), "/[TMP]/".to_string()));
+        filters.push((
+            r#"(\\|/)\.tmp[^\\/\s"'`]*"#.to_string(),
+            "/[TMP]".to_string(),
+        ));
 
         // Account for platform prefix differences `file://` (Unix) vs `file:///` (Windows)
         filters.push((r"file:///".to_string(), "file://".to_string()));
@@ -1911,9 +1909,6 @@ impl TestContext {
     ///
     /// This assumes that a lock has already been performed.
     pub fn diff_lock(&self, change: impl Fn(&Self) -> Command) -> String {
-        static TRIM_TRAILING_WHITESPACE: std::sync::LazyLock<Regex> =
-            std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s+$").unwrap());
-
         let lock_path = ChildPath::new(self.temp_dir.join("uv.lock"));
         let old_lock = fs_err::read_to_string(&lock_path).unwrap();
         let (snapshot, output) = run_and_format(
@@ -1984,9 +1979,6 @@ impl TestContext {
 /// Creates a "unified" diff between the two line-oriented strings suitable
 /// for snapshotting.
 pub fn diff_snapshot(old: &str, new: &str, context_radius: usize) -> String {
-    static TRIM_TRAILING_WHITESPACE: std::sync::LazyLock<Regex> =
-        std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s+$").unwrap());
-
     let diff = similar::TextDiff::from_lines(old, new);
     let unified = diff
         .unified_diff()
@@ -1996,9 +1988,7 @@ pub fn diff_snapshot(old: &str, new: &str, context_radius: usize) -> String {
     // Not totally clear why, but some lines end up containing only
     // whitespace in the diff, even though they don't appear in the
     // original data. So just strip them here.
-    TRIM_TRAILING_WHITESPACE
-        .replace_all(&unified, "")
-        .into_owned()
+    regex!(r"(?m)^\s+$").replace_all(&unified, "").into_owned()
 }
 
 /// Assert a snapshot of the diff between `old` and a command's output.

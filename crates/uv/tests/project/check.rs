@@ -1231,49 +1231,6 @@ fn check_script_ignores_transitive_ty_for_tool_selection() -> Result<()> {
 }
 
 #[test]
-fn check_passes_workspace_metadata_to_ty() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-    "#})?;
-    context.temp_dir.child("main.py").write_str(indoc! {r"
-        x: int = 1
-    "})?;
-
-    uv_snapshot!(
-        context.filters(),
-        context
-            .check()
-            .arg("--ty-version")
-            .arg("0.0.17")
-            .arg("--verbose")
-            .env(EnvVars::RUST_LOG, "uv::commands::project::check::ty=debug"),
-        @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    All checks passed!
-
-    ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    DEBUG `--exclude-newer` is ignored for pinned version `0.0.17`
-    DEBUG Using `ty==0.0.17`
-    DEBUG Passing workspace metadata to `ty check` via stdin
-    "
-    );
-
-    Ok(())
-}
-
-#[test]
 fn check_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1590,7 +1547,7 @@ fn check_isolated_no_project() -> Result<()> {
         .filters()
         .into_iter()
         .chain([(
-            r"info:   4\. \[CACHE_DIR\]/builds-v0/\[TMP\]/site-packages \(site-packages\)\n",
+            r"info:   4\. \[CACHE_DIR\]/builds-v0/\[TMP\]/lib64/python\d+\.\d+/site-packages \(site-packages\)\n",
             "",
         )])
         .collect::<Vec<_>>();
@@ -1617,7 +1574,7 @@ fn check_isolated_no_project() -> Result<()> {
     info: Searched in the following paths during module resolution:
     info:   1. [TEMP_DIR]/ (first-party code)
     info:   2. vendored://stdlib (stdlib typeshed stubs vendored by ty)
-    info:   3. [CACHE_DIR]/builds-v0/[TMP]/site-packages (site-packages)
+    info:   3. [CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages (site-packages)
     info: make sure your Python environment is properly configured: https://docs.astral.sh/ty/modules/#python-environment
     info: rule `unresolved-import` is enabled by default
 

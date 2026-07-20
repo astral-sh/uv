@@ -257,7 +257,7 @@ jobs:
           pattern: artifacts-*
           path: target/distrib/
           merge-multiple: true
-      # This is a harmless no-op for GitHub Releases, hosting for that happens in "announce"
+      # This is a harmless no-op for GitHub Releases, hosting for that happens in "publish-github"
       - id: host
         shell: bash
         run: |

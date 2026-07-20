@@ -236,7 +236,7 @@ impl CachedClient {
     /// allowed to make subsequent requests, e.g. through the uncached client.
     #[instrument(skip_all)]
     async fn get_cacheable<
-        Payload: Cacheable,
+        Payload: Cacheable + 'static,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     >(
@@ -246,8 +246,43 @@ impl CachedClient {
         cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
-        let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let start = Instant::now();
+
+        if matches!(cache_control, CacheControl::AllowStale) {
+            let (req, cached) = self
+                .read_and_decode_stale_cache::<Payload>(req, cache_entry)
+                .await;
+            match cached {
+                Ok(Some(payload)) => return Ok(payload),
+                Ok(None) => warn!(
+                    "Cached response doesn't match current request for: {}",
+                    DisplaySafeUrl::from_url(req.url().clone())
+                ),
+                Err(err) if err.is_file_not_exists() => {
+                    trace!("No cache entry exists for {}", cache_entry.path().display());
+                }
+                Err(err) => {
+                    warn!(
+                        "Broken cache entry at {}, removing: {err}",
+                        cache_entry.path().display()
+                    );
+                    let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
+                }
+            }
+
+            let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
+            return self
+                .run_response_callback(
+                    cache_entry,
+                    cache_policy,
+                    start,
+                    response,
+                    response_callback,
+                )
+                .await;
+        }
+
+        let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let cached_response = if let Some(cached) = self.read_cache(cache_entry).await {
             self.send_cached(req, cache_control.clone(), cached)
                 .boxed_local()
@@ -264,7 +299,13 @@ impl CachedClient {
             }
         };
         match cached_response {
-            CachedResponse::FreshCache(cached) => match Payload::from_aligned_bytes(cached.data) {
+            CachedResponse::FreshCache(cached) => match self
+                .0
+                .cache_read_runtime()
+                .spawn_blocking(move || Payload::from_aligned_bytes(cached.data))
+                .await
+                .expect("cache payload decoding task panicked")
+            {
                 Ok(payload) => Ok(payload),
                 Err(err) => {
                     warn!(
@@ -289,7 +330,13 @@ impl CachedClient {
                     write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
                         .await
                         .map_err(ErrorKind::CacheWrite)?;
-                    match Payload::from_aligned_bytes(cached.data) {
+                    match self
+                        .0
+                        .cache_read_runtime()
+                        .spawn_blocking(move || Payload::from_aligned_bytes(cached.data))
+                        .await
+                        .expect("cache payload decoding task panicked")
+                    {
                         Ok(payload) => Ok(payload),
                         Err(err) => {
                             warn!(
@@ -458,6 +505,33 @@ impl CachedClient {
                 None
             }
         }
+    }
+
+    /// Reads and decodes an allowed-stale cache entry in one blocking task.
+    ///
+    /// The task returns the request it owns while checking the policy. `Ok(None)` means the entry
+    /// belongs to a different request; errors indicate a broken entry for the caller to remove.
+    #[instrument(name = "read_and_decode_stale_cache", skip_all, fields(file = %cache_entry.path().display()))]
+    async fn read_and_decode_stale_cache<Payload: Cacheable + 'static>(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+    ) -> (Request, Result<Option<Payload::Target>, Error>) {
+        let path = cache_entry.path().to_path_buf();
+        self.0
+            .cache_read_runtime()
+            .spawn_blocking(move || {
+                let cached = DataWithCachePolicy::from_path_sync(&path).and_then(|cached| {
+                    if cached.cache_policy.matches_stale_request(&req) {
+                        Payload::from_aligned_bytes(cached.data).map(Some)
+                    } else {
+                        Ok(None)
+                    }
+                });
+                (req, cached)
+            })
+            .await
+            .expect("cache read and payload decoding task panicked")
     }
 
     /// Send a request given that we have a (possibly) stale cached response.
@@ -653,7 +727,7 @@ impl CachedClient {
     /// See: <https://github.com/TrueLayer/reqwest-middleware/blob/8a494c165734e24c62823714843e1c9347027e8a/reqwest-retry/src/middleware.rs#L137>
     #[instrument(skip_all)]
     pub(crate) async fn get_cacheable_with_retry<
-        Payload: Cacheable,
+        Payload: Cacheable + 'static,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     >(

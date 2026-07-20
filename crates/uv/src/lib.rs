@@ -2066,6 +2066,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                     args.dry_run,
                     args.refresh,
                     args.sync,
+                    args.active,
                     args.python,
                     args.install_mirrors,
                     args.malware_settings,

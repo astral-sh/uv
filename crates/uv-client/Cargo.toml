@@ -1,6 +1,6 @@
 [package]
 name = "uv-client"
-version = "0.0.62"
+version = "0.0.63"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -50,6 +50,7 @@ async_zip = { workspace = true }
 bytecheck = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+hex = { workspace = true }
 h2 = { workspace = true }
 html-escape = { workspace = true }
 http = { workspace = true }

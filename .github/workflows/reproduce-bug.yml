@@ -61,6 +61,11 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author \
             > .issue-triage-event.json
+
+          {
+            printf 'Bug reproduction automation for #%s\n\n' "$(jq -r '.number' .issue-triage-event.json)"
+            cat agents/prompts/reproduce-bug.md
+          } > "$RUNNER_TEMP/reproduce-bug-prompt.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ inputs.issue }}
@@ -78,8 +83,16 @@ jobs:
           permission-profile: "reproduce-bug"
           safety-strategy: drop-sudo
           allow-users: "*"
-          prompt-file: "agents/prompts/reproduce-bug.md"
+          prompt-file: "${{ runner.temp }}/reproduce-bug-prompt.md"
           output-schema-file: "agents/schemas/issue-triage-bug.json"
+
+      - name: "Upload Codex thread"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-reproduce-bug-${{ github.run_id }}-${{ github.run_attempt }}
+          path: agents/codex/sessions
+          if-no-files-found: warn
 
   report:
     needs: reproduce
@@ -88,6 +101,6 @@ jobs:
     permissions: {}
     steps:
       - name: "Write reproduction summary"
-        run: printf '%s\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        run: printf '```json\n%s\n```\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
         env:
           REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}

@@ -2101,6 +2101,7 @@ pub(crate) struct MetadataSettings {
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
     pub(crate) sync: bool,
+    pub(crate) active: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
@@ -2124,6 +2125,7 @@ impl MetadataSettings {
             build,
             refresh,
             sync,
+            active,
             python,
         } = *args;
 
@@ -2147,6 +2149,7 @@ impl MetadataSettings {
             frozen: resolve_frozen(frozen),
             dry_run: DryRun::from_args(dry_run),
             sync,
+            active,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(
