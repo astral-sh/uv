@@ -59,7 +59,7 @@ use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
-    Metadata, PylockToml, PylockTomlError, PylockTomlErrorKind, cyclonedx_json,
+    Metadata, PylockToml, PylockTomlError, PylockTomlErrorKind, PythonReport, cyclonedx_json,
 };
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;

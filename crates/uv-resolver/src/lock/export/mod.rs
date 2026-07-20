@@ -17,7 +17,7 @@ use uv_pypi_types::ConflictItem;
 
 use crate::graph_ops::Reachable;
 use crate::lock::LockErrorKind;
-pub use crate::lock::export::metadata::Metadata;
+pub use crate::lock::export::metadata::{Metadata, PythonReport};
 pub(crate) use crate::lock::export::metadata::{
     MetadataNode, MetadataNodeId, MetadataNodeKind, MetadataScript, MetadataWorkspace,
     MetadataWorkspaceMember,
