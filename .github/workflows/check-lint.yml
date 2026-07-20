@@ -86,7 +86,14 @@ jobs:
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           version: "0.11.28"
-      - run: uvx --from 'validate-pyproject[all,store]' --with validate-pyproject-schema-store==2026.7.17 validate-pyproject pyproject.toml
+      - name: "Validate pyproject and uv schema"
+        # Replace the bundled `uv` schema with the checked-in schema. validate-pyproject requires
+        # an absolute `$id` to resolve the schema's internal references.
+        run: >
+          uvx --from 'validate-pyproject[all,store]' validate-pyproject
+          --disable-plugins uv
+          --tool uv=<(jq '.["$id"]="https://example.com/uv.schema.json"' uv.schema.json)
+          pyproject.toml
 
   readme:
     timeout-minutes: 10
