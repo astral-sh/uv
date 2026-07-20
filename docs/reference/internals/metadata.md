@@ -171,7 +171,16 @@ Here is a human-readable annotated example:
   // Information about the environment, currently only available with `--sync`
   "environment": {
     // The absolute path to the environment root
-    "root": "/workspace/.venv"
+    "root": "/workspace/.venv",
+    // Information about the Python interpreter in the environment
+    "python": {
+      // The absolute path to the Python executable
+      "path": "/workspace/.venv/bin/python",
+      // The full Python version
+      "version": "3.12.12",
+      // The Python implementation name
+      "implementation": "cpython"
+    }
   },
   // Information about the script target, only present with `--script`.
   // Workspace metadata uses `workspace` and `members` below as graph entry-points instead.

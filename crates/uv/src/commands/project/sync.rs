@@ -31,7 +31,9 @@ use uv_python::{
     ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
+use uv_resolver::{
+    FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, PythonReport, ResolutionMode,
+};
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
@@ -1309,32 +1311,6 @@ impl LockAction {
 }
 
 #[derive(Serialize, Debug)]
-struct PythonReport {
-    path: PortablePathBuf,
-    version: uv_pep508::StringVersion,
-    implementation: String,
-}
-
-impl From<&uv_python::Interpreter> for PythonReport {
-    fn from(interpreter: &uv_python::Interpreter) -> Self {
-        Self {
-            path: interpreter.sys_executable().into(),
-            version: interpreter.python_full_version().clone(),
-            implementation: interpreter.implementation_name().to_string(),
-        }
-    }
-}
-
-impl PythonReport {
-    /// Set the path for this Python report.
-    #[must_use]
-    fn with_path(mut self, path: PortablePathBuf) -> Self {
-        self.path = path;
-        self
-    }
-}
-
-#[derive(Serialize, Debug)]
 struct EnvironmentReport {
     /// The path to the environment.
     path: PortablePathBuf,
@@ -1368,8 +1344,7 @@ impl EnvironmentReport {
     /// Set the path for this environment report.
     #[must_use]
     fn with_path(mut self, path: PortablePathBuf) -> Self {
-        let python_path = &self.python.path;
-        if let Ok(python_path) = python_path.as_ref().strip_prefix(self.path) {
+        if let Ok(python_path) = self.python.path().strip_prefix(self.path) {
             let new_path = path.as_ref().to_path_buf().join(python_path);
             self.python = self.python.with_path(new_path.as_path().into());
         }
