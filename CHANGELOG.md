@@ -7,39 +7,35 @@
 
 Released on 2026-07-20.
 
+### Python
+
+- Add managed CPython 3.15.0b4 downloads ([#20519](https://github.com/astral-sh/uv/pull/20519))
+
 ### Preview features
 
-- Support `--active` in `uv workspace metadata` ([#20500](https://github.com/astral-sh/uv/pull/20500))
+- Allow `uv workspace metadata --sync` to target the active virtual environment with `--active` ([#20500](https://github.com/astral-sh/uv/pull/20500))
+- Reuse centralized project environments when workspaces are accessed through symlinks ([#20436](https://github.com/astral-sh/uv/pull/20436))
 
 ### Performance
 
+- Skip resolver candidates whose files are all excluded by `exclude-newer` ([#20460](https://github.com/astral-sh/uv/pull/20460))
+- Limit parallel cache reads to reduce resolver scheduling and allocation overhead ([#20427](https://github.com/astral-sh/uv/pull/20427))
+- Accelerate lockfile serialization with `toml_writer` ([#20450](https://github.com/astral-sh/uv/pull/20450))
+- Compact cached Simple API distribution metadata ([#20463](https://github.com/astral-sh/uv/pull/20463))
+- Further compact cached Simple API distribution metadata and hashes ([#20483](https://github.com/astral-sh/uv/pull/20483))
+- Decode stale cache entries in a single blocking task ([#20486](https://github.com/astral-sh/uv/pull/20486))
+- Decode cached payloads outside resolver workers ([#20464](https://github.com/astral-sh/uv/pull/20464))
 - Cache resolver Python requirement markers ([#20461](https://github.com/astral-sh/uv/pull/20461))
-- Compact cached distribution metadata ([#20463](https://github.com/astral-sh/uv/pull/20463))
-- Decode cached payloads on the cache-read pool ([#20464](https://github.com/astral-sh/uv/pull/20464))
-- Decode stale cache entries in one blocking task ([#20486](https://github.com/astral-sh/uv/pull/20486))
-- Further compact cached distribution metadata ([#20483](https://github.com/astral-sh/uv/pull/20483))
-- Isolate cache reads on a blocking pool ([#20427](https://github.com/astral-sh/uv/pull/20427))
-- Migrate lockfile serialization to `toml_writer` ([#20450](https://github.com/astral-sh/uv/pull/20450))
 - Reuse resolver fork markers while recording preferences ([#20462](https://github.com/astral-sh/uv/pull/20462))
-- Skip fully cutoff-excluded resolver candidates ([#20460](https://github.com/astral-sh/uv/pull/20460))
 
 ### Bug fixes
 
-- Reuse centralized environments through workspace symlinks ([#20436](https://github.com/astral-sh/uv/pull/20436))
-- Stop escaping `extends-environment` in pyvenv.cfg ([#20466](https://github.com/astral-sh/uv/pull/20466))
+- Prevent skipped tar-wheel entries from causing unrelated files to be removed during uninstall ([#20429](https://github.com/astral-sh/uv/pull/20429))
+- Preserve literal `extends-environment` paths in `pyvenv.cfg` on Unix ([#20466](https://github.com/astral-sh/uv/pull/20466))
 
-### Other changes
+### Documentation
 
-- Add a nightly fast-build test profile ([#20456](https://github.com/astral-sh/uv/pull/20456))
-- Add contributing section to docs ([#20511](https://github.com/astral-sh/uv/pull/20511))
-- Allow Packse scenarios without generated tests ([#20469](https://github.com/astral-sh/uv/pull/20469))
-- Enable nightly Rust features for Windows tests ([#20452](https://github.com/astral-sh/uv/pull/20452))
-- Enable nightly Rust features for development builds ([#20458](https://github.com/astral-sh/uv/pull/20458))
-- Exclude skipped tar-wheel entries from RECORD healing ([#20429](https://github.com/astral-sh/uv/pull/20429))
-- Fix stale release job reference ([#20442](https://github.com/astral-sh/uv/pull/20442))
-- Support range requests in the Packse server ([#20473](https://github.com/astral-sh/uv/pull/20473))
-- Sync latest Python releases ([#20519](https://github.com/astral-sh/uv/pull/20519))
-- Use centralized crates.io publishing policies ([#20449](https://github.com/astral-sh/uv/pull/20449))
+- Add a contribution guide to the documentation ([#20511](https://github.com/astral-sh/uv/pull/20511))
 
 ## 0.11.29
 
