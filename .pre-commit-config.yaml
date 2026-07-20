@@ -44,7 +44,7 @@ repos:
         types_or: [yaml, json5]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 01a675ea018f2fb714478a5ffb83fcea8374bb06 # frozen: v0.15.21
+    rev: 2700fd5671c633760d912769c041bfcde2b9a01b # frozen: v0.15.22
     hooks:
       - id: ruff-format
       - id: ruff
