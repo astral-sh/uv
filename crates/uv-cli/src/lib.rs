@@ -3427,9 +3427,9 @@ pub struct InitArgs {
     /// `packaged-init` preview feature is enabled. It will become the default unconditionally in
     /// the future.
     ///
-    /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
-    /// project structure.
-    #[arg(long, overrides_with = "no_package")]
+    /// For an application (the default project kind), this will include a `[project.scripts]`
+    /// entrypoint and use a `src/` project structure.
+    #[arg(long, overrides_with = "no_package", conflicts_with_all = ["app"])]
     pub r#package: bool,
 
     /// Do not set up the project to be built as a Python package.
@@ -3447,9 +3447,9 @@ pub struct InitArgs {
     /// This project kind is for web servers, scripts, and command-line interfaces.
     ///
     /// By default, an application is not intended to be built and distributed as a Python package.
-    /// The `--package` option can be used to create an application that is distributable, e.g., if
-    /// you want to distribute a command-line interface via PyPI.
-    #[arg(long, alias = "application", conflicts_with_all = ["lib", "script"])]
+    /// Use `--package` (without `--app`) to create a distributable application, e.g., if you want
+    /// to distribute a command-line interface via PyPI.
+    #[arg(long, alias = "application", conflicts_with_all = ["lib", "script", "package", "build_backend"])]
     pub r#app: bool,
 
     /// Create a project for a library.
@@ -3488,7 +3488,7 @@ pub struct InitArgs {
     /// Initialize a build-backend of choice for the project.
     ///
     /// Implicitly sets `--package`.
-    #[arg(long, value_enum, conflicts_with_all=["script", "no_package"], env = EnvVars::UV_INIT_BUILD_BACKEND)]
+    #[arg(long, value_enum, conflicts_with_all=["script", "no_package", "app"], env = EnvVars::UV_INIT_BUILD_BACKEND)]
     pub build_backend: Option<ProjectBuildBackend>,
 
     /// Invalid option name for build backend.

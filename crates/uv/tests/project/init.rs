@@ -289,7 +289,7 @@ fn init_application_other_python_exists() -> Result<()> {
     Ok(())
 }
 
-/// Run `uv init --app --package` to create a packaged application project
+/// Run `uv init --package` to create a packaged application project
 #[test]
 fn init_application_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -300,7 +300,7 @@ fn init_application_package() -> Result<()> {
     let pyproject_toml = child.join("pyproject.toml");
     let init_py = child.join("src").join("foo").join("__init__.py");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package"), @"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--package"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -359,6 +359,81 @@ fn init_application_package() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    ");
+
+    Ok(())
+}
+
+/// Using `uv init --app --package` isn't allowed, since `--app` requests an unpackaged
+/// application while `--package` requests a packaged one.
+#[test]
+fn init_app_conflicts_with_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--app' cannot be used with '--package'
+
+    Usage: uv init --cache-dir [CACHE_DIR] --app [PATH]
+
+    For more information, try '--help'.
+    ");
+
+    Ok(())
+}
+
+/// Using `uv init --app --build-backend` isn't allowed, since `--build-backend` implies a
+/// packaged project.
+#[test]
+fn init_app_conflicts_with_build_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--build-backend").arg("uv"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--app' cannot be used with '--build-backend <BUILD_BACKEND>'
+
+    Usage: uv init --cache-dir [CACHE_DIR] --app [PATH]
+
+    For more information, try '--help'.
+    ");
+
+    Ok(())
+}
+
+/// Using `uv init --app` with `UV_INIT_BUILD_BACKEND` isn't allowed, since the build backend
+/// implies a packaged project. See <https://github.com/astral-sh/uv/issues/17335>.
+#[test]
+fn init_app_conflicts_with_build_backend_env() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").env(EnvVars::UV_INIT_BUILD_BACKEND, "uv"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--app' cannot be used with '--build-backend <BUILD_BACKEND>'
+
+    Usage: uv init --cache-dir [CACHE_DIR] --app [PATH]
+
+    For more information, try '--help'.
     ");
 
     Ok(())
@@ -3165,7 +3240,7 @@ fn init_with_author() {
     });
 }
 
-/// Run `uv init --app --package --build-backend flit` to create a packaged application project
+/// Run `uv init --package --build-backend flit` to create a packaged application project
 #[test]
 fn init_application_package_flit() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3176,7 +3251,7 @@ fn init_application_package_flit() -> Result<()> {
     let pyproject_toml = child.join("pyproject.toml");
     let init_py = child.join("src").join("foo").join("__init__.py");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("flit"), @"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--package").arg("--build-backend").arg("flit"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3440,7 +3515,7 @@ fn init_library_poetry() -> Result<()> {
     Ok(())
 }
 
-/// Run `uv init --app --package --build-backend maturin` to create a packaged application project
+/// Run `uv init --package --build-backend maturin` to create a packaged application project
 #[test]
 #[cfg(feature = "test-crates-io")]
 fn init_app_build_backend_maturin() -> Result<()> {
@@ -3455,7 +3530,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
     let lib_core = child.join("src").join("lib.rs");
     let build_file = child.join("Cargo.toml");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("maturin"), @"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--package").arg("--build-backend").arg("maturin"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3571,7 +3646,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
     Ok(())
 }
 
-/// Run `uv init --app --package --build-backend scikit` to create a packaged application project
+/// Run `uv init --package --build-backend scikit` to create a packaged application project
 #[test]
 fn init_app_build_backend_scikit() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3585,7 +3660,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
     let lib_core = child.join("src").join("main.cpp");
     let build_file = child.join("CMakeLists.txt");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("scikit"), @"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--package").arg("--build-backend").arg("scikit"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3942,7 +4017,7 @@ fn init_lib_build_backend_scikit() -> Result<()> {
     Ok(())
 }
 
-/// Run `uv init --app --package --build-backend hatchling` to create a packaged application project
+/// Run `uv init --package --build-backend hatchling` to create a packaged application project
 #[test]
 fn init_application_package_hatchling() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3953,7 +4028,7 @@ fn init_application_package_hatchling() -> Result<()> {
     let pyproject_toml = child.join("pyproject.toml");
     let init_py = child.join("src").join("foo").join("__init__.py");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("hatchling"), @"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--package").arg("--build-backend").arg("hatchling"), @"
     success: true
     exit_code: 0
     ----- stdout -----
