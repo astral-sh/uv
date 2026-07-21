@@ -2266,14 +2266,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return None;
         };
 
-        let current_index = state.pins.get(name, version)?.index();
+        let (current_dist, current_metadata_id) = state.pins.dist_and_id(name, version)?;
+        let current_index = current_dist.index();
         if !version_maps
             .iter()
             .any(|version_map| version_map.index() == current_index)
         {
             return None;
         }
-        let (_, current_metadata_id) = state.pins.dist_and_id(name, version)?;
         let current_response = self.index.distributions().get(current_metadata_id)?;
         let MetadataResponse::Found(current_metadata) = &*current_response else {
             return None;
@@ -3287,115 +3287,6 @@ fn scoped_dependency_effects_match(
         })
 }
 
-#[cfg(test)]
-mod tests {
-    use std::collections::BTreeMap;
-
-    use uv_configuration::{ExcludeDependency, Excludes, Override, Overrides};
-    use uv_distribution_types::Requirement;
-    use uv_normalize::{GroupName, PackageName};
-    use uv_pep440::Version;
-    use uv_pep508::Requirement as Pep508Requirement;
-    use uv_pypi_types::VerbatimParsedUrl;
-
-    use super::scoped_dependency_effects_match;
-
-    fn requirement(requirement: &str) -> Requirement {
-        requirement
-            .parse::<Pep508Requirement<VerbatimParsedUrl>>()
-            .expect("valid requirement")
-            .into()
-    }
-
-    #[test]
-    fn scoped_dependency_effects_prevent_coalescing() {
-        let name: PackageName = "parent".parse().expect("valid package name");
-        let version = Version::new([1]);
-        let candidate_version = Version::new([2]);
-        let requires_dist = [requirement("leaf>=1")];
-        let dependency_groups = BTreeMap::from([(
-            "dev".parse::<GroupName>().expect("valid group name"),
-            vec![requirement("group-leaf>=1")].into_boxed_slice(),
-        )]);
-
-        assert!(scoped_dependency_effects_match(
-            &Overrides::default(),
-            &Excludes::default(),
-            &name,
-            &version,
-            &candidate_version,
-            &requires_dist,
-            &dependency_groups,
-        ));
-
-        let scoped_override: Override<Requirement> = toml::from_str(
-            r#"
-            package = { name = "parent", version = "1" }
-            dependencies = [{ name = "leaf", specifier = "==2" }]
-            "#,
-        )
-        .expect("valid scoped override");
-        let overrides =
-            Overrides::from_entries(vec![scoped_override]).expect("valid scoped override source");
-        assert!(!scoped_dependency_effects_match(
-            &overrides,
-            &Excludes::default(),
-            &name,
-            &version,
-            &candidate_version,
-            &requires_dist,
-            &dependency_groups,
-        ));
-
-        for dependency in ["leaf", "group-leaf"] {
-            let exclusion: ExcludeDependency = toml::from_str(&format!(
-                r#"
-                package = {{ name = "parent", version = "1" }}
-                dependencies = ["{dependency}"]
-                "#,
-            ))
-            .expect("valid scoped exclusion");
-            let excludes = Excludes::from_entries([exclusion]);
-            assert!(!scoped_dependency_effects_match(
-                &Overrides::default(),
-                &excludes,
-                &name,
-                &version,
-                &candidate_version,
-                &requires_dist,
-                &dependency_groups,
-            ));
-        }
-
-        let scoped_addition: Override<Requirement> = toml::from_str(
-            r#"
-            package = { name = "parent" }
-            dependencies = [{ name = "added", specifier = ">=1" }]
-            "#,
-        )
-        .expect("valid scoped addition");
-        let overrides =
-            Overrides::from_entries(vec![scoped_addition]).expect("valid scoped override source");
-        let exclusion: ExcludeDependency = toml::from_str(
-            r#"
-            package = { name = "parent", version = "1" }
-            dependencies = ["added"]
-            "#,
-        )
-        .expect("valid scoped exclusion");
-        let excludes = Excludes::from_entries([exclusion]);
-        assert!(!scoped_dependency_effects_match(
-            &overrides,
-            &excludes,
-            &name,
-            &version,
-            &candidate_version,
-            &requires_dist,
-            &dependency_groups,
-        ));
-    }
-}
-
 /// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
 pub(crate) struct ForkState {
@@ -3656,8 +3547,9 @@ impl ForkState {
         // Widen across gaps so rejected adjacent versions merge into contiguous ranges rather
         // than leaving one hole per version.
         let versions = dependency_versions.unwrap_or_else(|| Range::singleton(for_version.clone()));
-        let versions = if let Some(known_versions) =
-            self.known_versions.get_or_update(
+        let versions = if let Some(known_versions) = self
+            .known_versions
+            .get_or_update(
                 index,
                 installed_packages,
                 &self.fork_urls,
@@ -4910,7 +4802,105 @@ struct ConflictTracker {
 
 #[cfg(test)]
 mod tests {
+    use uv_configuration::{ExcludeDependency, Override};
+    use uv_pep508::Requirement as Pep508Requirement;
+
     use super::*;
+
+    fn requirement(requirement: &str) -> Requirement {
+        requirement
+            .parse::<Pep508Requirement<VerbatimParsedUrl>>()
+            .expect("valid requirement")
+            .into()
+    }
+
+    #[test]
+    fn scoped_dependency_effects_prevent_coalescing() {
+        let name: PackageName = "parent".parse().expect("valid package name");
+        let version = Version::new([1]);
+        let candidate_version = Version::new([2]);
+        let requires_dist = [requirement("leaf>=1")];
+        let dependency_groups = BTreeMap::from([(
+            "dev".parse::<GroupName>().expect("valid group name"),
+            vec![requirement("group-leaf>=1")].into_boxed_slice(),
+        )]);
+
+        assert!(scoped_dependency_effects_match(
+            &Overrides::default(),
+            &Excludes::default(),
+            &name,
+            &version,
+            &candidate_version,
+            &requires_dist,
+            &dependency_groups,
+        ));
+
+        let scoped_override: Override<Requirement> = toml::from_str(
+            r#"
+            package = { name = "parent", version = "1" }
+            dependencies = [{ name = "leaf", specifier = "==2" }]
+            "#,
+        )
+        .expect("valid scoped override");
+        let overrides =
+            Overrides::from_entries(vec![scoped_override]).expect("valid scoped override source");
+        assert!(!scoped_dependency_effects_match(
+            &overrides,
+            &Excludes::default(),
+            &name,
+            &version,
+            &candidate_version,
+            &requires_dist,
+            &dependency_groups,
+        ));
+
+        for dependency in ["leaf", "group-leaf"] {
+            let exclusion: ExcludeDependency = toml::from_str(&format!(
+                r#"
+                package = {{ name = "parent", version = "1" }}
+                dependencies = ["{dependency}"]
+                "#,
+            ))
+            .expect("valid scoped exclusion");
+            let excludes = Excludes::from_entries([exclusion]);
+            assert!(!scoped_dependency_effects_match(
+                &Overrides::default(),
+                &excludes,
+                &name,
+                &version,
+                &candidate_version,
+                &requires_dist,
+                &dependency_groups,
+            ));
+        }
+
+        let scoped_addition: Override<Requirement> = toml::from_str(
+            r#"
+            package = { name = "parent" }
+            dependencies = [{ name = "added", specifier = ">=1" }]
+            "#,
+        )
+        .expect("valid scoped addition");
+        let overrides =
+            Overrides::from_entries(vec![scoped_addition]).expect("valid scoped override source");
+        let exclusion: ExcludeDependency = toml::from_str(
+            r#"
+            package = { name = "parent", version = "1" }
+            dependencies = ["added"]
+            "#,
+        )
+        .expect("valid scoped exclusion");
+        let excludes = Excludes::from_entries([exclusion]);
+        assert!(!scoped_dependency_effects_match(
+            &overrides,
+            &excludes,
+            &name,
+            &version,
+            &candidate_version,
+            &requires_dist,
+            &dependency_groups,
+        ));
+    }
 
     fn versions(versions: &[&str]) -> Vec<Version> {
         versions

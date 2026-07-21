@@ -146,7 +146,7 @@ impl VersionMap {
         }
     }
 
-    /// Return a distribution without materializing a lazy registry entry.
+    /// Return an already-initialized distribution without materializing a lazy registry entry.
     pub(crate) fn get_initialized(&self, version: &Version) -> Option<&PrioritizedDist> {
         match self.inner {
             VersionMapInner::Eager(ref eager) => eager.map.get(version),
@@ -176,7 +176,8 @@ impl VersionMap {
         }
     }
 
-    /// Returns whether this map contains an included version without materializing it.
+    /// Returns whether this version has a file within the upload-time cutoffs, without
+    /// materializing its distribution. Other compatibility checks may still exclude the version.
     pub(crate) fn contains_included(&self, version: &Version) -> bool {
         match &self.inner {
             VersionMapInner::Eager(eager) => eager.map.contains_key(version),
@@ -550,7 +551,7 @@ impl VersionMapLazy {
         self.get_lazy(&self.map.get(version)?.dist)
     }
 
-    /// Return a distribution without initializing a lazy registry entry.
+    /// Return an already-initialized distribution without materializing a lazy registry entry.
     fn get_initialized(&self, version: &Version) -> Option<&PrioritizedDist> {
         let dist = &self.map.get(version)?.dist;
         match (&dist.flat, &dist.simple) {
