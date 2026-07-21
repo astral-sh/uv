@@ -2803,16 +2803,16 @@ fn build_workspace_virtual_root() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution...
     warning: `[TEMP_DIR]/` appears to be a workspace root without a Python project; consider using `uv sync` to install the workspace, or add a `[build-system]` table to `pyproject.toml`
     Building wheel from source distribution...
-    Successfully built dist/cache-0.0.0.tar.gz
-    Successfully built dist/UNKNOWN-0.0.0-py3-none-any.whl
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: The source distribution declares name cache, but the wheel declares name unknown
     ");
     Ok(())
 }
@@ -2832,16 +2832,16 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution...
     warning: `[TEMP_DIR]/` does not appear to be a Python project, as the `pyproject.toml` does not include a `[build-system]` table, and neither `setup.py` nor `setup.cfg` are present in the directory
     Building wheel from source distribution...
-    Successfully built dist/cache-0.0.0.tar.gz
-    Successfully built dist/UNKNOWN-0.0.0-py3-none-any.whl
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: The source distribution declares name cache, but the wheel declares name unknown
     ");
     Ok(())
 }

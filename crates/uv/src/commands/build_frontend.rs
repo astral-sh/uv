@@ -1159,8 +1159,7 @@ async fn build_wheel(
     };
     if let Some(expected) = source_dist {
         let actual = build_message.normalized_filename();
-        // `setuptools` uses `UNKNOWN` when a source tree has no project metadata.
-        if actual.name().as_ref() != "unknown" && expected.name() != actual.name() {
+        if expected.name() != actual.name() {
             return Err(Error::NameMismatch(
                 expected.name().clone(),
                 actual.name().clone(),
