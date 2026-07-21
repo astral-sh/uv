@@ -858,10 +858,9 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
 
 /// Perform a safe removal of a virtual environment.
 ///
-/// Links at `location` are removed without following them.
+/// The link or file at `location` is removed without following it.
 pub fn remove_virtualenv(location: &Path) -> io::Result<()> {
-    let file_type = fs_err::symlink_metadata(location)?.file_type();
-    if file_type.is_symlink() {
+    if !fs_err::symlink_metadata(location)?.is_dir() {
         return remove_symlink(location);
     }
 

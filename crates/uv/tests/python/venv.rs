@@ -531,13 +531,70 @@ fn create_centralized_project_environment() -> Result<()> {
 }
 
 #[test]
+fn create_centralized_project_environment_path_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_centralized_environment_hashes();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+
+    context
+        .venv()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--python")
+        .arg("3.11")
+        .assert()
+        .success();
+
+    let environment = context.temp_dir.child(".venv");
+    let target = fs_err::read_link(environment.path())?;
+    let marker = target.join("marker");
+    fs_err::write(&marker, "")?;
+
+    uv_fs::remove_virtualenv(environment.path())?;
+    environment.write_str(&target.to_string_lossy())?;
+
+    // With the preview, `--allow-existing` selects the root for the requested interpreter.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--allow-existing")
+        .arg("--python")
+        .arg("3.12"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment `project-cp3.12.[X]-[HASH]`
+    Activate with: source .venv/[BIN]/activate
+    "#);
+    assert_ne!(target, fs_err::read_link(environment.path())?);
+    assert!(marker.is_file());
+
+    uv_fs::remove_virtualenv(environment.path())?;
+    environment.write_str(&target.to_string_lossy())?;
+
+    // Without the preview, `--allow-existing` replaces the path file without clearing its target.
+    context.venv().arg("--allow-existing").assert().success();
+    assert!(uv_fs::is_virtualenv_base(environment.path()));
+    assert!(marker.is_file());
+    Ok(())
+}
+
+#[test]
 fn create_centralized_project_environment_link_failure() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"])
-        .with_filtered_centralized_environment_hashes()
-        .with_filter((
-            r"(?m)^(warning: Failed to create link to project environment at `[^`]+`): .*$",
-            "$1: [ERR]",
-        ));
+        .with_filtered_centralized_environment_hashes();
     context
         .temp_dir
         .child("pyproject.toml")
@@ -552,19 +609,38 @@ fn create_centralized_project_environment_link_failure() -> Result<()> {
     environment.create_dir_all()?;
     environment.child("keep").touch()?;
 
-    uv_snapshot!(context.filters(), context.venv()
+    let mut command = context.venv();
+    command
         .arg("--preview-features")
-        .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+        .arg("centralized-project-envs");
+    cfg_select! {
+        unix => {
+            uv_snapshot!(context.filters(), command, @r#"
+            success: true
+            exit_code: 0
+            ----- stdout -----
 
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment `project-cp3.12.[X]-[HASH]`
-    warning: Failed to create link to project environment at `.venv`: [ERR]
-    Activate with: source [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]/[BIN]/activate
-    "#);
+            ----- stderr -----
+            Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+            Creating virtual environment `project-cp3.12.[X]-[HASH]`
+            warning: Failed to write the environment path: failed to rename file from [TEMP_DIR]/[TMP] to [VENV]/: Is a directory (os error 21)
+            Activate with: source [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]/[BIN]/activate
+            "#);
+        },
+        windows => {
+            uv_snapshot!(context.filters(), command, @r#"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+
+            ----- stderr -----
+            Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+            Creating virtual environment `project-cp3.12.[X]-[HASH]`
+            warning: Failed to create link to project environment: failed to remove directory `[VENV]/`: The directory is not empty. (os error 145)
+            Activate with: source [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]/[BIN]/activate
+            "#);
+        },
+    }
 
     assert!(environment.child("keep").is_file());
     Ok(())
