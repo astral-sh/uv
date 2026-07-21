@@ -307,8 +307,6 @@ hash-algorithm = "sha256"
 If a locked distribution does not advertise the required algorithm, uv will fail instead of falling
 back to another hash algorithm.
 
-This option is in [preview](./preview.md) and may change in any future release.
-
 ### Configuring `exclude-newer` for an index
 
 If you're using [`exclude-newer`](./resolution.md#reproducible-resolutions), you can configure a
