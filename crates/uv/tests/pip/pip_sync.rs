@@ -510,7 +510,6 @@ fn pip_sync_empty() -> Result<()> {
 /// virtual environment.
 #[test]
 fn link() -> Result<()> {
-    // Sync `anyio` into the first virtual environment.
     let context1 = uv_test::test_context!("3.12");
 
     let requirements_txt = context1.temp_dir.child("requirements.txt");
