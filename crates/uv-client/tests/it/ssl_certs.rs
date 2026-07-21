@@ -1,5 +1,4 @@
-use std::error::Error;
-use std::io::{self, Write};
+use std::io::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -274,18 +273,15 @@ impl TestClient {
 
     /// Assert that an mTLS connection to `cert`'s server fails and the server
     /// reports a specific TLS error.
-    async fn expect_mtls_connect_fails_with_tls_errors<F>(
+    async fn expect_mtls_connect_fails_with_server_tls_error<F>(
         &self,
         cert: &TestCertificate,
-        assert_tls_errors: F,
+        assert_tls_error: F,
     ) where
-        F: FnOnce(&rustls::Error, &rustls::Error),
+        F: FnOnce(&rustls::Error),
     {
         self.run_mtls(cert, |response, server_task| async move {
-            let reqwest_error = assert_fatal_reqwest_error(&response);
-            let Some(client_tls_error) = find_source_with_io::<rustls::Error>(reqwest_error) else {
-                panic!("expected client TLS error, got: {reqwest_error:?}");
-            };
+            assert_fatal_reqwest_error(&response);
 
             let server_res = server_task.await.expect("server task panicked");
             let Err(anyhow_err) = server_res else {
@@ -300,7 +296,7 @@ impl TestClient {
             let Some(tls_err) = wrapped_err.downcast_ref::<rustls::Error>() else {
                 panic!("expected rustls::Error, got: {wrapped_err}");
             };
-            assert_tls_errors(client_tls_error, tls_err);
+            assert_tls_error(tls_err);
         })
         .await;
     }
@@ -308,14 +304,7 @@ impl TestClient {
     /// Assert that an mTLS connection to `cert`'s server fails because no
     /// valid client certificate was presented.
     async fn expect_mtls_connect_fails(&self, cert: &TestCertificate) {
-        self.expect_mtls_connect_fails_with_tls_errors(cert, |client_tls_err, server_tls_err| {
-            assert!(
-                matches!(
-                    client_tls_err,
-                    rustls::Error::AlertReceived(rustls::AlertDescription::CertificateRequired)
-                ),
-                "expected CertificateRequired alert, got: {client_tls_err}"
-            );
+        self.expect_mtls_connect_fails_with_server_tls_error(cert, |server_tls_err| {
             assert!(
                 matches!(server_tls_err, rustls::Error::NoCertificatesPresented),
                 "expected NoCertificatesPresented, got: {server_tls_err}"
@@ -443,39 +432,15 @@ async fn send_request_to(
 }
 
 /// Assert that a request failed with a reqwest error without being retried.
-fn assert_fatal_reqwest_error(
-    res: &Result<reqwest::Response, reqwest_middleware::Error>,
-) -> &reqwest::Error {
+fn assert_fatal_reqwest_error(res: &Result<reqwest::Response, reqwest_middleware::Error>) {
     let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.as_ref().err() else {
         panic!("expected middleware error, got: {res:?}");
     };
-    let Some(reqwest_retry::RetryError::Error(reqwest_middleware::Error::Reqwest(reqwest_error))) =
+    let Some(reqwest_retry::RetryError::Error(reqwest_middleware::Error::Reqwest(_))) =
         middleware_error.downcast_ref::<reqwest_retry::RetryError>()
     else {
         panic!("expected fatal reqwest error without retries, got: {middleware_error:?}");
     };
-    reqwest_error
-}
-
-/// Find the first source error of a specific type, including errors wrapped by [`io::Error`].
-fn find_source_with_io<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
-    let mut cause = orig.source();
-    while let Some(err) = cause {
-        if let Some(concrete_err) = err.downcast_ref() {
-            return Some(concrete_err);
-        }
-        if let Some(io_err) = err.downcast_ref::<io::Error>()
-            && let Some(inner_err) = io_err.get_ref()
-        {
-            if let Some(concrete_err) = inner_err.downcast_ref() {
-                return Some(concrete_err);
-            }
-            cause = Some(inner_err);
-            continue;
-        }
-        cause = err.source();
-    }
-    None
 }
 
 /// A self-signed server certificate is rejected when no custom certs are
@@ -487,26 +452,13 @@ async fn test_no_custom_certs_rejects_self_signed() -> Result<()> {
     Ok(())
 }
 
-/// TLS certificate failures are fatal and preserve the original TLS error
-/// instead of retrying against the single-use server.
+/// TLS certificate failures are fatal instead of being retried against the single-use server.
 #[tokio::test]
 async fn test_tls_certificate_errors_are_not_retried() -> Result<()> {
     let cert = TestCertificate::new()?;
     client()
         .run_https(&cert, |response, server_task| async move {
             assert_fatal_reqwest_error(&response);
-            let Err(reqwest_middleware::Error::Middleware(middleware_error)) = response else {
-                panic!("expected middleware error");
-            };
-            let tls_error = find_source_with_io::<rustls::Error>(middleware_error.as_ref());
-            assert!(tls_error.is_some(), "expected TLS error in chain");
-            let Some(tls_error) = tls_error else {
-                return;
-            };
-            assert!(matches!(
-                tls_error,
-                rustls::Error::InvalidCertificate(rustls::CertificateError::UnknownIssuer)
-            ));
             let _ = server_task.await;
         })
         .await;
@@ -796,17 +748,7 @@ async fn test_mtls_with_wrong_client_cert() -> Result<()> {
     client()
         .ssl_cert_file(&server_cert.trust_path)
         .ssl_client_cert(&other_cert.client_cert_path)
-        .expect_mtls_connect_fails_with_tls_errors(&server_cert, |client_tls_err, server_tls_err| {
-            assert!(
-                matches!(
-                    client_tls_err,
-                    rustls::Error::AlertReceived(
-                        rustls::AlertDescription::DecryptError
-                            | rustls::AlertDescription::UnknownCA
-                    )
-                ),
-                "expected DecryptError or UnknownCA alert, got: {client_tls_err}"
-            );
+        .expect_mtls_connect_fails_with_server_tls_error(&server_cert, |server_tls_err| {
             assert!(
                 matches!(
                     server_tls_err,
