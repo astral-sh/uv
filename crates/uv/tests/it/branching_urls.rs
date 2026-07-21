@@ -150,8 +150,8 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
 ///
 /// Requirements:
 /// ```text
-/// a -> anyio==4.4.0 ; python_version >= '3.12'
-///  a -> anyio==4.3.0 ; python_version < '3.12'
+/// a -> anyio==4.3.0 ; python_version >= '3.12'
+///  a -> anyio==4.2.0 ; python_version < '3.12'
 /// a -> b -> b1 ; python_version < '3.12' -> https://../iniconfig-1.1.1-py3-none-any.whl
 /// a -> b -> b2 ; python_version >= '3.12' -> https://../iniconfig-2.0.0-py3-none-any.whl
 /// ```
@@ -356,8 +356,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
 ///
 /// Requirements:
 /// ```
-/// a -> anyio==4.4.0 ; python_version >= '3.12'
-/// a -> anyio==4.3.0 ; python_version < '3.12'
+/// a -> anyio==4.3.0 ; python_version >= '3.12'
+/// a -> anyio==4.2.0 ; python_version < '3.12'
 /// a -> b1 ; python_version < '3.12' -> iniconfig==1.1.1
 /// a -> b2 ; python_version >= '3.12' -> iniconfig==2.0.0
 /// ```
