@@ -36,6 +36,11 @@ Explain the decision in `decision_reason`. Do not create an issue merely because
 red. If a run contains multiple independent actionable failures, describe the most important
 untracked failure and mention the others in the body or related results.
 
+For `duplicate`, populate `comment_note` with a concise note only when this occurrence differs in a
+useful way from the tracked failure, such as an affected job, platform, error, or contributing
+factor. Leave `comment_note` empty when there is no useful difference and for `create` or `ignore`.
+Do not include `@mentions` or sensitive values.
+
 For `create`, populate `issue` with a concise, test- or symptom-specific title, a clear body, and
 exactly one label: use `ci-flake` for flaky tests or CI infrastructure, and `bug` for a
 deterministic repository or workflow defect. The body must include the failed run or job URL, the
