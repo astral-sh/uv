@@ -20,7 +20,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, Excludes, IndexStrategy, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
@@ -2279,10 +2279,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// especially useful for packages that publish many releases with unchanged dependencies,
     /// since rejecting the range lets the parent backtrack past all of them at once.
     ///
-    /// The optimization is deliberately limited to specific-environment, single-index wheel
-    /// resolutions after repeated backtracking. Every adjacent candidate must already have
-    /// metadata in memory, use the same index, and have identical raw requirements and scoped
-    /// dependency effects.
+    /// The optimization is deliberately limited to specific-environment wheel resolutions after
+    /// repeated backtracking. Every adjacent candidate must already have metadata in memory and
+    /// have identical raw requirements and scoped dependency effects. For multiple indexes, the
+    /// candidate is selected in index-priority order without materializing lazy entries.
     fn shared_dependency_versions(
         &self,
         package: &PubGrubPackage,
@@ -2315,12 +2315,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let VersionsResponse::Found(version_maps) = &*versions_response else {
             return None;
         };
-        let [version_map] = version_maps.as_slice() else {
-            return None;
-        };
 
         let current_index = state.pins.get(name, version)?.index();
-        if version_map.index() != current_index {
+        if !version_maps
+            .iter()
+            .any(|version_map| version_map.index() == current_index)
+        {
             return None;
         }
         let (_, current_metadata_id) = state.pins.dist_and_id(name, version)?;
@@ -2335,8 +2335,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let position = versions.binary_search(version).ok()?;
 
         // PubGrub already merges identical incompatibilities for versions that were tried in an
-        // earlier iteration. Only inspect the direction in which the resolver can select its next
-        // candidate, so those already-tried neighbors do not consume the coalescing budget.
+        // earlier iteration. Inspect the favored version direction so those already-tried
+        // neighbors do not consume the coalescing budget, while retaining every intervening
+        // version from the union of all indexes.
         let use_highest_version = self.selector.use_highest_version(name, &state.env);
         let candidates = if use_highest_version {
             Either::Left(versions[..position].iter().rev())
@@ -2351,7 +2352,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     version,
                     current_metadata,
                     candidate_version,
-                    version_map,
+                    version_maps,
                     state,
                 )
             })
@@ -2386,18 +2387,38 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         current: &ArchiveMetadata,
         candidate_version: &Version,
-        version_map: &VersionMap,
+        version_maps: &[VersionMap],
         state: &ForkState,
     ) -> bool {
         if !self.hasher.allows_package(name, candidate_version) {
             return false;
         }
-        // Batch prefetch materializes every candidate before registering its metadata request.
-        // Do not materialize an adjacent miss just to discover that no response is ready yet.
-        let Some(prioritized) = version_map.get_initialized(candidate_version) else {
-            return false;
-        };
-        let Some(dist) = prioritized.get() else {
+
+        // Select the candidate from the first index that contains the version, mirroring the
+        // candidate selector. Batch prefetch materializes a candidate before registering its
+        // metadata request; if a higher-priority entry is still lazy, stop instead of materializing
+        // it or incorrectly using a lower-priority index.
+        let mut candidate = None;
+        for version_map in version_maps {
+            let Some(prioritized) = version_map.get_initialized(candidate_version) else {
+                if version_map.contains_included(candidate_version) {
+                    return false;
+                }
+                continue;
+            };
+            let Some(dist) = prioritized.get() else {
+                if matches!(
+                    self.selector.index_strategy(),
+                    IndexStrategy::UnsafeBestMatch
+                ) {
+                    continue;
+                }
+                return false;
+            };
+            candidate = Some((version_map, dist));
+            break;
+        }
+        let Some((version_map, dist)) = candidate else {
             return false;
         };
         if dist.wheel().is_none()

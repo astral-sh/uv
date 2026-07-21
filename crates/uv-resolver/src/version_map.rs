@@ -182,6 +182,23 @@ impl VersionMap {
         }
     }
 
+    /// Returns whether this map contains an included version without materializing it.
+    pub(crate) fn contains_included(&self, version: &Version) -> bool {
+        match &self.inner {
+            VersionMapInner::Eager(eager) => eager.map.contains_key(version),
+            VersionMapInner::Lazy(lazy) => {
+                let Some(entry) = lazy.map.get(version) else {
+                    return false;
+                };
+                match (&entry.dist.flat, &entry.dist.simple) {
+                    (Some(_), _) => true,
+                    (None, Some(simple)) => lazy.any_file_included(simple),
+                    (None, None) => false,
+                }
+            }
+        }
+    }
+
     /// Return the index URL where this package came from.
     pub(crate) fn index(&self) -> Option<&IndexUrl> {
         match &self.inner {
