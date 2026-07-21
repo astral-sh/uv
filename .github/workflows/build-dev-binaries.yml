@@ -172,7 +172,7 @@ jobs:
   build-binary-macos-aarch64:
     name: "macos aarch64"
     timeout-minutes: 10
-    runs-on: macos-14 # github-macos-14-aarch64-3
+    runs-on: namespace-profile-macos-15
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
