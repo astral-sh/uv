@@ -1060,19 +1060,13 @@ impl ManagedPythonDownloadList {
                 &fs_err::read(path.as_ref())?,
                 path.to_string_lossy().to_string(),
             )?,
-            Source::Http(ref url) => {
+            Source::Http(url) => {
                 let client = CachedClient::new(
                     client_builder
                         .build()
                         .map_err(|err| Error::ClientBuild(Box::new(err)))?,
                 );
-                fetch_downloads_from_url(&client, cache, url)
-                    .await
-                    .map_err(|e| match e {
-                        e @ (Error::InvalidPythonDownloadsJSON(..)
-                        | Error::UnsupportedPythonDownloadsJSON(..)) => e,
-                        e => Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e)),
-                    })?
+                fetch_downloads_from_url(&client, cache, url).await?
             }
         };
 
@@ -1123,7 +1117,7 @@ fn parse_downloads_json(
 async fn fetch_downloads_from_url(
     client: &CachedClient,
     cache: &Cache,
-    url: &DisplaySafeUrl,
+    url: DisplaySafeUrl,
 ) -> Result<HashMap<String, JsonPythonDownload>, Error> {
     let cache_entry = cache.entry(
         CacheBucket::Python,
@@ -1137,7 +1131,7 @@ async fn fetch_downloads_from_url(
 
     let request = client
         .uncached()
-        .for_host(url)
+        .for_host(&url)
         .get(Url::from(url.clone()))
         .build()
         .map_err(|err| Error::NetworkError(url.clone(), WrappedReqwestError::from(err)))?;
@@ -1150,7 +1144,7 @@ async fn fetch_downloads_from_url(
         parse_downloads_json(&bytes, url.to_string())
     };
 
-    client
+    let result = client
         .get_serde_with_retry(request, &cache_entry, cache_control, response_callback)
         .await
         .map_err(|err| match err {
@@ -1166,7 +1160,13 @@ async fn fetch_downloads_from_url(
                 err if retries > 0 => err.into_retried(retries, duration),
                 err => err,
             },
-        })
+        });
+
+    result.map_err(|err| match err {
+        err @ (Error::InvalidPythonDownloadsJSON(..)
+        | Error::UnsupportedPythonDownloadsJSON(..)) => err,
+        err => Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(err)),
+    })
 }
 
 impl ManagedPythonDownload {
