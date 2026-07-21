@@ -371,6 +371,52 @@ fn upgrade_rejects_conflicting_extra_declarations() -> Result<()> {
 }
 
 #[test]
+fn upgrade_rejects_conflicting_included_group_declarations() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        cpu = [{ include-group = "cpu-core" }]
+        gpu = [{ include-group = "gpu-core" }]
+        cpu-core = ["bar<1"]
+        gpu-core = ["bar<2"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { group = "cpu" },
+                { group = "gpu" },
+            ],
+        ]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("bar"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Could not update dependency `bar` in `dependency-groups.cpu-core`: `bar<1` (declared under conflicting dependency group `cpu`)
+    warning: Could not update dependency `bar` in `dependency-groups.gpu-core`: `bar<2` (declared under conflicting dependency group `gpu`)
+    "
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
 fn upgrade_expands_constraint_for_multiple_fork_versions() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("fork/fork-upgrade.toml");
@@ -651,7 +697,7 @@ fn upgrade_rejects_dynamic_project_version() -> Result<()> {
 }
 
 #[test]
-fn upgrade_requires_production_dependency() -> Result<()> {
+fn upgrade_reports_missing_dependency_in_current_project() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
         [project]
@@ -672,31 +718,276 @@ fn upgrade_requires_production_dependency() -> Result<()> {
 
     uv_snapshot!(
         context.filters(),
-        context.upgrade().arg("requests"),
+        context.upgrade().arg("flask"),
         @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Dependency `requests` was not found in `project.dependencies`
-    "
-    );
-
-    uv_snapshot!(
-        context.filters(),
-        context.upgrade().arg("httpx"),
-        @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Dependency `httpx` was not found in `project.dependencies`
+    error: Dependency `flask` was not found in the current project
     "
     );
 
     assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_updates_matching_direct_declarations_across_locations() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar<2",
+        ]
+
+        [project.optional-dependencies]
+        test = ["bar<2"]
+
+        [dependency-groups]
+        dev = [
+            "bar<2",
+            {{ include-group = "lint" }},
+        ]
+        lint = []
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add bar v1.0.0, v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    Updated requirement: `bar<2` -> `bar<3`
+    Updated requirement: `bar<2` -> `bar<3`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+
+[project]
+name = "example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "foo==1",
+    "bar<3",
+]
+
+[project.optional-dependencies]
+test = ["bar<3"]
+
+[dependency-groups]
+dev = [
+    "bar<3",
+    { include-group = "lint" },
+]
+lint = []
+
+[[tool.uv.index]]
+url = "http://[LOCALHOST]/simple/"
+default = true
+"#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_without_package_selects_direct_declarations_across_locations() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar<2",
+        ]
+
+        [project.optional-dependencies]
+        test = ["bar<2"]
+
+        [dependency-groups]
+        dev = ["bar<2"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context.upgrade().env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add foo v2.0.0
+    Add bar v2.0.0
+    Updated requirement: `foo==1` -> `foo==2.0.0`
+    Updated requirement: `bar<2` -> `bar<3`
+    Updated requirement: `bar<2` -> `bar<3`
+    Updated requirement: `bar<2` -> `bar<3`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+
+[project]
+name = "example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "foo==2.0.0",
+    "bar<3",
+]
+
+[project.optional-dependencies]
+test = ["bar<3"]
+
+[dependency-groups]
+dev = ["bar<3"]
+
+[[tool.uv.index]]
+url = "http://[LOCALHOST]/simple/"
+default = true
+"#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_exclude_leaves_optional_and_group_dependencies_as_hard_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/upgrade-outcomes.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["baz<2"]
+
+        [project.optional-dependencies]
+        test = ["bar<2"]
+
+        [dependency-groups]
+        dev = ["bar<2"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("--exclude")
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add baz v2.0.0
+    Updated requirement: `baz<2` -> `baz<3`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+
+[project]
+name = "example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["baz<3"]
+
+[project.optional-dependencies]
+test = ["bar<2"]
+
+[dependency-groups]
+dev = ["bar<2"]
+
+[[tool.uv.index]]
+url = "http://[LOCALHOST]/simple/"
+default = true
+"#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
 }
 
 #[test]
@@ -1022,7 +1313,7 @@ fn upgrade_reports_selection_errors_before_interpreter_failure() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Dependency `missing` was not found in `project.dependencies`
+    error: Dependency `missing` was not found in the current project
     ");
 
     uv_snapshot!(context.filters(), context.upgrade().args(["bar", "requests"]), @"
@@ -1604,6 +1895,58 @@ fn upgrade_rejects_direct_url_requirement() -> Result<()> {
 }
 
 #[test]
+fn upgrade_rejects_direct_url_requirement_in_optional_and_group_declarations() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    allow_duplicates! {
+        for pyproject_toml in [
+            r#"
+                [project]
+                name = "example"
+                version = "0.1.0"
+                dependencies = []
+
+                [project.optional-dependencies]
+                cpu = ["bar @ https://example.com/bar-1.0.0-py3-none-any.whl"]
+            "#,
+            r#"
+                [project]
+                name = "example"
+                version = "0.1.0"
+                dependencies = []
+
+                [dependency-groups]
+                dev = ["bar @ https://example.com/bar-1.0.0-py3-none-any.whl"]
+            "#,
+        ] {
+            context
+                .temp_dir
+                .child("pyproject.toml")
+                .write_str(pyproject_toml)?;
+
+            uv_snapshot!(
+                context.filters(),
+                context.upgrade().arg("bar"),
+                @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `bar` is a direct URL requirement and cannot be upgraded
+    "
+            );
+
+            assert_project_unchanged(&context, pyproject_toml)?;
+        }
+
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+#[test]
 fn upgrade_rejects_self_dependency() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
@@ -1712,6 +2055,193 @@ fn upgrade_rejects_non_registry_sources() -> Result<()> {
 }
 
 #[test]
+fn upgrade_no_sources_ignores_non_registry_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar<2"]
+
+        [tool.uv]
+        no-sources = true
+
+        [tool.uv.sources]
+        bar = {{ path = "vendor/bar" }}
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    Add bar v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("bar<2", "bar<3")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_no_sources_package_ignores_selected_non_registry_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar<2"]
+
+        [tool.uv]
+        no-sources-package = ["bar"]
+
+        [tool.uv.sources]
+        bar = {{ path = "vendor/bar" }}
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    Add bar v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("bar<2", "bar<3")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_no_sources_package_preserves_non_covered_source_check() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        dependencies = ["bar<2"]
+
+        [tool.uv]
+        no-sources-package = ["baz"]
+
+        [tool.uv.sources]
+        bar = { path = "vendor/bar" }
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("bar"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `bar` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
+    "
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_no_sources_preserves_direct_url_requirement_rejection() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        dependencies = [
+            "bar @ https://example.com/bar-1.0.0-py3-none-any.whl",
+        ]
+
+        [tool.uv]
+        no-sources = true
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("bar"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `bar` is a direct URL requirement and cannot be upgraded
+    "
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
 fn upgrade_skips_non_registry_source_for_undefined_extra() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
@@ -1742,6 +2272,448 @@ fn upgrade_skips_non_registry_source_for_undefined_extra() -> Result<()> {
     );
 
     assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_uses_optional_and_group_source_origins() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/upgrade-outcomes.toml");
+    let empty_index = context.temp_dir.child("empty-index");
+    empty_index.create_dir_all()?;
+    let empty_index = Url::from_directory_path(empty_index.path())
+        .map_err(|()| anyhow!("Failed to create empty index URL"))?;
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        cpu = ["bar<2"]
+
+        [dependency-groups]
+        dev = ["baz<2"]
+
+        [tool.uv.sources]
+        bar = {{ index = "local", extra = "cpu" }}
+        baz = {{ index = "local", group = "dev" }}
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "{}"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "empty"
+        url = "{empty_index}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .arg("baz")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add bar v2.0.0
+    Add baz v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    Updated requirement: `baz<2` -> `baz<3`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+
+[project]
+name = "example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+cpu = ["bar<3"]
+
+[dependency-groups]
+dev = ["baz<3"]
+
+[tool.uv.sources]
+bar = { index = "local", extra = "cpu" }
+baz = { index = "local", group = "dev" }
+
+[[tool.uv.index]]
+name = "local"
+url = "http://[LOCALHOST]/simple/"
+explicit = true
+
+[[tool.uv.index]]
+name = "empty"
+url = "file://[TEMP_DIR]/empty-index/"
+default = true
+"#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_rejects_include_scoped_non_registry_source() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        base = ["bar<2"]
+        docs = [{ include-group = "base" }]
+
+        [tool.uv.sources]
+        bar = { git = "https://github.com/example/bar", group = "docs" }
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("bar"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `bar` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
+    "
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_rejects_unscoped_non_registry_sources_for_optional_and_group_declarations() -> Result<()>
+{
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    allow_duplicates! {
+        for pyproject_toml in [
+            r#"
+                [project]
+                name = "example"
+                version = "0.1.0"
+                dependencies = []
+
+                [project.optional-dependencies]
+                cpu = ["bar<2"]
+
+                [tool.uv.sources]
+                bar = { path = "vendor/bar" }
+            "#,
+            r#"
+                [project]
+                name = "example"
+                version = "0.1.0"
+                dependencies = []
+
+                [dependency-groups]
+                dev = ["bar<2"]
+
+                [tool.uv.sources]
+                bar = { path = "vendor/bar" }
+            "#,
+        ] {
+            context
+                .temp_dir
+                .child("pyproject.toml")
+                .write_str(pyproject_toml)?;
+
+            uv_snapshot!(
+                context.filters(),
+                context.upgrade().arg("bar"),
+                @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `bar` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
+    "
+            );
+
+            assert_project_unchanged(&context, pyproject_toml)?;
+        }
+
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+#[test]
+fn upgrade_rejects_unscoped_git_revision_for_optional_and_group_declarations() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    allow_duplicates! {
+        for pyproject_toml in [
+            r#"
+                [project]
+                name = "example"
+                version = "0.1.0"
+                dependencies = []
+
+                [project.optional-dependencies]
+                cpu = ["bar<2"]
+
+                [tool.uv.sources]
+                bar = { git = "https://github.com/example/bar", rev = "6f205ff422bccd5e4c4fc0b64c5f3e7df5181db6" }
+            "#,
+            r#"
+                [project]
+                name = "example"
+                version = "0.1.0"
+                dependencies = []
+
+                [dependency-groups]
+                dev = ["bar<2"]
+
+                [tool.uv.sources]
+                bar = { git = "https://github.com/example/bar", rev = "6f205ff422bccd5e4c4fc0b64c5f3e7df5181db6" }
+            "#,
+        ] {
+            context
+                .temp_dir
+                .child("pyproject.toml")
+                .write_str(pyproject_toml)?;
+
+            uv_snapshot!(
+                context.filters(),
+                context.upgrade().arg("bar"),
+                @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `bar` is pinned to a Git revision and cannot be upgraded commit-to-commit
+    "
+            );
+
+            assert_project_unchanged(&context, pyproject_toml)?;
+        }
+
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+#[test]
+fn upgrade_rejects_unscoped_include_group_non_registry_source() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        base = ["bar<2"]
+        docs = [{ include-group = "base" }]
+
+        [tool.uv.sources]
+        bar = { path = "vendor/bar" }
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.upgrade().arg("bar"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `bar` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
+    "
+    );
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_ignores_disjoint_include_scoped_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        base = ["bar<2"]
+        docs = [{{ include-group = "base" }}]
+
+        [tool.uv.dependency-groups]
+        docs = {{ requires-python = "<3.12" }}
+
+        [tool.uv.sources]
+        bar = {{ git = "https://github.com/example/bar", group = "docs" }}
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    Add bar v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+
+[project]
+name = "example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+base = ["bar<3"]
+docs = [{ include-group = "base" }]
+
+[tool.uv.dependency-groups]
+docs = { requires-python = "<3.12" }
+
+[tool.uv.sources]
+bar = { git = "https://github.com/example/bar", group = "docs" }
+
+[[tool.uv.index]]
+url = "http://[LOCALHOST]/simple/"
+default = true
+"#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_rejects_non_registry_sources_for_optional_and_group_declarations() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    allow_duplicates! {
+        for pyproject_toml in [
+            r#"
+                [project]
+                name = "example"
+                version = "0.1.0"
+                dependencies = []
+
+                [project.optional-dependencies]
+                cpu = ["bar<2"]
+
+                [tool.uv.sources]
+                bar = { git = "https://github.com/example/bar", extra = "cpu" }
+            "#,
+            r#"
+                [project]
+                name = "example"
+                version = "0.1.0"
+                dependencies = []
+
+                [dependency-groups]
+                dev = ["bar<2"]
+
+                [tool.uv.sources]
+                bar = { git = "https://github.com/example/bar", group = "dev" }
+            "#,
+        ] {
+            context
+                .temp_dir
+                .child("pyproject.toml")
+                .write_str(pyproject_toml)?;
+
+            uv_snapshot!(
+                context.filters(),
+                context.upgrade().arg("bar"),
+                @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Dependency `bar` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
+    "
+            );
+
+            assert_project_unchanged(&context, pyproject_toml)?;
+        }
+
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
 }
 
 #[test]
@@ -1988,6 +2960,234 @@ fn upgrade_skips_excluded_declarations_and_updates_applicable_requirement() -> R
 }
 
 #[test]
+fn upgrade_skips_excluded_optional_declaration() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar<2"]
+
+        [project.optional-dependencies]
+        legacy = ["bar @ https://example.com/bar-1.0.0-py3-none-any.whl ; python_version < '3.12'"]
+
+        [tool.uv.sources]
+        bar = {{ url = "https://example.com/bar-1.0.0-py3-none-any.whl", extra = "legacy" }}
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(packse_filters(&context), context.upgrade().arg("bar").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Skipping dependency `bar` in `project.optional-dependencies.legacy`: `bar @ https://example.com/bar-1.0.0-py3-none-any.whl ; python_full_version < '3.12'` (excluded by the project's environments or Python requirement)
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    Add bar v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    ");
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("bar<2", "bar<3")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_skips_excluded_group_declaration() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        legacy = ["bar @ https://example.com/bar-1.0.0-py3-none-any.whl"]
+        docs = [{{ include-group = "legacy" }}]
+        test = ["bar<2"]
+
+        [tool.uv.dependency-groups]
+        legacy = {{ requires-python = "<3.12" }}
+        docs = {{ requires-python = "<3.12" }}
+
+        [tool.uv.sources]
+        bar = {{ url = "https://example.com/bar-1.0.0-py3-none-any.whl", group = "docs" }}
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(packse_filters(&context), context.upgrade().arg("bar").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Skipping dependency `bar` in `dependency-groups.legacy`: `bar @ https://example.com/bar-1.0.0-py3-none-any.whl` (excluded by the project's environments or Python requirement)
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    Add bar v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    ");
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("bar<2", "bar<3")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_skips_inapplicable_optional_without_requires_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = []
+
+        [project.optional-dependencies]
+        legacy = ["bar<2 ; python_version < '3.12'"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("bar"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: Skipping dependency `bar` in `project.optional-dependencies.legacy`: `bar<2 ; python_full_version < '3.12'` (excluded by the project's environments or Python requirement)
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_skips_inapplicable_group_without_requires_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = []
+
+        [dependency-groups]
+        legacy = ["bar<2"]
+
+        [tool.uv.dependency-groups]
+        legacy = { requires-python = "<3.12" }
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("bar"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: Skipping dependency `bar` in `dependency-groups.legacy`: `bar<2` (excluded by the project's environments or Python requirement)
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_redacts_malformed_direct_url_optional_and_group_dependencies() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let optional_pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = []
+
+        [project.optional-dependencies]
+        legacy = ["bar @ https://user:super-secret@files.example.com/bar-1.0.0-py3-none-any.whl?X-Amz-Signature=signing-secret ; python_version <"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(optional_pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("bar"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse dependency from `project.optional-dependencies.legacy` in `[TEMP_DIR]/pyproject.toml`: Expected marker value, found end of dependency specification
+    ");
+
+    assert_project_unchanged(&context, optional_pyproject_toml)?;
+
+    let group_pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = []
+
+        [dependency-groups]
+        legacy = ["bar @ https://user:super-secret@files.example.com/bar-1.0.0-py3-none-any.whl?X-Amz-Signature=signing-secret ; python_version <"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(group_pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("bar"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project `project` has malformed dependency groups
+      Caused by: Failed to parse entry in group `legacy`: Expected marker value, found end of dependency specification
+    ");
+
+    assert_project_unchanged(&context, group_pyproject_toml)
+}
+
+#[test]
 fn upgrade_rejects_workspace_root_non_registry_source() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let workspace_pyproject_toml = r#"
@@ -2096,6 +3296,83 @@ fn upgrade_updates_nested_workspace_member_only() -> Result<()> {
     assert_eq!(
         fs_err::read_to_string(project.child("pyproject.toml"))?,
         project_pyproject_toml.replace("anyio<=2", "anyio<=4.3.0")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    assert!(!project.child("uv.lock").exists());
+    assert!(!project.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_preserves_workspace_root_dependency_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let workspace_pyproject_toml = format!(
+        r#"
+        [tool.uv.workspace]
+        members = ["project"]
+
+        [dependency-groups]
+        root = ["bar<2"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&workspace_pyproject_toml)?;
+
+    let project = context.temp_dir.child("project");
+    project.create_dir_all()?;
+    let project_pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar<2",
+        ]
+    "#;
+    project
+        .child("pyproject.toml")
+        .write_str(project_pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .current_dir(&project)
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies for split (markers: sys_platform != 'linux'):
+      ╰─▶ Because foo==1.0.0 depends on bar{sys_platform != 'linux'}==2 and your project depends on foo==1, we can conclude that your project depends on bar==2.
+          And because your project requires bar<2, we can conclude that your project's requirements and your project are incompatible.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        workspace_pyproject_toml
+    );
+    assert_eq!(
+        fs_err::read_to_string(project.child("pyproject.toml"))?,
+        project_pyproject_toml
     );
     assert!(!context.temp_dir.child("uv.lock").exists());
     assert!(!context.temp_dir.child(".venv").exists());

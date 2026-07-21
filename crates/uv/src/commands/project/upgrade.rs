@@ -8,19 +8,23 @@ use anyhow::{Context, Result, anyhow, bail};
 use itertools::Itertools;
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade};
+use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun, NoSources, Upgrade};
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Pep508ErrorSource, Requirement, VerbatimUrl, VersionOrUrl};
 use uv_preview::Preview;
-use uv_pypi_types::{PyProjectToml, ResolutionMetadata, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{
+    DependencyGroupSpecifier, PyProjectToml, ResolutionMetadata, SupportedEnvironments,
+    VerbatimParsedUrl,
+};
 use uv_python::{ConfigDiscovery, Interpreter, PythonDownloads, PythonPreference};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{MetadataResponse, implicit_constraints_marker};
 use uv_settings::PythonInstallMirrors;
-use uv_workspace::pyproject::{DependencyType, Source};
+use uv_workspace::dependency_groups::FlatDependencyGroups;
+use uv_workspace::pyproject::{DependencyType, PyProjectToml as WorkspacePyProjectToml, Source};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{
     DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceErrorKind,
@@ -41,6 +45,7 @@ struct UpgradableRequirement {
     original_text: String,
     requirement: Requirement<VerbatimParsedUrl>,
     effective_marker: MarkerTree,
+    contexts: Vec<DeclarationContext>,
     resolved_versions: BTreeSet<Version>,
 }
 
@@ -48,6 +53,7 @@ struct UpgradableRequirement {
 struct SkippedRequirement {
     package: PackageName,
     dependency_type: DependencyType,
+    contexts: Vec<DeclarationContext>,
     original_text: String,
     display_text: String,
     reason: SkippedReason,
@@ -56,6 +62,18 @@ struct SkippedRequirement {
 enum SkippedReason {
     EnvironmentOrPythonRequirement,
     UndefinedExtra,
+}
+
+#[derive(Clone)]
+struct DeclarationContext {
+    dependency_type: DependencyType,
+    marker: MarkerTree,
+}
+
+struct DependencyDeclaration {
+    dependency_type: DependencyType,
+    text: String,
+    contexts: Vec<DeclarationContext>,
 }
 
 /// The requirements selected for upgrade and those that cannot apply.
@@ -94,6 +112,7 @@ enum DeclarationOutcome {
 enum BlockedReason {
     UnrepresentableRequirement(ProposeRequirementError),
     ConflictExtra { extra: String },
+    ConflictGroup { group: String },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -138,6 +157,9 @@ impl BlockedReason {
             Self::UnrepresentableRequirement(error) => error.to_string(),
             Self::ConflictExtra { extra } => {
                 format!("declared under conflicting extra `{extra}`")
+            }
+            Self::ConflictGroup { group } => {
+                format!("declared under conflicting dependency group `{group}`")
             }
         }
     }
@@ -232,7 +254,7 @@ pub(crate) async fn upgrade(
                     packages,
                 } = select_requirements(&project, &packages, &exclude, None)?;
                 render_skipped_requirements(&skipped, printer)?;
-                validate_requirements(&project, &active, &packages)?;
+                validate_requirements(&project, &active, &packages, &settings.sources)?;
                 return Err(error.into());
             }
         }
@@ -245,21 +267,57 @@ pub(crate) async fn upgrade(
         packages: mut selected_packages,
     } = select_requirements(&project, &packages, &exclude, fallback_interpreter.as_ref())?;
     render_skipped_requirements(&skipped, printer)?;
-    validate_requirements(&project, &requirements, &selected_packages)?;
+    validate_requirements(
+        &project,
+        &requirements,
+        &selected_packages,
+        &settings.sources,
+    )?;
     let mut declaration_outcomes = Vec::new();
-    let conflicts = project.workspace().conflicts()?;
+    let mut conflicts = project.workspace().conflicts()?;
+    if let Some(groups) = &project.current_project().pyproject_toml().dependency_groups {
+        conflicts.expand_transitive_group_includes(project.project_name(), groups);
+    }
     let mut requirements = requirements
         .into_iter()
         .filter_map(|selected| {
-            let Some(extra) = selected.requirement.marker.top_level_extra_name() else {
-                return Some(selected);
-            };
-            if conflicts.contains(project.project_name(), extra.as_ref()) {
+            let blocked_reason =
+                selected
+                    .contexts
+                    .iter()
+                    .find_map(|context| match &context.dependency_type {
+                        DependencyType::Production => context
+                            .marker
+                            .top_level_extra_name()
+                            .map(std::borrow::Cow::into_owned)
+                            .filter(|extra| conflicts.contains(project.project_name(), extra))
+                            .map(|extra| BlockedReason::ConflictExtra {
+                                extra: extra.to_string(),
+                            }),
+                        DependencyType::Optional(extra) => {
+                            if conflicts.contains(project.project_name(), extra) {
+                                Some(BlockedReason::ConflictExtra {
+                                    extra: extra.to_string(),
+                                })
+                            } else {
+                                None
+                            }
+                        }
+                        DependencyType::Group(group) => {
+                            if conflicts.contains(project.project_name(), group) {
+                                Some(BlockedReason::ConflictGroup {
+                                    group: group.to_string(),
+                                })
+                            } else {
+                                None
+                            }
+                        }
+                        DependencyType::Dev => None,
+                    });
+            if let Some(reason) = blocked_reason {
                 declaration_outcomes.push(DeclarationOutcome::Blocked {
                     declaration: selected.identity(),
-                    reason: BlockedReason::ConflictExtra {
-                        extra: extra.to_string(),
-                    },
+                    reason,
                 });
                 None
             } else {
@@ -330,6 +388,10 @@ pub(crate) async fn upgrade(
     }
     apply_requirement_replacements(&mut pyproject, relaxed_requirements.iter())?;
     let pyproject = pyproject.to_string();
+    let mut workspace_pyproject = WorkspacePyProjectToml::from_string(
+        pyproject.clone(),
+        project.project_root().join("pyproject.toml"),
+    )?;
     let pyproject = PyProjectToml::from_toml(
         &pyproject,
         project.project_root().join("pyproject.toml").display(),
@@ -343,18 +405,59 @@ pub(crate) async fn upgrade(
         bail!("`uv upgrade` does not support projects with dynamic versions yet");
     }
     let metadata = ResolutionMetadata::parse_pyproject_toml(pyproject, None)?;
-    let metadata = Metadata::from_workspace(
+    let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
+        project.current_project().root(),
+        &workspace_pyproject,
+    )?;
+    if let Some(sources) = workspace_pyproject
+        .tool
+        .as_mut()
+        .and_then(|tool| tool.uv.as_mut())
+        .and_then(|uv| uv.sources.as_mut())
+    {
+        sources.retain(|package, source| {
+            if !skipped.iter().any(|requirement| {
+                requirement.package == *package
+                    && requirement
+                        .contexts
+                        .iter()
+                        .any(|context| source_origin_applies(source, context))
+            }) {
+                return true;
+            }
+
+            if let Some(extra) = source.extra() {
+                return metadata.requires_dist.iter().any(|requirement| {
+                    requirement.name == *package
+                        && requirement.marker.top_level_extra_name().as_deref() == Some(extra)
+                });
+            }
+            if let Some(group) = source.group() {
+                return dependency_groups.get(group).is_some_and(|group| {
+                    group
+                        .requirements
+                        .iter()
+                        .any(|requirement| requirement.name == *package)
+                });
+            }
+
+            true
+        });
+    }
+    let metadata = Metadata::from_project_workspace(
         metadata,
-        project.project_root(),
+        &project,
+        &workspace_pyproject,
         None,
         &settings.index_locations,
-        settings.sources.clone(),
+        &settings.sources,
+        Some(project_resolution_marker(
+            &project,
+            fallback_interpreter.as_ref(),
+        )?),
         true,
-        &cache,
-        workspace_cache,
         client_builder.credentials_cache(),
-    )
-    .await?;
+    )?;
 
     let interpreter = if let Some(interpreter) = fallback_interpreter {
         interpreter
@@ -560,14 +663,14 @@ fn requires_fallback_interpreter(
 
     let is_explicit_selection = !packages.is_empty();
     let pyproject_path = project.project_root().join("pyproject.toml");
-    for dependency in project
-        .current_project()
-        .project()
-        .dependencies
-        .as_deref()
-        .unwrap_or_default()
-    {
-        let requirement = parse_dependency(dependency, "`project.dependencies`", &pyproject_path)?;
+    for declaration in current_project_dependency_declarations(project) {
+        let DependencyDeclaration {
+            dependency_type,
+            text: dependency,
+            contexts: _,
+        } = declaration;
+        let table_name = dependency_type.toml_table_name();
+        let requirement = parse_dependency(&dependency, &table_name, &pyproject_path)?;
         if exclude.contains(&requirement.name)
             || (is_explicit_selection && !packages.contains(&requirement.name))
         {
@@ -610,12 +713,6 @@ fn select_requirements(
 
     let is_explicit_selection = !packages.is_empty();
     let resolution_marker = project_resolution_marker(project, fallback_interpreter)?;
-    let dependencies = project
-        .current_project()
-        .project()
-        .dependencies
-        .as_deref()
-        .unwrap_or_default();
     let pyproject_path = project.project_root().join("pyproject.toml");
     let optional_dependencies = project
         .current_project()
@@ -626,8 +723,14 @@ fn select_requirements(
     let mut skipped = Vec::new();
     let mut found_packages = BTreeSet::new();
     let mut selected_packages = Vec::new();
-    for dependency in dependencies {
-        let requirement = parse_dependency(dependency, "`project.dependencies`", &pyproject_path)?;
+    for declaration in current_project_dependency_declarations(project) {
+        let DependencyDeclaration {
+            dependency_type,
+            text: dependency,
+            contexts,
+        } = declaration;
+        let table_name = dependency_type.toml_table_name();
+        let requirement = parse_dependency(&dependency, &table_name, &pyproject_path)?;
         if exclude.contains(&requirement.name)
             || (is_explicit_selection && !packages.contains(&requirement.name))
         {
@@ -635,30 +738,52 @@ fn select_requirements(
         }
 
         found_packages.insert(requirement.name.clone());
-        let mut effective_marker = requirement.marker;
-        effective_marker.and(resolution_marker);
-        if effective_marker.is_false() {
-            skipped.push(SkippedRequirement {
-                package: requirement.name.clone(),
-                dependency_type: DependencyType::Production,
-                original_text: dependency.clone(),
-                display_text: display_requirement(&requirement),
-                reason: SkippedReason::EnvironmentOrPythonRequirement,
+        let declaration_contexts = contexts
+            .into_iter()
+            .map(|context| {
+                let mut marker = requirement.marker;
+                marker.and(context.marker);
+                DeclarationContext {
+                    dependency_type: context.dependency_type,
+                    marker,
+                }
+            })
+            .collect::<Vec<_>>();
+        let mut active_contexts = Vec::new();
+        let mut effective_marker = MarkerTree::FALSE;
+        let mut has_environment_context = false;
+        for context in &declaration_contexts {
+            let mut context_marker = context.marker;
+            context_marker.and(resolution_marker);
+            if context_marker.is_false() {
+                continue;
+            }
+            has_environment_context = true;
+            context_marker = context_marker.simplify_not_extras_with(|extra| {
+                optional_dependencies
+                    .is_none_or(|optional_dependencies| !optional_dependencies.contains_key(extra))
             });
-            continue;
+            if context_marker.is_false() {
+                continue;
+            }
+            effective_marker.or(context_marker);
+            active_contexts.push(DeclarationContext {
+                dependency_type: context.dependency_type.clone(),
+                marker: context_marker,
+            });
         }
-
-        effective_marker = effective_marker.simplify_not_extras_with(|extra| {
-            optional_dependencies
-                .is_none_or(|optional_dependencies| !optional_dependencies.contains_key(extra))
-        });
-        if effective_marker.is_false() {
+        if active_contexts.is_empty() {
             skipped.push(SkippedRequirement {
                 package: requirement.name.clone(),
-                dependency_type: DependencyType::Production,
-                original_text: dependency.clone(),
+                dependency_type,
+                contexts: declaration_contexts,
+                original_text: dependency,
                 display_text: display_requirement(&requirement),
-                reason: SkippedReason::UndefinedExtra,
+                reason: if has_environment_context {
+                    SkippedReason::UndefinedExtra
+                } else {
+                    SkippedReason::EnvironmentOrPythonRequirement
+                },
             });
             continue;
         }
@@ -667,10 +792,11 @@ fn select_requirements(
         }
         to_upgrade.push(UpgradableRequirement {
             package: requirement.name.clone(),
-            dependency_type: DependencyType::Production,
-            original_text: dependency.clone(),
+            dependency_type,
+            original_text: dependency,
             requirement,
             effective_marker,
+            contexts: active_contexts,
             resolved_versions: BTreeSet::new(),
         });
     }
@@ -680,7 +806,7 @@ fn select_requirements(
         .filter(|package| !exclude.contains(*package))
     {
         if !found_packages.contains(package) {
-            bail!("Dependency `{package}` was not found in `project.dependencies`");
+            bail!("Dependency `{package}` was not found in the current project");
         }
     }
     if is_explicit_selection {
@@ -714,6 +840,7 @@ fn validate_requirements(
     project: &ProjectWorkspace,
     requirements: &[UpgradableRequirement],
     packages: &[PackageName],
+    sources_strategy: &NoSources,
 ) -> Result<()> {
     for package in packages {
         if requirements.iter().any(|selected| {
@@ -734,6 +861,9 @@ fn validate_requirements(
     }
 
     for package in packages {
+        if sources_strategy.for_package(package) {
+            continue;
+        }
         let sources = project
             .current_project()
             .pyproject_toml()
@@ -745,12 +875,7 @@ fn validate_requirements(
             .or_else(|| project.workspace().sources().get(package));
         let applies_to_selected_requirement = |source| {
             requirements.iter().any(|selected| {
-                selected.package == *package
-                    && source_is_applicable(
-                        source,
-                        &selected.dependency_type,
-                        selected.effective_marker,
-                    )
+                selected.package == *package && source_is_applicable(source, &selected.contexts)
             })
         };
         if sources.is_some_and(|sources| {
@@ -808,6 +933,132 @@ fn render_skipped_requirements(skipped: &[SkippedRequirement], printer: Printer)
         )?;
     }
     Ok(())
+}
+
+/// Return direct dependency declarations in the selected current project.
+fn current_project_dependency_declarations(
+    project: &ProjectWorkspace,
+) -> Vec<DependencyDeclaration> {
+    let mut declarations = Vec::new();
+    let current_project = project.current_project();
+    let project_metadata = current_project.project();
+    if let Some(dependencies) = &project_metadata.dependencies {
+        declarations.extend(
+            dependencies
+                .iter()
+                .cloned()
+                .map(|dependency| DependencyDeclaration {
+                    dependency_type: DependencyType::Production,
+                    text: dependency,
+                    contexts: vec![DeclarationContext {
+                        dependency_type: DependencyType::Production,
+                        marker: MarkerTree::TRUE,
+                    }],
+                }),
+        );
+    }
+    if let Some(optional_dependencies) = &project_metadata.optional_dependencies {
+        for (extra, dependencies) in optional_dependencies {
+            declarations.extend(dependencies.iter().cloned().map(|dependency| {
+                DependencyDeclaration {
+                    dependency_type: DependencyType::Optional(extra.clone()),
+                    text: dependency,
+                    contexts: vec![DeclarationContext {
+                        dependency_type: DependencyType::Optional(extra.clone()),
+                        marker: MarkerTree::TRUE,
+                    }],
+                }
+            }));
+        }
+    }
+    if let Some(dependency_groups) = &current_project.pyproject_toml().dependency_groups {
+        for (group, dependencies) in dependency_groups {
+            let contexts =
+                dependency_group_appearance_contexts(current_project.pyproject_toml(), group);
+            declarations.extend(dependencies.iter().filter_map(|dependency| {
+                let DependencyGroupSpecifier::Requirement(dependency) = dependency else {
+                    return None;
+                };
+                Some(DependencyDeclaration {
+                    dependency_type: DependencyType::Group(group.clone()),
+                    text: dependency.clone(),
+                    contexts: contexts.clone(),
+                })
+            }));
+        }
+    }
+    declarations
+}
+
+fn dependency_group_appearance_contexts(
+    pyproject_toml: &WorkspacePyProjectToml,
+    group: &GroupName,
+) -> Vec<DeclarationContext> {
+    let mut contexts = Vec::new();
+    let mut parents = Vec::new();
+    collect_group_appearance_contexts(
+        pyproject_toml,
+        group,
+        dependency_group_requires_python_marker(pyproject_toml, group),
+        &mut parents,
+        &mut contexts,
+    );
+    contexts
+}
+
+fn collect_group_appearance_contexts(
+    pyproject_toml: &WorkspacePyProjectToml,
+    group: &GroupName,
+    marker: MarkerTree,
+    parents: &mut Vec<GroupName>,
+    contexts: &mut Vec<DeclarationContext>,
+) {
+    if parents.contains(group) {
+        return;
+    }
+    contexts.push(DeclarationContext {
+        dependency_type: DependencyType::Group(group.clone()),
+        marker,
+    });
+    parents.push(group.clone());
+    if let Some(dependency_groups) = &pyproject_toml.dependency_groups {
+        for (parent, dependencies) in dependency_groups {
+            let includes_group = dependencies.iter().any(|dependency| {
+                matches!(
+                    dependency,
+                    DependencyGroupSpecifier::IncludeGroup { include_group }
+                        if include_group == group
+                )
+            });
+            if !includes_group {
+                continue;
+            }
+            let mut parent_marker = marker;
+            parent_marker.and(dependency_group_requires_python_marker(
+                pyproject_toml,
+                parent,
+            ));
+            collect_group_appearance_contexts(
+                pyproject_toml,
+                parent,
+                parent_marker,
+                parents,
+                contexts,
+            );
+        }
+    }
+    let _ = parents.pop();
+}
+
+fn dependency_group_requires_python_marker(
+    pyproject_toml: &WorkspacePyProjectToml,
+    group: &GroupName,
+) -> MarkerTree {
+    pyproject_toml
+        .dependency_group_requires_python(group)
+        .map_or(MarkerTree::TRUE, |requires_python| {
+            RequiresPython::from_specifiers(requires_python.clone()).to_marker_tree()
+        })
 }
 
 fn render_declaration_outcomes(outcomes: &[DeclarationOutcome], printer: Printer) -> Result<()> {
@@ -894,14 +1145,17 @@ fn apply_requirement_replacements<'a>(
 }
 
 /// Return whether a source applies to the selected requirement declaration.
-fn source_is_applicable(
-    source: &Source,
-    dependency_type: &DependencyType,
-    requirement_marker: MarkerTree,
-) -> bool {
-    let source_origin_applies = match dependency_type {
+fn source_is_applicable(source: &Source, contexts: &[DeclarationContext]) -> bool {
+    contexts.iter().any(|context| {
+        source_origin_applies(source, context) && !source.marker().is_disjoint(context.marker)
+    })
+}
+
+/// Return whether a source is scoped to the selected requirement declaration.
+fn source_origin_applies(source: &Source, context: &DeclarationContext) -> bool {
+    match &context.dependency_type {
         DependencyType::Production => {
-            let extra = requirement_marker.top_level_extra_name();
+            let extra = context.marker.top_level_extra_name();
             source
                 .extra()
                 .is_none_or(|target| extra.as_deref() == Some(target))
@@ -909,11 +1163,12 @@ fn source_is_applicable(
         }
         DependencyType::Dev => source.extra().is_none() && source.group().is_none(),
         DependencyType::Optional(extra) => {
-            source.extra() == Some(extra) && source.group().is_none()
+            source.extra().is_none_or(|target| target == extra) && source.group().is_none()
         }
-        DependencyType::Group(group) => source.extra().is_none() && source.group() == Some(group),
-    };
-    source_origin_applies && !source.marker().is_disjoint(requirement_marker)
+        DependencyType::Group(group) => {
+            source.extra().is_none() && source.group().is_none_or(|target| target == group)
+        }
+    }
 }
 
 /// Convert a parsed requirement into the representation used by the mutable manifest.

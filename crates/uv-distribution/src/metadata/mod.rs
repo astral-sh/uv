@@ -9,9 +9,11 @@ use uv_configuration::NoSources;
 use uv_distribution_types::{GitDirectorySourceUrl, IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{HashDigests, ResolutionMetadata};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::{WorkspaceCache, WorkspaceError};
+use uv_workspace::pyproject::PyProjectToml as WorkspacePyProjectToml;
+use uv_workspace::{ProjectWorkspace, WorkspaceCache, WorkspaceError};
 
 pub use crate::metadata::build_requires::{BuildRequires, LoweredExtraBuildDependencies};
 pub use crate::metadata::dependency_groups::SourcedDependencyGroups;
@@ -131,6 +133,55 @@ impl Metadata {
             credentials_cache,
         )
         .await?;
+
+        // Combine with the remaining metadata.
+        Ok(Self {
+            name,
+            version: metadata.version,
+            requires_dist,
+            requires_python: metadata.requires_python,
+            provides_extra,
+            dependency_groups,
+            dynamic,
+        })
+    }
+
+    /// Lower by considering a provided `pyproject.toml` for a workspace member.
+    pub fn from_project_workspace(
+        metadata: ResolutionMetadata,
+        project_workspace: &ProjectWorkspace,
+        pyproject_toml: &WorkspacePyProjectToml,
+        git_source: Option<&GitWorkspaceMember<'_>>,
+        locations: &IndexLocations,
+        sources: &NoSources,
+        source_applicability: Option<MarkerTree>,
+        editable: bool,
+        credentials_cache: &CredentialsCache,
+    ) -> Result<Self, MetadataError> {
+        // Lower the requirements.
+        let requires_dist = uv_pypi_types::RequiresDist {
+            name: metadata.name,
+            requires_dist: metadata.requires_dist,
+            provides_extra: metadata.provides_extra,
+            dynamic: metadata.dynamic,
+        };
+        let RequiresDist {
+            name,
+            requires_dist,
+            provides_extra,
+            dependency_groups,
+            dynamic,
+        } = RequiresDist::from_project_workspace_pyproject(
+            requires_dist,
+            project_workspace,
+            pyproject_toml,
+            git_source,
+            locations,
+            sources,
+            source_applicability,
+            editable,
+            credentials_cache,
+        )?;
 
         // Combine with the remaining metadata.
         Ok(Self {

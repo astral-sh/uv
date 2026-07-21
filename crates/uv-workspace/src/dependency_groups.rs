@@ -8,7 +8,7 @@ use uv_distribution_types::RequiresPython;
 use uv_fs::Simplified;
 use uv_normalize::{DEV_DEPENDENCIES, GroupName};
 use uv_pep440::VersionSpecifiers;
-use uv_pep508::Pep508Error;
+use uv_pep508::Pep508ErrorSource;
 use uv_pypi_types::{DependencyGroupSpecifier, VerbatimParsedUrl};
 
 use crate::pyproject::{DependencyGroupSettings, PyProjectToml, ToolUvDependencyGroups};
@@ -133,10 +133,16 @@ impl FlatDependencyGroups {
                         match uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(requirement) {
                             Ok(requirement) => requirements.push(requirement),
                             Err(err) => {
+                                let message = match err.message {
+                                    Pep508ErrorSource::String(message)
+                                    | Pep508ErrorSource::UnsupportedRequirement(message) => message,
+                                    Pep508ErrorSource::UrlError(_) => {
+                                        "Invalid URL requirement".to_string()
+                                    }
+                                };
                                 return Err(DependencyGroupErrorInner::GroupParseError(
                                     name.clone(),
-                                    requirement.clone(),
-                                    Box::new(err),
+                                    message,
                                 ));
                             }
                         }
@@ -268,12 +274,8 @@ pub struct DependencyGroupError {
 
 #[derive(Debug, Error)]
 enum DependencyGroupErrorInner {
-    #[error("Failed to parse entry in group `{0}`: `{1}`")]
-    GroupParseError(
-        GroupName,
-        String,
-        #[source] Box<Pep508Error<VerbatimParsedUrl>>,
-    ),
+    #[error("Failed to parse entry in group `{0}`: {1}")]
+    GroupParseError(GroupName, String),
     #[error("Failed to find group `{0}` included by `{1}`")]
     GroupNotFound(GroupName, GroupName),
     #[error(

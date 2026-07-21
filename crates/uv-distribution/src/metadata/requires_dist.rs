@@ -107,11 +107,33 @@ impl RequiresDist {
         editable: bool,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
+        Self::from_project_workspace_pyproject(
+            metadata,
+            project_workspace,
+            project_workspace.current_project().pyproject_toml(),
+            git_member,
+            locations,
+            no_sources,
+            None,
+            editable,
+            credentials_cache,
+        )
+    }
+
+    pub(crate) fn from_project_workspace_pyproject(
+        metadata: uv_pypi_types::RequiresDist,
+        project_workspace: &ProjectWorkspace,
+        pyproject_toml: &uv_workspace::pyproject::PyProjectToml,
+        git_member: Option<&GitWorkspaceMember<'_>>,
+        locations: &IndexLocations,
+        no_sources: &NoSources,
+        source_applicability: Option<MarkerTree>,
+        editable: bool,
+        credentials_cache: &CredentialsCache,
+    ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
-        let project_indexes = project_workspace
-            .current_project()
-            .pyproject_toml()
+        let project_indexes = pyproject_toml
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
@@ -120,9 +142,7 @@ impl RequiresDist {
 
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let project_sources = project_workspace
-            .current_project()
-            .pyproject_toml()
+        let project_sources = pyproject_toml
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
@@ -132,7 +152,7 @@ impl RequiresDist {
 
         let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
             project_workspace.current_project().root(),
-            project_workspace.current_project().pyproject_toml(),
+            pyproject_toml,
         )?;
 
         // Now that we've resolved the dependency groups, we can validate that each source references
@@ -163,6 +183,7 @@ impl RequiresDist {
                                 project_indexes,
                                 extra,
                                 Some(&group),
+                                source_applicability,
                                 locations,
                                 project_workspace.workspace(),
                                 git_member,
@@ -206,6 +227,7 @@ impl RequiresDist {
                         project_indexes,
                         extra.as_deref(),
                         group,
+                        source_applicability,
                         locations,
                         project_workspace.workspace(),
                         git_member,

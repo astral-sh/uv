@@ -164,6 +164,7 @@ impl SourcedDependencyGroups {
                                 project_indexes,
                                 extra,
                                 Some(&group),
+                                None,
                                 locations,
                                 project.workspace(),
                                 git_member,
