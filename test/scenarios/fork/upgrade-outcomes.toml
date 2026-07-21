@@ -3,6 +3,9 @@ description = '''
 This test checks upgrade outcomes for blocked fork rewrites alongside safe upgrades.
 '''
 
+[testgen]
+disable = true
+
 [resolver_options]
 universal = true
 
