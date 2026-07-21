@@ -141,55 +141,52 @@ impl SourcedDependencyGroups {
         Self::validate_sources(project_sources, &dependency_groups)?;
 
         // Lower the dependency groups.
-        let dependency_groups = dependency_groups
-            .into_iter()
-            .map(|(name, group)| {
-                let requirements = group
-                    .requirements
-                    .into_iter()
-                    .flat_map(|requirement| {
-                        // Check if sources should be disabled for this specific package
-                        if no_sources.for_package(&requirement.name) {
-                            vec![Ok(Requirement::from(requirement))].into_iter()
-                        } else {
-                            let requirement_name = requirement.name.clone();
-                            let group = name.clone();
-                            let extra = None;
+        let mut lowered_dependency_groups = BTreeMap::new();
+        for (name, group) in dependency_groups {
+            let mut requirements = Vec::new();
+            for requirement in group.requirements {
+                if no_sources.for_package(&requirement.name) {
+                    requirements.push(Requirement::from(requirement));
+                    continue;
+                }
 
-                            LoweredRequirement::from_requirement(
-                                requirement,
-                                project.project_name(),
-                                project.root(),
-                                project_sources,
-                                project_indexes,
-                                extra,
-                                Some(&group),
-                                locations,
-                                project.workspace(),
-                                git_member,
-                                true,
-                                credentials_cache,
-                            )
-                            .map(move |requirement| match requirement {
-                                Ok(requirement) => Ok(requirement.into_inner()),
-                                Err(err) => Err(MetadataError::GroupLoweringError(
-                                    group.clone(),
+                let requirement_name = requirement.name.clone();
+                requirements.extend(
+                    LoweredRequirement::from_requirement(
+                        requirement,
+                        project.project_name(),
+                        project.root(),
+                        project_sources,
+                        project_indexes,
+                        None,
+                        Some(&name),
+                        locations,
+                        project.workspace(),
+                        git_member,
+                        true,
+                        credentials_cache,
+                    )
+                    .await
+                    .map(|requirement| {
+                        requirement
+                            .map(LoweredRequirement::into_inner)
+                            .map_err(|err| {
+                                MetadataError::GroupLoweringError(
+                                    name.clone(),
                                     requirement_name.clone(),
                                     Box::new(err),
-                                )),
+                                )
                             })
-                            .collect::<Vec<_>>()
-                            .into_iter()
-                        }
                     })
-                    .collect::<Result<Box<_>, _>>()?;
-                Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))
-            })
-            .collect::<Result<BTreeMap<_, _>, _>>()?;
+                    .collect::<Result<Vec<_>, _>>()?,
+                );
+            }
+            lowered_dependency_groups.insert(name, requirements.into_boxed_slice());
+        }
 
         Ok(Self {
             name: project.project_name().cloned(),
-            dependency_groups,
+            dependency_groups: lowered_dependency_groups,
         })
     }
 

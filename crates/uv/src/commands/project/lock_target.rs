@@ -347,7 +347,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Lower the requirements for the [`LockTarget`], relative to the target root.
-    pub(crate) fn lower(
+    pub(crate) async fn lower(
         self,
         requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
         locations: &IndexLocations,
@@ -373,7 +373,8 @@ impl<'lock> LockTarget<'lock> {
                     locations,
                     sources,
                     credentials_cache,
-                )?;
+                )
+                .await?;
 
                 Ok(metadata
                     .requires_dist
@@ -402,34 +403,38 @@ impl<'lock> LockTarget<'lock> {
                     .and_then(|uv| uv.sources.as_ref())
                     .unwrap_or(&empty);
 
-                Ok(requirements
-                    .into_iter()
-                    .flat_map(|requirement| {
-                        // Check if sources should be disabled for this specific package
-                        if sources.for_package(&requirement.name) {
-                            vec![Ok(Requirement::from(requirement))].into_iter()
-                        } else {
-                            let requirement_name = requirement.name.clone();
-                            LoweredRequirement::from_non_workspace_requirement(
-                                requirement,
-                                script.path.parent().unwrap(),
-                                sources_map,
-                                indexes,
-                                locations,
-                                credentials_cache,
-                            )
-                            .map(move |requirement| match requirement {
-                                Ok(requirement) => Ok(requirement.into_inner()),
-                                Err(err) => Err(uv_distribution::MetadataError::LoweringError(
-                                    requirement_name.clone(),
-                                    Box::new(err),
-                                )),
-                            })
-                            .collect::<Vec<_>>()
-                            .into_iter()
-                        }
-                    })
-                    .collect::<Result<_, _>>()?)
+                let mut lowered = Vec::new();
+                for requirement in requirements {
+                    if sources.for_package(&requirement.name) {
+                        lowered.push(Requirement::from(requirement));
+                        continue;
+                    }
+
+                    let requirement_name = requirement.name.clone();
+                    lowered.extend(
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script.path.parent().unwrap(),
+                            sources_map,
+                            indexes,
+                            locations,
+                            credentials_cache,
+                        )
+                        .await
+                        .map(|requirement| {
+                            requirement
+                                .map(LoweredRequirement::into_inner)
+                                .map_err(|err| {
+                                    uv_distribution::MetadataError::LoweringError(
+                                        requirement_name.clone(),
+                                        Box::new(err),
+                                    )
+                                })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                    );
+                }
+                Ok(lowered)
             }
         }
     }

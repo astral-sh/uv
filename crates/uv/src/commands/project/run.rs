@@ -364,12 +364,15 @@ pub(crate) async fn run(
                 (&script).into(),
                 &settings.resolver,
                 client_builder.credentials_cache(),
-            )? {
+            )
+            .await?
+            {
                 let script_extra_build_requires = script_extra_build_requires(
                     (&script).into(),
                     &settings.resolver,
                     client_builder.credentials_cache(),
-                )?
+                )
+                .await?
                 .into_inner();
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
