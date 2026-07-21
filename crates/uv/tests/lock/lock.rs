@@ -9804,7 +9804,8 @@ fn lock_mixed_hashes() -> Result<()> {
     Ok(())
 }
 
-/// Lock with an index that advertises multiple hashes, then require SHA256 for that index.
+/// Lock with an index that advertises multiple hashes, then require SHA256 for that index while
+/// ignoring an incompatible SHA512-only wheel.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_index_hash_algorithm() -> Result<()> {
@@ -9817,6 +9818,12 @@ async fn lock_index_hash_algorithm() -> Result<()> {
         },
         "name": "basic-package",
         "files": [{
+            "filename": "basic_package-0.1.0-cp311-cp311-any.whl",
+            "url": format!("{}/files/basic_package-0.1.0-cp311-cp311-any.whl", server.uri()),
+            "hashes": {
+                "sha512": "765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17"
+            }
+        }, {
             "filename": "basic_package-0.1.0-py3-none-any.whl",
             "url": format!("{}/files/basic_package-0.1.0-py3-none-any.whl", server.uri()),
             "hashes": {
@@ -9965,7 +9972,8 @@ async fn lock_index_hash_algorithm() -> Result<()> {
     Ok(())
 }
 
-/// An index-specific hash algorithm must be advertised by every locked artifact.
+/// An index-specific hash algorithm must be advertised by every locked artifact, even if the index
+/// URL is duplicated through the CLI or environment.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_index_hash_algorithm_missing() -> Result<()> {
@@ -10035,6 +10043,28 @@ async fn lock_index_hash_algorithm_missing() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     warning: Setting `hash-algorithm` on configured indexes is experimental and may change without warning. Pass `--preview-features index-hash-algorithm` to disable this warning.
+    error: The index `http://[LOCALHOST]/simple` requires `sha256` hashes, but `basic_package-0.1.0-py3-none-any.whl` does not provide one
+    ");
+
+    let index = format!("{}/simple", server.uri());
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index").arg(&index).arg("--preview-features").arg("index-hash-algorithm").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The index `http://[LOCALHOST]/simple` requires `sha256` hashes, but `basic_package-0.1.0-py3-none-any.whl` does not provide one
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_DEFAULT_INDEX, &index).arg("--preview-features").arg("index-hash-algorithm").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
     error: The index `http://[LOCALHOST]/simple` requires `sha256` hashes, but `basic_package-0.1.0-py3-none-any.whl` does not provide one
     ");
 

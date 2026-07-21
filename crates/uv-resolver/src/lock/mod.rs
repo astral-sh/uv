@@ -459,12 +459,18 @@ impl Lock {
                 vec![]
             };
 
-            let mut package =
-                Package::from_annotated_dist(dist, fork_markers, root, index_locations)?;
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
                 wheel_marker.and(supported_environments_marker);
             }
+            let mut package = Package::from_annotated_dist(
+                dist,
+                fork_markers,
+                root,
+                index_locations,
+                &requires_python,
+                &wheel_marker,
+            )?;
             let wheels = &mut package.wheels;
             wheels.retain(|wheel| {
                 !is_wheel_unreachable_for_marker(
@@ -2855,10 +2861,17 @@ impl Package {
         fork_markers: Vec<UniversalMarker>,
         root: &Path,
         index_locations: &IndexLocations,
+        requires_python: &RequiresPython,
+        wheel_marker: &UniversalMarker,
     ) -> Result<Self, LockError> {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist, index_locations)?;
-        let wheels = Wheel::from_annotated_dist(annotated_dist, index_locations)?;
+        let wheels = Wheel::from_annotated_dist(
+            annotated_dist,
+            index_locations,
+            requires_python,
+            wheel_marker,
+        )?;
         let requires_dist = if id.source.is_immutable() {
             BTreeSet::default()
         } else {
@@ -4913,6 +4926,8 @@ impl Wheel {
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
         index_locations: &IndexLocations,
+        requires_python: &RequiresPython,
+        wheel_marker: &UniversalMarker,
     ) -> Result<Vec<Self>, LockError> {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
@@ -4922,6 +4937,8 @@ impl Wheel {
                 annotated_dist.hashes.as_slice(),
                 annotated_dist.index(),
                 index_locations,
+                requires_python,
+                wheel_marker,
             ),
         }
     }
@@ -4931,22 +4948,26 @@ impl Wheel {
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
         index_locations: &IndexLocations,
+        requires_python: &RequiresPython,
+        wheel_marker: &UniversalMarker,
     ) -> Result<Vec<Self>, LockError> {
         match *dist {
-            Dist::Built(ref built_dist) => {
-                Self::from_built_dist(built_dist, hashes, index, index_locations)
-            }
+            Dist::Built(ref built_dist) => Self::from_built_dist(
+                built_dist,
+                hashes,
+                index,
+                index_locations,
+                requires_python,
+                wheel_marker,
+            ),
             Dist::Source(uv_distribution_types::SourceDist::Registry(ref source_dist)) => {
-                source_dist
-                    .wheels
-                    .iter()
-                    .filter(|wheel| {
-                        // Reject distributions from registries that don't match the index URL, as can occur with
-                        // `--find-links`.
-                        index.is_some_and(|index| *index == wheel.index)
-                    })
-                    .map(|wheel| Self::from_registry_wheel(wheel, index_locations))
-                    .collect()
+                Self::from_registry_wheels(
+                    &source_dist.wheels,
+                    index,
+                    index_locations,
+                    requires_python,
+                    wheel_marker,
+                )
             }
             Dist::Source(_) => Ok(vec![]),
         }
@@ -4957,11 +4978,17 @@ impl Wheel {
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
         index_locations: &IndexLocations,
+        requires_python: &RequiresPython,
+        wheel_marker: &UniversalMarker,
     ) -> Result<Vec<Self>, LockError> {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => {
-                Self::from_registry_dist(reg_dist, index, index_locations)
-            }
+            BuiltDist::Registry(ref reg_dist) => Self::from_registry_wheels(
+                &reg_dist.wheels,
+                index,
+                index_locations,
+                requires_python,
+                wheel_marker,
+            ),
             BuiltDist::DirectUrl(ref direct_dist) => {
                 Ok(vec![Self::from_direct_dist(direct_dist, hashes)])
             }
@@ -4972,18 +4999,25 @@ impl Wheel {
         }
     }
 
-    fn from_registry_dist(
-        reg_dist: &RegistryBuiltDist,
+    fn from_registry_wheels(
+        wheels: &[RegistryBuiltWheel],
         index: Option<&IndexUrl>,
         index_locations: &IndexLocations,
+        requires_python: &RequiresPython,
+        wheel_marker: &UniversalMarker,
     ) -> Result<Vec<Self>, LockError> {
-        reg_dist
-            .wheels
+        wheels
             .iter()
             .filter(|wheel| {
                 // Reject distributions from registries that don't match the index URL, as can occur with
                 // `--find-links`.
                 index.is_some_and(|index| *index == wheel.index)
+                    && !is_wheel_unreachable_for_marker(
+                        &wheel.filename,
+                        requires_python,
+                        wheel_marker,
+                        None,
+                    )
             })
             .map(|wheel| Self::from_registry_wheel(wheel, index_locations))
             .collect()
