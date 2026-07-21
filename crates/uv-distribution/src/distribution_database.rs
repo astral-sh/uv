@@ -299,7 +299,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         None,
                         &wheel.filename,
                         WheelExtension::Whl,
-                        None,
+                        wheel.size,
                         &wheel_entry,
                         dist,
                         hashes,
@@ -337,7 +337,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                 None,
                                 &wheel.filename,
                                 WheelExtension::Whl,
-                                None,
+                                wheel.size,
                                 &wheel_entry,
                                 dist,
                                 hashes,
@@ -704,6 +704,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<Archive, Error> {
+        let expected_size = match dist {
+            BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => size,
+            BuiltDist::DirectUrl(_) => size,
+            _ => None,
+        };
+
         // Acquire an advisory lock, to guard against concurrent writes.
         #[cfg(windows)]
         let _lock = {
@@ -718,12 +724,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let download = |response: reqwest::Response| {
             async {
-                let size = size.or_else(|| content_length(&response));
+                let progress_size = size.or_else(|| content_length(&response));
 
-                let progress = self
-                    .reporter
-                    .as_ref()
-                    .map(|reporter| (reporter, reporter.on_download_start(dist.name(), size)));
+                let progress = self.reporter.as_ref().map(|reporter| {
+                    (
+                        reporter,
+                        reporter.on_download_start(dist.name(), progress_size),
+                    )
+                });
 
                 let reader = response
                     .bytes_stream()
@@ -770,6 +778,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 };
                 // Exhaust the reader to compute the hashes.
                 hasher.finish().await.map_err(Error::HashExhaustion)?;
+                let actual_size = hasher.bytes_read();
+                if let Some(expected) = expected_size
+                    && actual_size != expected
+                {
+                    return Err(Error::MismatchedSize {
+                        distribution: dist.to_string(),
+                        expected,
+                        actual: actual_size,
+                    });
+                }
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
@@ -792,6 +810,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     id,
                     hashers.into_iter().map(HashDigest::from).collect(),
                     filename.clone(),
+                    Some(actual_size),
                 ))
             }
             .instrument(info_span!("wheel", wheel = %dist))
@@ -836,10 +855,21 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        // If the archive is missing the required hashes, or has since been removed, force a refresh.
+        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
+            && expected != actual
+        {
+            return Err(Error::MismatchedSize {
+                distribution: dist.to_string(),
+                expected,
+                actual,
+            });
+        }
+
+        // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.exists(self.build_context.cache()));
+            .filter(|archive| archive.exists(self.build_context.cache()))
+            .filter(|archive| expected_size.is_none() || archive.size.is_some());
 
         let archive = if let Some(archive) = archive {
             archive
@@ -878,6 +908,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<Archive, Error> {
+        let expected_size = match dist {
+            BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => size,
+            BuiltDist::DirectUrl(_) => size,
+            _ => None,
+        };
+
         // Acquire an advisory lock, to guard against concurrent writes.
         #[cfg(windows)]
         let _lock = {
@@ -890,12 +926,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let download = |response: reqwest::Response| {
             async {
-                let size = size.or_else(|| content_length(&response));
+                let progress_size = size.or_else(|| content_length(&response));
 
-                let progress = self
-                    .reporter
-                    .as_ref()
-                    .map(|reporter| (reporter, reporter.on_download_start(dist.name(), size)));
+                let progress = self.reporter.as_ref().map(|reporter| {
+                    (
+                        reporter,
+                        reporter.on_download_start(dist.name(), progress_size),
+                    )
+                });
 
                 let reader = response
                     .bytes_stream()
@@ -929,6 +967,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             .map_err(Error::CacheWrite)?;
                     }
                 }
+
+                if let Some(expected) = expected_size
+                    && hasher.bytes_read() != expected
+                {
+                    return Err(Error::MismatchedSize {
+                        distribution: dist.to_string(),
+                        expected,
+                        actual: hasher.bytes_read(),
+                    });
+                }
+
+                let actual_size = hasher.bytes_read();
 
                 // Unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
@@ -967,7 +1017,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(id, hashes, filename.clone()))
+                Ok(Archive::new(
+                    id,
+                    hashes,
+                    filename.clone(),
+                    Some(actual_size),
+                ))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -1011,10 +1066,21 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        // If the archive is missing the required hashes, or has since been removed, force a refresh.
+        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
+            && expected != actual
+        {
+            return Err(Error::MismatchedSize {
+                distribution: dist.to_string(),
+                expected,
+                actual,
+            });
+        }
+
+        // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.exists(self.build_context.cache()));
+            .filter(|archive| archive.exists(self.build_context.cache()))
+            .filter(|archive| expected_size.is_none() || archive.size.is_some());
 
         let archive = if let Some(archive) = archive {
             archive
@@ -1091,6 +1157,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await?,
                 HashDigests::empty(),
                 filename.clone(),
+                None,
             );
 
             // Write the archive pointer to the cache.
@@ -1158,7 +1225,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .map_err(Error::CacheWrite)?;
 
             // Create an archive.
-            let archive = Archive::new(id, hashes, filename.clone());
+            let archive = Archive::new(id, hashes, filename.clone(), None);
 
             // Write the archive pointer to the cache.
             let pointer = PathArchivePointer {

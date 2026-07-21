@@ -14,6 +14,8 @@ use uv_pypi_types::{HashDigest, HashDigests};
 pub(crate) struct Revision {
     id: RevisionId,
     hashes: HashDigests,
+    #[serde(default)]
+    size: Option<u64>,
 }
 
 impl Revision {
@@ -22,6 +24,7 @@ impl Revision {
         Self {
             id: RevisionId::new(),
             hashes: HashDigests::empty(),
+            size: None,
         }
     }
 
@@ -40,10 +43,22 @@ impl Revision {
         self.hashes
     }
 
+    /// Return the size of the downloaded archive.
+    pub(crate) fn size(&self) -> Option<u64> {
+        self.size
+    }
+
     /// Set the computed hashes of the archive.
     #[must_use]
     pub(crate) fn with_hashes(mut self, hashes: HashDigests) -> Self {
         self.hashes = hashes;
+        self
+    }
+
+    /// Set the size of the downloaded archive.
+    #[must_use]
+    pub(crate) fn with_size(mut self, size: u64) -> Self {
+        self.size = Some(size);
         self
     }
 }
@@ -92,9 +107,15 @@ mod tests {
     /// Regression test for <https://github.com/astral-sh/uv/issues/19298>.
     #[test]
     fn deserialize_legacy_nanoid_revision() {
+        #[derive(Serialize)]
+        struct LegacyRevision {
+            id: RevisionId,
+            hashes: HashDigests,
+        }
+
         // A representative 21-character nanoid ID, drawn from the same alphabet
         // used by both the old `nanoid` crate and `uv_fastid`.
-        let legacy = Revision {
+        let legacy = LegacyRevision {
             id: RevisionId("HM0NxJml5hc7UjbfTWT1r".to_string()),
             hashes: HashDigests::empty(),
         };

@@ -5,7 +5,7 @@ use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use fs_err as fs;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use predicates::Predicate;
 use url::Url;
 use wiremock::matchers::{method, path};
@@ -6134,6 +6134,163 @@ fn pep_751_requires_packages() -> Result<()> {
         1 |
           | ^
         missing field `packages`
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_validates_archive_size() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("iniconfig-2.0.0-py3-none-any.whl")
+        .touch()?;
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        archive = { path = "iniconfig-2.0.0-py3-none-any.whl", size = 1, hashes = { sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" } }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Archive `[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl` has size 0, but the lockfile records 1
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_validates_remote_archive_size() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "a"
+        version = "1.0.0"
+        archive = {{ url = "{wheel_url}", size = 1, hashes = {{ sha256 = "f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809" }} }}
+        "#,
+        wheel_url = server.file_url("a-1.0.0-py3-none-any.whl"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      ╰─▶ Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
+    "#);
+
+    context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "a"
+        version = "1.0.0"
+        wheels = [{{ url = "{wheel_url}", size = 1, hashes = {{ sha256 = "f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809" }} }}]
+        "#,
+        wheel_url = server.file_url("a-1.0.0-py3-none-any.whl"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `a==1.0.0`
+      ╰─▶ Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 921 bytes
+    "#);
+
+    context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "a"
+        version = "1.0.0"
+        sdist = {{ url = "{sdist_url}", size = 1, hashes = {{ sha256 = "3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097" }} }}
+        "#,
+        sdist_url = server.file_url("a-1.0.0.tar.gz"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `a==1.0.0`
+      ╰─▶ Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 453 bytes
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_validates_cached_remote_archive_size() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    let wheel_url = server.file_url("a-1.0.0-py3-none-any.whl");
+
+    context
+        .pip_install()
+        .arg(format!("a @ {wheel_url}"))
+        .assert()
+        .success();
+
+    context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "a"
+        version = "1.0.0"
+        archive = {{ url = "{wheel_url}", size = 1, hashes = {{ sha256 = "f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809" }} }}
+        "#,
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--reinstall")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      ╰─▶ Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
     "#);
 
     Ok(())

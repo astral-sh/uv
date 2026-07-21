@@ -69,6 +69,7 @@ impl From<Hasher> for HashDigest {
 pub struct HashReader<'a, R> {
     reader: R,
     hashers: &'a mut [Hasher],
+    bytes_read: u64,
 }
 
 impl<'a, R> HashReader<'a, R>
@@ -76,7 +77,16 @@ where
     R: tokio::io::AsyncRead + Unpin,
 {
     pub fn new(reader: R, hashers: &'a mut [Hasher]) -> Self {
-        HashReader { reader, hashers }
+        HashReader {
+            reader,
+            hashers,
+            bytes_read: 0,
+        }
+    }
+
+    /// Return the number of bytes read from the underlying reader.
+    pub fn bytes_read(&self) -> u64 {
+        self.bytes_read
     }
 
     /// Exhaust the underlying reader.
@@ -97,10 +107,13 @@ where
         buf: &mut ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         let reader = Pin::new(&mut self.reader);
+        let filled = buf.filled().len();
         match reader.poll_read(cx, buf) {
             Poll::Ready(Ok(())) => {
+                let bytes = &buf.filled()[filled..];
+                self.bytes_read += bytes.len() as u64;
                 for hasher in self.hashers.iter_mut() {
-                    hasher.update(buf.filled());
+                    hasher.update(bytes);
                 }
                 Poll::Ready(Ok(()))
             }

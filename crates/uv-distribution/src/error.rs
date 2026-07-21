@@ -174,6 +174,15 @@ pub enum Error {
     },
 
     #[error(
+        "Size mismatch for `{distribution}`: expected {expected} bytes, but downloaded {actual} bytes"
+    )]
+    MismatchedSize {
+        distribution: String,
+        expected: u64,
+        actual: u64,
+    },
+
+    #[error(
         "Hash-checking is enabled, but no hashes were provided or computed for: `{distribution}`"
     )]
     MissingHashes { distribution: String },

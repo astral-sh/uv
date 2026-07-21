@@ -8392,6 +8392,72 @@ async fn find_links_uppercase_html() -> Result<()> {
     Ok(())
 }
 
+/// Treat an incorrect wheel size from the Simple API as advisory.
+#[tokio::test]
+async fn registry_wheel_size_is_advisory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let wheel_filename = "tqdm-1000.0.0-py3-none-any.whl";
+    let wheel_path = context
+        .workspace_root
+        .join("test/links")
+        .join(wheel_filename);
+
+    Mock::given(method("GET"))
+        .and(path("/tqdm/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            formatdoc! {r#"
+                {{
+                    "name": "tqdm",
+                    "files": [{{
+                        "filename": "{wheel_filename}",
+                        "url": "/{wheel_filename}",
+                        "hashes": {{}},
+                        "size": 1,
+                        "core-metadata": true,
+                        "upload-time": "2024-03-24T00:00:00Z"
+                    }}]
+                }}
+            "#},
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/{wheel_filename}.metadata")))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.1
+            Name: tqdm
+            Version: 1000.0.0
+        "}))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/{wheel_filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs::read(wheel_path)?))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm==1000.0.0")
+        .arg("--index-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Reject a wheel with multiple `.dist-info` directories when PEP 658 metadata bypasses
 /// reading metadata from the wheel archive.
 #[tokio::test]
