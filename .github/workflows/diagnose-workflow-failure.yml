@@ -120,22 +120,24 @@ jobs:
     timeout-minutes: 5
     permissions:
       id-token: write # for the credential broker
+      issues: write # for upstream issue creation
     steps:
-      - name: "Get uv issue token"
+      - name: "Get uv-dev issue token"
         id: token
+        if: github.repository == 'astral-sh/uv-dev'
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
-          repository: astral-sh/uv
+          repository: astral-sh/uv-dev
           permissions: |
             issues: write
 
       - name: "Open workflow failure issue"
         env:
           DIAGNOSIS: ${{ needs.diagnose.outputs.result }}
-          GH_TOKEN: ${{ steps.token.outputs.token }}
-          ISSUE_REPOSITORY: astral-sh/uv
+          GH_TOKEN: ${{ steps.token.outputs.token || secrets.GITHUB_TOKEN }}
+          ISSUE_REPOSITORY: ${{ github.repository }}
         run: |
           printf '%s\n' "$DIAGNOSIS" > "$RUNNER_TEMP/diagnosis.json"
 

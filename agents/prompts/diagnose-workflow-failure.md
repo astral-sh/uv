@@ -14,15 +14,13 @@ by the proposed change, a repository defect, a flaky test, or external infrastru
 distinguish source-backed findings from hypotheses.
 
 Before deciding to open an issue, use the authenticated `gh` CLI to search the open and closed
-issues in `astral-sh/uv` and the open, closed, and merged pull requests in both `astral-sh/uv` and
-`astral-sh/uv-dev`. The `uv-dev` fork has issues disabled, so `astral-sh/uv` is the canonical issue
-tracker. Search each independent failure using exact test names, error fragments, workflow or job
-names, and affected platforms; then try conceptual searches that remove incidental versions, package
-names, and paths. In particular, search existing `ci-flake` issues for test and infrastructure
-flakes. Inspect the strongest candidates and follow references to the canonical issue when
-appropriate. Populate `related.items` with the closest results and explain the evidence for each.
-Summarize the searches performed and any plausible candidate that was ruled out in
-`related.search_scope`.
+issues and the open, closed, and merged pull requests in both `astral-sh/uv` and `astral-sh/uv-dev`.
+Search each independent failure using exact test names, error fragments, workflow or job names, and
+affected platforms; then try conceptual searches that remove incidental versions, package names, and
+paths. In particular, search existing `ci-flake` issues for test and infrastructure flakes. Inspect
+the strongest candidates and follow references to the canonical issue when appropriate. Populate
+`related.items` with the closest results and explain the evidence for each. Summarize the searches
+performed and any plausible candidate that was ruled out in `related.search_scope`.
 
 Set `decision` to exactly one of:
 
