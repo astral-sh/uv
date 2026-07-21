@@ -69,14 +69,15 @@ jobs:
   reproduce-bug:
     needs: triage
     if: needs.triage.outputs.result != '' && fromJSON(needs.triage.outputs.result).type == 'bug'
+    permissions:
+      contents: read
+      id-token: write
+      issues: read
     uses: ./.github/workflows/reproduce-bug.yml
-    secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
     with:
       issue: ${{ inputs.issue || github.event.issue.number }}
       runner: ubuntu-latest
-    permissions:
-      contents: read
-      issues: read
+    secrets: inherit # zizmor: ignore[secrets-inherit] -- protected environment secrets are needed for reproduction
 
   report:
     needs: triage

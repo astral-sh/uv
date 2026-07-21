@@ -1,4 +1,4 @@
-# Reproduce reported bugs without modifying the repository or GitHub.
+# Reproduce reported bugs and open draft regression tests in uv-dev.
 name: "reproduce-bug"
 
 on:
@@ -17,6 +17,12 @@ on:
       result:
         description: "The bug reproduction result"
         value: ${{ jobs.reproduce.outputs.result }}
+      test-result:
+        description: "The integration-test creation result"
+        value: ${{ jobs.create-integration-test.outputs.result }}
+      pull-request:
+        description: "The draft integration-test pull request URL"
+        value: ${{ jobs.create-integration-test.outputs.pull-request }}
   workflow_dispatch:
     inputs:
       issue:
@@ -104,3 +110,149 @@ jobs:
         run: printf '```json\n%s\n```\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
         env:
           REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
+
+  create-integration-test:
+    needs: reproduce
+    if: needs.reproduce.outputs.result != '' && fromJSON(needs.reproduce.outputs.result).reproduction == 'reproducible'
+    runs-on: ${{ inputs.runner }}
+    environment: automations
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write # for the uv-dev credential broker
+      issues: read
+    outputs:
+      result: ${{ steps.create-test.outputs.final-message }}
+      pull-request: ${{ steps.open-pr.outputs.url }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: false
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: false
+
+      - name: "Install required Python versions"
+        run: uv python install
+
+      - name: "Collect reproduction context"
+        run: |
+          gh issue view "$ISSUE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author \
+            > "$RUNNER_TEMP/issue-triage-event.json"
+          printf '%s\n' "$REPRODUCTION_RESULT" > "$RUNNER_TEMP/bug-reproduction-result.json"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ inputs.issue }}
+          REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
+
+      - name: "Create integration test"
+        id: create-test
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INSTA_UPDATE: "no"
+          TMPDIR: ${{ runner.temp }}
+          UV_CACHE_DIR: ${{ runner.temp }}/uv-create-test-cache
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: "agents/codex"
+          permission-profile: "create-bug-test"
+          safety-strategy: drop-sudo
+          allow-users: "*"
+          prompt-file: "agents/prompts/create-bug-test.md"
+          output-schema-file: "agents/schemas/create-bug-test.json"
+
+      - name: "Commit integration test"
+        id: commit-test
+        run: |
+          git add -- crates/uv/tests/it crates/uv-client/tests/it
+
+          if [ -n "$(git ls-files --others --exclude-standard)" ] || ! git diff --quiet; then
+            echo "Codex changed files outside the integration-test directories."
+            git status --short
+            exit 1
+          fi
+
+          if git diff --cached --quiet; then
+            if [ "$CREATE_TEST_OUTCOME" != "not_created" ]; then
+              echo "Codex reported an integration test was created, but the checkout is unchanged."
+              exit 1
+            fi
+            echo "Codex did not create a suitable integration test."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            {
+              printf '%s\n\n' '### Integration test not created'
+              printf '%s\n' "$CREATE_TEST_SUMMARY"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$CREATE_TEST_OUTCOME" != "created" ]; then
+            echo "Codex changed integration-test files, but reported that no test was created."
+            exit 1
+          fi
+
+          git diff --cached --check
+          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
+          git \
+            -c core.hooksPath=/dev/null \
+            -c user.name="github-actions[bot]" \
+            -c user.email="github-actions[bot]@users.noreply.github.com" \
+            commit --message "Add regression test for uv#${issue_number}"
+
+          git_dir="$(git rev-parse --absolute-git-dir)"
+          mv "$git_dir/config" "$RUNNER_TEMP/untrusted-git-config"
+          echo "created=true" >> "$GITHUB_OUTPUT"
+        env:
+          CREATE_TEST_OUTCOME: ${{ fromJSON(steps.create-test.outputs.final-message).outcome }}
+          CREATE_TEST_SUMMARY: ${{ fromJSON(steps.create-test.outputs.final-message).summary }}
+
+      - name: "Get uv-dev token"
+        if: steps.commit-test.outputs.created == 'true'
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: |
+            contents: write
+            pull_requests: write
+
+      - name: "Open draft pull request"
+        if: steps.commit-test.outputs.created == 'true'
+        id: open-pr
+        run: |
+          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
+          branch="zb/reproduce-bug/${issue_number}"
+          git -c core.hooksPath=/dev/null push \
+            "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
+            HEAD:"$branch"
+          pull_request="$(
+            gh pr create \
+              --repo astral-sh/uv-dev \
+              --base main \
+              --head "$branch" \
+              --draft \
+              --title "Add regression test for uv#${issue_number}" \
+              --body "Add a minimal integration test that reproduces astral-sh/uv#${issue_number}."
+          )"
+          echo "url=$pull_request" >> "$GITHUB_OUTPUT"
+          {
+            printf '%s\n\n' '### Integration test created'
+            printf '%s\n\n' "$CREATE_TEST_SUMMARY"
+            printf 'Draft pull request: %s\n' "$pull_request"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          CREATE_TEST_SUMMARY: ${{ fromJSON(steps.create-test.outputs.final-message).summary }}
