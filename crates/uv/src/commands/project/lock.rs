@@ -1492,6 +1492,16 @@ pub(super) struct LockEventVersion<'lock> {
     sha: Option<&'lock str>,
 }
 
+impl LockEventVersion<'_> {
+    pub(super) fn version(&self) -> Option<&Version> {
+        self.version
+    }
+
+    pub(super) fn sha(&self) -> Option<&str> {
+        self.sha
+    }
+}
+
 impl<'lock> From<&'lock Package> for LockEventVersion<'lock> {
     fn from(value: &'lock Package) -> Self {
         Self {
@@ -1523,6 +1533,13 @@ pub(super) enum LockEvent<'lock> {
     ),
     Add(DryRun, PackageName, BTreeSet<LockEventVersion<'lock>>),
     Remove(DryRun, PackageName, BTreeSet<LockEventVersion<'lock>>),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) enum LockEventAction {
+    Update,
+    Add,
+    Remove,
 }
 
 impl<'lock> LockEvent<'lock> {
@@ -1594,6 +1611,32 @@ impl<'lock> LockEvent<'lock> {
             Self::Update(_, package, ..)
             | Self::Add(_, package, ..)
             | Self::Remove(_, package, ..) => package,
+        }
+    }
+
+    pub(super) fn action(&self) -> LockEventAction {
+        match self {
+            Self::Update(..) => LockEventAction::Update,
+            Self::Add(..) => LockEventAction::Add,
+            Self::Remove(..) => LockEventAction::Remove,
+        }
+    }
+
+    pub(super) fn previous_versions(&self) -> Option<&BTreeSet<LockEventVersion<'lock>>> {
+        match self {
+            Self::Update(_, _, previous_versions, _) | Self::Remove(_, _, previous_versions) => {
+                Some(previous_versions)
+            }
+            Self::Add(..) => None,
+        }
+    }
+
+    pub(super) fn current_versions(&self) -> Option<&BTreeSet<LockEventVersion<'lock>>> {
+        match self {
+            Self::Update(_, _, _, current_versions) | Self::Add(_, _, current_versions) => {
+                Some(current_versions)
+            }
+            Self::Remove(..) => None,
         }
     }
 }

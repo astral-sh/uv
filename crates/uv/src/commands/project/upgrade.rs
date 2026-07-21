@@ -6,15 +6,17 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow, bail};
 use itertools::Itertools;
+use serde::Serialize;
 use uv_cache::{Cache, Refresh};
+use uv_cli::SyncFormat;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun, NoSources, Upgrade};
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Pep508ErrorSource, Requirement, VerbatimUrl, VersionOrUrl};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{
     DependencyGroupSpecifier, PyProjectToml, ResolutionMetadata, SupportedEnvironments,
     VerbatimParsedUrl,
@@ -23,6 +25,7 @@ use uv_python::{ConfigDiscovery, Interpreter, PythonDownloads, PythonPreference}
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{MetadataResponse, implicit_constraints_marker};
 use uv_settings::PythonInstallMirrors;
+use uv_warnings::warn_user;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{DependencyType, PyProjectToml as WorkspacePyProjectToml, Source};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
@@ -32,7 +35,9 @@ use uv_workspace::{
 };
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
-use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
+use crate::commands::project::lock::{
+    LockEvent, LockEventAction, LockEventVersion, LockMode, LockOperation, LockResult,
+};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{ProjectError, ProjectInterpreter, UniversalState, WorkspacePython};
 use crate::commands::{ExitStatus, diagnostics};
@@ -52,6 +57,7 @@ struct UpgradableRequirement {
 }
 
 /// A selected requirement that cannot apply to the project.
+#[derive(Clone)]
 struct SkippedRequirement {
     member: PackageName,
     package: PackageName,
@@ -62,6 +68,7 @@ struct SkippedRequirement {
     reason: SkippedReason,
 }
 
+#[derive(Clone)]
 enum SkippedReason {
     EnvironmentOrPythonRequirement,
     UndefinedExtra,
@@ -91,7 +98,8 @@ struct DeclarationIdentity {
     member: PackageName,
     package: PackageName,
     dependency_type: DependencyType,
-    text: String,
+    display_text: String,
+    resolved_versions: BTreeSet<Version>,
 }
 
 /// An existing requirement and its proposed replacement.
@@ -103,6 +111,7 @@ struct RequirementUpdate {
     original_text: String,
     existing: Requirement<VerbatimUrl>,
     replacement: Requirement<VerbatimUrl>,
+    resolved_versions: BTreeSet<Version>,
 }
 
 struct UpgradeWorkspace {
@@ -118,6 +127,7 @@ enum DeclarationOutcome {
         declaration: DeclarationIdentity,
         reason: BlockedReason,
     },
+    Skipped(SkippedRequirement),
 }
 
 enum BlockedReason {
@@ -137,6 +147,105 @@ enum ProposeRequirementError {
     Rewrite(#[from] anyhow::Error),
 }
 
+#[derive(Serialize, Debug)]
+struct UpgradeReport {
+    schema: SchemaReport,
+    dry_run: bool,
+    packages: Vec<PackageName>,
+    declarations: Vec<UpgradeDeclarationReport>,
+    lock_changes: Vec<UpgradeLockChangeReport>,
+}
+
+#[derive(Serialize, Debug, Default)]
+struct SchemaReport {
+    version: SchemaVersion,
+}
+
+#[derive(Serialize, Debug, Default)]
+#[serde(rename_all = "snake_case")]
+enum SchemaVersion {
+    #[default]
+    Preview,
+}
+
+#[derive(Serialize, Debug)]
+struct UpgradeDeclarationReport {
+    member: PackageName,
+    package: PackageName,
+    dependency_type: UpgradeDependencyType,
+    location: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extra: Option<ExtraName>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    group: Option<GroupName>,
+    original_requirement: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    new_requirement: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    resolved_versions: Vec<Version>,
+    status: UpgradeDeclarationStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<UpgradeReasonReport>,
+}
+
+#[derive(Serialize, Debug, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum UpgradeDependencyType {
+    Production,
+    Optional,
+    Group,
+    Dev,
+}
+
+#[derive(Serialize, Debug, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum UpgradeDeclarationStatus {
+    Changed,
+    Unchanged,
+    Blocked,
+    Skipped,
+}
+
+#[derive(Serialize, Debug)]
+struct UpgradeReasonReport {
+    code: UpgradeReasonCode,
+    message: String,
+}
+
+#[derive(Serialize, Debug)]
+struct UpgradeLockChangeReport {
+    action: UpgradeLockChangeAction,
+    package: PackageName,
+    previous_versions: Vec<UpgradeLockVersionReport>,
+    current_versions: Vec<UpgradeLockVersionReport>,
+}
+
+#[derive(Serialize, Debug, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum UpgradeLockChangeAction {
+    Update,
+    Add,
+    Remove,
+}
+
+#[derive(Serialize, Debug)]
+struct UpgradeLockVersionReport {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<Version>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sha: Option<String>,
+}
+
+#[derive(Serialize, Debug, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum UpgradeReasonCode {
+    UnrepresentableRequirement,
+    ConflictExtra,
+    ConflictGroup,
+    EnvironmentOrPythonRequirement,
+    UndefinedExtra,
+}
+
 impl DeclarationOutcome {
     fn package(&self) -> &PackageName {
         match self {
@@ -144,6 +253,7 @@ impl DeclarationOutcome {
             Self::Unchanged(declaration) | Self::Blocked { declaration, .. } => {
                 &declaration.package
             }
+            Self::Skipped(declaration) => &declaration.package,
         }
     }
 
@@ -162,7 +272,188 @@ impl DeclarationOutcome {
     }
 }
 
+impl UpgradeReport {
+    fn from_outcomes(
+        outcomes: &[DeclarationOutcome],
+        events: &[LockEvent<'_>],
+        dry_run: DryRun,
+    ) -> Self {
+        let mut packages = Vec::new();
+        for outcome in outcomes {
+            if !packages.contains(outcome.package()) {
+                packages.push(outcome.package().clone());
+            }
+        }
+
+        Self {
+            schema: SchemaReport::default(),
+            dry_run: dry_run.enabled(),
+            packages,
+            declarations: outcomes
+                .iter()
+                .map(UpgradeDeclarationReport::from_outcome)
+                .collect(),
+            lock_changes: events
+                .iter()
+                .map(UpgradeLockChangeReport::from_event)
+                .collect(),
+        }
+    }
+
+    fn format(&self, output_format: SyncFormat) -> Option<String> {
+        match output_format {
+            SyncFormat::Json => serde_json::to_string_pretty(self).ok(),
+            SyncFormat::Text => None,
+        }
+    }
+}
+
+impl UpgradeDeclarationReport {
+    fn from_outcome(outcome: &DeclarationOutcome) -> Self {
+        match outcome {
+            DeclarationOutcome::Changed(update) => Self::from_changed(update),
+            DeclarationOutcome::Unchanged(declaration) => {
+                Self::from_identity(declaration, UpgradeDeclarationStatus::Unchanged, None, None)
+            }
+            DeclarationOutcome::Blocked {
+                declaration,
+                reason,
+            } => Self::from_identity(
+                declaration,
+                UpgradeDeclarationStatus::Blocked,
+                Some(UpgradeReasonReport::from(reason)),
+                None,
+            ),
+            DeclarationOutcome::Skipped(declaration) => Self::from_skipped(declaration),
+        }
+    }
+
+    fn from_changed(update: &RequirementUpdate) -> Self {
+        Self {
+            member: update.member.clone(),
+            package: update.package.clone(),
+            dependency_type: UpgradeDependencyType::from(&update.dependency_type),
+            location: dependency_location(&update.dependency_type),
+            extra: dependency_extra(&update.dependency_type),
+            group: dependency_group(&update.dependency_type),
+            original_requirement: update.original_text.clone(),
+            new_requirement: Some(update.replacement.to_string()),
+            resolved_versions: update.resolved_versions.iter().cloned().collect(),
+            status: UpgradeDeclarationStatus::Changed,
+            reason: None,
+        }
+    }
+
+    fn from_identity(
+        declaration: &DeclarationIdentity,
+        status: UpgradeDeclarationStatus,
+        reason: Option<UpgradeReasonReport>,
+        new_requirement: Option<String>,
+    ) -> Self {
+        Self {
+            member: declaration.member.clone(),
+            package: declaration.package.clone(),
+            dependency_type: UpgradeDependencyType::from(&declaration.dependency_type),
+            location: dependency_location(&declaration.dependency_type),
+            extra: dependency_extra(&declaration.dependency_type),
+            group: dependency_group(&declaration.dependency_type),
+            original_requirement: declaration.display_text.clone(),
+            new_requirement,
+            resolved_versions: declaration.resolved_versions.iter().cloned().collect(),
+            status,
+            reason,
+        }
+    }
+
+    fn from_skipped(declaration: &SkippedRequirement) -> Self {
+        Self {
+            member: declaration.member.clone(),
+            package: declaration.package.clone(),
+            dependency_type: UpgradeDependencyType::from(&declaration.dependency_type),
+            location: dependency_location(&declaration.dependency_type),
+            extra: dependency_extra(&declaration.dependency_type),
+            group: dependency_group(&declaration.dependency_type),
+            original_requirement: declaration.display_text.clone(),
+            new_requirement: None,
+            resolved_versions: Vec::new(),
+            status: UpgradeDeclarationStatus::Skipped,
+            reason: Some(UpgradeReasonReport {
+                code: declaration.reason.code(),
+                message: declaration.reason.message().to_string(),
+            }),
+        }
+    }
+}
+
+impl UpgradeLockChangeReport {
+    fn from_event(event: &LockEvent<'_>) -> Self {
+        Self {
+            action: UpgradeLockChangeAction::from(event.action()),
+            package: event.package().clone(),
+            previous_versions: event
+                .previous_versions()
+                .into_iter()
+                .flatten()
+                .map(UpgradeLockVersionReport::from_version)
+                .collect(),
+            current_versions: event
+                .current_versions()
+                .into_iter()
+                .flatten()
+                .map(UpgradeLockVersionReport::from_version)
+                .collect(),
+        }
+    }
+}
+
+impl From<LockEventAction> for UpgradeLockChangeAction {
+    fn from(value: LockEventAction) -> Self {
+        match value {
+            LockEventAction::Update => Self::Update,
+            LockEventAction::Add => Self::Add,
+            LockEventAction::Remove => Self::Remove,
+        }
+    }
+}
+
+impl UpgradeLockVersionReport {
+    fn from_version(version: &LockEventVersion<'_>) -> Self {
+        Self {
+            version: version.version().cloned(),
+            sha: version.sha().map(ToString::to_string),
+        }
+    }
+}
+
+impl From<&DependencyType> for UpgradeDependencyType {
+    fn from(value: &DependencyType) -> Self {
+        match value {
+            DependencyType::Production => Self::Production,
+            DependencyType::Optional(_) => Self::Optional,
+            DependencyType::Group(_) => Self::Group,
+            DependencyType::Dev => Self::Dev,
+        }
+    }
+}
+
+impl From<&BlockedReason> for UpgradeReasonReport {
+    fn from(value: &BlockedReason) -> Self {
+        Self {
+            code: value.code(),
+            message: value.message(),
+        }
+    }
+}
+
 impl BlockedReason {
+    fn code(&self) -> UpgradeReasonCode {
+        match self {
+            Self::UnrepresentableRequirement(_) => UpgradeReasonCode::UnrepresentableRequirement,
+            Self::ConflictExtra { .. } => UpgradeReasonCode::ConflictExtra,
+            Self::ConflictGroup { .. } => UpgradeReasonCode::ConflictGroup,
+        }
+    }
+
     fn message(&self) -> String {
         match self {
             Self::UnrepresentableRequirement(error) => error.to_string(),
@@ -176,13 +467,57 @@ impl BlockedReason {
     }
 }
 
+impl SkippedReason {
+    fn code(&self) -> UpgradeReasonCode {
+        match self {
+            Self::EnvironmentOrPythonRequirement => {
+                UpgradeReasonCode::EnvironmentOrPythonRequirement
+            }
+            Self::UndefinedExtra => UpgradeReasonCode::UndefinedExtra,
+        }
+    }
+
+    fn message(&self) -> &'static str {
+        match self {
+            Self::EnvironmentOrPythonRequirement => {
+                "excluded by the project's environments or Python requirement"
+            }
+            Self::UndefinedExtra => "references an extra that the project does not provide",
+        }
+    }
+}
+
+fn dependency_location(dependency_type: &DependencyType) -> String {
+    match dependency_type {
+        DependencyType::Production => "project.dependencies".to_string(),
+        DependencyType::Optional(extra) => format!("project.optional-dependencies.{extra}"),
+        DependencyType::Group(group) => format!("dependency-groups.{group}"),
+        DependencyType::Dev => "tool.uv.dev-dependencies".to_string(),
+    }
+}
+
+fn dependency_extra(dependency_type: &DependencyType) -> Option<ExtraName> {
+    match dependency_type {
+        DependencyType::Optional(extra) => Some(extra.clone()),
+        DependencyType::Production | DependencyType::Group(_) | DependencyType::Dev => None,
+    }
+}
+
+fn dependency_group(dependency_type: &DependencyType) -> Option<GroupName> {
+    match dependency_type {
+        DependencyType::Group(group) => Some(group.clone()),
+        DependencyType::Production | DependencyType::Optional(_) | DependencyType::Dev => None,
+    }
+}
+
 impl UpgradableRequirement {
     fn identity(&self) -> DeclarationIdentity {
         DeclarationIdentity {
             member: self.member.clone(),
             package: self.package.clone(),
             dependency_type: self.dependency_type.clone(),
-            text: self.original_text.clone(),
+            display_text: self.original_text.clone(),
+            resolved_versions: self.resolved_versions.clone(),
         }
     }
 }
@@ -193,6 +528,8 @@ pub(crate) async fn upgrade(
     exclude: Vec<PackageName>,
     package: Option<PackageName>,
     all_packages: bool,
+    dry_run: DryRun,
+    output_format: SyncFormat,
     install_mirrors: PythonInstallMirrors,
     mut settings: ResolverSettings,
     client_builder: BaseClientBuilder<'_>,
@@ -205,6 +542,14 @@ pub(crate) async fn upgrade(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if matches!(output_format, SyncFormat::Json) && !preview.is_enabled(PreviewFeature::JsonOutput)
+    {
+        warn_user!(
+            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
+        );
+    }
+
     let upgrade_workspace =
         discover_upgrade_workspace(project_dir, package, all_packages, cache, workspace_cache)
             .await?;
@@ -225,6 +570,20 @@ pub(crate) async fn upgrade(
             render_skipped_requirements(
                 &selection.skipped,
                 upgrade_workspace.display_members,
+                printer,
+            )?;
+            let outcomes = selection
+                .skipped
+                .into_iter()
+                .map(DeclarationOutcome::Skipped)
+                .collect::<Vec<_>>();
+            render_upgrade_report(
+                &outcomes,
+                &[],
+                &[],
+                upgrade_workspace.display_members,
+                dry_run,
+                output_format,
                 printer,
             )?;
             return Ok(ExitStatus::Success);
@@ -300,7 +659,11 @@ pub(crate) async fn upgrade(
         &selected_packages,
         &settings.sources,
     )?;
-    let mut declaration_outcomes = Vec::new();
+    let mut declaration_outcomes = skipped
+        .iter()
+        .cloned()
+        .map(DeclarationOutcome::Skipped)
+        .collect::<Vec<_>>();
     let mut conflicts = upgrade_workspace.target.workspace().conflicts()?;
     for selected_project in &upgrade_workspace.selected_projects {
         if let Some(groups) = &selected_project
@@ -364,9 +727,13 @@ pub(crate) async fn upgrade(
             .any(|selected| selected.package == *package)
     });
     if requirements.is_empty() {
-        render_declaration_outcomes(
+        render_upgrade_report(
             &declaration_outcomes,
+            &[],
+            &selected_packages,
             upgrade_workspace.display_members,
+            dry_run,
+            output_format,
             printer,
         )?;
         return Ok(ExitStatus::Success);
@@ -393,6 +760,7 @@ pub(crate) async fn upgrade(
                     relax_requirement(selected.requirement.clone()),
                     &selected.package,
                 )?,
+                resolved_versions: BTreeSet::new(),
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -532,6 +900,7 @@ pub(crate) async fn upgrade(
                 original_text: selected.original_text.clone(),
                 existing,
                 replacement,
+                resolved_versions: selected.resolved_versions.clone(),
             };
             declaration_outcomes.push(DeclarationOutcome::Changed(Box::new(update.clone())));
             if !updated_requirements
@@ -566,7 +935,7 @@ pub(crate) async fn upgrade(
         );
     }
 
-    if !updated_requirements.is_empty() {
+    if !dry_run.enabled() && !updated_requirements.is_empty() {
         let mut pyproject_writes = Vec::new();
         for selected_project in &upgrade_workspace.selected_projects {
             if !updated_requirements
@@ -594,53 +963,22 @@ pub(crate) async fn upgrade(
     }
 
     let events = match &result {
-        LockResult::Changed(previous, lock) => {
-            LockEvent::detect_changes(previous.as_ref(), lock, DryRun::Enabled)
-                .filter(|event| {
-                    selected_packages
-                        .iter()
-                        .any(|package| event.package() == package)
-                })
-                .collect::<Vec<_>>()
-        }
+        LockResult::Changed(previous, lock) => reportable_lock_events(
+            &declaration_outcomes,
+            &selected_packages,
+            LockEvent::detect_changes(previous.as_ref(), lock, DryRun::Enabled),
+        ),
         LockResult::Unchanged(_) => Vec::new(),
     };
-    for package in &selected_packages {
-        if !declaration_outcomes
-            .iter()
-            .any(|outcome| outcome.package() == package && outcome.supports_lock_event())
-        {
-            continue;
-        }
-        if let Some(event) = events.iter().find(|event| event.package() == package) {
-            writeln!(printer.stderr(), "{event}")?;
-        } else {
-            writeln!(printer.stderr(), "No version change for {package}")?;
-        }
-    }
-    render_declaration_outcomes(
+    render_upgrade_report(
         &declaration_outcomes,
+        &events,
+        &selected_packages,
         upgrade_workspace.display_members,
+        dry_run,
+        output_format,
         printer,
     )?;
-    for update in updated_requirements {
-        if upgrade_workspace.display_members {
-            writeln!(
-                printer.stderr(),
-                "Updated requirement in package `{}`: `{}` -> `{}`",
-                update.member,
-                update.original_text,
-                update.replacement
-            )?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "Updated requirement: `{}` -> `{}`",
-                update.original_text,
-                update.replacement
-            )?;
-        }
-    }
 
     Ok(ExitStatus::Success)
 }
@@ -1161,14 +1499,7 @@ fn render_skipped_requirements(
     printer: Printer,
 ) -> Result<()> {
     for requirement in skipped {
-        let reason = match requirement.reason {
-            SkippedReason::EnvironmentOrPythonRequirement => {
-                "excluded by the project's environments or Python requirement"
-            }
-            SkippedReason::UndefinedExtra => {
-                "references an extra that the project does not provide"
-            }
-        };
+        let reason = requirement.reason.message();
         if display_members {
             writeln!(
                 printer.stderr(),
@@ -1317,6 +1648,124 @@ fn dependency_group_requires_python_marker(
         })
 }
 
+fn render_upgrade_report(
+    outcomes: &[DeclarationOutcome],
+    events: &[LockEvent<'_>],
+    selected_packages: &[PackageName],
+    display_members: bool,
+    dry_run: DryRun,
+    output_format: SyncFormat,
+    printer: Printer,
+) -> Result<()> {
+    match output_format {
+        SyncFormat::Text => {
+            render_upgrade_report_text(
+                outcomes,
+                events,
+                selected_packages,
+                display_members,
+                dry_run,
+                printer,
+            )?;
+        }
+        SyncFormat::Json => {
+            render_declaration_outcomes(outcomes, display_members, printer)?;
+            if let Some(output) =
+                UpgradeReport::from_outcomes(outcomes, events, dry_run).format(output_format)
+            {
+                writeln!(printer.stdout_important(), "{output}")?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn render_upgrade_report_text(
+    outcomes: &[DeclarationOutcome],
+    events: &[LockEvent<'_>],
+    selected_packages: &[PackageName],
+    display_members: bool,
+    dry_run: DryRun,
+    printer: Printer,
+) -> Result<()> {
+    for package in selected_packages {
+        if !package_supports_lock_event(outcomes, package) {
+            continue;
+        }
+        if let Some(event) = events.iter().find(|event| event.package() == package) {
+            writeln!(printer.stderr(), "{event}")?;
+        } else {
+            writeln!(printer.stderr(), "No version change for {package}")?;
+        }
+    }
+    render_declaration_outcomes(outcomes, display_members, printer)?;
+
+    let action = if dry_run.enabled() {
+        "Would update"
+    } else {
+        "Updated"
+    };
+    let mut rendered_updates = Vec::new();
+    for outcome in outcomes {
+        let DeclarationOutcome::Changed(update) = outcome else {
+            continue;
+        };
+        let update = update.as_ref();
+        if rendered_updates
+            .iter()
+            .any(|rendered: &&RequirementUpdate| {
+                rendered.member == update.member
+                    && rendered.dependency_type == update.dependency_type
+                    && rendered.existing == update.existing
+                    && rendered.replacement == update.replacement
+            })
+        {
+            continue;
+        }
+        if display_members {
+            writeln!(
+                printer.stderr(),
+                "{action} requirement in package `{}`: `{}` -> `{}`",
+                update.member,
+                update.original_text,
+                update.replacement
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "{action} requirement: `{}` -> `{}`",
+                update.original_text,
+                update.replacement
+            )?;
+        }
+        rendered_updates.push(update);
+    }
+
+    Ok(())
+}
+
+fn reportable_lock_events<'lock>(
+    outcomes: &[DeclarationOutcome],
+    selected_packages: &[PackageName],
+    events: impl IntoIterator<Item = LockEvent<'lock>>,
+) -> Vec<LockEvent<'lock>> {
+    events
+        .into_iter()
+        .filter(|event| {
+            selected_packages
+                .iter()
+                .any(|package| event.package() == package)
+                && package_supports_lock_event(outcomes, event.package())
+        })
+        .collect()
+}
+
+fn package_supports_lock_event(outcomes: &[DeclarationOutcome], package: &PackageName) -> bool {
+    outcomes
+        .iter()
+        .any(|outcome| outcome.package() == package && outcome.supports_lock_event())
+}
+
 fn render_declaration_outcomes(
     outcomes: &[DeclarationOutcome],
     display_members: bool,
@@ -1335,7 +1784,7 @@ fn render_declaration_outcomes(
                         declaration.package,
                         declaration.member,
                         declaration.dependency_type.toml_table_name(),
-                        declaration.text,
+                        declaration.display_text,
                         reason.message()
                     )?;
                 } else {
@@ -1344,12 +1793,14 @@ fn render_declaration_outcomes(
                         "warning: Could not update dependency `{}` in {}: `{}` ({})",
                         declaration.package,
                         declaration.dependency_type.toml_table_name(),
-                        declaration.text,
+                        declaration.display_text,
                         reason.message()
                     )?;
                 }
             }
-            DeclarationOutcome::Changed(_) | DeclarationOutcome::Unchanged(_) => {}
+            DeclarationOutcome::Changed(_)
+            | DeclarationOutcome::Unchanged(_)
+            | DeclarationOutcome::Skipped(_) => {}
         }
     }
     Ok(())
