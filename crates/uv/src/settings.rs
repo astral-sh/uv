@@ -794,7 +794,7 @@ impl RunSettings {
         let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
         let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
 
-        let malware_settings = MalwareCheckSettings::from(&environment);
+        let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
         Self {
             lock_check: resolve_lock_check(locked),
@@ -1849,6 +1849,7 @@ impl SyncSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
         let settings = ResolverInstallerSettings::combine(
             resolver_installer_options(installer, build),
             filesystem,
@@ -1925,8 +1926,6 @@ impl SyncSettings {
         let only_install_workspace = only_install_workspace.is_enabled();
         let no_install_local = no_install_local.is_enabled();
         let only_install_local = only_install_local.is_enabled();
-
-        let malware_settings = MalwareCheckSettings::from(&environment);
 
         Self {
             output_format,
@@ -2141,7 +2140,7 @@ impl MetadataSettings {
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
 
-        let malware_settings = MalwareCheckSettings::from(&environment);
+        let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
         Self {
             script,
@@ -2401,7 +2400,7 @@ impl AddSettings {
         let no_install_local = no_install_local.is_enabled();
         let only_install_local = only_install_local.is_enabled();
 
-        let malware_settings = MalwareCheckSettings::from(&environment);
+        let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
         Self {
             lock_check: resolve_lock_check(locked),
@@ -2532,7 +2531,7 @@ impl RemoveSettings {
         // Check for conflicts between no_sync and frozen.
         check_conflicts(no_sync, frozen);
 
-        let malware_settings = MalwareCheckSettings::from(&environment);
+        let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
         Self {
             lock_check: resolve_lock_check(locked),
@@ -2619,7 +2618,7 @@ impl VersionSettings {
         // Check for conflicts between no_sync and frozen.
         check_conflicts(no_sync, frozen);
 
-        let malware_settings = MalwareCheckSettings::from(&environment);
+        let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
         Self {
             value,
@@ -3056,13 +3055,12 @@ impl CheckSettings {
             Some(environment.dev),
             Some(environment.no_dev),
         );
+        let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
         let settings = ResolverInstallerSettings::combine(
             resolver_installer_options(installer, build),
             filesystem,
             &environment,
         );
-        let malware_settings = MalwareCheckSettings::from(&environment);
-
         Self {
             ty_path: environment.ty_path,
             script,

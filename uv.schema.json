@@ -653,6 +653,21 @@
           "items": {
             "type": "string"
           }
+        },
+        "malware-check": {
+          "description": "Whether to run the automatic malware check during sync operations.",
+          "type": ["boolean", "null"]
+        },
+        "malware-check-url": {
+          "description": "The vulnerability service URL to use for automatic malware checks.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DisplaySafeUrl"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
