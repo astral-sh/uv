@@ -20,7 +20,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, Excludes, IndexStrategy, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
@@ -96,6 +96,9 @@ mod urls;
 
 /// The number of conflicts a package may accumulate before we re-prioritize and backtrack.
 const CONFLICT_THRESHOLD: usize = 5;
+
+/// The number of adjacent, already-prefetched versions to inspect for matching dependencies.
+const DEPENDENCY_COALESCE_LIMIT: usize = 128;
 
 pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
     state: ResolverState<InstalledPackages>,
@@ -663,6 +666,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             ));
                     }
                     ForkedDependencies::Unforked(dependencies) => {
+                        let dependency_versions = if state.prefetcher.versions_tried(next_package)
+                            >= CONFLICT_THRESHOLD
+                        {
+                            let coalesced_package = next_package.clone();
+                            self.shared_dependency_versions(
+                                &coalesced_package,
+                                &version,
+                                &mut state,
+                            )
+                        } else {
+                            None
+                        };
+
                         // Enrich the state with any URLs, etc.
                         state
                             .visit_package_version_dependencies(
@@ -689,6 +705,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         state.add_package_version_dependencies(
                             next_id,
                             &version,
+                            dependency_versions,
                             dependencies,
                             &self.index,
                             &self.installed_packages,
@@ -944,6 +961,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 forked_state.add_package_version_dependencies(
                     package,
                     version,
+                    None,
                     fork.dependencies,
                     &self.index,
                     &self.installed_packages,
@@ -2255,6 +2273,222 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
     }
 
+    /// Returns a contiguous set of prefetched registry versions with the same dependencies.
+    ///
+    /// PubGrub can attach one dependency incompatibility to all versions in this range. This is
+    /// especially useful for packages that publish many releases with unchanged dependencies,
+    /// since rejecting the range lets the parent backtrack past all of them at once.
+    ///
+    /// The optimization is deliberately limited to unforked wheel dependencies after repeated
+    /// backtracking. Every adjacent candidate must already have metadata in memory and have
+    /// identical raw requirements and scoped dependency effects. For multiple indexes, the
+    /// candidate is selected in index-priority order without materializing lazy entries.
+    fn shared_dependency_versions(
+        &self,
+        package: &PubGrubPackage,
+        version: &Version,
+        state: &mut ForkState,
+    ) -> Option<Range<Version>> {
+        let PubGrubPackageInner::Package {
+            name,
+            extra: None,
+            group: None,
+            marker: MarkerTree::TRUE,
+        } = &**package
+        else {
+            return None;
+        };
+        if state.fork_urls.get(name).is_some()
+            || !self.preferences.get(name).is_empty()
+            || !self.installed_packages.get_packages(name).is_empty()
+        {
+            return None;
+        }
+
+        let fork_index = state.fork_indexes.get(name).map(IndexMetadata::url);
+        let versions_response = if let Some(index) = fork_index {
+            self.index.explicit().get(&(name.clone(), index.clone()))?
+        } else {
+            self.index.implicit().get(name)?
+        };
+        let VersionsResponse::Found(version_maps) = &*versions_response else {
+            return None;
+        };
+
+        let (current_dist, current_metadata_id) = state.pins.dist_and_id(name, version)?;
+        let current_index = current_dist.index();
+        if !version_maps
+            .iter()
+            .any(|version_map| version_map.index() == current_index)
+        {
+            return None;
+        }
+        let current_response = self.index.distributions().get(current_metadata_id)?;
+        let MetadataResponse::Found(current_metadata) = &*current_response else {
+            return None;
+        };
+
+        // Earlier dependency additions have already cached the conservative, sorted version
+        // universe for this package. Reuse it instead of rescanning every archived file.
+        let versions = state.known_versions.get(name)?;
+        let position = versions.binary_search(version).ok()?;
+
+        // PubGrub already merges identical incompatibilities for versions that were tried in an
+        // earlier iteration. Inspect the favored version direction so those already-tried
+        // neighbors do not consume the coalescing budget, while retaining every intervening
+        // version from the union of all indexes.
+        let use_highest_version = self.selector.use_highest_version(name, &state.env);
+        let candidates = if use_highest_version {
+            Either::Left(versions[..position].iter().rev())
+        } else {
+            Either::Right(versions[position + 1..].iter())
+        };
+        let coalesced = candidates
+            .take(DEPENDENCY_COALESCE_LIMIT)
+            .take_while(|candidate_version| {
+                self.has_same_prefetched_dependencies(
+                    name,
+                    version,
+                    current_metadata,
+                    candidate_version,
+                    version_maps,
+                    state,
+                )
+            })
+            .count();
+        if coalesced == 0 {
+            return None;
+        }
+        let (lower, upper) = if use_highest_version {
+            (position - coalesced, position)
+        } else {
+            (position, position + coalesced)
+        };
+
+        // These candidates now share the selected version's dependency incompatibility, so a
+        // rejection really did try all of them. Keep batch prefetch moving past the coalesced
+        // range instead of starving the next metadata batch while the parent backtracks.
+        for candidate_version in &versions[lower..=upper] {
+            state.prefetcher.version_tried(package, candidate_version);
+        }
+
+        let lower = versions[lower].clone();
+        let upper = versions[upper].clone();
+        debug!("Coalescing dependencies for {name}=={version} across {lower}..={upper}");
+        Some(Range::from_range_bounds(lower..=upper))
+    }
+
+    /// Returns whether an adjacent registry candidate has the same raw dependencies and scoped
+    /// dependency effects.
+    fn has_same_prefetched_dependencies(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        current: &ArchiveMetadata,
+        candidate_version: &Version,
+        version_maps: &[VersionMap],
+        state: &ForkState,
+    ) -> bool {
+        if !self.hasher.allows_package(name, candidate_version) {
+            return false;
+        }
+
+        // Select the candidate from the first index that contains the version, mirroring the
+        // candidate selector. Batch prefetch materializes a candidate before registering its
+        // metadata request; if a higher-priority entry is still lazy, stop instead of materializing
+        // it or incorrectly using a lower-priority index.
+        let mut candidate = None;
+        for version_map in version_maps {
+            let Some(prioritized) = version_map.get_initialized(candidate_version) else {
+                if version_map.contains_included(candidate_version) {
+                    return false;
+                }
+                continue;
+            };
+            let Some(dist) = prioritized.get() else {
+                if matches!(
+                    self.selector.index_strategy(),
+                    IndexStrategy::UnsafeBestMatch
+                ) {
+                    continue;
+                }
+                return false;
+            };
+            candidate = Some((version_map, dist));
+            break;
+        }
+        let Some((version_map, dist)) = candidate else {
+            return false;
+        };
+        if dist.wheel().is_none()
+            || dist.for_resolution().index() != version_map.index()
+            || Self::check_requires_python(&dist, &state.python_requirement).is_some()
+            // Universal resolution may need to fork or reject a platform-limited version when
+            // checking required environments or local-version coverage.
+            || (state.env.marker_environment().is_none()
+                && (!self.options.artifact_environments.is_empty()
+                    || candidate_version.is_local())
+                && !dist.implied_markers().is_true())
+        {
+            return false;
+        }
+
+        // CUDA system dependencies are synthesized from the selected index, so identical archive
+        // metadata is not sufficient when adjacent candidates come from different backends.
+        if self.options.torch_backend.as_ref().is_some_and(|backend| {
+            matches!(backend, TorchStrategy::Cuda { .. }) && backend.has_system_dependency(name)
+        }) {
+            let current_system_dependency = state
+                .pins
+                .get(name, version)
+                .and_then(ResolvedDist::index)
+                .map(IndexUrl::url)
+                .and_then(SystemDependency::from_index);
+            let candidate_system_dependency = dist
+                .for_resolution()
+                .index()
+                .map(IndexUrl::url)
+                .and_then(SystemDependency::from_index);
+            if current_system_dependency != candidate_system_dependency {
+                return false;
+            }
+        }
+
+        let metadata_id = dist.for_resolution().distribution_id();
+        let Some(response) = self.index.distributions().get(&metadata_id) else {
+            return false;
+        };
+        let MetadataResponse::Found(candidate) = &*response else {
+            return false;
+        };
+        if candidate.metadata.name != *name
+            || current.metadata.requires_dist != candidate.metadata.requires_dist
+            || current.metadata.dependency_groups != candidate.metadata.dependency_groups
+            || candidate
+                .metadata
+                .requires_python
+                .as_ref()
+                .is_some_and(|requires_python| {
+                    !state
+                        .python_requirement
+                        .target()
+                        .is_contained_by(requires_python)
+                })
+        {
+            return false;
+        }
+
+        scoped_dependency_effects_match(
+            &self.overrides,
+            &self.excludes,
+            name,
+            version,
+            candidate_version,
+            &current.metadata.requires_dist,
+            &current.metadata.dependency_groups,
+        )
+    }
+
     /// The set of the regular and dev dependencies, filtered by Python version,
     /// the markers of this fork and the requested extra.
     fn requirements_for_extra<'data, 'parameters>(
@@ -2993,6 +3227,151 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 }
 
+/// Returns whether scoped overrides and exclusions affect the same dependencies for two versions.
+fn scoped_dependency_effects_match(
+    overrides: &Overrides,
+    excludes: &Excludes,
+    name: &PackageName,
+    version: &Version,
+    candidate_version: &Version,
+    requires_dist: &[Requirement],
+    dependency_groups: &BTreeMap<GroupName, Box<[Requirement]>>,
+) -> bool {
+    // Global overrides and constraints see identical raw requirements. Scoped overrides can
+    // replace or add dependencies based on the parent version, so require the applicable sets to
+    // match before coalescing.
+    if !overrides
+        .scoped_requirements_for(name, version)
+        .eq(overrides.scoped_requirements_for(name, candidate_version))
+    {
+        return false;
+    }
+
+    // Scoped exclusions can also vary by parent version. Compare every raw or added dependency
+    // rather than flattening requirements and evaluating markers for each version.
+    requires_dist
+        .iter()
+        .chain(
+            dependency_groups
+                .values()
+                .flat_map(|requirements| requirements.iter()),
+        )
+        .chain(overrides.scoped_requirements_for(name, version))
+        .all(|dependency| {
+            excludes.contains_for_package(Some((name, version)), &dependency.name)
+                == excludes.contains_for_package(Some((name, candidate_version)), &dependency.name)
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use uv_configuration::{ExcludeDependency, Excludes, Override, Overrides};
+    use uv_distribution_types::Requirement;
+    use uv_normalize::{GroupName, PackageName};
+    use uv_pep440::Version;
+    use uv_pep508::Requirement as Pep508Requirement;
+    use uv_pypi_types::VerbatimParsedUrl;
+
+    use super::scoped_dependency_effects_match;
+
+    fn requirement(requirement: &str) -> Requirement {
+        requirement
+            .parse::<Pep508Requirement<VerbatimParsedUrl>>()
+            .expect("valid requirement")
+            .into()
+    }
+
+    #[test]
+    fn scoped_dependency_effects_prevent_coalescing() {
+        let name: PackageName = "parent".parse().expect("valid package name");
+        let version = Version::new([1]);
+        let candidate_version = Version::new([2]);
+        let requires_dist = [requirement("leaf>=1")];
+        let dependency_groups = BTreeMap::from([(
+            "dev".parse::<GroupName>().expect("valid group name"),
+            vec![requirement("group-leaf>=1")].into_boxed_slice(),
+        )]);
+
+        assert!(scoped_dependency_effects_match(
+            &Overrides::default(),
+            &Excludes::default(),
+            &name,
+            &version,
+            &candidate_version,
+            &requires_dist,
+            &dependency_groups,
+        ));
+
+        let scoped_override: Override<Requirement> = toml::from_str(
+            r#"
+            package = { name = "parent", version = "1" }
+            dependencies = [{ name = "leaf", specifier = "==2" }]
+            "#,
+        )
+        .expect("valid scoped override");
+        let overrides =
+            Overrides::from_entries(vec![scoped_override]).expect("valid scoped override source");
+        assert!(!scoped_dependency_effects_match(
+            &overrides,
+            &Excludes::default(),
+            &name,
+            &version,
+            &candidate_version,
+            &requires_dist,
+            &dependency_groups,
+        ));
+
+        for dependency in ["leaf", "group-leaf"] {
+            let exclusion: ExcludeDependency = toml::from_str(&format!(
+                r#"
+                package = {{ name = "parent", version = "1" }}
+                dependencies = ["{dependency}"]
+                "#,
+            ))
+            .expect("valid scoped exclusion");
+            let excludes = Excludes::from_entries([exclusion]);
+            assert!(!scoped_dependency_effects_match(
+                &Overrides::default(),
+                &excludes,
+                &name,
+                &version,
+                &candidate_version,
+                &requires_dist,
+                &dependency_groups,
+            ));
+        }
+
+        let scoped_addition: Override<Requirement> = toml::from_str(
+            r#"
+            package = { name = "parent" }
+            dependencies = [{ name = "added", specifier = ">=1" }]
+            "#,
+        )
+        .expect("valid scoped addition");
+        let overrides =
+            Overrides::from_entries(vec![scoped_addition]).expect("valid scoped override source");
+        let exclusion: ExcludeDependency = toml::from_str(
+            r#"
+            package = { name = "parent", version = "1" }
+            dependencies = ["added"]
+            "#,
+        )
+        .expect("valid scoped exclusion");
+        let excludes = Excludes::from_entries([exclusion]);
+        assert!(!scoped_dependency_effects_match(
+            &overrides,
+            &excludes,
+            &name,
+            &version,
+            &candidate_version,
+            &requires_dist,
+            &dependency_groups,
+        ));
+    }
+}
+
 /// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
 pub(crate) struct ForkState {
@@ -3215,6 +3594,9 @@ impl ForkState {
 
     /// Adds the dependencies for the selected version of the current package.
     ///
+    /// When `dependency_versions` is provided, every version in the range must have the same
+    /// dependencies as the selected version so they can share its incompatibilities.
+    ///
     /// For registry packages, the depending version is widened across gaps containing no other
     /// known version before its incompatibilities are added. Packages without a complete registry
     /// version map retain the selected version's singleton range.
@@ -3222,6 +3604,7 @@ impl ForkState {
         &mut self,
         for_package: Id<PubGrubPackage>,
         for_version: &Version,
+        dependency_versions: Option<Range<Version>>,
         dependencies: Vec<PubGrubDependency>,
         index: &InMemoryIndex,
         installed_packages: &InstalledPackages,
@@ -3249,7 +3632,7 @@ impl ForkState {
 
         // Widen across gaps so rejected adjacent versions merge into contiguous ranges rather
         // than leaving one hole per version.
-        let versions = Range::singleton(for_version.clone());
+        let versions = dependency_versions.unwrap_or_else(|| Range::singleton(for_version.clone()));
         let versions = if let Some(known_versions) =
             ResolverState::<InstalledPackages>::known_versions(
                 index,

@@ -159,6 +159,20 @@ impl BatchPrefetcher {
             .insert(version.clone());
     }
 
+    /// Returns the number of distinct versions already tried for a base package.
+    pub(crate) fn versions_tried(&self, package: &PubGrubPackage) -> usize {
+        let PubGrubPackageInner::Package {
+            name,
+            extra: None,
+            group: None,
+            marker: MarkerTree::TRUE,
+        } = &**package
+        else {
+            return 0;
+        };
+        self.tried_versions.get(name).map_or(0, FxHashSet::len)
+    }
+
     /// After 5, 10, 20, 40 tried versions, prefetch that many versions to start early but not
     /// too aggressive. Later we schedule the prefetch of 50 versions every 20 versions, this gives
     /// us a good buffer until we see prefetch again and is high enough to saturate the task pool.
