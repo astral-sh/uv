@@ -36369,6 +36369,7 @@ async fn lock_circular_path_dependency_explicit_index() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_android() -> Result<()> {
+    let server = PackseServer::new("wheels/android.toml");
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-06-01T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -36387,7 +36388,7 @@ fn lock_android() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -36419,11 +36420,11 @@ fn lock_android() -> Result<()> {
         [[package]]
         name = "deltachat-rpc-server"
         version = "1.159.5"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/c4/59/fd0dee6b1c950ba5c93e02ed6692990bffd6e843710f0c1b547de661534b/deltachat_rpc_server-1.159.5.tar.gz", hash = "sha256:7e015f9f8a8400133648971049032851c560729c6e9807f865a3f026b74b13a0", size = 1471, upload-time = "2025-05-14T17:35:33.428Z" }
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5.tar.gz", hash = "sha256:b923352b2b7253d068cdba7d1d23f36bc82a8dc7eb7f0e3860a1379324c62c32", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c0/47/97e67319025afedb8cc5fc4e8e3779ef407836dbe2c111eeb403a7a83e8c/deltachat_rpc_server-1.159.5-py3-none-android_21_arm64_v8a.whl", hash = "sha256:3fb08568e12984cb2fc85409d6bc5bfa5b965b834c5d45fecd2f63ad3893396c", size = 10495646, upload-time = "2025-05-14T17:35:07.189Z" },
-            { url = "https://files.pythonhosted.org/packages/1d/93/d470afef50ddd4b101d78401f8aaf5adbaa7c27a984a151017bc3c449171/deltachat_rpc_server-1.159.5-py3-none-android_21_armeabi_v7a.whl", hash = "sha256:560178de3f61dc9ef1c69b7d9bd238b45b07b98331d85d074d8652babac9de49", size = 8821626, upload-time = "2025-05-14T17:35:09.645Z" },
+            { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5-py3-none-android_21_arm64_v8a.whl", hash = "sha256:a09292118bd3cbe9133c410c8228399a65467f1bcacbfbd35ffa27a2c1e8b3c3", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5-py3-none-android_21_armeabi_v7a.whl", hash = "sha256:fcedd34dfec4397a5f516266e7d38237b01133e2fbfe29f08140d04cf8ea5b64", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -36441,7 +36442,7 @@ fn lock_android() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -36452,7 +36453,7 @@ fn lock_android() -> Result<()> {
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
