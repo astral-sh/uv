@@ -3729,7 +3729,7 @@ fn run_no_project() -> Result<()> {
     ----- stderr -----
     ");
 
-    // `run --no-project --locked` should fail.
+    // `run --no-project --locked` should warn about `--locked`.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--locked").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
     success: true
     exit_code: 0
