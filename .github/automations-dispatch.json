@@ -1,6 +1,10 @@
 {
   "version": 2,
   "repositories": {
+    "uv": {
+      "name": "astral-sh/uv",
+      "id": 699532645
+    },
     "uv-dev": {
       "name": "astral-sh/uv-dev",
       "id": 1302176231
@@ -24,6 +28,58 @@
       },
       "allow_draft": true,
       "workflow": "pull-request-conflicts.yml"
+    },
+    {
+      "repository": "uv",
+      "on": {
+        "workflow_run": ["completed"]
+      },
+      "conditions": {
+        "/workflow_run/conclusion": {
+          "one_of": ["failure", "timed_out", "startup_failure"]
+        },
+        "/workflow_run/event": {
+          "one_of": ["pull_request", "push", "schedule", "workflow_dispatch"]
+        },
+        "/workflow_run/head_repository/id": {
+          "one_of": [699532645, 1302176231]
+        },
+        "/workflow_run/head_repository/full_name": {
+          "one_of": ["astral-sh/uv", "astral-sh/uv-dev"]
+        },
+        "/workflow_run/name": {
+          "not": "Diagnose workflow failure"
+        }
+      },
+      "workflow": "diagnose-workflow-failure.yml",
+      "inputs": {
+        "run": "/workflow_run/id",
+        "head_sha": "/workflow_run/head_sha"
+      }
+    },
+    {
+      "repository": "uv-dev",
+      "on": {
+        "workflow_run": ["completed"]
+      },
+      "conditions": {
+        "/workflow_run/conclusion": {
+          "one_of": ["failure", "timed_out", "startup_failure"]
+        },
+        "/workflow_run/event": {
+          "one_of": ["pull_request", "push", "schedule", "workflow_dispatch"]
+        },
+        "/workflow_run/head_repository/id": 1302176231,
+        "/workflow_run/head_repository/full_name": "astral-sh/uv-dev",
+        "/workflow_run/name": {
+          "not": "Diagnose workflow failure"
+        }
+      },
+      "workflow": "diagnose-workflow-failure.yml",
+      "inputs": {
+        "run": "/workflow_run/id",
+        "head_sha": "/workflow_run/head_sha"
+      }
     }
   ]
 }
