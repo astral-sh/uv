@@ -37,6 +37,7 @@
       "enum": ["create", "duplicate", "ignore"]
     },
     "decision_reason": { "type": "string" },
+    "comment_note": { "type": "string" },
     "issue": {
       "type": "object",
       "additionalProperties": false,
@@ -51,5 +52,11 @@
       "required": ["title", "body", "label"]
     }
   },
-  "required": ["related", "decision", "decision_reason", "issue"]
+  "required": [
+    "related",
+    "decision",
+    "decision_reason",
+    "comment_note",
+    "issue"
+  ]
 }

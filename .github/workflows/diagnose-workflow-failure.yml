@@ -148,6 +148,20 @@ jobs:
             exit 1
           fi
 
+          if ! jq --exit-status '
+            (.comment_note | type == "string")
+            and (.comment_note | test("@[A-Za-z0-9][A-Za-z0-9-]*") | not)
+          ' "$RUNNER_TEMP/diagnosis.json" > /dev/null; then
+            echo "The workflow failure comment note is invalid or contains a user mention; refusing to comment." >&2
+            exit 1
+          fi
+
+          run_url="https://github.com/$ISSUE_REPOSITORY/actions/runs/$RUN_ID"
+          jq --raw-output --arg run_url "$run_url" '
+            "Another workflow run encountered this failure: " + $run_url
+            + (if (.comment_note | length) > 0 then "\n\n" + .comment_note else "" end)
+          ' "$RUNNER_TEMP/diagnosis.json" > "$RUNNER_TEMP/comment.md"
+
           if [ "$(jq -r '.decision' "$RUNNER_TEMP/diagnosis.json")" = "duplicate" ]; then
             duplicate_issue="$(jq -r --arg repository "$ISSUE_REPOSITORY" '
               [
@@ -165,10 +179,9 @@ jobs:
               exit 0
             fi
 
-            run_url="https://github.com/$ISSUE_REPOSITORY/actions/runs/$RUN_ID"
             gh issue comment "$duplicate_issue" \
               --repo "$ISSUE_REPOSITORY" \
-              --body "Another workflow run encountered this failure: $run_url"
+              --body-file "$RUNNER_TEMP/comment.md"
             exit 0
           fi
 
@@ -198,10 +211,9 @@ jobs:
             '[.[] | select(.title == $title)][0].number // empty' \
             "$RUNNER_TEMP/existing-issues.json")"
           if [ -n "$existing_issue" ]; then
-            run_url="https://github.com/$ISSUE_REPOSITORY/actions/runs/$RUN_ID"
             gh issue comment "$existing_issue" \
               --repo "$ISSUE_REPOSITORY" \
-              --body "Another workflow run encountered this failure: $run_url"
+              --body-file "$RUNNER_TEMP/comment.md"
             exit 0
           fi
 
