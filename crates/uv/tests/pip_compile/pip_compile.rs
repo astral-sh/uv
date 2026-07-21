@@ -6640,6 +6640,28 @@ fn resolver_legacy() -> Result<()> {
     Ok(())
 }
 
+/// Suggest the supported alternative when users pass `--emit-options` from `pip-compile`.
+#[test]
+fn emit_options_unsupported() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("werkzeug==3.0.1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in")
+            .arg("--emit-options"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: pip-compile's `--emit-options` is unsupported (try `--emit-build-options` instead)
+    "
+    );
+
+    Ok(())
+}
+
 /// Avoid including the `--index` and `-i` flags in the header.
 #[test]
 fn hide_index_urls() -> Result<()> {
