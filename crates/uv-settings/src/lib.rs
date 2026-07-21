@@ -294,7 +294,6 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         add: _,
         audit: _,
         pip: _,
-        malware_check: _,
         cache_keys: _,
         override_dependencies: _,
         exclude_dependencies: _,
@@ -444,7 +443,6 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         add: AddOptions { add_bounds },
         audit: _,
         pip,
-        malware_check,
         cache_keys,
         override_dependencies,
         exclude_dependencies,
@@ -631,9 +629,6 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if pip.is_some() {
         masked_fields.push("pip");
-    }
-    if malware_check.is_some() {
-        masked_fields.push("malware-check");
     }
     if cache_keys.is_some() {
         masked_fields.push("cache_keys");

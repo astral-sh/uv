@@ -327,10 +327,6 @@
         }
       ]
     },
-    "malware-check": {
-      "description": "Whether to run the automatic malware check during sync operations.",
-      "type": ["boolean", "null"]
-    },
     "managed": {
       "description": "Whether the project is managed by uv. If `false`, uv will ignore the project when\n`uv run` is invoked.",
       "type": ["boolean", "null"]
@@ -657,6 +653,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "malware-check": {
+          "description": "Whether to run the automatic malware check during sync operations.",
+          "type": ["boolean", "null"]
         }
       }
     },

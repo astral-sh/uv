@@ -17199,7 +17199,7 @@ async fn sync_malware_detected() {
         requires-python = ">=3.12"
         dependencies = ["iniconfig==2.0.0"]
 
-        [tool.uv]
+        [tool.uv.audit]
         malware-check = true
     "#})
         .unwrap();
@@ -17389,7 +17389,7 @@ async fn sync_malware_check_skips_non_mal() {
         requires-python = ">=3.12"
         dependencies = ["iniconfig==2.0.0"]
 
-        [tool.uv]
+        [tool.uv.audit]
         malware-check = false
     "#})
         .unwrap();
@@ -17461,7 +17461,7 @@ async fn sync_malware_check_disabled() {
     user_config_dir.create_dir_all().unwrap();
     user_config_dir
         .child("uv.toml")
-        .write_str("malware-check = true")
+        .write_str("[audit]\nmalware-check = true")
         .unwrap();
 
     let server = MockServer::start().await;

@@ -100,16 +100,6 @@ pub struct Options {
     #[option_group]
     pub pip: Option<PipOptions>,
 
-    /// Whether to run the automatic malware check during sync operations.
-    #[option(
-        default = "false",
-        value_type = "bool",
-        example = r#"
-            malware-check = true
-        "#
-    )]
-    pub malware_check: Option<bool>,
-
     /// The keys to consider when caching builds for the project.
     ///
     /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
@@ -2531,7 +2521,6 @@ struct OptionsWire {
 
     audit: Option<AuditOptions>,
     pip: Option<PipOptions>,
-    malware_check: Option<bool>,
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
@@ -2618,7 +2607,6 @@ impl TryFrom<OptionsWire> for Options {
             torch_backend,
             audit,
             pip,
-            malware_check,
             cache_keys,
             override_dependencies,
             exclude_dependencies,
@@ -2699,7 +2687,6 @@ impl TryFrom<OptionsWire> for Options {
                 torch_backend,
             },
             pip,
-            malware_check,
             cache_keys,
             build_backend,
             override_dependencies,
@@ -2814,6 +2801,16 @@ pub struct AddOptions {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct AuditOptions {
+    /// Whether to run the automatic malware check during sync operations.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            malware-check = true
+        "#
+    )]
+    pub malware_check: Option<bool>,
+
     /// A list of vulnerability IDs to ignore during auditing.
     ///
     /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
@@ -2859,7 +2856,9 @@ impl MalwareCheckSettings {
             enabled: environment
                 .malware_check
                 .value
-                .or(filesystem.and_then(|options| options.malware_check))
+                .or(filesystem
+                    .and_then(|options| options.audit.as_ref())
+                    .and_then(|audit| audit.malware_check))
                 .unwrap_or_default(),
             malware_check_url: environment.malware_check_url.clone(),
         }
