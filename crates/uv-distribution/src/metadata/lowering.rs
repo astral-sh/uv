@@ -39,7 +39,8 @@ enum RequirementOrigin {
 
 impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
-    pub(crate) fn from_requirement<'data>(
+    #[expect(clippy::unused_async, reason = "Requirement lowering is an async API")]
+    pub(crate) async fn from_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         project_name: Option<&'data PackageName>,
         project_dir: &'data Path,
@@ -367,7 +368,8 @@ impl LoweredRequirement {
 
     /// Lower a [`uv_pep508::Requirement`] in a non-workspace setting (for example, in a PEP 723
     /// script, which runs in an isolated context).
-    pub fn from_non_workspace_requirement<'data>(
+    #[expect(clippy::unused_async, reason = "Requirement lowering is an async API")]
+    pub async fn from_non_workspace_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         dir: &'data Path,
         sources: &'data BTreeMap<PackageName, Sources>,

@@ -3142,7 +3142,7 @@ pub(crate) fn detect_conflicts(
 }
 
 /// Determine the [`RequirementsSpecification`] for a script.
-pub(crate) fn script_specification(
+pub(crate) async fn script_specification(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
     credentials_cache: &CredentialsCache,
@@ -3155,10 +3155,9 @@ pub(crate) fn script_specification(
     let script_indexes = script.indexes(&settings.sources);
     let script_sources = script.sources(&settings.sources);
 
-    let requirements = dependencies
-        .iter()
-        .cloned()
-        .flat_map(|requirement| {
+    let mut requirements = Vec::new();
+    for requirement in dependencies.iter().cloned() {
+        requirements.extend(
             LoweredRequirement::from_non_workspace_requirement(
                 requirement,
                 script_dir.as_ref(),
@@ -3167,10 +3166,12 @@ pub(crate) fn script_specification(
                 &settings.index_locations,
                 credentials_cache,
             )
+            .await
             .map_ok(LoweredRequirement::into_inner)
-        })
-        .collect::<Result<_, _>>()?;
-    let constraints = script
+            .collect::<Result<Vec<_>, _>>()?,
+        );
+    }
+    let constraint_dependencies = script
         .metadata()
         .tool
         .as_ref()
@@ -3178,8 +3179,10 @@ pub(crate) fn script_specification(
         .and_then(|uv| uv.constraint_dependencies.as_ref())
         .into_iter()
         .flatten()
-        .cloned()
-        .flat_map(|requirement| {
+        .cloned();
+    let mut constraints = Vec::new();
+    for requirement in constraint_dependencies {
+        constraints.extend(
             LoweredRequirement::from_non_workspace_requirement(
                 requirement,
                 script_dir.as_ref(),
@@ -3188,9 +3191,11 @@ pub(crate) fn script_specification(
                 &settings.index_locations,
                 credentials_cache,
             )
+            .await
             .map_ok(LoweredRequirement::into_inner)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?,
+        );
+    }
     let overrides = {
         let override_entries = script
             .metadata()
@@ -3214,17 +3219,16 @@ pub(crate) fn script_specification(
                             &settings.index_locations,
                             credentials_cache,
                         )
+                        .await
                         .map_ok(LoweredRequirement::into_inner)
                         .map_ok(Override::Requirement)
                         .collect::<Result<Vec<_>, _>>()?,
                     );
                 }
                 Override::Package(package) => {
-                    let dependencies = package
-                        .dependencies
-                        .into_vec()
-                        .into_iter()
-                        .flat_map(|requirement| {
+                    let mut dependencies = Vec::new();
+                    for requirement in package.dependencies.into_vec() {
+                        dependencies.extend(
                             LoweredRequirement::from_non_workspace_requirement(
                                 requirement,
                                 script_dir.as_ref(),
@@ -3233,9 +3237,11 @@ pub(crate) fn script_specification(
                                 &settings.index_locations,
                                 credentials_cache,
                             )
+                            .await
                             .map_ok(LoweredRequirement::into_inner)
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
+                            .collect::<Result<Vec<_>, _>>()?,
+                        );
+                    }
                     overrides.push(Override::Package(PackageOverride {
                         package: package.package,
                         dependencies: dependencies.into_boxed_slice(),
@@ -3264,7 +3270,7 @@ pub(crate) fn script_specification(
 }
 
 /// Determine the extra build requires for a script.
-pub(crate) fn script_extra_build_requires(
+pub(crate) async fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
     credentials_cache: &CredentialsCache,
@@ -3286,29 +3292,29 @@ pub(crate) fn script_extra_build_requires(
     // Lower the extra build dependencies.
     let mut extra_build_requires = ExtraBuildRequires::default();
     for (name, requirements) in script_extra_build_dependencies {
-        let lowered_requirements: Vec<_> = requirements
-            .iter()
-            .cloned()
-            .flat_map(
-                |ExtraBuildDependency {
-                     requirement,
-                     match_runtime,
-                 }| {
-                    LoweredRequirement::from_non_workspace_requirement(
-                        requirement,
-                        script_dir.as_ref(),
-                        script_sources.as_ref(),
-                        script_indexes,
-                        &settings.index_locations,
-                        credentials_cache,
-                    )
-                    .map_ok(move |requirement| ExtraBuildRequirement {
-                        requirement: requirement.into_inner(),
-                        match_runtime,
-                    })
-                },
-            )
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut lowered_requirements = Vec::new();
+        for ExtraBuildDependency {
+            requirement,
+            match_runtime,
+        } in requirements.iter().cloned()
+        {
+            lowered_requirements.extend(
+                LoweredRequirement::from_non_workspace_requirement(
+                    requirement,
+                    script_dir.as_ref(),
+                    script_sources.as_ref(),
+                    script_indexes,
+                    &settings.index_locations,
+                    credentials_cache,
+                )
+                .await
+                .map_ok(|requirement| ExtraBuildRequirement {
+                    requirement: requirement.into_inner(),
+                    match_runtime,
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            );
+        }
         extra_build_requires.insert(name.clone(), lowered_requirements);
     }
 

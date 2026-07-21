@@ -243,13 +243,15 @@ pub(crate) async fn sync(
                 script.into(),
                 &settings.resolver,
                 client_builder.credentials_cache(),
-            )?
+            )
+            .await?
             .unwrap_or_default();
             let script_extra_build_requires = script_extra_build_requires(
                 script.into(),
                 &settings.resolver,
                 client_builder.credentials_cache(),
-            )?
+            )
+            .await?
             .into_inner();
 
             // Parse the build constraints from the script.
@@ -670,7 +672,8 @@ pub(crate) async fn do_sync(
                 index_locations,
                 &sources,
                 client_builder.credentials_cache(),
-            )?
+            )
+            .await?
         }
         InstallTarget::Script { script, .. } => {
             // Try to get extra build dependencies from the script metadata
@@ -700,7 +703,8 @@ pub(crate) async fn do_sync(
                 (*script).into(),
                 &resolver_settings,
                 client_builder.credentials_cache(),
-            )?
+            )
+            .await?
         }
     }
     .into_inner();

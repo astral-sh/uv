@@ -74,6 +74,7 @@ impl RequiresDist {
             editable,
             credentials_cache,
         )
+        .await
     }
 
     fn from_metadata23_with_source_context(
@@ -98,7 +99,7 @@ impl RequiresDist {
         })
     }
 
-    fn from_project_workspace(
+    async fn from_project_workspace(
         metadata: uv_pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
         git_member: Option<&GitWorkspaceMember<'_>>,
@@ -140,95 +141,90 @@ impl RequiresDist {
         Self::validate_sources(project_sources, &metadata, &dependency_groups)?;
 
         // Lower the dependency groups.
-        let dependency_groups = dependency_groups
-            .into_iter()
-            .map(|(name, flat_group)| {
-                let requirements = flat_group
-                    .requirements
-                    .into_iter()
-                    .flat_map(|requirement| {
-                        // Check if sources should be disabled for this specific package
-                        if no_sources.for_package(&requirement.name) {
-                            vec![Ok(Requirement::from(requirement))].into_iter()
-                        } else {
-                            let requirement_name = requirement.name.clone();
-                            let group = name.clone();
-                            let extra = None;
-
-                            LoweredRequirement::from_requirement(
-                                requirement,
-                                Some(&metadata.name),
-                                project_workspace.project_root(),
-                                project_sources,
-                                project_indexes,
-                                extra,
-                                Some(&group),
-                                locations,
-                                project_workspace.workspace(),
-                                git_member,
-                                editable,
-                                credentials_cache,
-                            )
-                            .map(move |requirement| match requirement {
-                                Ok(requirement) => Ok(requirement.into_inner()),
-                                Err(err) => Err(MetadataError::GroupLoweringError(
-                                    group.clone(),
-                                    requirement_name.clone(),
-                                    Box::new(err),
-                                )),
-                            })
-                            .collect::<Vec<_>>()
-                            .into_iter()
-                        }
-                    })
-                    .collect::<Result<Box<_>, _>>()?;
-                Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))
-            })
-            .collect::<Result<BTreeMap<_, _>, _>>()?;
-
-        // Lower the requirements.
-        let requires_dist = Box::into_iter(metadata.requires_dist);
-        let requires_dist = requires_dist
-            .flat_map(|requirement| {
-                // Check if sources should be disabled for this specific package
+        let mut lowered_dependency_groups = BTreeMap::new();
+        for (name, flat_group) in dependency_groups {
+            let mut requirements = Vec::new();
+            for requirement in flat_group.requirements {
                 if no_sources.for_package(&requirement.name) {
-                    vec![Ok(Requirement::from(requirement))].into_iter()
-                } else {
-                    let requirement_name = requirement.name.clone();
-                    let extra = requirement.marker.top_level_extra_name();
-                    let group = None;
+                    requirements.push(Requirement::from(requirement));
+                    continue;
+                }
 
+                let requirement_name = requirement.name.clone();
+                requirements.extend(
                     LoweredRequirement::from_requirement(
                         requirement,
                         Some(&metadata.name),
                         project_workspace.project_root(),
                         project_sources,
                         project_indexes,
-                        extra.as_deref(),
-                        group,
+                        None,
+                        Some(&name),
                         locations,
                         project_workspace.workspace(),
                         git_member,
                         editable,
                         credentials_cache,
                     )
-                    .map(move |requirement| match requirement {
-                        Ok(requirement) => Ok(requirement.into_inner()),
-                        Err(err) => Err(MetadataError::LoweringError(
-                            requirement_name.clone(),
-                            Box::new(err),
-                        )),
+                    .await
+                    .map(|requirement| {
+                        requirement
+                            .map(LoweredRequirement::into_inner)
+                            .map_err(|err| {
+                                MetadataError::GroupLoweringError(
+                                    name.clone(),
+                                    requirement_name.clone(),
+                                    Box::new(err),
+                                )
+                            })
                     })
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                }
-            })
-            .collect::<Result<Box<_>, _>>()?;
+                    .collect::<Result<Vec<_>, _>>()?,
+                );
+            }
+            lowered_dependency_groups.insert(name, requirements.into_boxed_slice());
+        }
+
+        // Lower the requirements.
+        let mut requires_dist = Vec::new();
+        for requirement in Box::into_iter(metadata.requires_dist) {
+            if no_sources.for_package(&requirement.name) {
+                requires_dist.push(Requirement::from(requirement));
+                continue;
+            }
+
+            let requirement_name = requirement.name.clone();
+            let extra = requirement.marker.top_level_extra_name();
+            requires_dist.extend(
+                LoweredRequirement::from_requirement(
+                    requirement,
+                    Some(&metadata.name),
+                    project_workspace.project_root(),
+                    project_sources,
+                    project_indexes,
+                    extra.as_deref(),
+                    None,
+                    locations,
+                    project_workspace.workspace(),
+                    git_member,
+                    editable,
+                    credentials_cache,
+                )
+                .await
+                .map(|requirement| {
+                    requirement
+                        .map(LoweredRequirement::into_inner)
+                        .map_err(|err| {
+                            MetadataError::LoweringError(requirement_name.clone(), Box::new(err))
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            );
+        }
 
         Ok(Self {
             name: metadata.name,
-            requires_dist,
-            dependency_groups,
+            requires_dist: requires_dist.into_boxed_slice(),
+            dependency_groups: lowered_dependency_groups,
             provides_extra: metadata.provides_extra,
             dynamic: metadata.dynamic,
         })
@@ -496,7 +492,8 @@ mod test {
             &NoSources::default(),
             true,
             &CredentialsCache::new(),
-        )?)
+        )
+        .await?)
     }
 
     async fn format_err(input: &str) -> String {
