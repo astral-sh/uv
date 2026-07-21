@@ -817,6 +817,7 @@ impl InstallationPlan {
                 resolution,
                 build_options,
                 link_mode,
+                matches!(compile, Some(BytecodeCompilation::All)),
                 hasher,
                 tags,
                 client,
@@ -846,6 +847,7 @@ impl InstallationPlan {
                 resolution,
                 build_options,
                 link_mode,
+                matches!(compile, Some(BytecodeCompilation::All)),
                 hasher,
                 tags,
                 client,
@@ -1016,6 +1018,7 @@ async fn execute_plan(
     resolution: &Resolution,
     build_options: &BuildOptions,
     link_mode: LinkMode,
+    compile_bytecode: bool,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -1056,6 +1059,11 @@ async fn execute_plan(
         .with_reporter(Arc::new(
             PrepareReporter::from(printer).with_length(remote.len() as u64),
         ));
+        let preparer = if compile_bytecode {
+            preparer.with_bytecode_compilation(venv.python_executable(), concurrency)
+        } else {
+            preparer
+        };
 
         let wheels = preparer
             .prepare(remote.clone(), in_flight, resolution)

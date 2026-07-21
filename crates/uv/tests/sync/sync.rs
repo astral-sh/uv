@@ -7,10 +7,14 @@ use predicates::prelude::predicate;
 use serde_json::json;
 #[cfg(feature = "test-git")]
 use std::process::Command;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use tempfile::tempdir_in;
 use url::Url;
+use walkdir::WalkDir;
 use wiremock::matchers::{basic_auth, body_string_contains, method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -47,6 +51,105 @@ fn sync() -> Result<()> {
     ");
 
     assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Compile a prepared wheel in the cache while another wheel is still downloading.
+#[tokio::test]
+async fn sync_compile_bytecode_while_preparing() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let server = MockServer::start().await;
+
+    let fast_wheel = fs_err::read(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+    )?;
+    let slow_wheel = fs_err::read(
+        context
+            .workspace_root
+            .join("test/links/validation-1.0.0-py3-none-any.whl"),
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fast_wheel))
+        .mount(&server)
+        .await;
+
+    let delay_download = Arc::new(AtomicBool::new(false));
+    let compiled_while_downloading = Arc::new(AtomicBool::new(false));
+    let cache_dir = context.cache_dir.to_path_buf();
+    Mock::given(method("GET"))
+        .and(path("/files/validation-1.0.0-py3-none-any.whl"))
+        .respond_with({
+            let delay_download = Arc::clone(&delay_download);
+            let compiled_while_downloading = Arc::clone(&compiled_while_downloading);
+            move |_request: &Request| {
+                if delay_download.load(Ordering::Relaxed) {
+                    std::thread::sleep(Duration::from_secs(2));
+                    let compiled = WalkDir::new(&cache_dir)
+                        .into_iter()
+                        .filter_map(Result::ok)
+                        .any(|entry| {
+                            entry
+                                .path()
+                                .ends_with("basic_package/__pycache__/__init__.cpython-313.pyc")
+                        });
+                    compiled_while_downloading.store(compiled, Ordering::Relaxed);
+                }
+                ResponseTemplate::new(200).set_body_bytes(slow_wheel.clone())
+            }
+        })
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = [
+            "basic-package @ {server}/files/basic_package-0.1.0-py3-none-any.whl",
+            "validation @ {server}/files/validation-1.0.0-py3-none-any.whl",
+        ]
+        "#,
+            server = server.uri(),
+        })?;
+
+    context.lock().assert().success();
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    delay_download.store(true, Ordering::Relaxed);
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--compile-bytecode")
+        .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "2")
+        .env(EnvVars::UV_CONCURRENT_INSTALLS, "2"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+    Bytecode compiled 3 files in [TIME]
+     + basic-package==0.1.0 (from http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl)
+     + validation==1.0.0 (from http://[LOCALHOST]/files/validation-1.0.0-py3-none-any.whl)
+    ");
+
+    assert!(compiled_while_downloading.load(Ordering::Relaxed));
+    assert!(
+        context
+            .site_packages()
+            .join("basic_package/__pycache__/__init__.cpython-313.pyc")
+            .exists()
+    );
 
     Ok(())
 }

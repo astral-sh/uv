@@ -176,6 +176,29 @@ pub async fn compile_tree(
     concurrency: &Concurrency,
     cache: &Path,
 ) -> Result<usize, CompileError> {
+    compile_tree_inner(dir, python_executable, concurrency, cache, false).await
+}
+
+/// Bytecode compile Python source files in an unpacked wheel.
+///
+/// Files in the wheel's `.data` directory are skipped. Their bytecode files would not be listed in
+/// `RECORD`, which prevents the installer from relocating them safely.
+pub(crate) async fn compile_wheel(
+    dir: &Path,
+    python_executable: &Path,
+    concurrency: &Concurrency,
+    cache: &Path,
+) -> Result<usize, CompileError> {
+    compile_tree_inner(dir, python_executable, concurrency, cache, true).await
+}
+
+async fn compile_tree_inner(
+    dir: &Path,
+    python_executable: &Path,
+    concurrency: &Concurrency,
+    cache: &Path,
+    skip_wheel_data: bool,
+) -> Result<usize, CompileError> {
     debug_assert!(
         dir.is_absolute(),
         "compileall doesn't work with relative paths: `{}`",
@@ -207,7 +230,15 @@ pub async fn compile_tree(
     let walker = WalkDir::new(dir)
         .into_iter()
         // Otherwise we stumble over temporary files from `compileall`.
-        .filter_entry(|dir| dir.file_name() != "__pycache__");
+        .filter_entry(|entry| {
+            entry.file_name() != "__pycache__"
+                && !(skip_wheel_data
+                    && entry.depth() == 1
+                    && entry
+                        .path()
+                        .extension()
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("data")))
+        });
     for entry in walker {
         // Retrieve the entry and its metadata, with shared handling for IO errors
         let (entry, metadata) =
@@ -530,4 +561,49 @@ async fn worker_main_loop(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use uv_cache::Cache;
+    use uv_configuration::Concurrency;
+    use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
+
+    use super::compile_wheel;
+
+    #[tokio::test]
+    async fn wheel_compilation_skips_data_directory() {
+        let cache = Cache::temp().expect("cache should be available");
+        let wheel = tempfile::tempdir_in(cache.root()).expect("wheel directory should exist");
+        let package = wheel.path().join("package");
+        let scripts = wheel.path().join("package-1.0.0.data/scripts");
+        fs_err::create_dir_all(&package).expect("package directory should exist");
+        fs_err::create_dir_all(&scripts).expect("scripts directory should exist");
+        fs_err::write(package.join("__init__.py"), "VALUE = 1\n")
+            .expect("package source should be written");
+        fs_err::write(scripts.join("script.py"), "VALUE = 1\n")
+            .expect("script source should be written");
+
+        let environment = PythonEnvironment::find(
+            &PythonRequest::Any,
+            EnvironmentPreference::Any,
+            PythonPreference::System,
+            &cache,
+        )
+        .expect("Python environment should be available");
+        let concurrency = Concurrency::new(1, 1, 1, 1);
+
+        let compiled = compile_wheel(
+            wheel.path(),
+            environment.python_executable(),
+            &concurrency,
+            cache.root(),
+        )
+        .await
+        .expect("wheel should compile");
+
+        assert_eq!(compiled, 1);
+        assert!(package.join("__pycache__").exists());
+        assert!(!scripts.join("__pycache__").exists());
+    }
 }

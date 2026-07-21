@@ -1,11 +1,13 @@
 use std::cmp::Reverse;
+use std::path::Path;
 use std::sync::Arc;
 
 use futures::{FutureExt, Stream, TryFutureExt, TryStreamExt, stream::FuturesUnordered};
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 use uv_cache::Cache;
-use uv_configuration::BuildOptions;
+use uv_configuration::{BuildOptions, Concurrency};
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_distribution_types::{
     BuildableSource, CachedDist, DerivationChain, Dist, DistErrorKind, Hashed, Identifier, Name,
@@ -26,6 +28,8 @@ pub struct Preparer<'a, Context: BuildContext> {
     build_options: &'a BuildOptions,
     database: DistributionDatabase<'a, Context>,
     reporter: Option<Arc<dyn Reporter>>,
+    bytecode_compilation: Option<(&'a Path, &'a Concurrency)>,
+    bytecode_lock: Mutex<()>,
 }
 
 impl<'a, Context: BuildContext> Preparer<'a, Context> {
@@ -43,6 +47,8 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
             build_options,
             database,
             reporter: None,
+            bytecode_compilation: None,
+            bytecode_lock: Mutex::new(()),
         }
     }
 
@@ -58,6 +64,21 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .database
                 .with_reporter(reporter.clone().into_distribution_reporter()),
             reporter: Some(reporter),
+            bytecode_compilation: self.bytecode_compilation,
+            bytecode_lock: self.bytecode_lock,
+        }
+    }
+
+    /// Bytecode-compile each unpacked wheel before the next installation phase.
+    #[must_use]
+    pub fn with_bytecode_compilation(
+        self,
+        python_executable: &'a Path,
+        concurrency: &'a Concurrency,
+    ) -> Self {
+        Self {
+            bytecode_compilation: Some((python_executable, concurrency)),
+            ..self
         }
     }
 
@@ -75,6 +96,19 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                     .get_wheel((*dist).clone(), in_flight, resolution)
                     .boxed_local()
                     .await?;
+                if let Some((python_executable, concurrency)) = self.bytecode_compilation {
+                    // Each compilation uses the install concurrency limit internally. Keep one
+                    // wheel compiling at a time so downloads can continue without starting a
+                    // worker pool for every completed wheel.
+                    let _guard = self.bytecode_lock.lock().await;
+                    crate::compile::compile_wheel(
+                        wheel.path(),
+                        python_executable,
+                        concurrency,
+                        self.cache.root(),
+                    )
+                    .await?;
+                }
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&wheel);
                 }
@@ -219,6 +253,8 @@ pub enum Error {
     ),
     #[error("Cyclic build dependency detected for `{0}`")]
     CyclicBuildDependency(PackageName),
+    #[error("Failed to bytecode-compile a prepared wheel")]
+    Bytecode(#[from] crate::CompileError),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }
