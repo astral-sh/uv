@@ -596,6 +596,10 @@ pub enum LoweringError {
     WorkspaceFalse,
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
+    #[error(
+        "Workspace source path `{}` must point to a workspace root (found workspace at `{}`)", path.simplified_display(), root.simplified_display()
+    )]
+    WorkspaceSourceNotRoot { path: PathBuf, root: PathBuf },
     #[error("Source with `editable = true` must refer to a local directory, not a file: `{0}`")]
     EditableFile(String),
     #[error("Source with `package = true` must refer to a local directory, not a file: `{0}`")]
@@ -904,14 +908,22 @@ async fn discover_workspace_from_source_path(
         .to_file_path()
         .map_err(|()| LoweringError::RelativeTo(io::Error::other("Invalid path in file URL")))?;
 
-    Workspace::discover(
+    let workspace = Workspace::discover(
         &workspace_path,
         &DiscoveryOptions::default(),
         cache,
         workspace_cache,
     )
-    .await
-    .map_err(LoweringError::Workspace)
+    .await?;
+
+    if workspace.install_path() != &workspace_path {
+        return Err(LoweringError::WorkspaceSourceNotRoot {
+            path: workspace_path,
+            root: workspace.install_path().clone(),
+        });
+    }
+
+    Ok(workspace)
 }
 
 /// Convert a path string to a file or directory source.
