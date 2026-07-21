@@ -484,16 +484,12 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         );
     }
 
-    // Adjust open file limits on Unix if the preview feature is enabled.
+    // Adjust open file limits on Unix.
     #[cfg(unix)]
-    if global_initialization.needs_initialization()
-        && globals.preview.is_enabled(PreviewFeature::AdjustUlimit)
-    {
+    if global_initialization.needs_initialization() {
         match uv_unix::adjust_open_file_limit() {
             Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
-            // TODO(zanieb): When moving out of preview, consider changing this to a log instead of
-            // a warning because it's okay if we fail here.
-            Err(err) => warn_user!("{err}"),
+            Err(err) => debug!("{err}"),
         }
     }
 
