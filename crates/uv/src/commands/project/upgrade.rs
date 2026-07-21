@@ -5,6 +5,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow, bail};
+use itertools::Itertools;
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade};
@@ -12,10 +13,7 @@ use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{
-    MarkerExpression, MarkerTree, MarkerValueVersion, Pep508ErrorSource, Requirement, VerbatimUrl,
-    VersionOrUrl,
-};
+use uv_pep508::{MarkerTree, Pep508ErrorSource, Requirement, VerbatimUrl, VersionOrUrl};
 use uv_preview::Preview;
 use uv_pypi_types::{PyProjectToml, ResolutionMetadata, SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{ConfigDiscovery, Interpreter, PythonDownloads, PythonPreference};
@@ -94,8 +92,19 @@ enum DeclarationOutcome {
 }
 
 enum BlockedReason {
-    UnrepresentableRequirement { message: String },
+    UnrepresentableRequirement(ProposeRequirementError),
     ConflictExtra { extra: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+enum ProposeRequirementError {
+    #[error("Dependency `{package}` resolved to `{}` which cannot be represented by the upgraded requirement; this is not supported yet", resolved_versions.iter().join("`, `"))]
+    Unrepresentable {
+        package: PackageName,
+        resolved_versions: BTreeSet<Version>,
+    },
+    #[error(transparent)]
+    Rewrite(#[from] anyhow::Error),
 }
 
 impl DeclarationOutcome {
@@ -116,7 +125,7 @@ impl DeclarationOutcome {
         matches!(
             self,
             Self::Blocked {
-                reason: BlockedReason::UnrepresentableRequirement { .. },
+                reason: BlockedReason::UnrepresentableRequirement(_),
                 ..
             }
         )
@@ -126,7 +135,7 @@ impl DeclarationOutcome {
 impl BlockedReason {
     fn message(&self) -> String {
         match self {
-            Self::UnrepresentableRequirement { message } => message.clone(),
+            Self::UnrepresentableRequirement(error) => error.to_string(),
             Self::ConflictExtra { extra } => {
                 format!("declared under conflicting extra `{extra}`")
             }
@@ -182,6 +191,8 @@ pub(crate) async fn upgrade(
         }
         Err(err) => return Err(err.into()),
     };
+    // Locking defaults a missing `requires-python` to the discovered interpreter's minor version.
+    // Use that same bound when deciding whether selected declarations and sources can apply.
     let fallback_interpreter = if requires_fallback_interpreter(&project, &packages, &exclude)? {
         let groups = DependencyGroupsWithDefaults::none();
         let workspace_python = WorkspacePython::from_request(
@@ -435,9 +446,7 @@ pub(crate) async fn upgrade(
                 Err(err) => {
                     declaration_outcomes.push(DeclarationOutcome::Blocked {
                         declaration: selected.identity(),
-                        reason: BlockedReason::UnrepresentableRequirement {
-                            message: err.to_string(),
-                        },
+                        reason: BlockedReason::UnrepresentableRequirement(err),
                     });
                     continue;
                 }
@@ -467,6 +476,8 @@ pub(crate) async fn upgrade(
     let unsafe_blocked = declaration_outcomes
         .iter()
         .any(DeclarationOutcome::invalidates_relaxed_solve);
+    // The blocked declaration was relaxed for the solve, but cannot be rewritten to admit the
+    // resolved versions. Applying other updates would leave a manifest inconsistent with that solve.
     if unsafe_blocked && !updated_requirements.is_empty() {
         render_declaration_outcomes(&declaration_outcomes, printer)?;
         bail!(
@@ -522,7 +533,7 @@ pub(crate) async fn upgrade(
     Ok(ExitStatus::Success)
 }
 
-/// Return whether selected declarations need an interpreter-derived Python bound.
+/// Return whether selected declarations need the interpreter-derived Python bound used by locking.
 fn requires_fallback_interpreter(
     project: &ProjectWorkspace,
     packages: &[PackageName],
@@ -535,7 +546,6 @@ fn requires_fallback_interpreter(
 
     let is_explicit_selection = !packages.is_empty();
     let pyproject_path = project.project_root().join("pyproject.toml");
-    let mut has_selected_declaration = false;
     for dependency in project
         .current_project()
         .project()
@@ -549,35 +559,10 @@ fn requires_fallback_interpreter(
         {
             continue;
         }
-        has_selected_declaration = true;
-        if marker_uses_python_version(requirement.marker) {
-            return Ok(true);
-        }
+        return Ok(true);
     }
 
-    Ok(has_selected_declaration
-        && target.environments().is_some_and(|environments| {
-            environments
-                .as_markers()
-                .iter()
-                .copied()
-                .any(marker_uses_python_version)
-        }))
-}
-
-fn marker_uses_python_version(marker: MarkerTree) -> bool {
-    marker.to_dnf().into_iter().flatten().any(|expression| {
-        matches!(
-            expression,
-            MarkerExpression::Version {
-                key: MarkerValueVersion::PythonVersion | MarkerValueVersion::PythonFullVersion,
-                ..
-            } | MarkerExpression::VersionIn {
-                key: MarkerValueVersion::PythonVersion | MarkerValueVersion::PythonFullVersion,
-                ..
-            }
-        )
-    })
+    Ok(false)
 }
 
 fn parse_dependency(
@@ -948,7 +933,7 @@ fn into_verbatim_requirement(
 fn propose_specifiers(
     requirement: &Requirement<VerbatimParsedUrl>,
     resolved_versions: &BTreeSet<Version>,
-) -> Result<Option<VersionSpecifiers>> {
+) -> Result<Option<VersionSpecifiers>, ProposeRequirementError> {
     if resolved_versions.is_empty() {
         return Ok(None);
     }
@@ -962,10 +947,6 @@ fn propose_specifiers(
     {
         return Ok(None);
     }
-    let Some(highest_resolved_version) = resolved_versions.last() else {
-        return Ok(None);
-    };
-
     let specifiers = specifiers
         .iter()
         .cloned()
@@ -981,21 +962,10 @@ fn propose_specifiers(
             rewritten_specifiers = %specifiers,
             "Rewritten dependency constraint does not admit every resolved version"
         );
-        if resolved_versions.len() == 1 {
-            bail!(
-                "Dependency `{}` resolved to version `{highest_resolved_version}` which cannot be represented by the upgraded requirement; this is not supported yet",
-                requirement.name
-            );
-        }
-        let resolved_versions = resolved_versions
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join("`, `");
-        bail!(
-            "Dependency `{}` resolved to versions `{resolved_versions}` which cannot be represented by the upgraded requirement; this is not supported yet",
-            requirement.name
-        );
+        return Err(ProposeRequirementError::Unrepresentable {
+            package: requirement.name.clone(),
+            resolved_versions: resolved_versions.clone(),
+        });
     }
     Ok(Some(specifiers))
 }
@@ -1127,7 +1097,10 @@ mod tests {
     use uv_pep508::Requirement;
     use uv_pypi_types::VerbatimParsedUrl;
 
-    use super::{increment_version_at_precision, propose_specifiers, relax_requirement};
+    use super::{
+        ProposeRequirementError, increment_version_at_precision, propose_specifiers,
+        relax_requirement,
+    };
 
     fn resolved_versions(versions: &[&str]) -> BTreeSet<Version> {
         versions
@@ -1245,9 +1218,17 @@ mod tests {
         let error = propose_specifiers(&requirement, &resolved_versions(&["2.4"]))
             .expect_err("rewritten requirement must admit the resolved version");
 
+        assert!(matches!(
+            &error,
+            ProposeRequirementError::Unrepresentable {
+                package,
+                resolved_versions: actual_resolved_versions,
+            } if package.as_ref() == "requests"
+                && *actual_resolved_versions == resolved_versions(&["2.4"])
+        ));
         assert_eq!(
             error.to_string(),
-            "Dependency `requests` resolved to version `2.4` which cannot be represented by the upgraded requirement; this is not supported yet"
+            "Dependency `requests` resolved to `2.4` which cannot be represented by the upgraded requirement; this is not supported yet"
         );
     }
 
@@ -1297,9 +1278,17 @@ mod tests {
         let error = propose_specifiers(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
             .expect_err("wildcard cannot admit versions from different major lines");
 
+        assert!(matches!(
+            &error,
+            ProposeRequirementError::Unrepresentable {
+                package,
+                resolved_versions: actual_resolved_versions,
+            } if package.as_ref() == "requests"
+                && *actual_resolved_versions == resolved_versions(&["1.5.0", "2.4.0"])
+        ));
         assert_eq!(
             error.to_string(),
-            "Dependency `requests` resolved to versions `1.5.0`, `2.4.0` which cannot be represented by the upgraded requirement; this is not supported yet"
+            "Dependency `requests` resolved to `1.5.0`, `2.4.0` which cannot be represented by the upgraded requirement; this is not supported yet"
         );
     }
 
