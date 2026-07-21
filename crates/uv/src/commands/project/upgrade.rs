@@ -194,6 +194,12 @@ pub(crate) async fn upgrade(
     // Locking defaults a missing `requires-python` to the discovered interpreter's minor version.
     // Use that same bound when deciding whether selected declarations and sources can apply.
     let fallback_interpreter = if requires_fallback_interpreter(&project, &packages, &exclude)? {
+        let selection = select_requirements(&project, &packages, &exclude, None)?;
+        if selection.active.is_empty() {
+            render_skipped_requirements(&selection.skipped, printer)?;
+            return Ok(ExitStatus::Success);
+        }
+
         let groups = DependencyGroupsWithDefaults::none();
         let workspace_python = WorkspacePython::from_request(
             None,
@@ -220,7 +226,13 @@ pub(crate) async fn upgrade(
         {
             Ok(interpreter) => Some(interpreter.into_interpreter()),
             Err(error) => {
-                select_requirements(&project, &packages, &exclude, None)?;
+                let DeclarationSelection {
+                    active,
+                    skipped,
+                    packages,
+                } = select_requirements(&project, &packages, &exclude, None)?;
+                render_skipped_requirements(&skipped, printer)?;
+                validate_requirements(&project, &active, &packages)?;
                 return Err(error.into());
             }
         }
@@ -233,6 +245,7 @@ pub(crate) async fn upgrade(
         packages: mut selected_packages,
     } = select_requirements(&project, &packages, &exclude, fallback_interpreter.as_ref())?;
     render_skipped_requirements(&skipped, printer)?;
+    validate_requirements(&project, &requirements, &selected_packages)?;
     let mut declaration_outcomes = Vec::new();
     let conflicts = project.workspace().conflicts()?;
     let mut requirements = requirements
@@ -690,8 +703,20 @@ fn select_requirements(
         bail!("No dependencies selected for upgrade");
     }
 
-    for package in &selected_packages {
-        if to_upgrade.iter().any(|selected| {
+    Ok(DeclarationSelection {
+        active: to_upgrade,
+        skipped,
+        packages: selected_packages,
+    })
+}
+
+fn validate_requirements(
+    project: &ProjectWorkspace,
+    requirements: &[UpgradableRequirement],
+    packages: &[PackageName],
+) -> Result<()> {
+    for package in packages {
+        if requirements.iter().any(|selected| {
             selected.package == *package
                 && matches!(
                     selected.requirement.version_or_url,
@@ -702,13 +727,13 @@ fn select_requirements(
         }
     }
 
-    for package in &selected_packages {
+    for package in packages {
         if package == project.project_name() {
             bail!("Dependency `{package}` refers to the current project and cannot be upgraded");
         }
     }
 
-    for package in &selected_packages {
+    for package in packages {
         let sources = project
             .current_project()
             .pyproject_toml()
@@ -719,7 +744,7 @@ fn select_requirements(
             .and_then(|sources| sources.inner().get(package))
             .or_else(|| project.workspace().sources().get(package));
         let applies_to_selected_requirement = |source| {
-            to_upgrade.iter().any(|selected| {
+            requirements.iter().any(|selected| {
                 selected.package == *package
                     && source_is_applicable(
                         source,
@@ -750,11 +775,7 @@ fn select_requirements(
         }
     }
 
-    Ok(DeclarationSelection {
-        active: to_upgrade,
-        skipped,
-        packages: selected_packages,
-    })
+    Ok(())
 }
 
 /// Return a requirement suitable for diagnostics without exposing URL query parameters.
