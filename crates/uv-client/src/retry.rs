@@ -261,12 +261,12 @@ fn is_retryable_status_error(reqwest_err: &reqwest::Error) -> bool {
 }
 
 fn is_tls_certificate_error(reqwest_err: &reqwest::Error) -> bool {
-    find_source_with_io::<RustlsError>(reqwest_err).is_some_and(is_certificate_error)
-}
+    let Some(rustls_error) = find_source_with_io::<RustlsError>(reqwest_err) else {
+        return false;
+    };
 
-fn is_certificate_error(error: &RustlsError) -> bool {
     // TODO(konsti): https://github.com/seanmonstar/reqwest/issues/2819#issuecomment-5032072023
-    match error {
+    match rustls_error {
         RustlsError::InvalidCertificate(_) | RustlsError::NoCertificatesPresented => true,
         RustlsError::AlertReceived(alert) => matches!(
             alert,
