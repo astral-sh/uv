@@ -747,6 +747,55 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                         continue 'FORK;
                     }
+                    ForkedDependencies::RequiresPython(requires_python) => {
+                        if matches!(self.options.fork_strategy, ForkStrategy::RequiresPython)
+                            && state.env.marker_environment().is_none()
+                        {
+                            let forks = fork_version_by_python_requirement(
+                                &requires_python,
+                                &state.python_requirement,
+                                &state.env,
+                            );
+                            if !forks.is_empty() {
+                                debug!(
+                                    "Forking Python requirement `{}` on `{}` for {}=={} ({})",
+                                    state.python_requirement.target(),
+                                    &requires_python,
+                                    next_package,
+                                    version,
+                                    forks
+                                        .iter()
+                                        .map(ToString::to_string)
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                );
+
+                                // Revisit the version in each fork so its dependencies are added
+                                // under the narrowed Python requirement.
+                                let forks = forks
+                                    .into_iter()
+                                    .map(|env| VersionFork {
+                                        env,
+                                        id: next_id,
+                                        version: None,
+                                    })
+                                    .collect();
+                                forked_states
+                                    .extend(self.version_forks_to_fork_states(state, forks));
+                                continue 'FORK;
+                            }
+                        }
+
+                        state
+                            .pubgrub
+                            .add_incompatibility(Incompatibility::custom_version(
+                                next_id,
+                                version.clone(),
+                                UnavailableReason::Version(UnavailableVersion::RequiresPython(
+                                    requires_python,
+                                )),
+                            ));
+                    }
                 }
             }
         }
@@ -1871,6 +1920,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Available(deps) | Dependencies::Unforkable(deps) => {
                     ForkedDependencies::Unforked(deps)
                 }
+                Dependencies::RequiresPython(requires_python) => {
+                    ForkedDependencies::RequiresPython(requires_python)
+                }
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
             })
         } else {
@@ -1993,12 +2045,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 };
 
                 // If there was no requires-python on the index page, we may have an incompatible
-                // distribution.
+                // distribution or need to fork.
                 if let Some(requires_python) = &metadata.requires_python {
                     if !python_requirement.target().is_contained_by(requires_python) {
-                        return Ok(Dependencies::Unavailable(
-                            UnavailableVersion::RequiresPython(requires_python.clone()),
-                        ));
+                        return Ok(Dependencies::RequiresPython(requires_python.clone()));
                     }
                 }
 
@@ -3842,6 +3892,8 @@ enum Dependencies {
     /// `PubGrubPackage` values in this list to have the same package name.
     /// These conflicts are resolved via `Dependencies::fork`.
     Available(Vec<PubGrubDependency>),
+    /// Package metadata has a `Requires-Python` specifier that is incompatible with the target.
+    RequiresPython(VersionSpecifiers),
     /// Dependencies that should never result in a fork.
     ///
     /// For example, the dependencies of a `Marker` package will have the
@@ -3866,6 +3918,9 @@ impl Dependencies {
         let deps = match self {
             Self::Available(deps) => deps,
             Self::Unforkable(deps) => return ForkedDependencies::Unforked(deps),
+            Self::RequiresPython(requires_python) => {
+                return ForkedDependencies::RequiresPython(requires_python);
+            }
             Self::Unavailable(err) => return ForkedDependencies::Unavailable(err),
         };
         let mut name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>> = BTreeMap::new();
@@ -3918,6 +3973,8 @@ enum ForkedDependencies {
         /// The package(s) with different requirements for disjoint markers.
         diverging_packages: Vec<PackageName>,
     },
+    /// Package metadata has a `Requires-Python` specifier that is incompatible with the target.
+    RequiresPython(VersionSpecifiers),
 }
 
 /// A list of forks determined from the dependencies of a single package.
