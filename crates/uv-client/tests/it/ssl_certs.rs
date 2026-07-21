@@ -8,7 +8,7 @@ use rcgen::CustomExtension;
 use temp_env::async_with_vars;
 use tempfile::{NamedTempFile, TempDir};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use url::Url;
 
 use uv_cache::Cache;
@@ -287,7 +287,10 @@ impl TestClient {
         F: FnOnce(&rustls::Error),
     {
         self.run_mtls(cert, |response, server_task| async move {
-            assert_fatal_reqwest_error(&response);
+            assert!(
+                response.is_err(),
+                "expected request error, got: {response:?}"
+            );
 
             let server_res = server_task.await.expect("server task panicked");
             let Err(anyhow_err) = server_res else {
@@ -449,6 +452,22 @@ fn assert_fatal_reqwest_error(res: &Result<reqwest::Response, reqwest_middleware
     };
 }
 
+/// Read the client's complete TLS record before sending a fatal alert.
+async fn send_tls_alert(stream: &mut TcpStream, alert_description: u8) -> Result<()> {
+    let mut client_hello_header = [0; 5];
+    stream.read_exact(&mut client_hello_header).await?;
+    let client_hello_length = usize::from(u16::from_be_bytes([
+        client_hello_header[3],
+        client_hello_header[4],
+    ]));
+    let mut client_hello = vec![0; client_hello_length];
+    stream.read_exact(&mut client_hello).await?;
+    stream
+        .write_all(&[0x15, 0x03, 0x03, 0x00, 0x02, 0x02, alert_description])
+        .await?;
+    Ok(())
+}
+
 /// A self-signed server certificate is rejected when no custom certs are
 /// configured — the bundled webpki roots don't include our test CA.
 #[tokio::test]
@@ -471,6 +490,24 @@ async fn test_tls_certificate_errors_are_not_retried() -> Result<()> {
     Ok(())
 }
 
+/// Certificate TLS alerts are fatal instead of being retried.
+#[tokio::test]
+async fn test_certificate_tls_alerts_are_not_retried() -> Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    let server_task = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await?;
+        // A fatal TLS `unknown_ca` alert.
+        send_tls_alert(&mut stream, 0x30).await?;
+        Ok::<_, anyhow::Error>(())
+    });
+
+    let response = send_request(addr, false).await;
+    assert_fatal_reqwest_error(&response);
+    server_task.await??;
+    Ok(())
+}
+
 /// An expired server certificate is rejected without retries.
 #[tokio::test]
 async fn test_expired_cert_rejected() -> Result<()> {
@@ -490,12 +527,8 @@ async fn test_non_certificate_tls_errors_are_retried() -> Result<()> {
     let server_task = tokio::spawn(async move {
         for _ in 0..4 {
             let (mut stream, _) = listener.accept().await?;
-            let mut client_hello = [0];
-            stream.read_exact(&mut client_hello).await?;
             // A fatal TLS `internal_error` alert.
-            stream
-                .write_all(&[0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x50])
-                .await?;
+            send_tls_alert(&mut stream, 0x50).await?;
         }
         Ok::<_, anyhow::Error>(())
     });
