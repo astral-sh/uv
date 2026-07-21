@@ -9852,8 +9852,7 @@ async fn lock_index_hash_algorithm() -> Result<()> {
         .mount(&server)
         .await;
 
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(&formatdoc! { r#"
+    let pyproject = formatdoc! { r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -9869,7 +9868,9 @@ async fn lock_index_hash_algorithm() -> Result<()> {
         explicit = true
         "#,
         server.uri()
-    })?;
+    };
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&pyproject)?;
 
     uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
@@ -9910,24 +9911,7 @@ async fn lock_index_hash_algorithm() -> Result<()> {
         "#);
     });
 
-    pyproject_toml.write_str(&formatdoc! { r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.13"
-        dependencies = ["basic-package"]
-
-        [tool.uv.sources]
-        basic-package = {{ index = "test-registry" }}
-
-        [[tool.uv.index]]
-        name = "test-registry"
-        url = "{}/simple"
-        explicit = true
-        hash-algorithm = "sha256"
-        "#,
-        server.uri()
-    })?;
+    pyproject_toml.write_str(&format!("{pyproject}hash-algorithm = \"sha256\"\n"))?;
 
     uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true

@@ -598,11 +598,6 @@ impl Index {
     pub(crate) fn exclude_newer(&self) -> Option<&ExcludeNewerOverride> {
         self.exclude_newer.as_ref()
     }
-
-    /// Return the hash algorithm required for distributions resolved from this index.
-    pub(crate) fn hash_algorithm(&self) -> Option<HashAlgorithm> {
-        self.hash_algorithm.map(HashAlgorithm::from)
-    }
 }
 
 impl From<IndexUrl> for Index {
@@ -845,21 +840,6 @@ mod tests {
         assert_eq!(index.name.as_ref().unwrap().as_ref(), "test-index");
         assert_eq!(index.cache_control, None);
         assert_eq!(index.exclude_newer, None);
-    }
-
-    #[test]
-    fn test_index_hash_algorithm() {
-        let index: Index = toml::from_str(
-            r#"
-            name = "test-index"
-            url = "https://test.example.com/simple"
-            hash-algorithm = "sha256"
-        "#,
-        )
-        .unwrap();
-
-        assert_eq!(index.hash_algorithm, Some(IndexHashAlgorithm::Sha256));
-        assert_eq!(index.hash_algorithm(), Some(HashAlgorithm::Sha256));
     }
 
     #[test]

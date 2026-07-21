@@ -399,7 +399,10 @@ impl<'lock> DependencySelection<'lock> {
 }
 
 impl Lock {
-    /// Initialize a [`Lock`] from a [`ResolverOutput`].
+    /// Initialize a [`Lock`] from a [`ResolverOutput`], applying any index-specific hash
+    /// requirements to registry artifacts.
+    ///
+    /// Returns an error if an artifact does not advertise its index's required algorithm.
     pub fn from_resolution(
         resolution: &ResolverOutput,
         root: &Path,
@@ -821,8 +824,8 @@ impl Lock {
         &self.packages
     }
 
-    /// Return whether every registry artifact in the lockfile uses its index's required hash
-    /// algorithm, if any.
+    /// Return whether every registry artifact in the lockfile has a hash using its index's
+    /// required algorithm, if any.
     pub fn satisfies_hash_algorithms(
         &self,
         root: &Path,
@@ -836,19 +839,17 @@ impl Lock {
                 continue;
             };
 
-            if package
-                .sdist
-                .iter()
-                .map(SourceDist::hash)
-                .chain(package.wheels.iter().map(|wheel| wheel.hash.as_ref()))
-                .chain(
-                    package
-                        .wheels
-                        .iter()
-                        .filter_map(|wheel| wheel.zstd.as_ref())
-                        .map(|zstd| zstd.hash.as_ref()),
-                )
-                .any(|hash| hash.is_none_or(|hash| hash.0.algorithm != algorithm))
+            let mismatched =
+                |hash: Option<&Hash>| hash.is_none_or(|hash| hash.0.algorithm != algorithm);
+
+            if package.sdist.iter().any(|sdist| mismatched(sdist.hash()))
+                || package.wheels.iter().any(|wheel| {
+                    mismatched(wheel.hash.as_ref())
+                        || wheel
+                            .zstd
+                            .as_ref()
+                            .is_some_and(|zstd| mismatched(zstd.hash.as_ref()))
+                })
             {
                 return Ok(false);
             }
@@ -5033,22 +5034,19 @@ impl Wheel {
             .map(Timestamp::from_millisecond)
             .transpose()
             .map_err(LockErrorKind::InvalidTimestamp)?;
-        let zstd = wheel
-            .file
-            .zstd
-            .as_ref()
-            .map(|zstd| {
-                Ok::<_, LockError>(ZstdWheel {
-                    hash: select_registry_hash(
-                        &zstd.hashes,
-                        &wheel.index,
-                        index_locations,
-                        wheel.file.filename.as_ref(),
-                    )?,
-                    size: zstd.size,
-                })
+        let zstd = if let Some(zstd) = wheel.file.zstd.as_ref() {
+            Some(ZstdWheel {
+                hash: select_registry_hash(
+                    &zstd.hashes,
+                    &wheel.index,
+                    index_locations,
+                    wheel.file.filename.as_ref(),
+                )?,
+                size: zstd.size,
             })
-            .transpose()?;
+        } else {
+            None
+        };
         Ok(Self {
             url,
             hash,
@@ -5439,7 +5437,10 @@ impl From<HashDigest> for Hash {
     }
 }
 
-/// Select the hash for a registry artifact, requiring the configured algorithm when present.
+/// Select the configured hash algorithm for a registry artifact, preserving the default hash
+/// selection when the index has no requirement.
+///
+/// Returns an error if the required algorithm is not advertised.
 fn select_registry_hash(
     hashes: &HashDigests,
     index: &IndexUrl,

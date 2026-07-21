@@ -528,7 +528,8 @@ impl<'a> IndexLocations {
 
     /// Return the hash algorithm required for distributions resolved from a given index.
     pub fn hash_algorithm_for(&self, url: &IndexUrl) -> Option<HashAlgorithm> {
-        self.index_for_url(url).and_then(Index::hash_algorithm)
+        self.index_for_url(url)
+            .and_then(|index| index.hash_algorithm.map(HashAlgorithm::from))
     }
 
     /// Return the `exclude-newer` setting for a given index, if the index is configured.
