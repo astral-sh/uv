@@ -123,23 +123,21 @@ jobs:
     timeout-minutes: 5
     permissions:
       id-token: write # for the credential broker
-      issues: write # for upstream issue reports
     steps:
-      - name: "Get uv-dev issue token"
+      - name: "Get issue token"
         id: token
-        if: github.repository == 'astral-sh/uv-dev'
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
-          repository: astral-sh/uv-dev
+          repository: ${{ github.repository }}
           permissions: |
             issues: write
 
       - name: "Report workflow failure"
         env:
           DIAGNOSIS: ${{ needs.diagnose.outputs.result }}
-          GH_TOKEN: ${{ steps.token.outputs.token || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
           ISSUE_REPOSITORY: ${{ github.repository }}
           RUN_ID: ${{ inputs.run }}
         run: |
