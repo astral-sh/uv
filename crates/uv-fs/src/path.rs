@@ -27,9 +27,7 @@ pub trait Simplified {
     /// equivalent to [`std::path::Display`].
     fn simplified_display(&self) -> impl std::fmt::Display;
 
-    /// Canonicalize a path without a `\\?\` prefix on Windows.
-    /// For a path that can't be canonicalized (e.g. on network drive or RAM drive on Windows),
-    /// this will return the absolute path if it exists.
+    /// Canonicalize a path, stripping the `\\?\` prefix on Windows when possible.
     fn simple_canonicalize(&self) -> std::io::Result<PathBuf>;
 
     /// Render a [`Path`] for user-facing display.
