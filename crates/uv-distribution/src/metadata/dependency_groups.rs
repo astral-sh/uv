@@ -164,6 +164,7 @@ impl SourcedDependencyGroups {
                         project.workspace(),
                         git_member,
                         true,
+                        cache,
                         workspace_cache,
                         credentials_cache,
                     )

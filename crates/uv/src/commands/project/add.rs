@@ -437,6 +437,7 @@ pub(crate) async fn add(
                     project.workspace(),
                     &settings.resolver.index_locations,
                     &settings.resolver.sources,
+                    cache,
                     &WorkspaceCache::default(),
                     client.credentials_cache(),
                 )

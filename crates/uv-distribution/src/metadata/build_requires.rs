@@ -74,6 +74,7 @@ impl BuildRequires {
             locations,
             sources,
             editable,
+            cache,
             workspace_cache,
             credentials_cache,
         )
@@ -87,7 +88,8 @@ impl BuildRequires {
         locations: &IndexLocations,
         sources: &NoSources,
         editable: bool,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -105,7 +107,6 @@ impl BuildRequires {
                 .unwrap_or(&empty)
         };
 
-        // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
         let project_sources = if sources.all() {
             &empty
@@ -145,6 +146,7 @@ impl BuildRequires {
                     None,
                     editable,
                     cache,
+                    workspace_cache,
                     credentials_cache,
                 )
                 .await
@@ -171,7 +173,8 @@ impl BuildRequires {
         workspace: &Workspace,
         locations: &IndexLocations,
         sources: &NoSources,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -219,6 +222,7 @@ impl BuildRequires {
                     None,
                     true,
                     cache,
+                    workspace_cache,
                     credentials_cache,
                 )
                 .await
@@ -259,7 +263,8 @@ impl LoweredExtraBuildDependencies {
         workspace: &Workspace,
         index_locations: &IndexLocations,
         source_strategy: &NoSources,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         match source_strategy {
@@ -308,6 +313,7 @@ impl LoweredExtraBuildDependencies {
                                 None,
                                 true,
                                 cache,
+                                workspace_cache,
                                 credentials_cache,
                             )
                             .await

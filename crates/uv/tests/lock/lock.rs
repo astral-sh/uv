@@ -10876,6 +10876,36 @@ fn lock_external_workspace_source() -> Result<()> {
     Ok(())
 }
 
+/// Lock a project with an unused external workspace source that does not exist.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_unused_external_workspace_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.sources]
+        unused = { workspace = "missing-workspace" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a workspace member that incorrectly points at another workspace via `workspace = "..."`
 /// instead of using `workspace = true`.
 #[cfg(feature = "test-universal")]

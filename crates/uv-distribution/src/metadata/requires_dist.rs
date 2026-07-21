@@ -72,6 +72,7 @@ impl RequiresDist {
             locations,
             &sources,
             editable,
+            cache,
             workspace_cache,
             credentials_cache,
         )
@@ -107,7 +108,8 @@ impl RequiresDist {
         locations: &IndexLocations,
         no_sources: &NoSources,
         editable: bool,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -121,7 +123,6 @@ impl RequiresDist {
             .and_then(|uv| uv.index.as_deref())
             .unwrap_or(&empty);
 
-        // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
         let project_sources = project_workspace
             .current_project()
@@ -167,6 +168,7 @@ impl RequiresDist {
                         git_member,
                         editable,
                         cache,
+                        workspace_cache,
                         credentials_cache,
                     )
                     .await
@@ -211,6 +213,7 @@ impl RequiresDist {
                     git_member,
                     editable,
                     cache,
+                    workspace_cache,
                     credentials_cache,
                 )
                 .await
@@ -497,6 +500,7 @@ mod test {
             &IndexLocations::default(),
             &NoSources::default(),
             true,
+            &cache,
             &workspace_cache,
             &CredentialsCache::new(),
         )

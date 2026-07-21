@@ -1,11 +1,14 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use either::Either;
+use futures::future::join_all;
 
 use thiserror::Error;
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
@@ -39,7 +42,6 @@ enum RequirementOrigin {
 
 impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
-    #[expect(clippy::unused_async, reason = "Requirement lowering is an async API")]
     pub(crate) async fn from_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         project_name: Option<&'data PackageName>,
@@ -52,7 +54,8 @@ impl LoweredRequirement {
         workspace: &'data Workspace,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
         editable: bool,
-        cache: &'data WorkspaceCache,
+        cache: &'data Cache,
+        workspace_cache: &'data WorkspaceCache,
         credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
         // Identify the source from the `tool.uv.sources` table.
@@ -177,9 +180,9 @@ impl LoweredRequirement {
         };
 
         Either::Right(
-            sources
-                .into_iter()
-                .map(move |source| {
+            join_all(sources.into_iter().map(|source| {
+                let requirement = &requirement;
+                async move {
                     let (source, mut marker) = match source {
                         Source::Git {
                             git,
@@ -210,7 +213,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source =
-                                url_source(&requirement, url, subdirectory.map(Box::<Path>::from))?;
+                                url_source(requirement, url, subdirectory.map(Box::<Path>::from))?;
                             (source, marker)
                         }
                         Source::Path {
@@ -271,7 +274,7 @@ impl LoweredRequirement {
                                     })
                                 }
                             });
-                            let source = registry_source(&requirement, index, conflict);
+                            let source = registry_source(requirement, index, conflict);
                             (source, marker)
                         }
                         Source::Workspace {
@@ -281,7 +284,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = workspace_source(
-                                &requirement,
+                                requirement,
                                 &workspace_ref,
                                 source_editable,
                                 editable,
@@ -291,7 +294,9 @@ impl LoweredRequirement {
                                 Some(workspace),
                                 git_member,
                                 cache,
-                            )?;
+                                workspace_cache,
+                            )
+                            .await?;
                             (source, marker)
                         }
                     };
@@ -306,25 +311,28 @@ impl LoweredRequirement {
                         source,
                         origin: requirement.origin.clone(),
                     }))
-                })
-                .chain(std::iter::once(Ok(remaining)))
-                .filter(|requirement| match requirement {
-                    Ok(requirement) => !requirement.0.marker.is_false(),
-                    Err(_) => true,
-                }),
+                }
+            }))
+            .await
+            .into_iter()
+            .chain(std::iter::once(Ok(remaining)))
+            .filter(|requirement| match requirement {
+                Ok(requirement) => !requirement.0.marker.is_false(),
+                Err(_) => true,
+            }),
         )
     }
 
     /// Lower a [`uv_pep508::Requirement`] in a non-workspace setting (for example, in a PEP 723
     /// script, which runs in an isolated context).
-    #[expect(clippy::unused_async, reason = "Requirement lowering is an async API")]
     pub async fn from_non_workspace_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         dir: &'data Path,
         sources: &'data BTreeMap<PackageName, Sources>,
         indexes: &'data [Index],
         locations: &'data IndexLocations,
-        cache: &'data WorkspaceCache,
+        cache: &'data Cache,
+        workspace_cache: &'data WorkspaceCache,
         credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let source = sources.get(&requirement.name).cloned();
@@ -367,9 +375,9 @@ impl LoweredRequirement {
         };
 
         Either::Right(
-            source
-                .into_iter()
-                .map(move |source| {
+            join_all(source.into_iter().map(|source| {
+                let requirement = &requirement;
+                async move {
                     let (source, mut marker) = match source {
                         Source::Git {
                             git,
@@ -400,7 +408,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source =
-                                url_source(&requirement, url, subdirectory.map(Box::<Path>::from))?;
+                                url_source(requirement, url, subdirectory.map(Box::<Path>::from))?;
                             (source, marker)
                         }
                         Source::Path {
@@ -445,7 +453,7 @@ impl LoweredRequirement {
                                 format: index.format,
                             };
                             let conflict = None;
-                            let source = registry_source(&requirement, index, conflict);
+                            let source = registry_source(requirement, index, conflict);
                             (source, marker)
                         }
                         Source::Workspace {
@@ -455,7 +463,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = workspace_source(
-                                &requirement,
+                                requirement,
                                 &workspace_ref,
                                 editable,
                                 true,
@@ -465,7 +473,9 @@ impl LoweredRequirement {
                                 None,
                                 None,
                                 cache,
-                            )?;
+                                workspace_cache,
+                            )
+                            .await?;
                             (source, marker)
                         }
                     };
@@ -480,12 +490,15 @@ impl LoweredRequirement {
                         source,
                         origin: requirement.origin.clone(),
                     }))
-                })
-                .chain(std::iter::once(Ok(remaining)))
-                .filter(|requirement| match requirement {
-                    Ok(requirement) => !requirement.0.marker.is_false(),
-                    Err(_) => true,
-                }),
+                }
+            }))
+            .await
+            .into_iter()
+            .chain(std::iter::once(Ok(remaining)))
+            .filter(|requirement| match requirement {
+                Ok(requirement) => !requirement.0.marker.is_false(),
+                Err(_) => true,
+            }),
         )
     }
 
@@ -792,7 +805,7 @@ fn registry_source(
     }
 }
 
-fn workspace_source(
+async fn workspace_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
     workspace_ref: &WorkspaceReference,
     source_editable: Option<bool>,
@@ -801,8 +814,9 @@ fn workspace_source(
     project_dir: &Path,
     workspace_root: &Path,
     current_workspace: Option<&Workspace>,
-    git_member: Option<&GitWorkspaceMember>,
-    cache: &WorkspaceCache,
+    git_member: Option<&GitWorkspaceMember<'_>>,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
 ) -> Result<RequirementSource, LoweringError> {
     match workspace_ref {
         WorkspaceReference::Bool(false) => Err(LoweringError::WorkspaceFalse),
@@ -838,7 +852,9 @@ fn workspace_source(
                 project_dir,
                 workspace_root,
                 cache,
-            )?;
+                workspace_cache,
+            )
+            .await?;
             let member = target_workspace
                 .packages()
                 .get(&requirement.name)
@@ -872,13 +888,14 @@ fn workspace_source(
     }
 }
 
-fn discover_workspace_from_source_path(
+async fn discover_workspace_from_source_path(
     path: &Path,
     origin: RequirementOrigin,
     project_dir: &Path,
     workspace_root: &Path,
-    cache: &WorkspaceCache,
-) -> Result<Workspace, LoweringError> {
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+) -> Result<Arc<Workspace>, LoweringError> {
     let base = match origin {
         RequirementOrigin::Project => project_dir,
         RequirementOrigin::Workspace => workspace_root,
@@ -887,8 +904,14 @@ fn discover_workspace_from_source_path(
         .to_file_path()
         .map_err(|()| LoweringError::RelativeTo(io::Error::other("Invalid path in file URL")))?;
 
-    Workspace::discover_blocking(&workspace_path, &DiscoveryOptions::default(), cache)
-        .map_err(LoweringError::Workspace)
+    Workspace::discover(
+        &workspace_path,
+        &DiscoveryOptions::default(),
+        cache,
+        workspace_cache,
+    )
+    .await
+    .map_err(LoweringError::Workspace)
 }
 
 /// Convert a path string to a file or directory source.

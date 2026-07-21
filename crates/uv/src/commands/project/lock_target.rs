@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use tracing::info_span;
 
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency, NoSources};
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
@@ -352,6 +353,7 @@ impl<'lock> LockTarget<'lock> {
         requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
         locations: &IndexLocations,
         sources: &NoSources,
+        cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
@@ -373,6 +375,7 @@ impl<'lock> LockTarget<'lock> {
                     workspace,
                     locations,
                     sources,
+                    cache,
                     workspace_cache,
                     credentials_cache,
                 )
@@ -420,6 +423,7 @@ impl<'lock> LockTarget<'lock> {
                             sources_map,
                             indexes,
                             locations,
+                            cache,
                             workspace_cache,
                             credentials_cache,
                         )

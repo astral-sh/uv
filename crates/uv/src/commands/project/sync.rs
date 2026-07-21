@@ -242,6 +242,7 @@ pub(crate) async fn sync(
             let spec = script_specification(
                 script.into(),
                 &settings.resolver,
+                cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
             )
@@ -250,6 +251,7 @@ pub(crate) async fn sync(
             let script_extra_build_requires = script_extra_build_requires(
                 script.into(),
                 &settings.resolver,
+                cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
             )
@@ -673,6 +675,7 @@ pub(crate) async fn do_sync(
                 workspace,
                 index_locations,
                 &sources,
+                cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
             )
@@ -705,6 +708,7 @@ pub(crate) async fn do_sync(
             script_extra_build_requires(
                 (*script).into(),
                 &resolver_settings,
+                cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
             )
