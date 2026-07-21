@@ -230,6 +230,7 @@ impl LoweredRequirement {
                                 workspace.install_path(),
                                 editable,
                                 package,
+                                true,
                             )?;
                             (source, marker)
                         }
@@ -425,6 +426,7 @@ impl LoweredRequirement {
                                 dir,
                                 editable,
                                 package,
+                                true,
                             )?;
                             (source, marker)
                         }
@@ -821,6 +823,11 @@ async fn workspace_source(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
 ) -> Result<RequirementSource, LoweringError> {
+    let base = match origin {
+        RequirementOrigin::Project => project_dir,
+        RequirementOrigin::Workspace => workspace_root,
+    };
+
     match workspace_ref {
         WorkspaceReference::Bool(false) => Err(LoweringError::WorkspaceFalse),
         WorkspaceReference::Bool(true) => {
@@ -837,7 +844,6 @@ async fn workspace_source(
             } else {
                 Some(false)
             };
-
             path_source(
                 member.root(),
                 git_member,
@@ -846,13 +852,10 @@ async fn workspace_source(
                 workspace_root,
                 editable,
                 Some(is_package),
+                false,
             )
         }
         WorkspaceReference::Path(path) => {
-            let base = match origin {
-                RequirementOrigin::Project => project_dir,
-                RequirementOrigin::Workspace => workspace_root,
-            };
             let workspace_path = VerbatimUrl::from_path(path.as_ref(), base)?
                 .to_file_path()
                 .map_err(|()| {
@@ -897,6 +900,7 @@ async fn workspace_source(
                 workspace_root,
                 editable,
                 Some(is_package),
+                true,
             )
         }
     }
@@ -911,13 +915,19 @@ fn path_source(
     workspace_root: &Path,
     editable: Option<bool>,
     package: Option<bool>,
+    preserve_given: bool,
 ) -> Result<RequirementSource, LoweringError> {
     let path = path.as_ref();
     let base = match origin {
         RequirementOrigin::Project => project_dir,
         RequirementOrigin::Workspace => workspace_root,
     };
-    let url = VerbatimUrl::from_path(path, base)?.with_given(path.to_string_lossy());
+    let url = VerbatimUrl::from_path(path, base)?;
+    let url = if preserve_given {
+        url.with_given(path.to_string_lossy())
+    } else {
+        url
+    };
     let install_path = url
         .to_file_path()
         .map_err(|()| LoweringError::RelativeTo(io::Error::other("Invalid path in file URL")))?;
