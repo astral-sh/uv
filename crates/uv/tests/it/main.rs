@@ -21,6 +21,9 @@ mod network;
 #[cfg(feature = "test-pypi")]
 mod publish;
 
+#[cfg(unix)]
+mod resource_limits;
+
 #[cfg(feature = "self-update")]
 mod self_update;
 
