@@ -46,6 +46,7 @@ use uv_pep508::{
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
     ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
@@ -53,6 +54,7 @@ use uv_pypi_types::{
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
+use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
@@ -838,6 +840,7 @@ impl Lock {
             let Some(algorithm) = index_locations.hash_algorithm_for(&index) else {
                 continue;
             };
+            warn_index_hash_algorithm_preview();
 
             let mismatched =
                 |hash: Option<&Hash>| hash.is_none_or(|hash| hash.0.algorithm != algorithm);
@@ -5450,6 +5453,7 @@ fn select_registry_hash(
     let Some(algorithm) = index_locations.hash_algorithm_for(index) else {
         return Ok(hashes.iter().max().cloned().map(Hash::from));
     };
+    warn_index_hash_algorithm_preview();
 
     hashes
         .iter()
@@ -5465,6 +5469,16 @@ fn select_registry_hash(
             }
             .into()
         })
+}
+
+/// Warn if an index-specific hash algorithm is used without its preview feature enabled.
+fn warn_index_hash_algorithm_preview() {
+    if !uv_preview::is_enabled(PreviewFeature::IndexHashAlgorithm) {
+        warn_user_once!(
+            "Setting `hash-algorithm` on configured indexes is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::IndexHashAlgorithm
+        );
+    }
 }
 
 impl FromStr for Hash {

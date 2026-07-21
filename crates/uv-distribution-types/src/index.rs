@@ -236,6 +236,8 @@ pub struct Index {
     /// If a distribution does not advertise a hash using this algorithm, lockfile generation
     /// will fail.
     ///
+    /// This option is in preview and may change in any future release.
+    ///
     /// ```toml
     /// [[tool.uv.index]]
     /// name = "my-index"

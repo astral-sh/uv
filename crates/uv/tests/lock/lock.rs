@@ -9919,6 +9919,7 @@ async fn lock_index_hash_algorithm() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Setting `hash-algorithm` on configured indexes is experimental and may change without warning. Pass `--preview-features index-hash-algorithm` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -9951,6 +9952,15 @@ async fn lock_index_hash_algorithm() -> Result<()> {
         requires-dist = [{ name = "basic-package", index = "http://[LOCALHOST]/simple" }]
         "#);
     });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("index-hash-algorithm").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
 
     Ok(())
 }
@@ -10024,6 +10034,7 @@ async fn lock_index_hash_algorithm_missing() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    warning: Setting `hash-algorithm` on configured indexes is experimental and may change without warning. Pass `--preview-features index-hash-algorithm` to disable this warning.
     error: The index `http://[LOCALHOST]/simple` requires `sha256` hashes, but `basic_package-0.1.0-py3-none-any.whl` does not provide one
     ");
 

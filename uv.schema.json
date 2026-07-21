@@ -1043,7 +1043,7 @@
           "default": "simple"
         },
         "hash-algorithm": {
-          "description": "The hash algorithm that must be used for distributions resolved from this index.\n\nIf a distribution does not advertise a hash using this algorithm, lockfile generation\nwill fail.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nhash-algorithm = \"sha256\"\n```",
+          "description": "The hash algorithm that must be used for distributions resolved from this index.\n\nIf a distribution does not advertise a hash using this algorithm, lockfile generation\nwill fail.\n\nThis option is in preview and may change in any future release.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nhash-algorithm = \"sha256\"\n```",
           "anyOf": [
             {
               "$ref": "#/definitions/IndexHashAlgorithm"
@@ -1802,7 +1802,8 @@
             "centralized-project-envs",
             "tool-install-locks",
             "workspace-list-scripts",
-            "no-distutils-patch"
+            "no-distutils-patch",
+            "index-hash-algorithm"
           ]
         },
         {

@@ -295,6 +295,9 @@ the lockfile. To require a specific algorithm for distributions resolved from an
 `hash-algorithm` setting:
 
 ```toml
+[tool.uv]
+preview-features = ["index-hash-algorithm"]
+
 [[tool.uv.index]]
 name = "private-index"
 url = "https://private-index.com/simple"
@@ -303,6 +306,8 @@ hash-algorithm = "sha256"
 
 If a locked distribution does not advertise the required algorithm, uv will fail instead of falling
 back to another hash algorithm.
+
+This option is in [preview](./preview.md) and may change in any future release.
 
 ### Configuring `exclude-newer` for an index
 

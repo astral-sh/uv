@@ -3258,6 +3258,7 @@ fn preview_features() {
     +            ToolInstallLocks,
     +            WorkspaceListScripts,
     +            NoDistutilsPatch,
+    +            IndexHashAlgorithm,
     +        ],
          },
          python_preference: Managed,
