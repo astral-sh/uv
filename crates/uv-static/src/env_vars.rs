@@ -610,7 +610,8 @@ impl EnvVars {
 
     /// Override the vulnerability service URL for the automatic malware check.
     ///
-    /// Defaults to the OSV API endpoint (`https://api.osv.dev/`).
+    /// This variable overrides the `audit.malware-check-url` setting. Defaults to the OSV API
+    /// endpoint (`https://api.osv.dev/`).
     #[attr_added_in("0.11.16")]
     pub const UV_MALWARE_CHECK_URL: &'static str = "UV_MALWARE_CHECK_URL";
 

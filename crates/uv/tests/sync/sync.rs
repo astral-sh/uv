@@ -17189,10 +17189,11 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
 #[tokio::test]
 async fn sync_malware_detected() {
     let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml
-        .write_str(indoc! {r#"
+        .write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -17201,12 +17202,11 @@ async fn sync_malware_detected() {
 
         [tool.uv.audit]
         malware-check = true
-    "#})
+        malware-check-url = "{}"
+    "#, server.uri()})
         .unwrap();
 
     context.lock().assert().success();
-
-    let server = MockServer::start().await;
 
     Mock::given(method("POST"))
         .and(path("/v1/querybatch"))
@@ -17229,7 +17229,7 @@ async fn sync_malware_detected() {
         .sync()
         .arg("--preview-features").arg("malware-check")
         .env_remove(EnvVars::UV_MALWARE_CHECK)
-        .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
+        .env_remove(EnvVars::UV_MALWARE_CHECK_URL), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -17391,6 +17391,7 @@ async fn sync_malware_check_skips_non_mal() {
 
         [tool.uv.audit]
         malware-check = false
+        malware-check-url = "https://example.com"
     "#})
         .unwrap();
 

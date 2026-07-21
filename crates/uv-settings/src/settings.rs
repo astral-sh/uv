@@ -2811,6 +2811,16 @@ pub struct AuditOptions {
     )]
     pub malware_check: Option<bool>,
 
+    /// The vulnerability service URL to use for automatic malware checks.
+    #[option(
+        default = "\"https://api.osv.dev/\"",
+        value_type = "str",
+        example = r#"
+            malware-check-url = "https://example.com"
+        "#
+    )]
+    pub malware_check_url: Option<DisplaySafeUrl>,
+
     /// A list of vulnerability IDs to ignore during auditing.
     ///
     /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
@@ -2852,15 +2862,18 @@ impl MalwareCheckSettings {
         filesystem: Option<&FilesystemOptions>,
         environment: &EnvironmentOptions,
     ) -> Self {
+        let audit = filesystem.and_then(|options| options.audit.as_ref());
+
         Self {
             enabled: environment
                 .malware_check
                 .value
-                .or(filesystem
-                    .and_then(|options| options.audit.as_ref())
-                    .and_then(|audit| audit.malware_check))
+                .or(audit.and_then(|audit| audit.malware_check))
                 .unwrap_or_default(),
-            malware_check_url: environment.malware_check_url.clone(),
+            malware_check_url: environment
+                .malware_check_url
+                .clone()
+                .or_else(|| audit.and_then(|audit| audit.malware_check_url.clone())),
         }
     }
 }
