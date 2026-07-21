@@ -265,6 +265,7 @@ fn is_tls_certificate_error(reqwest_err: &reqwest::Error) -> bool {
 }
 
 fn is_certificate_error(error: &RustlsError) -> bool {
+    // TODO(konsti): https://github.com/seanmonstar/reqwest/issues/2819#issuecomment-5032072023
     match error {
         RustlsError::InvalidCertificate(_) | RustlsError::NoCertificatesPresented => true,
         RustlsError::AlertReceived(alert) => matches!(
