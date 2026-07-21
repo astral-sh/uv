@@ -261,7 +261,7 @@ fn is_retryable_status_error(reqwest_err: &reqwest::Error) -> bool {
 }
 
 fn is_tls_certificate_error(reqwest_err: &reqwest::Error) -> bool {
-    let Some(rustls_error) = find_source_with_io::<RustlsError>(reqwest_err) else {
+    let Some(rustls_error) = find_source::<RustlsError>(reqwest_err) else {
         return false;
     };
 
@@ -288,25 +288,11 @@ fn is_tls_certificate_error(reqwest_err: &reqwest::Error) -> bool {
     }
 }
 
-/// Find the first source error of a specific type.
-///
-/// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
-fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
-    let mut cause = orig.source();
-    while let Some(err) = cause {
-        if let Some(typed) = err.downcast_ref() {
-            return Some(typed);
-        }
-        cause = err.source();
-    }
-    None
-}
-
 /// Find the first source error of a specific type, including errors wrapped by [`io::Error`].
 ///
 /// Inspired by <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
 /// See <https://github.com/hyperium/h2/issues/862>
-fn find_source_with_io<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
+fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
     let mut cause = orig.source();
     while let Some(err) = cause {
         if let Some(concrete_err) = err.downcast_ref() {
