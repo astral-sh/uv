@@ -9,6 +9,10 @@ on:
         description: "The uv-dev pull request number to rebase"
         required: false
         type: string
+      head_sha:
+        description: "The expected uv-dev pull request head SHA"
+        required: false
+        type: string
 
 permissions: {}
 
@@ -39,16 +43,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
         run: |
           if [ -n "$PULL_REQUEST_NUMBER" ]; then
-            pull_request=$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GH_REPO" --json number,state,url,baseRefName,headRefName,headRefOid,headRepository)
-            if ! jq --exit-status '.state == "OPEN"' <<< "$pull_request" > /dev/null; then
-              echo "Pull request #$PULL_REQUEST_NUMBER is no longer open; refusing to rebase it." >&2
+            if ! [[ "$PULL_REQUEST_NUMBER" =~ ^[1-9][0-9]*$ ]] || ! [[ "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "The dispatched pull request context is invalid." >&2
               exit 1
             fi
 
-            pull_requests=$(jq --compact-output '[{number, url, base_ref: .baseRefName, head_ref: .headRefName, head_sha: .headRefOid, head_repository: .headRepository.nameWithOwner}]' <<< "$pull_request")
+            pull_request=$(gh api "repos/$GH_REPO/pulls/$PULL_REQUEST_NUMBER")
+            if ! jq --exit-status \
+              --arg repository "$GH_REPO" \
+              --argjson repository_id "$GITHUB_REPOSITORY_ID" \
+              --arg head_sha "$EXPECTED_HEAD_SHA" \
+              '.state == "open" and .base.repo.full_name == $repository and .base.repo.id == $repository_id and .head.repo.full_name == $repository and .head.repo.id == $repository_id and .head.sha == $head_sha' \
+              <<< "$pull_request" > /dev/null; then
+              echo "The uv-dev pull request is no longer open at the expected head; refusing to rebase it." >&2
+              exit 1
+            fi
+
+            pull_requests=$(jq --compact-output '[{number, url: .html_url, base_ref: .base.ref, head_ref: .head.ref, head_sha: .head.sha, head_repository: .head.repo.full_name}]' <<< "$pull_request")
           elif [[ "$GH_REPO" == "astral-sh/uv" ]]; then
             pull_requests=$(./scripts/find-conflicted-pull-requests.sh --author app/astral-automations-bot)
           else

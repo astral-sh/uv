@@ -13,6 +13,17 @@
         "pull_request": ["ready_for_review"]
       },
       "workflow": "promote-pull-request.yml"
+    },
+    {
+      "repository": "uv-dev",
+      "on": {
+        "pull_request": ["edited"]
+      },
+      "conditions": {
+        "/changes/base/ref/from": { "exists": true }
+      },
+      "allow_draft": true,
+      "workflow": "pull-request-conflicts.yml"
     }
   ]
 }
