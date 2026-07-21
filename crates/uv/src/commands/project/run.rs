@@ -363,6 +363,8 @@ pub(crate) async fn run(
             if let Some(spec) = script_specification(
                 (&script).into(),
                 &settings.resolver,
+                &cache,
+                workspace_cache,
                 client_builder.credentials_cache(),
             )
             .await?
@@ -370,6 +372,8 @@ pub(crate) async fn run(
                 let script_extra_build_requires = script_extra_build_requires(
                     (&script).into(),
                     &settings.resolver,
+                    &cache,
+                    workspace_cache,
                     client_builder.credentials_cache(),
                 )
                 .await?

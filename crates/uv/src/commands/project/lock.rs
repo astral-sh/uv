@@ -523,6 +523,8 @@ async fn do_lock(
             requirements,
             index_locations,
             sources,
+            cache,
+            workspace_cache,
             client_builder.credentials_cache(),
         )
         .await?;
@@ -537,6 +539,8 @@ async fn do_lock(
                                 vec![requirement],
                                 index_locations,
                                 sources,
+                                cache,
+                                workspace_cache,
                                 client_builder.credentials_cache(),
                             )
                             .await?
@@ -552,6 +556,8 @@ async fn do_lock(
                                 package.dependencies.into_vec(),
                                 index_locations,
                                 sources,
+                                cache,
+                                workspace_cache,
                                 client_builder.credentials_cache(),
                             )
                             .await?
@@ -567,6 +573,8 @@ async fn do_lock(
             constraints,
             index_locations,
             sources,
+            cache,
+            workspace_cache,
             client_builder.credentials_cache(),
         )
         .await?;
@@ -575,6 +583,8 @@ async fn do_lock(
             build_constraints,
             index_locations,
             sources,
+            cache,
+            workspace_cache,
             client_builder.credentials_cache(),
         )
         .await?;
@@ -585,6 +595,8 @@ async fn do_lock(
                 group.requirements,
                 index_locations,
                 sources,
+                cache,
+                workspace_cache,
                 client_builder.credentials_cache(),
             )
             .await?;
@@ -805,14 +817,22 @@ async fn do_lock(
                 workspace,
                 index_locations,
                 sources,
+                cache,
+                workspace_cache,
                 client.credentials_cache(),
             )
             .await?
         }
         LockTarget::Script(script) => {
             // Try to get extra build dependencies from the script metadata
-            script_extra_build_requires((*script).into(), settings, client.credentials_cache())
-                .await?
+            script_extra_build_requires(
+                (*script).into(),
+                settings,
+                cache,
+                workspace_cache,
+                client.credentials_cache(),
+            )
+            .await?
         }
     }
     .into_inner();

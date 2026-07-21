@@ -10790,6 +10790,200 @@ fn lock_workspace_member_with_standalone_path_source() -> Result<()> {
     Ok(())
 }
 
+/// Lock a project that correctly points at an external workspace via `workspace = "..."`.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_external_workspace_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-b"]
+
+        [tool.uv.sources]
+        pkg-b = { workspace = "../external-workspace" }
+        "#,
+    )?;
+
+    let external_workspace = context.temp_dir.child("external-workspace");
+    external_workspace.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    let external_member = external_workspace.child("packages").child("pkg-b");
+    fs_err::create_dir_all(&external_member)?;
+    external_member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "pkg-b"
+        version = "0.1.0"
+        source = { editable = "../external-workspace/packages/pkg-b" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "pkg-b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "pkg-b", editable = "../external-workspace/packages/pkg-b" }]
+        "#
+        );
+    });
+
+    // A workspace source must point to the workspace root, not one of its members.
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-b"]
+
+        [tool.uv.sources]
+        pkg-b = { workspace = "../external-workspace/packages/pkg-b" }
+        "#,
+    )?;
+
+    fs_err::remove_file(project.join("uv.lock"))?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&project), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+      × Failed to build `project @ file://[TEMP_DIR]/project`
+      ├─▶ Failed to parse entry: `pkg-b`
+      ╰─▶ Workspace source path `[TEMP_DIR]/external-workspace/packages/pkg-b` must point to a workspace root (found workspace at `[TEMP_DIR]/external-workspace`)
+    ");
+
+    Ok(())
+}
+
+/// Lock a project with an unused external workspace source that does not exist.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_unused_external_workspace_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.sources]
+        unused = { workspace = "missing-workspace" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Lock a workspace member that incorrectly points at another workspace via `workspace = "..."`
+/// instead of using `workspace = true`.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_workspace_member_with_external_workspace_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+
+        [tool.uv.sources]
+        child = { workspace = "../external-workspace" }
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("packages").child("child");
+    fs_err::create_dir_all(&child)?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `child`
+      ╰─▶ `child` is included as a workspace member, but does not use `workspace = true` in `tool.uv.sources`
+    ");
+
+    Ok(())
+}
+
 /// Lock a workspace with a member that's a peer to the root.
 #[cfg(feature = "test-universal")]
 #[test]

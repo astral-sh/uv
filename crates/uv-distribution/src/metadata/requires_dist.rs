@@ -72,6 +72,8 @@ impl RequiresDist {
             locations,
             &sources,
             editable,
+            cache,
+            workspace_cache,
             credentials_cache,
         )
         .await
@@ -106,6 +108,8 @@ impl RequiresDist {
         locations: &IndexLocations,
         no_sources: &NoSources,
         editable: bool,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -164,6 +168,8 @@ impl RequiresDist {
                         project_workspace.workspace(),
                         git_member,
                         editable,
+                        cache,
+                        workspace_cache,
                         credentials_cache,
                     )
                     .await
@@ -207,6 +213,8 @@ impl RequiresDist {
                     project_workspace.workspace(),
                     git_member,
                     editable,
+                    cache,
+                    workspace_cache,
                     credentials_cache,
                 )
                 .await
@@ -470,6 +478,8 @@ mod test {
         temp_dir: &Path,
         contents: &str,
     ) -> anyhow::Result<RequiresDist> {
+        let workspace_cache = WorkspaceCache::default();
+        fs_err::create_dir_all(temp_dir)?;
         fs_err::write(temp_dir.join("pyproject.toml"), contents)?;
         let cache = Cache::from_path(temp_dir.join(".uv_cache"));
         let project_workspace = ProjectWorkspace::discover(
@@ -479,7 +489,7 @@ mod test {
                 ..DiscoveryOptions::default()
             },
             &cache,
-            &WorkspaceCache::default(),
+            &workspace_cache,
         )
         .await?;
         let pyproject_toml = uv_pypi_types::PyProjectToml::from_toml(contents, "pyproject.toml")?;
@@ -491,6 +501,8 @@ mod test {
             &IndexLocations::default(),
             &NoSources::default(),
             true,
+            &cache,
+            &workspace_cache,
             &CredentialsCache::new(),
         )
         .await?)

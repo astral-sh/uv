@@ -3,9 +3,11 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use either::Either;
+use futures::future::join_all;
 
 use thiserror::Error;
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
@@ -21,8 +23,8 @@ use uv_pypi_types::{
     VerbatimParsedUrl,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
-use uv_workspace::Workspace;
-use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
+use uv_workspace::pyproject::{PyProjectToml, Source, Sources, WorkspaceReference};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::metadata::GitWorkspaceMember;
 
@@ -39,7 +41,6 @@ enum RequirementOrigin {
 
 impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
-    #[expect(clippy::unused_async, reason = "Requirement lowering is an async API")]
     pub(crate) async fn from_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         project_name: Option<&'data PackageName>,
@@ -52,6 +53,8 @@ impl LoweredRequirement {
         workspace: &'data Workspace,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
         editable: bool,
+        cache: &'data Cache,
+        workspace_cache: &'data WorkspaceCache,
         credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
         // Identify the source from the `tool.uv.sources` table.
@@ -133,8 +136,16 @@ impl LoweredRequirement {
                                 ),
                             )));
                         }
-                        Source::Workspace { .. } => {
+                        Source::Workspace {
+                            workspace: WorkspaceReference::Bool(true),
+                            ..
+                        } => {
                             // OK
+                        }
+                        Source::Workspace { .. } => {
+                            return Either::Left(std::iter::once(Err(
+                                LoweringError::InvalidWorkspaceSource(requirement.name.clone()),
+                            )));
                         }
                     }
                 }
@@ -168,9 +179,9 @@ impl LoweredRequirement {
         };
 
         Either::Right(
-            sources
-                .into_iter()
-                .map(move |source| {
+            join_all(sources.into_iter().map(|source| {
+                let requirement = &requirement;
+                async move {
                     let (source, mut marker) = match source {
                         Source::Git {
                             git,
@@ -201,7 +212,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source =
-                                url_source(&requirement, url, subdirectory.map(Box::<Path>::from))?;
+                                url_source(requirement, url, subdirectory.map(Box::<Path>::from))?;
                             (source, marker)
                         }
                         Source::Path {
@@ -219,6 +230,7 @@ impl LoweredRequirement {
                                 workspace.install_path(),
                                 editable,
                                 package,
+                                true,
                             )?;
                             (source, marker)
                         }
@@ -262,87 +274,29 @@ impl LoweredRequirement {
                                     })
                                 }
                             });
-                            let source = registry_source(&requirement, index, conflict);
+                            let source = registry_source(requirement, index, conflict);
                             (source, marker)
                         }
                         Source::Workspace {
-                            workspace: is_workspace,
+                            workspace: workspace_ref,
+                            editable: source_editable,
                             marker,
                             ..
                         } => {
-                            if !is_workspace {
-                                return Err(LoweringError::WorkspaceFalse);
-                            }
-                            let member = workspace
-                                .packages()
-                                .get(&requirement.name)
-                                .ok_or_else(|| {
-                                    LoweringError::UndeclaredWorkspacePackage(
-                                        requirement.name.clone(),
-                                    )
-                                })?
-                                .clone();
-
-                            // Say we have:
-                            // ```
-                            // root
-                            // ├── main_workspace  <- We want to the path from here ...
-                            // │   ├── pyproject.toml
-                            // │   └── uv.lock
-                            // └──current_workspace
-                            //    └── packages
-                            //        └── current_package  <- ... to here.
-                            //            └── pyproject.toml
-                            // ```
-                            // The path we need in the lockfile: `../current_workspace/packages/current_project`
-                            // member root: `/root/current_workspace/packages/current_project`
-                            // workspace install root: `/root/current_workspace`
-                            // relative to workspace: `packages/current_project`
-                            // workspace lock root: `../current_workspace`
-                            // relative to main workspace: `../current_workspace/packages/current_project`
-                            let url = VerbatimUrl::from_absolute_path(member.root())?;
-                            let install_path = url.to_file_path().map_err(|()| {
-                                LoweringError::RelativeTo(io::Error::other(
-                                    "Invalid path in file URL",
-                                ))
-                            })?;
-
-                            let source = if let Some(git_member) = &git_member {
-                                // If the workspace comes from a Git dependency, all workspace
-                                // members need to be Git dependencies, too.
-                                let subdirectory =
-                                    uv_fs::relative_to(member.root(), git_member.fetch_root)
-                                        .expect("Workspace member must be relative");
-                                let subdirectory = normalize_path(subdirectory);
-                                RequirementSource::GitDirectory {
-                                    git: git_member.git_source.git.clone(),
-                                    subdirectory: if subdirectory == PathBuf::new() {
-                                        None
-                                    } else {
-                                        Some(subdirectory.into_owned().into_boxed_path())
-                                    },
-                                    url,
-                                }
-                            } else {
-                                let value = workspace.required_members().get(&requirement.name);
-                                let is_required_member = value.is_some();
-                                let editability = value.copied().flatten();
-                                if member.pyproject_toml().is_package(!is_required_member) {
-                                    RequirementSource::Directory {
-                                        install_path: install_path.into_boxed_path(),
-                                        url,
-                                        editable: Some(editability.unwrap_or(editable)),
-                                        r#virtual: Some(false),
-                                    }
-                                } else {
-                                    RequirementSource::Directory {
-                                        install_path: install_path.into_boxed_path(),
-                                        url,
-                                        editable: Some(false),
-                                        r#virtual: Some(true),
-                                    }
-                                }
-                            };
+                            let source = workspace_source(
+                                requirement,
+                                &workspace_ref,
+                                source_editable,
+                                editable,
+                                origin,
+                                project_dir,
+                                workspace.install_path(),
+                                Some(workspace),
+                                git_member,
+                                cache,
+                                workspace_cache,
+                            )
+                            .await?;
                             (source, marker)
                         }
                     };
@@ -357,24 +311,28 @@ impl LoweredRequirement {
                         source,
                         origin: requirement.origin.clone(),
                     }))
-                })
-                .chain(std::iter::once(Ok(remaining)))
-                .filter(|requirement| match requirement {
-                    Ok(requirement) => !requirement.0.marker.is_false(),
-                    Err(_) => true,
-                }),
+                }
+            }))
+            .await
+            .into_iter()
+            .chain(std::iter::once(Ok(remaining)))
+            .filter(|requirement| match requirement {
+                Ok(requirement) => !requirement.0.marker.is_false(),
+                Err(_) => true,
+            }),
         )
     }
 
     /// Lower a [`uv_pep508::Requirement`] in a non-workspace setting (for example, in a PEP 723
     /// script, which runs in an isolated context).
-    #[expect(clippy::unused_async, reason = "Requirement lowering is an async API")]
     pub async fn from_non_workspace_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         dir: &'data Path,
         sources: &'data BTreeMap<PackageName, Sources>,
         indexes: &'data [Index],
         locations: &'data IndexLocations,
+        cache: &'data Cache,
+        workspace_cache: &'data WorkspaceCache,
         credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let source = sources.get(&requirement.name).cloned();
@@ -417,9 +375,9 @@ impl LoweredRequirement {
         };
 
         Either::Right(
-            source
-                .into_iter()
-                .map(move |source| {
+            join_all(source.into_iter().map(|source| {
+                let requirement = &requirement;
+                async move {
                     let (source, mut marker) = match source {
                         Source::Git {
                             git,
@@ -450,7 +408,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source =
-                                url_source(&requirement, url, subdirectory.map(Box::<Path>::from))?;
+                                url_source(requirement, url, subdirectory.map(Box::<Path>::from))?;
                             (source, marker)
                         }
                         Source::Path {
@@ -468,6 +426,7 @@ impl LoweredRequirement {
                                 dir,
                                 editable,
                                 package,
+                                true,
                             )?;
                             (source, marker)
                         }
@@ -495,11 +454,30 @@ impl LoweredRequirement {
                                 format: index.format,
                             };
                             let conflict = None;
-                            let source = registry_source(&requirement, index, conflict);
+                            let source = registry_source(requirement, index, conflict);
                             (source, marker)
                         }
-                        Source::Workspace { .. } => {
-                            return Err(LoweringError::WorkspaceMember);
+                        Source::Workspace {
+                            workspace: workspace_ref,
+                            editable,
+                            marker,
+                            ..
+                        } => {
+                            let source = workspace_source(
+                                requirement,
+                                &workspace_ref,
+                                editable,
+                                true,
+                                RequirementOrigin::Project,
+                                dir,
+                                dir,
+                                None,
+                                None,
+                                cache,
+                                workspace_cache,
+                            )
+                            .await?;
+                            (source, marker)
                         }
                     };
 
@@ -513,12 +491,15 @@ impl LoweredRequirement {
                         source,
                         origin: requirement.origin.clone(),
                     }))
-                })
-                .chain(std::iter::once(Ok(remaining)))
-                .filter(|requirement| match requirement {
-                    Ok(requirement) => !requirement.0.marker.is_false(),
-                    Err(_) => true,
-                }),
+                }
+            }))
+            .await
+            .into_iter()
+            .chain(std::iter::once(Ok(remaining)))
+            .filter(|requirement| match requirement {
+                Ok(requirement) => !requirement.0.marker.is_false(),
+                Err(_) => true,
+            }),
         )
     }
 
@@ -584,6 +565,10 @@ pub enum LoweringError {
         "`{0}` references a workspace in `tool.uv.sources` (e.g., `{0} = {{ workspace = true }}`), but is not a workspace member"
     )]
     UndeclaredWorkspacePackage(PackageName),
+    #[error(
+        "`{0}` is included as a workspace member, but does not use `workspace = true` in `tool.uv.sources`"
+    )]
+    InvalidWorkspaceSource(PackageName),
     #[error("Can only specify one of: `rev`, `tag`, or `branch`")]
     MoreThanOneGitRef,
     #[error(transparent)]
@@ -610,6 +595,12 @@ pub enum LoweringError {
     MissingGitSource(PackageName, DisplaySafeUrl),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
+    #[error(transparent)]
+    Workspace(#[from] WorkspaceError),
+    #[error(
+        "Workspace source path `{}` must point to a workspace root (found workspace at `{}`)", path.simplified_display(), root.simplified_display()
+    )]
+    WorkspaceSourceNotRoot { path: PathBuf, root: PathBuf },
     #[error("Source with `editable = true` must refer to a local directory, not a file: `{0}`")]
     EditableFile(String),
     #[error("Source with `package = true` must refer to a local directory, not a file: `{0}`")]
@@ -618,6 +609,8 @@ pub enum LoweringError {
         "Git repository references local file source, but only directories are supported as transitive Git dependencies: `{0}`"
     )]
     GitFile(String),
+    #[error("Git repository references local directory outside the repository: `{0}`")]
+    GitDirectory(String),
     #[error(transparent)]
     ParsedUrl(#[from] ParsedUrlError),
     #[error("Path must be UTF-8: `{0}`")]
@@ -817,6 +810,102 @@ fn registry_source(
     }
 }
 
+async fn workspace_source(
+    requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
+    workspace_ref: &WorkspaceReference,
+    source_editable: Option<bool>,
+    default_editable: bool,
+    origin: RequirementOrigin,
+    project_dir: &Path,
+    workspace_root: &Path,
+    current_workspace: Option<&Workspace>,
+    git_member: Option<&GitWorkspaceMember<'_>>,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+) -> Result<RequirementSource, LoweringError> {
+    let base = match origin {
+        RequirementOrigin::Project => project_dir,
+        RequirementOrigin::Workspace => workspace_root,
+    };
+
+    match workspace_ref {
+        WorkspaceReference::Bool(false) => Err(LoweringError::WorkspaceFalse),
+        WorkspaceReference::Bool(true) => {
+            let workspace = current_workspace.ok_or(LoweringError::WorkspaceMember)?;
+            let member = workspace.packages().get(&requirement.name).ok_or_else(|| {
+                LoweringError::UndeclaredWorkspacePackage(requirement.name.clone())
+            })?;
+
+            let value = workspace.required_members().get(&requirement.name);
+            let is_required_member = value.is_some();
+            let is_package = member.pyproject_toml().is_package(!is_required_member);
+            let editable = if is_package {
+                Some(value.copied().flatten().unwrap_or(default_editable))
+            } else {
+                Some(false)
+            };
+            path_source(
+                member.root(),
+                git_member,
+                origin,
+                project_dir,
+                workspace_root,
+                editable,
+                Some(is_package),
+                false,
+            )
+        }
+        WorkspaceReference::Path(path) => {
+            let workspace_path = VerbatimUrl::from_path(path.as_ref(), base)?
+                .to_file_path()
+                .map_err(|()| {
+                    LoweringError::RelativeTo(io::Error::other("Invalid path in file URL"))
+                })?;
+            let target_workspace = Workspace::discover(
+                &workspace_path,
+                &DiscoveryOptions::default(),
+                cache,
+                workspace_cache,
+            )
+            .await?;
+
+            if target_workspace.install_path() != &workspace_path {
+                return Err(LoweringError::WorkspaceSourceNotRoot {
+                    path: workspace_path,
+                    root: target_workspace.install_path().clone(),
+                });
+            }
+
+            let member = target_workspace
+                .packages()
+                .get(&requirement.name)
+                .ok_or_else(|| {
+                    LoweringError::UndeclaredWorkspacePackage(requirement.name.clone())
+                })?;
+
+            let is_package = member.pyproject_toml().is_package(false);
+            let editable = if is_package {
+                Some(source_editable.unwrap_or(true))
+            } else {
+                Some(false)
+            };
+            let member_path =
+                uv_fs::relative_to(member.root(), base).unwrap_or_else(|_| member.root().into());
+
+            path_source(
+                member_path,
+                git_member,
+                origin,
+                project_dir,
+                workspace_root,
+                editable,
+                Some(is_package),
+                true,
+            )
+        }
+    }
+}
+
 /// Convert a path string to a file or directory source.
 fn path_source(
     path: impl AsRef<Path>,
@@ -826,13 +915,19 @@ fn path_source(
     workspace_root: &Path,
     editable: Option<bool>,
     package: Option<bool>,
+    preserve_given: bool,
 ) -> Result<RequirementSource, LoweringError> {
     let path = path.as_ref();
     let base = match origin {
         RequirementOrigin::Project => project_dir,
         RequirementOrigin::Workspace => workspace_root,
     };
-    let url = VerbatimUrl::from_path(path, base)?.with_given(path.to_string_lossy());
+    let url = VerbatimUrl::from_path(path, base)?;
+    let url = if preserve_given {
+        url.with_given(path.to_string_lossy())
+    } else {
+        url
+    };
     let install_path = url
         .to_file_path()
         .map_err(|()| LoweringError::RelativeTo(io::Error::other("Invalid path in file URL")))?;
@@ -903,8 +998,8 @@ fn git_directory_source_from_path(
     let git = git_member.git_source.git.clone();
     let install_path = git_path(install_path.as_ref())?;
     let fetch_root = git_path(git_member.fetch_root)?;
-    let subdirectory =
-        uv_fs::relative_to(install_path, fetch_root).map_err(LoweringError::RelativeTo)?;
+    let subdirectory = uv_fs::relative_to(&install_path, fetch_root)
+        .map_err(|_| LoweringError::GitDirectory(install_path.display().to_string()))?;
     let subdirectory = normalize_path(subdirectory);
     let subdirectory = if subdirectory == PathBuf::new() {
         None

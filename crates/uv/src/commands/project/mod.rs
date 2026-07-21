@@ -3145,6 +3145,8 @@ pub(crate) fn detect_conflicts(
 pub(crate) async fn script_specification(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
 ) -> Result<Option<RequirementsSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
@@ -3164,6 +3166,8 @@ pub(crate) async fn script_specification(
                 script_sources.as_ref(),
                 script_indexes,
                 &settings.index_locations,
+                cache,
+                workspace_cache,
                 credentials_cache,
             )
             .await
@@ -3189,6 +3193,8 @@ pub(crate) async fn script_specification(
                 script_sources.as_ref(),
                 script_indexes,
                 &settings.index_locations,
+                cache,
+                workspace_cache,
                 credentials_cache,
             )
             .await
@@ -3217,6 +3223,8 @@ pub(crate) async fn script_specification(
                             script_sources.as_ref(),
                             script_indexes,
                             &settings.index_locations,
+                            cache,
+                            workspace_cache,
                             credentials_cache,
                         )
                         .await
@@ -3235,6 +3243,8 @@ pub(crate) async fn script_specification(
                                 script_sources.as_ref(),
                                 script_indexes,
                                 &settings.index_locations,
+                                cache,
+                                workspace_cache,
                                 credentials_cache,
                             )
                             .await
@@ -3273,6 +3283,8 @@ pub(crate) async fn script_specification(
 pub(crate) async fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
 ) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
@@ -3305,6 +3317,8 @@ pub(crate) async fn script_extra_build_requires(
                     script_sources.as_ref(),
                     script_indexes,
                     &settings.index_locations,
+                    cache,
+                    workspace_cache,
                     credentials_cache,
                 )
                 .await

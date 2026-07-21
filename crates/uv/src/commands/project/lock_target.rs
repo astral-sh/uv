@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use tracing::info_span;
 
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency, NoSources};
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
@@ -14,7 +15,7 @@ use uv_resolver::{Lock, LockVersion, VERSION};
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
 use uv_workspace::pyproject::OverrideDependency;
-use uv_workspace::{Editability, Workspace, WorkspaceMember};
+use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
 
@@ -352,6 +353,8 @@ impl<'lock> LockTarget<'lock> {
         requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
         locations: &IndexLocations,
         sources: &NoSources,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
         match self {
@@ -372,6 +375,8 @@ impl<'lock> LockTarget<'lock> {
                     workspace,
                     locations,
                     sources,
+                    cache,
+                    workspace_cache,
                     credentials_cache,
                 )
                 .await?;
@@ -418,6 +423,8 @@ impl<'lock> LockTarget<'lock> {
                             sources_map,
                             indexes,
                             locations,
+                            cache,
+                            workspace_cache,
                             credentials_cache,
                         )
                         .await
