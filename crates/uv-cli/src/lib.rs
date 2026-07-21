@@ -4294,9 +4294,13 @@ pub struct LockArgs {
 
 #[derive(Args)]
 pub struct UpgradeArgs {
-    /// The package to upgrade.
+    /// The packages to upgrade.
     #[arg(value_hint = ValueHint::Other)]
-    pub package: PackageName,
+    pub packages: Vec<PackageName>,
+
+    /// Exclude the named package from upgrades.
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub exclude: Vec<PackageName>,
 }
 
 #[derive(Args)]
