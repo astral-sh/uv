@@ -20,7 +20,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 use crate::http_util::{
-    SelfSigned, generate_self_signed_certs_with_ca,
+    SelfSigned, generate_expired_self_signed_certs_with_ca, generate_self_signed_certs_with_ca,
     generate_self_signed_certs_with_ca_custom_extensions, start_https_mtls_user_agent_server,
     start_https_user_agent_server, test_cert_dir,
 };
@@ -46,6 +46,12 @@ impl TestCertificate {
     /// relevant PEM files to a temporary directory.
     fn new() -> Result<Self> {
         let (ca, server, client) = generate_self_signed_certs_with_ca()?;
+        Self::persist(ca, server, &client)
+    }
+
+    /// Generate a fresh certificate set whose server certificate is expired.
+    fn new_expired() -> Result<Self> {
+        let (ca, server, client) = generate_expired_self_signed_certs_with_ca()?;
         Self::persist(ca, server, &client)
     }
 
@@ -461,6 +467,17 @@ async fn test_tls_certificate_errors_are_not_retried() -> Result<()> {
             assert_fatal_reqwest_error(&response);
             let _ = server_task.await;
         })
+        .await;
+    Ok(())
+}
+
+/// An expired server certificate is rejected without retries.
+#[tokio::test]
+async fn test_expired_cert_rejected() -> Result<()> {
+    let cert = TestCertificate::new_expired()?;
+    client()
+        .ssl_cert_file(&cert.trust_path)
+        .expect_https_connect_fails(&cert)
         .await;
     Ok(())
 }
