@@ -1,4 +1,4 @@
-# Diagnose trusted workflow failures and open an issue only for actionable, untracked problems.
+# Diagnose trusted workflow failures and report actionable problems without creating duplicates.
 name: "Diagnose workflow failure"
 
 on:
@@ -114,13 +114,16 @@ jobs:
 
   report:
     needs: diagnose
-    if: needs.diagnose.outputs.result != '' && fromJSON(needs.diagnose.outputs.result).decision == 'create'
+    if: >-
+      needs.diagnose.outputs.result != '' &&
+      (fromJSON(needs.diagnose.outputs.result).decision == 'create' ||
+      fromJSON(needs.diagnose.outputs.result).decision == 'duplicate')
     runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 5
     permissions:
       id-token: write # for the credential broker
-      issues: write # for upstream issue creation
+      issues: write # for upstream issue reports
     steps:
       - name: "Get uv-dev issue token"
         id: token
@@ -133,13 +136,43 @@ jobs:
           permissions: |
             issues: write
 
-      - name: "Open workflow failure issue"
+      - name: "Report workflow failure"
         env:
           DIAGNOSIS: ${{ needs.diagnose.outputs.result }}
           GH_TOKEN: ${{ steps.token.outputs.token || secrets.GITHUB_TOKEN }}
           ISSUE_REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run }}
         run: |
           printf '%s\n' "$DIAGNOSIS" > "$RUNNER_TEMP/diagnosis.json"
+
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "Invalid workflow run ID: $RUN_ID" >&2
+            exit 1
+          fi
+
+          if [ "$(jq -r '.decision' "$RUNNER_TEMP/diagnosis.json")" = "duplicate" ]; then
+            duplicate_issue="$(jq -r --arg repository "$ISSUE_REPOSITORY" '
+              [
+                .related.items[]
+                | select(
+                    .kind == "issue"
+                    and .state == "open"
+                    and .number > 0
+                    and .url == ("https://github.com/" + $repository + "/issues/" + (.number | tostring))
+                  )
+              ][0].number // empty
+            ' "$RUNNER_TEMP/diagnosis.json")"
+            if [ -z "$duplicate_issue" ]; then
+              echo "No open issue in $ISSUE_REPOSITORY tracks this workflow failure."
+              exit 0
+            fi
+
+            run_url="https://github.com/$ISSUE_REPOSITORY/actions/runs/$RUN_ID"
+            gh issue comment "$duplicate_issue" \
+              --repo "$ISSUE_REPOSITORY" \
+              --body "Another workflow run encountered this failure: $run_url"
+            exit 0
+          fi
 
           if ! jq --exit-status '
             .decision == "create"
@@ -163,10 +196,14 @@ jobs:
             --limit 100 \
             --json number,title,url \
             > "$RUNNER_TEMP/existing-issues.json"
-          existing_issue="$(jq -r --arg title "$issue_title" '.[] | select(.title == $title) | .url' \
+          existing_issue="$(jq -r --arg title "$issue_title" \
+            '[.[] | select(.title == $title)][0].number // empty' \
             "$RUNNER_TEMP/existing-issues.json")"
           if [ -n "$existing_issue" ]; then
-            printf 'An issue with this title already exists: %s\n' "$existing_issue"
+            run_url="https://github.com/$ISSUE_REPOSITORY/actions/runs/$RUN_ID"
+            gh issue comment "$existing_issue" \
+              --repo "$ISSUE_REPOSITORY" \
+              --body "Another workflow run encountered this failure: $run_url"
             exit 0
           fi
 

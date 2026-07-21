@@ -13,21 +13,21 @@ relevant source and workflow configuration when that helps establish whether the
 by the proposed change, a repository defect, a flaky test, or external infrastructure. Clearly
 distinguish source-backed findings from hypotheses.
 
-Before deciding to open an issue, use the authenticated `gh` CLI to search the open and closed
-issues and the open, closed, and merged pull requests in both `astral-sh/uv` and `astral-sh/uv-dev`.
-Search each independent failure using exact test names, error fragments, workflow or job names, and
-affected platforms; then try conceptual searches that remove incidental versions, package names, and
-paths. In particular, search existing `ci-flake` issues for test and infrastructure flakes. Inspect
-the strongest candidates and follow references to the canonical issue when appropriate. Populate
-`related.items` with the closest results and explain the evidence for each. Summarize the searches
-performed and any plausible candidate that was ruled out in `related.search_scope`.
+Before deciding to open an issue, follow the related-issue search guidance in
+`agents/prompts/triage-issue.md`. Apply that guidance to each independent failure and search the
+open and closed issues and the open, closed, and merged pull requests in both `astral-sh/uv` and
+`astral-sh/uv-dev`. In particular, search existing `ci-flake` issues for test and infrastructure
+flakes. Populate `related.items` with the closest results and summarize the searches performed and
+any plausible candidate that was ruled out in `related.search_scope`.
 
 Set `decision` to exactly one of:
 
 - `create` when the failure exposes an actionable, untracked repository or workflow problem. This
   includes a failing default-branch workflow, a confirmed CI flake, or infrastructure behavior the
   repository should mitigate.
-- `duplicate` when an existing issue or pull request already tracks the same underlying failure.
+- `duplicate` when an existing issue or pull request already tracks the same underlying failure. Put
+  the canonical open issue in the originating repository first in `related.items` when one exists so
+  the failed run can be reported as another sample.
 - `ignore` when there is nothing for maintainers to fix, including an expected compile, lint, or
   test failure caused by the pull request; a superseded or follow-on failure; or a transient
   external outage with no repository-side remediation.
