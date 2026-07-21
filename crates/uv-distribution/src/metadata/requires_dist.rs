@@ -15,7 +15,9 @@ use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, WorkspaceCache};
 
 use crate::Metadata;
-use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
+use crate::metadata::{
+    GitWorkspaceMember, GitWorkspaceSourceContext, LoweredRequirement, MetadataError,
+};
 
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
@@ -39,6 +41,7 @@ impl RequiresDist {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> Result<Self, MetadataError> {
         let discovery = DiscoveryOptions {
             stop_discovery_at: git_member.map(|git_member| {
@@ -75,6 +78,7 @@ impl RequiresDist {
             cache,
             workspace_cache,
             credentials_cache,
+            git_workspace,
         )
         .await
     }
@@ -111,6 +115,7 @@ impl RequiresDist {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -171,6 +176,7 @@ impl RequiresDist {
                         cache,
                         workspace_cache,
                         credentials_cache,
+                        git_workspace,
                     )
                     .await
                     .map(|requirement| {
@@ -216,6 +222,7 @@ impl RequiresDist {
                     cache,
                     workspace_cache,
                     credentials_cache,
+                    git_workspace,
                 )
                 .await
                 .map(|requirement| {
@@ -467,11 +474,13 @@ mod test {
     use uv_cache::Cache;
     use uv_configuration::NoSources;
     use uv_distribution_types::IndexLocations;
+    use uv_git::{GitHttpSettings, GitResolver};
     use uv_normalize::PackageName;
     use uv_pep508::Requirement;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace, WorkspaceCache};
 
     use crate::RequiresDist;
+    use crate::metadata::GitWorkspaceSourceContext;
     use crate::metadata::requires_dist::FlatRequiresDist;
 
     async fn requires_dist_from_pyproject_toml(
@@ -494,6 +503,7 @@ mod test {
         .await?;
         let pyproject_toml = uv_pypi_types::PyProjectToml::from_toml(contents, "pyproject.toml")?;
         let requires_dist = uv_pypi_types::RequiresDist::from_pyproject_toml(pyproject_toml)?;
+        let git = GitResolver::default();
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
@@ -504,6 +514,7 @@ mod test {
             &cache,
             &workspace_cache,
             &CredentialsCache::new(),
+            &GitWorkspaceSourceContext::new(&git, |_| GitHttpSettings::default()),
         )
         .await?)
     }

@@ -16,7 +16,9 @@ use uv_configuration::{
     ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
+use uv_distribution::{
+    DistributionDatabase, GitWorkspaceSourceContext, LoweredExtraBuildDependencies,
+};
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
     Requirement, RequiresPython, UnresolvedRequirementSpecification,
@@ -517,6 +519,9 @@ async fn do_lock(
     let dependency_groups = target.dependency_groups()?;
     let source_trees = vec![];
 
+    let git_workspace =
+        GitWorkspaceSourceContext::new(state.git(), |url| client_builder.git_http_settings(url));
+
     // If necessary, lower the overrides and constraints.
     let requirements = target
         .lower(
@@ -526,6 +531,7 @@ async fn do_lock(
             cache,
             workspace_cache,
             client_builder.credentials_cache(),
+            &git_workspace,
         )
         .await?;
     let overrides = {
@@ -542,6 +548,7 @@ async fn do_lock(
                                 cache,
                                 workspace_cache,
                                 client_builder.credentials_cache(),
+                                &git_workspace,
                             )
                             .await?
                             .into_iter()
@@ -559,6 +566,7 @@ async fn do_lock(
                                 cache,
                                 workspace_cache,
                                 client_builder.credentials_cache(),
+                                &git_workspace,
                             )
                             .await?
                             .into_boxed_slice(),
@@ -576,6 +584,7 @@ async fn do_lock(
             cache,
             workspace_cache,
             client_builder.credentials_cache(),
+            &git_workspace,
         )
         .await?;
     let build_constraints = target
@@ -586,6 +595,7 @@ async fn do_lock(
             cache,
             workspace_cache,
             client_builder.credentials_cache(),
+            &git_workspace,
         )
         .await?;
     let mut lowered_dependency_groups = BTreeMap::new();
@@ -598,6 +608,7 @@ async fn do_lock(
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
+                &git_workspace,
             )
             .await?;
         lowered_dependency_groups.insert(name, requirements);
@@ -820,6 +831,7 @@ async fn do_lock(
                 cache,
                 workspace_cache,
                 client.credentials_cache(),
+                &git_workspace,
             )
             .await?
         }
@@ -831,6 +843,7 @@ async fn do_lock(
                 cache,
                 workspace_cache,
                 client.credentials_cache(),
+                &git_workspace,
             )
             .await?
         }

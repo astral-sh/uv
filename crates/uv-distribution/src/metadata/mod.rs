@@ -7,9 +7,11 @@ use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{GitDirectorySourceUrl, IndexLocations, Requirement};
+use uv_git::{GitHttpSettings, GitResolver};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigests, ResolutionMetadata};
+use uv_redacted::DisplaySafeUrl;
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{WorkspaceCache, WorkspaceError};
 
@@ -23,6 +25,33 @@ mod build_requires;
 mod dependency_groups;
 mod lowering;
 mod requires_dist;
+
+/// The configured Git resolver and HTTP settings used while lowering workspace sources.
+pub struct GitWorkspaceSourceContext<'a> {
+    resolver: &'a GitResolver,
+    http_settings: Box<dyn Fn(&DisplaySafeUrl) -> GitHttpSettings + 'a>,
+}
+
+impl<'a> GitWorkspaceSourceContext<'a> {
+    /// Create a context for lowering Git workspace sources.
+    pub fn new(
+        resolver: &'a GitResolver,
+        http_settings: impl Fn(&DisplaySafeUrl) -> GitHttpSettings + 'a,
+    ) -> Self {
+        Self {
+            resolver,
+            http_settings: Box::new(http_settings),
+        }
+    }
+
+    pub(crate) fn resolver(&self) -> &GitResolver {
+        self.resolver
+    }
+
+    pub(crate) fn http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings {
+        (self.http_settings)(url)
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum MetadataError {
@@ -105,6 +134,7 @@ impl Metadata {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let requires_dist = uv_pypi_types::RequiresDist {
@@ -129,6 +159,7 @@ impl Metadata {
             cache,
             workspace_cache,
             credentials_cache,
+            git_workspace,
         )
         .await?;
 

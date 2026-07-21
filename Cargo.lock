@@ -6444,6 +6444,7 @@ dependencies = [
  "uv-preview",
  "uv-pypi-types",
  "uv-python",
+ "uv-redacted",
  "uv-requirements",
  "uv-resolver",
  "uv-types",

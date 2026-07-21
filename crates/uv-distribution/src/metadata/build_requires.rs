@@ -13,7 +13,7 @@ use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace, WorkspaceCache,
 };
 
-use crate::metadata::{LoweredRequirement, MetadataError};
+use crate::metadata::{GitWorkspaceSourceContext, LoweredRequirement, MetadataError};
 
 /// Lowered requirements from a `[build-system.requires]` field in a `pyproject.toml` file.
 #[derive(Debug, Clone)]
@@ -48,6 +48,7 @@ impl BuildRequires {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> Result<Self, MetadataError> {
         let discovery = DiscoveryOptions {
             stop_discovery_at: stop_discovery_at.map(Path::to_path_buf),
@@ -77,6 +78,7 @@ impl BuildRequires {
             cache,
             workspace_cache,
             credentials_cache,
+            git_workspace,
         )
         .await
     }
@@ -91,6 +93,7 @@ impl BuildRequires {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -149,6 +152,7 @@ impl BuildRequires {
                     cache,
                     workspace_cache,
                     credentials_cache,
+                    git_workspace,
                 )
                 .await
                 .map(|requirement| {
@@ -177,6 +181,7 @@ impl BuildRequires {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -225,6 +230,7 @@ impl BuildRequires {
                     cache,
                     workspace_cache,
                     credentials_cache,
+                    git_workspace,
                 )
                 .await
                 .map(|requirement| {
@@ -267,6 +273,7 @@ impl LoweredExtraBuildDependencies {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> Result<Self, MetadataError> {
         match source_strategy {
             NoSources::None => {
@@ -316,6 +323,7 @@ impl LoweredExtraBuildDependencies {
                                 cache,
                                 workspace_cache,
                                 credentials_cache,
+                                git_workspace,
                             )
                             .await
                             .map(|requirement| {

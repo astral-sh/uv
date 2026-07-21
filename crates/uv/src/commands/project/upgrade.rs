@@ -8,7 +8,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun};
-use uv_distribution::{ArchiveMetadata, Metadata};
+use uv_distribution::{ArchiveMetadata, GitWorkspaceSourceContext, Metadata};
 use uv_distribution_types::Identifier;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
@@ -99,6 +99,7 @@ pub(crate) async fn upgrade(
         bail!("`uv upgrade` does not support projects with dynamic versions yet");
     }
     let metadata = ResolutionMetadata::parse_pyproject_toml(pyproject, None)?;
+    let state = UniversalState::default();
     let metadata = Metadata::from_workspace(
         metadata,
         project.project_root(),
@@ -109,6 +110,7 @@ pub(crate) async fn upgrade(
         cache,
         workspace_cache,
         client_builder.credentials_cache(),
+        &GitWorkspaceSourceContext::new(state.git(), |url| client_builder.git_http_settings(url)),
     )
     .await?;
 
@@ -137,7 +139,6 @@ pub(crate) async fn upgrade(
     .await?
     .into_interpreter();
 
-    let state = UniversalState::default();
     let distribution_id = DisplaySafeUrl::from_file_path(project.project_root())
         .map_err(|()| anyhow!("Project root is not a valid file URL"))?
         .distribution_id();

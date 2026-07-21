@@ -13,7 +13,9 @@ use uv_workspace::{
     WorkspaceErrorKind,
 };
 
-use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
+use crate::metadata::{
+    GitWorkspaceMember, GitWorkspaceSourceContext, LoweredRequirement, MetadataError,
+};
 
 /// Like [`crate::RequiresDist`] but only supporting dependency-groups.
 ///
@@ -62,6 +64,7 @@ impl SourcedDependencyGroups {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> Result<Self, MetadataError> {
         // If the `pyproject.toml` doesn't exist, fail early.
         if !pyproject_path.is_file() {
@@ -167,6 +170,7 @@ impl SourcedDependencyGroups {
                         cache,
                         workspace_cache,
                         credentials_cache,
+                        git_workspace,
                     )
                     .await
                     .map(|requirement| {

@@ -21,7 +21,9 @@ use uv_configuration::{
     InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
+use uv_distribution::{
+    DistributionDatabase, GitWorkspaceSourceContext, LoweredExtraBuildDependencies,
+};
 use uv_distribution_types::{
     Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
     Requirement, RequirementSource, UnresolvedRequirement,
@@ -440,6 +442,9 @@ pub(crate) async fn add(
                     cache,
                     &WorkspaceCache::default(),
                     client.credentials_cache(),
+                    &GitWorkspaceSourceContext::new(state.git(), |url| {
+                        client.git_http_settings(url)
+                    }),
                 )
                 .await?
             } else {

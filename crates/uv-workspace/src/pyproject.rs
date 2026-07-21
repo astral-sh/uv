@@ -1223,13 +1223,13 @@ pub enum Source {
     },
     /// A dependency on another package in the workspace.
     Workspace {
-        /// `true` selects the current workspace. A string selects another workspace discovered
-        /// from the given path.
+        /// `true` selects the current workspace. A path or Git source selects another workspace
+        /// discovered from that source. A string is shorthand for a path source.
         ///
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
         workspace: WorkspaceReference,
-        /// Whether the package should be installed as editable. Defaults to `true`.
+        /// Whether a local workspace package should be installed as editable. Defaults to `true`.
         editable: Option<bool>,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
@@ -1242,13 +1242,31 @@ pub enum Source {
     },
 }
 
-/// A reference to either the current workspace or a workspace discovered from a path.
+/// A reference to either the current workspace or a workspace discovered from a source.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
 #[serde(untagged)]
 pub enum WorkspaceReference {
     Bool(bool),
     Path(PortablePathBuf),
+    Source(WorkspaceSource),
+}
+
+/// A source from which to discover a workspace.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case", untagged, deny_unknown_fields)]
+pub enum WorkspaceSource {
+    Path {
+        path: PortablePathBuf,
+    },
+    Git {
+        git: DisplaySafeUrl,
+        rev: Option<String>,
+        tag: Option<String>,
+        branch: Option<String>,
+        lfs: Option<bool>,
+    },
 }
 
 /// A custom deserialization implementation for [`Source`]. This is roughly equivalent to

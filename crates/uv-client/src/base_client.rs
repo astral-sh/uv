@@ -421,6 +421,17 @@ impl<'a> BaseClientBuilder<'a> {
         matches!(self.connectivity, Connectivity::Offline)
     }
 
+    /// Return the [`GitHttpSettings`] for fetching from the given URL.
+    pub fn git_http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings {
+        GitHttpSettings::default()
+            .with_disabled_ssl(
+                self.allow_insecure_host
+                    .iter()
+                    .any(|allow_insecure_host| allow_insecure_host.matches(url)),
+            )
+            .with_offline(self.connectivity.is_offline())
+    }
+
     /// Create a [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
         retry_policy(self.retries, self.no_retry_delay)

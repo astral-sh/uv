@@ -27,11 +27,12 @@ use uv_distribution_types::{
     Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
     PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
-use uv_git::GitResolver;
+use uv_git::{GitHttpSettings, GitResolver};
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_redacted::DisplaySafeUrl;
 use uv_requirements::LookaheadResolver;
 use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
@@ -219,6 +220,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn git(&self) -> &GitResolver {
         &self.shared_state.git
+    }
+
+    fn git_http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings {
+        self.client.git_http_settings(url)
     }
 
     fn build_arena(&self) -> &BuildArena<SourceBuild> {

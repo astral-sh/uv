@@ -17,7 +17,10 @@ use uv_configuration::{
     GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
+use uv_distribution::{
+    DistributionDatabase, GitWorkspaceSourceContext, LoweredExtraBuildDependencies,
+    LoweredRequirement,
+};
 use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, HashGeneration, Index, IndexCredentialsError,
     Requirement, RequiresPython, Resolution, UnresolvedRequirement,
@@ -3148,6 +3151,7 @@ pub(crate) async fn script_specification(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
+    git_workspace: &GitWorkspaceSourceContext<'_>,
 ) -> Result<Option<RequirementsSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
         return Ok(None);
@@ -3169,6 +3173,7 @@ pub(crate) async fn script_specification(
                 cache,
                 workspace_cache,
                 credentials_cache,
+                git_workspace,
             )
             .await
             .map_ok(LoweredRequirement::into_inner)
@@ -3196,6 +3201,7 @@ pub(crate) async fn script_specification(
                 cache,
                 workspace_cache,
                 credentials_cache,
+                git_workspace,
             )
             .await
             .map_ok(LoweredRequirement::into_inner)
@@ -3226,6 +3232,7 @@ pub(crate) async fn script_specification(
                             cache,
                             workspace_cache,
                             credentials_cache,
+                            git_workspace,
                         )
                         .await
                         .map_ok(LoweredRequirement::into_inner)
@@ -3246,6 +3253,7 @@ pub(crate) async fn script_specification(
                                 cache,
                                 workspace_cache,
                                 credentials_cache,
+                                git_workspace,
                             )
                             .await
                             .map_ok(LoweredRequirement::into_inner)
@@ -3286,6 +3294,7 @@ pub(crate) async fn script_extra_build_requires(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
+    git_workspace: &GitWorkspaceSourceContext<'_>,
 ) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
     let script_indexes = script.indexes(&settings.sources);
@@ -3320,6 +3329,7 @@ pub(crate) async fn script_extra_build_requires(
                     cache,
                     workspace_cache,
                     credentials_cache,
+                    git_workspace,
                 )
                 .await
                 .map_ok(|requirement| ExtraBuildRequirement {

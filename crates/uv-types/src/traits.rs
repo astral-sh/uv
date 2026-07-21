@@ -14,9 +14,10 @@ use uv_distribution_types::{
     ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
     PackageConfigSettings, Requirement, SourceDist,
 };
-use uv_git::GitResolver;
+use uv_git::{GitHttpSettings, GitResolver};
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_redacted::DisplaySafeUrl;
 use uv_workspace::WorkspaceCache;
 
 use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
@@ -101,6 +102,9 @@ pub trait BuildContext {
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
+
+    /// Return the configured HTTP settings for fetching from the given Git URL.
+    fn git_http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings;
 
     /// Return a reference to the build arena.
     fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;

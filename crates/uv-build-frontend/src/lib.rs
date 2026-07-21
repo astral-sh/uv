@@ -31,7 +31,7 @@ use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
-use uv_distribution::BuildRequires;
+use uv_distribution::{BuildRequires, GitWorkspaceSourceContext};
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
 };
@@ -327,6 +327,9 @@ impl SourceBuild {
             build_context.cache(),
             workspace_cache,
             credentials_cache,
+            &GitWorkspaceSourceContext::new(build_context.git(), |url| {
+                build_context.git_http_settings(url)
+            }),
         )
         .await
         .map_err(|err| *err)?;
@@ -581,6 +584,7 @@ impl SourceBuild {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         let pyproject_toml = match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
@@ -693,6 +697,7 @@ impl SourceBuild {
                     cache,
                     workspace_cache,
                     credentials_cache,
+                    git_workspace,
                 )
                 .await
                 .map_err(Error::Lowering)?;
@@ -1136,6 +1141,9 @@ async fn create_pep517_build_environment(
             build_context.cache(),
             workspace_cache,
             credentials_cache,
+            &GitWorkspaceSourceContext::new(build_context.git(), |url| {
+                build_context.git_http_settings(url)
+            }),
         )
         .await
         .map_err(Error::Lowering)?;
