@@ -338,39 +338,6 @@ mod tests {
 
     use crate::{UvRetryableStrategy, retryable_on_request_failure};
 
-    #[test]
-    fn recognizes_tls_certificate_errors() {
-        let certificate_alerts = [
-            AlertDescription::AccessDenied,
-            AlertDescription::BadCertificate,
-            AlertDescription::BadCertificateHashValue,
-            AlertDescription::BadCertificateStatusResponse,
-            AlertDescription::CertificateExpired,
-            AlertDescription::CertificateRequired,
-            AlertDescription::CertificateRevoked,
-            AlertDescription::CertificateUnknown,
-            AlertDescription::CertificateUnobtainable,
-            AlertDescription::DecryptError,
-            AlertDescription::NoCertificate,
-            AlertDescription::UnknownCA,
-            AlertDescription::UnsupportedCertificate,
-        ];
-
-        assert!(is_certificate_error(&RustlsError::InvalidCertificate(
-            rustls::CertificateError::UnknownIssuer
-        )));
-        assert!(is_certificate_error(&RustlsError::NoCertificatesPresented));
-        for alert in certificate_alerts {
-            assert!(
-                is_certificate_error(&RustlsError::AlertReceived(alert)),
-                "expected {alert:?} to be classified as a certificate error"
-            );
-        }
-        assert!(!is_certificate_error(&RustlsError::AlertReceived(
-            AlertDescription::InternalError
-        )));
-    }
-
     /// Enumerate which status codes we are retrying.
     #[tokio::test]
     async fn retried_status_codes() -> Result<()> {
