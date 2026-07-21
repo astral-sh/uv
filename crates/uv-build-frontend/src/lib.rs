@@ -611,11 +611,12 @@ impl SourceBuild {
             .as_ref()
             .and_then(|build_system| build_system.build_backend.as_deref());
 
-        if let Some(backend_path) = pyproject_toml
+        let backend_path = pyproject_toml
             .build_system
             .as_ref()
-            .and_then(|build_system| build_system.backend_path.as_ref())
-        {
+            .and_then(|build_system| build_system.backend_path.as_ref());
+
+        if let Some(backend_path) = backend_path {
             let source_tree = fs_err::canonicalize(source_tree).map_err(Error::Io)?;
             for path in backend_path.iter() {
                 if Path::new(path).is_absolute() {
@@ -639,8 +640,10 @@ impl SourceBuild {
         }
 
         // Only show the warning for first party and URL dependencies, not for registry dependencies
-        // (which have sources disabled).
+        // (which have sources disabled). In-tree build backends may wrap `uv_build`, so we don't
+        // warn for them either.
         if !no_sources.all()
+            && backend_path.is_none()
             && pyproject_toml
                 .tool
                 .as_ref()
