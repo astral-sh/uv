@@ -776,7 +776,7 @@ pub(crate) async fn pip_compile(
         .into_iter()
         .filter(|name| resolution.contains(name))
         .collect::<Vec<_>>();
-    if !excluded.is_empty() {
+    if include_annotations && !excluded.is_empty() {
         writeln!(writer)?;
         writeln!(
             writer,
