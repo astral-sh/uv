@@ -6,7 +6,11 @@
       "type": "string",
       "enum": ["reproducible", "not_reproducible", "needs_more_information"]
     },
-    "reason": { "type": "string" }
+    "reason": { "type": "string" },
+    "dockerfile": {
+      "type": ["string", "null"],
+      "description": "A minimal, self-contained Dockerfile that demonstrates the result of a Linux-specific reproduction attempt, or null when not applicable."
+    }
   },
-  "required": ["reproduction", "reason"]
+  "required": ["reproduction", "reason", "dockerfile"]
 }

@@ -28,6 +28,13 @@ Set `reproduction` to exactly one of these values and explain the result in `rea
   meaningful reproduction. Identify the specific commands, configuration, versions, platform
   details, or input data needed.
 
+For a Linux-specific report with enough information for a targeted reproduction, set `dockerfile` to
+a complete, minimal Dockerfile that demonstrates the observed result, whether the bug is
+reproducible or not. Include the relevant Linux base image, uv and Python versions, configuration,
+and input files, and use `CMD` for the reproducing command so the workflow can build and run the
+container. Keep it self-contained: do not depend on local files, host mounts, credentials, or
+scripts copied from the issue. Set `dockerfile` to `null` only for non-Linux or incomplete reports.
+
 Do not infer that a bug is reproducible from source inspection or a related issue alone. Clearly
 distinguish observed behavior from hypotheses, and do not claim a root cause that has not been
 confirmed.

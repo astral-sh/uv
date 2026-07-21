@@ -104,3 +104,47 @@ jobs:
         run: printf '```json\n%s\n```\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
         env:
           REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
+
+  validate-dockerfile:
+    needs: reproduce
+    if: needs.reproduce.outputs.result != '' && fromJSON(needs.reproduce.outputs.result).dockerfile != null
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - name: "Build and run Docker reproduction"
+        run: |
+          context="$RUNNER_TEMP/docker-reproduction"
+          output="$RUNNER_TEMP/docker-reproduction-output.txt"
+          mkdir -- "$context"
+          printf '%s\n' "$REPRODUCTION_RESULT" | jq --exit-status --raw-output '.dockerfile' > "$context/Dockerfile"
+
+          docker build --file "$context/Dockerfile" --tag uv-issue-reproduction "$context"
+
+          exit_code=0
+          timeout 300 docker run --rm uv-issue-reproduction > "$output" 2>&1 || exit_code=$?
+          if [ "$exit_code" -eq 124 ]; then
+            echo "Docker reproduction timed out."
+            sed -n '1,200p' "$output"
+            exit 1
+          fi
+          if [ "$exit_code" -ge 125 ] && [ "$exit_code" -le 127 ]; then
+            echo "Docker could not run the reproducing command."
+            sed -n '1,200p' "$output"
+            exit 1
+          fi
+
+          {
+            printf '%s\n\n' '### Docker reproduction'
+            printf 'Result: %s; container exit code: %s.\n\n' "$REPRODUCTION" "$exit_code"
+            printf '%s\n' '```dockerfile'
+            sed -n '1,200p' "$context/Dockerfile"
+            printf '%s\n\n' '```'
+            printf '%s\n' '```text'
+            sed -n '1,200p' "$output"
+            printf '%s\n' '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          sed -n '1,200p' "$output"
+        env:
+          REPRODUCTION: ${{ fromJSON(needs.reproduce.outputs.result).reproduction }}
+          REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
