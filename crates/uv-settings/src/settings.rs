@@ -30,6 +30,8 @@ use uv_torch::TorchMode;
 use uv_workspace::pyproject::{ExtraBuildDependencies, OverrideDependency};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
+use crate::{EnvironmentOptions, FilesystemOptions};
+
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -97,6 +99,16 @@ pub struct Options {
 
     #[option_group]
     pub pip: Option<PipOptions>,
+
+    /// Whether to run the automatic malware check during sync operations.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            malware-check = true
+        "#
+    )]
+    pub malware_check: Option<bool>,
 
     /// The keys to consider when caching builds for the project.
     ///
@@ -2519,6 +2531,7 @@ struct OptionsWire {
 
     audit: Option<AuditOptions>,
     pip: Option<PipOptions>,
+    malware_check: Option<bool>,
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
@@ -2605,6 +2618,7 @@ impl TryFrom<OptionsWire> for Options {
             torch_backend,
             audit,
             pip,
+            malware_check,
             cache_keys,
             override_dependencies,
             exclude_dependencies,
@@ -2685,6 +2699,7 @@ impl TryFrom<OptionsWire> for Options {
                 torch_backend,
             },
             pip,
+            malware_check,
             cache_keys,
             build_backend,
             override_dependencies,
@@ -2835,11 +2850,18 @@ pub struct MalwareCheckSettings {
     pub malware_check_url: Option<DisplaySafeUrl>,
 }
 
-impl From<&crate::EnvironmentOptions> for MalwareCheckSettings {
-    fn from(options: &crate::EnvironmentOptions) -> Self {
+impl MalwareCheckSettings {
+    pub fn resolve(
+        filesystem: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
         Self {
-            enabled: options.malware_check.value == Some(true),
-            malware_check_url: options.malware_check_url.clone(),
+            enabled: environment
+                .malware_check
+                .value
+                .or(filesystem.and_then(|options| options.malware_check))
+                .unwrap_or_default(),
+            malware_check_url: environment.malware_check_url.clone(),
         }
     }
 }

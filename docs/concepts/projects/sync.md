@@ -233,4 +233,5 @@ against [OSV](https://osv.dev). OSV references MAL advisories from the OpenSSF's
 
 If a locked dependency matches a malware advisory, the sync will be terminated.
 
-To enable malware checks, set `UV_MALWARE_CHECK=1` in your environment.
+To enable malware checks, set `malware-check = true` in your uv settings or set `UV_MALWARE_CHECK=1`
+in your environment. When set, `UV_MALWARE_CHECK` overrides the `malware-check` setting.

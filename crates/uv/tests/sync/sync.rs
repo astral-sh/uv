@@ -17198,6 +17198,9 @@ async fn sync_malware_detected() {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig==2.0.0"]
+
+        [tool.uv]
+        malware-check = true
     "#})
         .unwrap();
 
@@ -17225,7 +17228,7 @@ async fn sync_malware_detected() {
     uv_snapshot!(context.filters(), context
         .sync()
         .arg("--preview-features").arg("malware-check")
-        .env(EnvVars::UV_MALWARE_CHECK, "1")
+        .env_remove(EnvVars::UV_MALWARE_CHECK)
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
     success: false
     exit_code: 2
@@ -17385,6 +17388,9 @@ async fn sync_malware_check_skips_non_mal() {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig==2.0.0"]
+
+        [tool.uv]
+        malware-check = false
     "#})
         .unwrap();
 
@@ -17432,8 +17438,8 @@ async fn sync_malware_check_skips_non_mal() {
     ");
 }
 
-/// Ensure that `UV_MALWARE_CHECK=0` keeps the malware check disabled even when the preview
-/// feature is enabled.
+/// Ensure that `UV_MALWARE_CHECK=0` keeps the malware check disabled even when enabled in user
+/// configuration.
 #[tokio::test]
 async fn sync_malware_check_disabled() {
     let context = uv_test::test_context!("3.12");
@@ -17451,10 +17457,17 @@ async fn sync_malware_check_disabled() {
 
     context.lock().assert().success();
 
+    let user_config_dir = context.user_config_dir.child("uv");
+    user_config_dir.create_dir_all().unwrap();
+    user_config_dir
+        .child("uv.toml")
+        .write_str("malware-check = true")
+        .unwrap();
+
     let server = MockServer::start().await;
 
-    // Even though the preview feature is enabled, the check is explicitly disabled via env
-    // var so no request should be made. (No mocks are mounted, so any request would fail.)
+    // The check is explicitly disabled via env var, so no request should be made. (No mocks are
+    // mounted, so any request would fail.)
 
     uv_snapshot!(context.filters(), context
         .sync()
