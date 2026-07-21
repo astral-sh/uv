@@ -27,7 +27,8 @@ use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{DependencyType, PyProjectToml as WorkspacePyProjectToml, Source};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{
-    DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceErrorKind,
+    DiscoveryOptions, ProjectWorkspace, VirtualProject, Workspace, WorkspaceCache,
+    WorkspaceErrorKind,
 };
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -40,6 +41,7 @@ use crate::settings::ResolverSettings;
 
 /// A dependency requirement selected for upgrading.
 struct UpgradableRequirement {
+    member: PackageName,
     package: PackageName,
     dependency_type: DependencyType,
     original_text: String,
@@ -51,6 +53,7 @@ struct UpgradableRequirement {
 
 /// A selected requirement that cannot apply to the project.
 struct SkippedRequirement {
+    member: PackageName,
     package: PackageName,
     dependency_type: DependencyType,
     contexts: Vec<DeclarationContext>,
@@ -85,6 +88,7 @@ struct DeclarationSelection {
 
 #[derive(Clone)]
 struct DeclarationIdentity {
+    member: PackageName,
     package: PackageName,
     dependency_type: DependencyType,
     text: String,
@@ -93,11 +97,18 @@ struct DeclarationIdentity {
 /// An existing requirement and its proposed replacement.
 #[derive(Clone)]
 struct RequirementUpdate {
+    member: PackageName,
     package: PackageName,
     dependency_type: DependencyType,
     original_text: String,
     existing: Requirement<VerbatimUrl>,
     replacement: Requirement<VerbatimUrl>,
+}
+
+struct UpgradeWorkspace {
+    target: VirtualProject,
+    selected_projects: Vec<ProjectWorkspace>,
+    display_members: bool,
 }
 
 enum DeclarationOutcome {
@@ -168,6 +179,7 @@ impl BlockedReason {
 impl UpgradableRequirement {
     fn identity(&self) -> DeclarationIdentity {
         DeclarationIdentity {
+            member: self.member.clone(),
             package: self.package.clone(),
             dependency_type: self.dependency_type.clone(),
             text: self.original_text.clone(),
@@ -179,6 +191,8 @@ pub(crate) async fn upgrade(
     project_dir: &Path,
     packages: Vec<PackageName>,
     exclude: Vec<PackageName>,
+    package: Option<PackageName>,
+    all_packages: bool,
     install_mirrors: PythonInstallMirrors,
     mut settings: ResolverSettings,
     client_builder: BaseClientBuilder<'_>,
@@ -191,48 +205,42 @@ pub(crate) async fn upgrade(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let project = match VirtualProject::discover(
-        project_dir,
-        &DiscoveryOptions::default(),
-        cache,
-        workspace_cache,
-    )
-    .await
-    {
-        Ok(VirtualProject::Project(project)) => project,
-        Ok(VirtualProject::NonProject(_)) => {
-            bail!("`uv upgrade` requires a project with a `[project]` table")
-        }
-        Err(err)
-            if matches!(
-                err.as_ref(),
-                WorkspaceErrorKind::MissingPyprojectToml | WorkspaceErrorKind::MissingProject(_)
-            ) =>
-        {
-            bail!("`uv upgrade` requires a project with a `[project]` table");
-        }
-        Err(err) => return Err(err.into()),
-    };
-    // Locking defaults a missing `requires-python` to the discovered interpreter's minor version.
-    // Use that same bound when deciding whether selected declarations and sources can apply.
-    let fallback_interpreter = if requires_fallback_interpreter(&project, &packages, &exclude)? {
-        let selection = select_requirements(&project, &packages, &exclude, None)?;
+    let upgrade_workspace =
+        discover_upgrade_workspace(project_dir, package, all_packages, cache, workspace_cache)
+            .await?;
+    let fallback_interpreter = if requires_fallback_interpreter(
+        upgrade_workspace.target.workspace(),
+        &upgrade_workspace.selected_projects,
+        &packages,
+        &exclude,
+    )? {
+        let selection = select_requirements(
+            upgrade_workspace.target.workspace(),
+            &upgrade_workspace.selected_projects,
+            &packages,
+            &exclude,
+            None,
+        )?;
         if selection.active.is_empty() {
-            render_skipped_requirements(&selection.skipped, printer)?;
+            render_skipped_requirements(
+                &selection.skipped,
+                upgrade_workspace.display_members,
+                printer,
+            )?;
             return Ok(ExitStatus::Success);
         }
 
         let groups = DependencyGroupsWithDefaults::none();
         let workspace_python = WorkspacePython::from_request(
             None,
-            Some(project.workspace()),
+            Some(upgrade_workspace.target.workspace()),
             &groups,
             project_dir,
             config_discovery,
         )
         .await?;
         match ProjectInterpreter::discover(
-            project.workspace(),
+            upgrade_workspace.target.workspace(),
             &groups,
             workspace_python,
             &client_builder,
@@ -252,9 +260,21 @@ pub(crate) async fn upgrade(
                     active,
                     skipped,
                     packages,
-                } = select_requirements(&project, &packages, &exclude, None)?;
-                render_skipped_requirements(&skipped, printer)?;
-                validate_requirements(&project, &active, &packages, &settings.sources)?;
+                } = select_requirements(
+                    upgrade_workspace.target.workspace(),
+                    &upgrade_workspace.selected_projects,
+                    &packages,
+                    &exclude,
+                    None,
+                )?;
+                render_skipped_requirements(&skipped, upgrade_workspace.display_members, printer)?;
+                validate_requirements(
+                    upgrade_workspace.target.workspace(),
+                    &upgrade_workspace.selected_projects,
+                    &active,
+                    &packages,
+                    &settings.sources,
+                )?;
                 return Err(error.into());
             }
         }
@@ -265,18 +285,31 @@ pub(crate) async fn upgrade(
         active: requirements,
         skipped,
         packages: mut selected_packages,
-    } = select_requirements(&project, &packages, &exclude, fallback_interpreter.as_ref())?;
-    render_skipped_requirements(&skipped, printer)?;
+    } = select_requirements(
+        upgrade_workspace.target.workspace(),
+        &upgrade_workspace.selected_projects,
+        &packages,
+        &exclude,
+        fallback_interpreter.as_ref(),
+    )?;
+    render_skipped_requirements(&skipped, upgrade_workspace.display_members, printer)?;
     validate_requirements(
-        &project,
+        upgrade_workspace.target.workspace(),
+        &upgrade_workspace.selected_projects,
         &requirements,
         &selected_packages,
         &settings.sources,
     )?;
     let mut declaration_outcomes = Vec::new();
-    let mut conflicts = project.workspace().conflicts()?;
-    if let Some(groups) = &project.current_project().pyproject_toml().dependency_groups {
-        conflicts.expand_transitive_group_includes(project.project_name(), groups);
+    let mut conflicts = upgrade_workspace.target.workspace().conflicts()?;
+    for selected_project in &upgrade_workspace.selected_projects {
+        if let Some(groups) = &selected_project
+            .current_project()
+            .pyproject_toml()
+            .dependency_groups
+        {
+            conflicts.expand_transitive_group_includes(selected_project.project_name(), groups);
+        }
     }
     let mut requirements = requirements
         .into_iter()
@@ -290,12 +323,12 @@ pub(crate) async fn upgrade(
                             .marker
                             .top_level_extra_name()
                             .map(std::borrow::Cow::into_owned)
-                            .filter(|extra| conflicts.contains(project.project_name(), extra))
+                            .filter(|extra| conflicts.contains(&selected.member, extra))
                             .map(|extra| BlockedReason::ConflictExtra {
                                 extra: extra.to_string(),
                             }),
                         DependencyType::Optional(extra) => {
-                            if conflicts.contains(project.project_name(), extra) {
+                            if conflicts.contains(&selected.member, extra) {
                                 Some(BlockedReason::ConflictExtra {
                                     extra: extra.to_string(),
                                 })
@@ -304,7 +337,7 @@ pub(crate) async fn upgrade(
                             }
                         }
                         DependencyType::Group(group) => {
-                            if conflicts.contains(project.project_name(), group) {
+                            if conflicts.contains(&selected.member, group) {
                                 Some(BlockedReason::ConflictGroup {
                                     group: group.to_string(),
                                 })
@@ -331,7 +364,11 @@ pub(crate) async fn upgrade(
             .any(|selected| selected.package == *package)
     });
     if requirements.is_empty() {
-        render_declaration_outcomes(&declaration_outcomes, printer)?;
+        render_declaration_outcomes(
+            &declaration_outcomes,
+            upgrade_workspace.display_members,
+            printer,
+        )?;
         return Ok(ExitStatus::Success);
     }
     settings.upgrade = Upgrade::from_packages(selected_packages.clone());
@@ -344,6 +381,7 @@ pub(crate) async fn upgrade(
         .iter()
         .map(|selected| {
             Ok(RequirementUpdate {
+                member: selected.member.clone(),
                 package: selected.package.clone(),
                 dependency_type: selected.dependency_type.clone(),
                 original_text: selected.original_text.clone(),
@@ -359,120 +397,49 @@ pub(crate) async fn upgrade(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let mut pyproject = PyProjectTomlMut::from_toml(
-        &project.current_project().pyproject_toml().raw,
-        DependencyTarget::PyProjectToml,
+    let resolution_marker = workspace_resolution_marker(
+        upgrade_workspace.target.workspace(),
+        fallback_interpreter.as_ref(),
     )?;
-    // Remove unreachable requirements from the temporary manifest, since URL requirements can be
-    // fetched during metadata preparation even when their markers cannot apply.
-    for (index, requirement) in skipped.iter().enumerate() {
-        if skipped[..index].iter().any(|removed| {
-            removed.dependency_type == requirement.dependency_type
-                && removed.original_text == requirement.original_text
-        }) {
-            continue;
-        }
-        if pyproject
-            .remove_dependency_declaration_text(
-                &requirement.dependency_type,
-                &requirement.original_text,
-            )?
-            .is_empty()
-        {
-            bail!(
-                "Dependency `{}` was not found in {}",
-                requirement.package,
-                requirement.dependency_type.toml_table_name()
+
+    let state = UniversalState::default();
+    for selected_project in &upgrade_workspace.selected_projects {
+        let metadata = temporary_member_metadata(
+            selected_project,
+            relaxed_requirements
+                .iter()
+                .filter(|replacement| replacement.member == *selected_project.project_name()),
+            skipped
+                .iter()
+                .filter(|requirement| requirement.member == *selected_project.project_name()),
+            &settings,
+            resolution_marker,
+            &client_builder,
+        )?;
+        if let Some(metadata) = metadata {
+            let distribution_id = DisplaySafeUrl::from_file_path(selected_project.project_root())
+                .map_err(|()| anyhow!("Project root is not a valid file URL"))?
+                .distribution_id();
+            state.index().distributions().done(
+                distribution_id,
+                Arc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
             );
         }
     }
-    apply_requirement_replacements(&mut pyproject, relaxed_requirements.iter())?;
-    let pyproject = pyproject.to_string();
-    let mut workspace_pyproject = WorkspacePyProjectToml::from_string(
-        pyproject.clone(),
-        project.project_root().join("pyproject.toml"),
-    )?;
-    let pyproject = PyProjectToml::from_toml(
-        &pyproject,
-        project.project_root().join("pyproject.toml").display(),
-    )?;
-    if pyproject
-        .project
-        .as_ref()
-        .is_some_and(|project| project.version.is_none())
-    {
-        // TODO: Support dynamic project metadata by building the project before resolution.
-        bail!("`uv upgrade` does not support projects with dynamic versions yet");
-    }
-    let metadata = ResolutionMetadata::parse_pyproject_toml(pyproject, None)?;
-    let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
-        project.current_project().root(),
-        &workspace_pyproject,
-    )?;
-    if let Some(sources) = workspace_pyproject
-        .tool
-        .as_mut()
-        .and_then(|tool| tool.uv.as_mut())
-        .and_then(|uv| uv.sources.as_mut())
-    {
-        sources.retain(|package, source| {
-            if !skipped.iter().any(|requirement| {
-                requirement.package == *package
-                    && requirement
-                        .contexts
-                        .iter()
-                        .any(|context| source_origin_applies(source, context))
-            }) {
-                return true;
-            }
-
-            if let Some(extra) = source.extra() {
-                return metadata.requires_dist.iter().any(|requirement| {
-                    requirement.name == *package
-                        && requirement.marker.top_level_extra_name().as_deref() == Some(extra)
-                });
-            }
-            if let Some(group) = source.group() {
-                return dependency_groups.get(group).is_some_and(|group| {
-                    group
-                        .requirements
-                        .iter()
-                        .any(|requirement| requirement.name == *package)
-                });
-            }
-
-            true
-        });
-    }
-    let metadata = Metadata::from_project_workspace(
-        metadata,
-        &project,
-        &workspace_pyproject,
-        None,
-        &settings.index_locations,
-        &settings.sources,
-        Some(project_resolution_marker(
-            &project,
-            fallback_interpreter.as_ref(),
-        )?),
-        true,
-        client_builder.credentials_cache(),
-    )?;
-
     let interpreter = if let Some(interpreter) = fallback_interpreter {
         interpreter
     } else {
         let groups = DependencyGroupsWithDefaults::none();
         let workspace_python = WorkspacePython::from_request(
             None,
-            Some(project.workspace()),
+            Some(upgrade_workspace.target.workspace()),
             &groups,
             project_dir,
             config_discovery,
         )
         .await?;
         ProjectInterpreter::discover(
-            project.workspace(),
+            upgrade_workspace.target.workspace(),
             &groups,
             workspace_python,
             &client_builder,
@@ -488,15 +455,6 @@ pub(crate) async fn upgrade(
         .into_interpreter()
     };
 
-    let state = UniversalState::default();
-    let distribution_id = DisplaySafeUrl::from_file_path(project.project_root())
-        .map_err(|()| anyhow!("Project root is not a valid file URL"))?
-        .distribution_id();
-    state.index().distributions().done(
-        distribution_id,
-        Arc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
-    );
-
     let result = match Box::pin(
         LockOperation::new(
             LockMode::DryRun(&interpreter),
@@ -511,7 +469,7 @@ pub(crate) async fn upgrade(
             preview,
         )
         .with_refresh(&refresh)
-        .execute(LockTarget::Workspace(project.workspace())),
+        .execute(LockTarget::Workspace(upgrade_workspace.target.workspace())),
     )
     .await
     {
@@ -533,7 +491,7 @@ pub(crate) async fn upgrade(
             continue;
         }
         if resolved_package
-            .index(project.workspace().install_path())?
+            .index(upgrade_workspace.target.workspace().install_path())?
             .is_some()
             && let Some(version) = resolved_package.version()
         {
@@ -568,6 +526,7 @@ pub(crate) async fn upgrade(
                 into_verbatim_requirement(selected.requirement.clone(), &selected.package)?;
             let replacement = into_verbatim_requirement(proposed_requirement, &selected.package)?;
             let update = RequirementUpdate {
+                member: selected.member.clone(),
                 package: selected.package.clone(),
                 dependency_type: selected.dependency_type.clone(),
                 original_text: selected.original_text.clone(),
@@ -578,7 +537,8 @@ pub(crate) async fn upgrade(
             if !updated_requirements
                 .iter()
                 .any(|existing_update: &RequirementUpdate| {
-                    existing_update.dependency_type == selected.dependency_type
+                    existing_update.member == selected.member
+                        && existing_update.dependency_type == selected.dependency_type
                         && existing_update.existing == update.existing
                         && existing_update.replacement == update.replacement
                 })
@@ -596,20 +556,41 @@ pub(crate) async fn upgrade(
     // The blocked declaration was relaxed for the solve, but cannot be rewritten to admit the
     // resolved versions. Applying other updates would leave a manifest inconsistent with that solve.
     if unsafe_blocked && !updated_requirements.is_empty() {
-        render_declaration_outcomes(&declaration_outcomes, printer)?;
+        render_declaration_outcomes(
+            &declaration_outcomes,
+            upgrade_workspace.display_members,
+            printer,
+        )?;
         bail!(
             "Could not safely apply dependency updates because one or more selected requirements could not be represented"
         );
     }
 
     if !updated_requirements.is_empty() {
-        let mut pyproject = PyProjectTomlMut::from_toml(
-            &project.current_project().pyproject_toml().raw,
-            DependencyTarget::PyProjectToml,
-        )?;
-        apply_requirement_replacements(&mut pyproject, updated_requirements.iter())?;
-        let pyproject_path = project.project_root().join("pyproject.toml");
-        fs_err::write(pyproject_path, pyproject.to_string())?;
+        let mut pyproject_writes = Vec::new();
+        for selected_project in &upgrade_workspace.selected_projects {
+            if !updated_requirements
+                .iter()
+                .any(|update| update.member == *selected_project.project_name())
+            {
+                continue;
+            }
+            let mut pyproject = PyProjectTomlMut::from_toml(
+                &selected_project.current_project().pyproject_toml().raw,
+                DependencyTarget::PyProjectToml,
+            )?;
+            apply_requirement_replacements(
+                &mut pyproject,
+                updated_requirements
+                    .iter()
+                    .filter(|update| update.member == *selected_project.project_name()),
+            )?;
+            let pyproject_path = selected_project.project_root().join("pyproject.toml");
+            pyproject_writes.push((pyproject_path, pyproject.to_string()));
+        }
+        for (pyproject_path, contents) in pyproject_writes {
+            fs_err::write(pyproject_path, contents)?;
+        }
     }
 
     let events = match &result {
@@ -637,14 +618,28 @@ pub(crate) async fn upgrade(
             writeln!(printer.stderr(), "No version change for {package}")?;
         }
     }
-    render_declaration_outcomes(&declaration_outcomes, printer)?;
+    render_declaration_outcomes(
+        &declaration_outcomes,
+        upgrade_workspace.display_members,
+        printer,
+    )?;
     for update in updated_requirements {
-        writeln!(
-            printer.stderr(),
-            "Updated requirement: `{}` -> `{}`",
-            update.original_text,
-            update.replacement
-        )?;
+        if upgrade_workspace.display_members {
+            writeln!(
+                printer.stderr(),
+                "Updated requirement in package `{}`: `{}` -> `{}`",
+                update.member,
+                update.original_text,
+                update.replacement
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Updated requirement: `{}` -> `{}`",
+                update.original_text,
+                update.replacement
+            )?;
+        }
     }
 
     Ok(ExitStatus::Success)
@@ -652,31 +647,36 @@ pub(crate) async fn upgrade(
 
 /// Return whether selected declarations need the interpreter-derived Python bound used by locking.
 fn requires_fallback_interpreter(
-    project: &ProjectWorkspace,
+    workspace: &Workspace,
+    selected_projects: &[ProjectWorkspace],
     packages: &[PackageName],
     exclude: &[PackageName],
 ) -> Result<bool> {
-    let target = LockTarget::from(project.workspace());
+    let target = LockTarget::from(workspace);
     if target.requires_python()?.is_some() {
         return Ok(false);
     }
 
     let is_explicit_selection = !packages.is_empty();
-    let pyproject_path = project.project_root().join("pyproject.toml");
-    for declaration in current_project_dependency_declarations(project) {
-        let DependencyDeclaration {
-            dependency_type,
-            text: dependency,
-            contexts: _,
-        } = declaration;
-        let table_name = dependency_type.toml_table_name();
-        let requirement = parse_dependency(&dependency, &table_name, &pyproject_path)?;
-        if exclude.contains(&requirement.name)
-            || (is_explicit_selection && !packages.contains(&requirement.name))
-        {
-            continue;
+    for project in selected_projects {
+        let member = project.project_name();
+        let pyproject_path = project.project_root().join("pyproject.toml");
+        for declaration in current_project_dependency_declarations(project) {
+            let DependencyDeclaration {
+                dependency_type,
+                text: dependency,
+                contexts: _,
+            } = declaration;
+            let table_name = dependency_type.toml_table_name();
+            let requirement = parse_dependency(&dependency, &table_name, &pyproject_path)?;
+            if exclude.contains(&requirement.name)
+                || (is_explicit_selection && !packages.contains(&requirement.name))
+                || (!is_explicit_selection && requirement.name == *member)
+            {
+                continue;
+            }
+            return Ok(true);
         }
-        return Ok(true);
     }
 
     Ok(false)
@@ -700,105 +700,328 @@ fn parse_dependency(
     })
 }
 
+async fn discover_upgrade_workspace(
+    project_dir: &Path,
+    package: Option<PackageName>,
+    all_packages: bool,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+) -> Result<UpgradeWorkspace> {
+    if all_packages {
+        let target = discover_virtual_project(project_dir, cache, workspace_cache).await?;
+        let member_names = target
+            .workspace()
+            .packages()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut selected_projects = Vec::new();
+        for member_name in member_names {
+            selected_projects.push(
+                discover_package_project(project_dir, member_name, cache, workspace_cache).await?,
+            );
+        }
+        return Ok(UpgradeWorkspace {
+            display_members: selected_projects.len() > 1,
+            target,
+            selected_projects,
+        });
+    }
+
+    if let Some(package) = package {
+        let project =
+            discover_package_project(project_dir, package, cache, workspace_cache).await?;
+        return Ok(UpgradeWorkspace {
+            target: VirtualProject::Project(project.clone()),
+            selected_projects: vec![project],
+            display_members: false,
+        });
+    }
+
+    match discover_virtual_project(project_dir, cache, workspace_cache).await? {
+        VirtualProject::Project(project) => Ok(UpgradeWorkspace {
+            target: VirtualProject::Project(project.clone()),
+            selected_projects: vec![project],
+            display_members: false,
+        }),
+        VirtualProject::NonProject(_) => {
+            bail!(
+                "`uv upgrade` requires a project with a `[project]` table; use `--package` or `--all-packages` to select workspace members"
+            )
+        }
+    }
+}
+
+async fn discover_virtual_project(
+    project_dir: &Path,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+) -> Result<VirtualProject> {
+    match VirtualProject::discover(
+        project_dir,
+        &DiscoveryOptions::default(),
+        cache,
+        workspace_cache,
+    )
+    .await
+    {
+        Ok(project) => Ok(project),
+        Err(err)
+            if matches!(
+                err.as_ref(),
+                WorkspaceErrorKind::MissingPyprojectToml | WorkspaceErrorKind::MissingProject(_)
+            ) =>
+        {
+            bail!("`uv upgrade` requires a project with a `[project]` table");
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
+async fn discover_package_project(
+    project_dir: &Path,
+    package: PackageName,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+) -> Result<ProjectWorkspace> {
+    match VirtualProject::discover_with_package(
+        project_dir,
+        &DiscoveryOptions::default(),
+        cache,
+        workspace_cache,
+        package,
+    )
+    .await
+    {
+        Ok(VirtualProject::Project(project)) => Ok(project),
+        Ok(VirtualProject::NonProject(_)) => {
+            bail!("`uv upgrade --package` requires a workspace member with a `[project]` table")
+        }
+        Err(err)
+            if matches!(
+                err.as_ref(),
+                WorkspaceErrorKind::MissingPyprojectToml | WorkspaceErrorKind::MissingProject(_)
+            ) =>
+        {
+            bail!("`uv upgrade` requires a project with a `[project]` table");
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn temporary_member_metadata<'a>(
+    project: &ProjectWorkspace,
+    relaxed_requirements: impl IntoIterator<Item = &'a RequirementUpdate>,
+    skipped_requirements: impl IntoIterator<Item = &'a SkippedRequirement>,
+    settings: &ResolverSettings,
+    resolution_marker: MarkerTree,
+    client_builder: &BaseClientBuilder<'_>,
+) -> Result<Option<Metadata>> {
+    let relaxed_requirements = relaxed_requirements.into_iter().collect::<Vec<_>>();
+    let skipped_requirements = skipped_requirements.into_iter().collect::<Vec<_>>();
+    if relaxed_requirements.is_empty() && skipped_requirements.is_empty() {
+        return Ok(None);
+    }
+
+    let mut pyproject = PyProjectTomlMut::from_toml(
+        &project.current_project().pyproject_toml().raw,
+        DependencyTarget::PyProjectToml,
+    )?;
+    for (index, requirement) in skipped_requirements.iter().enumerate() {
+        if skipped_requirements[..index].iter().any(|removed| {
+            removed.dependency_type == requirement.dependency_type
+                && removed.original_text == requirement.original_text
+        }) {
+            continue;
+        }
+        if pyproject
+            .remove_dependency_declaration_text(
+                &requirement.dependency_type,
+                &requirement.original_text,
+            )?
+            .is_empty()
+        {
+            bail!(
+                "Dependency `{}` was not found in {}",
+                requirement.package,
+                requirement.dependency_type.toml_table_name()
+            );
+        }
+    }
+    apply_requirement_replacements(&mut pyproject, relaxed_requirements)?;
+    let pyproject = pyproject.to_string();
+    let pyproject_path = project.project_root().join("pyproject.toml");
+    let mut workspace_pyproject =
+        WorkspacePyProjectToml::from_string(pyproject.clone(), pyproject_path.clone())?;
+    let pyproject = PyProjectToml::from_toml(&pyproject, pyproject_path.display())?;
+    if pyproject
+        .project
+        .as_ref()
+        .is_some_and(|project| project.version.is_none())
+    {
+        // TODO: Support dynamic project metadata by building the project before resolution.
+        bail!("`uv upgrade` does not support projects with dynamic versions yet");
+    }
+    let metadata = ResolutionMetadata::parse_pyproject_toml(pyproject, None)?;
+    let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
+        project.current_project().root(),
+        &workspace_pyproject,
+    )?;
+    if let Some(sources) = workspace_pyproject
+        .tool
+        .as_mut()
+        .and_then(|tool| tool.uv.as_mut())
+        .and_then(|uv| uv.sources.as_mut())
+    {
+        sources.retain(|package, source| {
+            if !skipped_requirements.iter().any(|requirement| {
+                requirement.package == *package
+                    && requirement
+                        .contexts
+                        .iter()
+                        .any(|context| source_origin_applies(source, context))
+            }) {
+                return true;
+            }
+
+            if let Some(extra) = source.extra() {
+                return metadata.requires_dist.iter().any(|requirement| {
+                    requirement.name == *package
+                        && requirement.marker.top_level_extra_name().as_deref() == Some(extra)
+                });
+            }
+            if let Some(group) = source.group() {
+                return dependency_groups.get(group).is_some_and(|group| {
+                    group
+                        .requirements
+                        .iter()
+                        .any(|requirement| requirement.name == *package)
+                });
+            }
+
+            true
+        });
+    }
+    let metadata = Metadata::from_project_workspace(
+        metadata,
+        project,
+        &workspace_pyproject,
+        None,
+        &settings.index_locations,
+        &settings.sources,
+        Some(resolution_marker),
+        true,
+        client_builder.credentials_cache(),
+    )?;
+    Ok(Some(metadata))
+}
+
 /// Select the dependency declarations targeted by `uv upgrade`.
 fn select_requirements(
-    project: &ProjectWorkspace,
+    workspace: &Workspace,
+    selected_projects: &[ProjectWorkspace],
     packages: &[PackageName],
     exclude: &[PackageName],
     fallback_interpreter: Option<&Interpreter>,
 ) -> Result<DeclarationSelection> {
-    if project.workspace().packages().len() != 1 {
-        bail!("`uv upgrade` does not support workspaces with multiple members yet");
-    }
-
     let is_explicit_selection = !packages.is_empty();
-    let resolution_marker = project_resolution_marker(project, fallback_interpreter)?;
-    let pyproject_path = project.project_root().join("pyproject.toml");
-    let optional_dependencies = project
-        .current_project()
-        .project()
-        .optional_dependencies
-        .as_ref();
+    let resolution_marker = workspace_resolution_marker(workspace, fallback_interpreter)?;
     let mut to_upgrade = Vec::new();
     let mut skipped = Vec::new();
     let mut found_packages = BTreeSet::new();
     let mut selected_packages = Vec::new();
-    for declaration in current_project_dependency_declarations(project) {
-        let DependencyDeclaration {
-            dependency_type,
-            text: dependency,
-            contexts,
-        } = declaration;
-        let table_name = dependency_type.toml_table_name();
-        let requirement = parse_dependency(&dependency, &table_name, &pyproject_path)?;
-        if exclude.contains(&requirement.name)
-            || (is_explicit_selection && !packages.contains(&requirement.name))
-        {
-            continue;
-        }
+    for project in selected_projects {
+        let member = project.project_name().clone();
+        let pyproject_path = project.project_root().join("pyproject.toml");
+        let optional_dependencies = project
+            .current_project()
+            .project()
+            .optional_dependencies
+            .as_ref();
+        for declaration in current_project_dependency_declarations(project) {
+            let DependencyDeclaration {
+                dependency_type,
+                text: dependency,
+                contexts,
+            } = declaration;
+            let table_name = dependency_type.toml_table_name();
+            let requirement = parse_dependency(&dependency, &table_name, &pyproject_path)?;
+            if exclude.contains(&requirement.name)
+                || (is_explicit_selection && !packages.contains(&requirement.name))
+            {
+                continue;
+            }
+            // Optional self-references are valid metadata, but not implicit upgrade targets.
+            if !is_explicit_selection && requirement.name == member {
+                continue;
+            }
 
-        found_packages.insert(requirement.name.clone());
-        let declaration_contexts = contexts
-            .into_iter()
-            .map(|context| {
-                let mut marker = requirement.marker;
-                marker.and(context.marker);
-                DeclarationContext {
-                    dependency_type: context.dependency_type,
-                    marker,
+            found_packages.insert(requirement.name.clone());
+            let declaration_contexts = contexts
+                .into_iter()
+                .map(|context| {
+                    let mut marker = requirement.marker;
+                    marker.and(context.marker);
+                    DeclarationContext {
+                        dependency_type: context.dependency_type,
+                        marker,
+                    }
+                })
+                .collect::<Vec<_>>();
+            let mut active_contexts = Vec::new();
+            let mut effective_marker = MarkerTree::FALSE;
+            let mut has_environment_context = false;
+            for context in &declaration_contexts {
+                let mut context_marker = context.marker;
+                context_marker.and(resolution_marker);
+                if context_marker.is_false() {
+                    continue;
                 }
-            })
-            .collect::<Vec<_>>();
-        let mut active_contexts = Vec::new();
-        let mut effective_marker = MarkerTree::FALSE;
-        let mut has_environment_context = false;
-        for context in &declaration_contexts {
-            let mut context_marker = context.marker;
-            context_marker.and(resolution_marker);
-            if context_marker.is_false() {
+                has_environment_context = true;
+                context_marker = context_marker.simplify_not_extras_with(|extra| {
+                    optional_dependencies.is_none_or(|optional_dependencies| {
+                        !optional_dependencies.contains_key(extra)
+                    })
+                });
+                if context_marker.is_false() {
+                    continue;
+                }
+                effective_marker.or(context_marker);
+                active_contexts.push(DeclarationContext {
+                    dependency_type: context.dependency_type.clone(),
+                    marker: context_marker,
+                });
+            }
+            if active_contexts.is_empty() {
+                skipped.push(SkippedRequirement {
+                    member: member.clone(),
+                    package: requirement.name.clone(),
+                    dependency_type,
+                    contexts: declaration_contexts,
+                    original_text: dependency,
+                    display_text: display_requirement(&requirement),
+                    reason: if has_environment_context {
+                        SkippedReason::UndefinedExtra
+                    } else {
+                        SkippedReason::EnvironmentOrPythonRequirement
+                    },
+                });
                 continue;
             }
-            has_environment_context = true;
-            context_marker = context_marker.simplify_not_extras_with(|extra| {
-                optional_dependencies
-                    .is_none_or(|optional_dependencies| !optional_dependencies.contains_key(extra))
-            });
-            if context_marker.is_false() {
-                continue;
+            if !selected_packages.contains(&requirement.name) {
+                selected_packages.push(requirement.name.clone());
             }
-            effective_marker.or(context_marker);
-            active_contexts.push(DeclarationContext {
-                dependency_type: context.dependency_type.clone(),
-                marker: context_marker,
-            });
-        }
-        if active_contexts.is_empty() {
-            skipped.push(SkippedRequirement {
+            to_upgrade.push(UpgradableRequirement {
+                member: member.clone(),
                 package: requirement.name.clone(),
                 dependency_type,
-                contexts: declaration_contexts,
                 original_text: dependency,
-                display_text: display_requirement(&requirement),
-                reason: if has_environment_context {
-                    SkippedReason::UndefinedExtra
-                } else {
-                    SkippedReason::EnvironmentOrPythonRequirement
-                },
+                requirement,
+                effective_marker,
+                contexts: active_contexts,
+                resolved_versions: BTreeSet::new(),
             });
-            continue;
         }
-        if !selected_packages.contains(&requirement.name) {
-            selected_packages.push(requirement.name.clone());
-        }
-        to_upgrade.push(UpgradableRequirement {
-            package: requirement.name.clone(),
-            dependency_type,
-            original_text: dependency,
-            requirement,
-            effective_marker,
-            contexts: active_contexts,
-            resolved_versions: BTreeSet::new(),
-        });
     }
 
     for package in packages
@@ -806,7 +1029,10 @@ fn select_requirements(
         .filter(|package| !exclude.contains(*package))
     {
         if !found_packages.contains(package) {
-            bail!("Dependency `{package}` was not found in the current project");
+            if selected_projects.len() == 1 {
+                bail!("Dependency `{package}` was not found in the current project");
+            }
+            bail!("Dependency `{package}` was not found in selected workspace members");
         }
     }
     if is_explicit_selection {
@@ -837,7 +1063,8 @@ fn select_requirements(
 }
 
 fn validate_requirements(
-    project: &ProjectWorkspace,
+    workspace: &Workspace,
+    selected_projects: &[ProjectWorkspace],
     requirements: &[UpgradableRequirement],
     packages: &[PackageName],
     sources_strategy: &NoSources,
@@ -854,49 +1081,63 @@ fn validate_requirements(
         }
     }
 
-    for package in packages {
-        if package == project.project_name() {
-            bail!("Dependency `{package}` refers to the current project and cannot be upgraded");
+    for selected in requirements {
+        if selected.package == selected.member {
+            if selected_projects.len() == 1 {
+                bail!(
+                    "Dependency `{}` refers to the current project and cannot be upgraded",
+                    selected.package
+                );
+            }
+            bail!(
+                "Dependency `{}` refers to workspace member `{}` and cannot be upgraded",
+                selected.package,
+                selected.member
+            );
         }
     }
 
-    for package in packages {
-        if sources_strategy.for_package(package) {
-            continue;
-        }
-        let sources = project
-            .current_project()
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.as_ref())
-            .and_then(|sources| sources.inner().get(package))
-            .or_else(|| project.workspace().sources().get(package));
-        let applies_to_selected_requirement = |source| {
-            requirements.iter().any(|selected| {
-                selected.package == *package && source_is_applicable(source, &selected.contexts)
-            })
-        };
-        if sources.is_some_and(|sources| {
-            sources.iter().any(|source| {
-                applies_to_selected_requirement(source)
-                    && matches!(source, Source::Git { rev: Some(_), .. })
-            })
-        }) {
-            bail!(
-                "Dependency `{package}` is pinned to a Git revision and cannot be upgraded commit-to-commit"
-            );
-        }
-        if sources.is_some_and(|sources| {
-            sources.iter().any(|source| {
-                applies_to_selected_requirement(source)
-                    && !matches!(source, Source::Registry { .. })
-            })
-        }) {
-            bail!(
-                "Dependency `{package}` uses a non-registry source in `tool.uv.sources` and cannot be upgraded"
-            );
+    for project in selected_projects {
+        for package in packages {
+            if sources_strategy.for_package(package) {
+                continue;
+            }
+            let sources = project
+                .current_project()
+                .pyproject_toml()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.sources.as_ref())
+                .and_then(|sources| sources.inner().get(package))
+                .or_else(|| workspace.sources().get(package));
+            let applies_to_selected_requirement = |source| {
+                requirements.iter().any(|selected| {
+                    selected.member == *project.project_name()
+                        && selected.package == *package
+                        && source_is_applicable(source, &selected.contexts)
+                })
+            };
+            if sources.is_some_and(|sources| {
+                sources.iter().any(|source| {
+                    applies_to_selected_requirement(source)
+                        && matches!(source, Source::Git { rev: Some(_), .. })
+                })
+            }) {
+                bail!(
+                    "Dependency `{package}` is pinned to a Git revision and cannot be upgraded commit-to-commit"
+                );
+            }
+            if sources.is_some_and(|sources| {
+                sources.iter().any(|source| {
+                    applies_to_selected_requirement(source)
+                        && !matches!(source, Source::Registry { .. })
+                })
+            }) {
+                bail!(
+                    "Dependency `{package}` uses a non-registry source in `tool.uv.sources` and cannot be upgraded"
+                );
+            }
         }
     }
 
@@ -914,7 +1155,11 @@ fn display_requirement(requirement: &Requirement<VerbatimParsedUrl>) -> String {
     requirement.to_string()
 }
 
-fn render_skipped_requirements(skipped: &[SkippedRequirement], printer: Printer) -> Result<()> {
+fn render_skipped_requirements(
+    skipped: &[SkippedRequirement],
+    display_members: bool,
+    printer: Printer,
+) -> Result<()> {
     for requirement in skipped {
         let reason = match requirement.reason {
             SkippedReason::EnvironmentOrPythonRequirement => {
@@ -924,13 +1169,24 @@ fn render_skipped_requirements(skipped: &[SkippedRequirement], printer: Printer)
                 "references an extra that the project does not provide"
             }
         };
-        writeln!(
-            printer.stderr(),
-            "warning: Skipping dependency `{}` in {}: `{}` ({reason})",
-            requirement.package,
-            requirement.dependency_type.toml_table_name(),
-            requirement.display_text
-        )?;
+        if display_members {
+            writeln!(
+                printer.stderr(),
+                "warning: Skipping dependency `{}` in package `{}` {}: `{}` ({reason})",
+                requirement.package,
+                requirement.member,
+                requirement.dependency_type.toml_table_name(),
+                requirement.display_text
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "warning: Skipping dependency `{}` in {}: `{}` ({reason})",
+                requirement.package,
+                requirement.dependency_type.toml_table_name(),
+                requirement.display_text
+            )?;
+        }
     }
     Ok(())
 }
@@ -1061,21 +1317,37 @@ fn dependency_group_requires_python_marker(
         })
 }
 
-fn render_declaration_outcomes(outcomes: &[DeclarationOutcome], printer: Printer) -> Result<()> {
+fn render_declaration_outcomes(
+    outcomes: &[DeclarationOutcome],
+    display_members: bool,
+    printer: Printer,
+) -> Result<()> {
     for outcome in outcomes {
         match outcome {
             DeclarationOutcome::Blocked {
                 declaration,
                 reason,
             } => {
-                writeln!(
-                    printer.stderr(),
-                    "warning: Could not update dependency `{}` in {}: `{}` ({})",
-                    declaration.package,
-                    declaration.dependency_type.toml_table_name(),
-                    declaration.text,
-                    reason.message()
-                )?;
+                if display_members {
+                    writeln!(
+                        printer.stderr(),
+                        "warning: Could not update dependency `{}` in package `{}` {}: `{}` ({})",
+                        declaration.package,
+                        declaration.member,
+                        declaration.dependency_type.toml_table_name(),
+                        declaration.text,
+                        reason.message()
+                    )?;
+                } else {
+                    writeln!(
+                        printer.stderr(),
+                        "warning: Could not update dependency `{}` in {}: `{}` ({})",
+                        declaration.package,
+                        declaration.dependency_type.toml_table_name(),
+                        declaration.text,
+                        reason.message()
+                    )?;
+                }
             }
             DeclarationOutcome::Changed(_) | DeclarationOutcome::Unchanged(_) => {}
         }
@@ -1083,12 +1355,12 @@ fn render_declaration_outcomes(outcomes: &[DeclarationOutcome], printer: Printer
     Ok(())
 }
 
-/// Return the marker domain that the project will resolve for dependency declarations.
-fn project_resolution_marker(
-    project: &ProjectWorkspace,
+/// Return the marker domain that the workspace will resolve for dependency declarations.
+fn workspace_resolution_marker(
+    workspace: &Workspace,
     fallback_interpreter: Option<&Interpreter>,
 ) -> Result<MarkerTree> {
-    let target = LockTarget::from(project.workspace());
+    let target = LockTarget::from(workspace);
     let requires_python = match target.requires_python()? {
         Some(requires_python) => requires_python.to_marker_tree(),
         None => fallback_interpreter.map_or(MarkerTree::TRUE, |interpreter| {

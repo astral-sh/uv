@@ -4301,6 +4301,14 @@ pub struct UpgradeArgs {
     /// Exclude the named package from upgrades.
     #[arg(long, value_hint = ValueHint::Other)]
     pub exclude: Vec<PackageName>,
+
+    /// Upgrade dependencies in all workspace members.
+    #[arg(long, conflicts_with = "package")]
+    pub all_packages: bool,
+
+    /// Upgrade dependencies in a specific package in the workspace.
+    #[arg(long, conflicts_with = "all_packages", value_hint = ValueHint::Other)]
+    pub package: Option<PackageName>,
 }
 
 #[derive(Args)]
