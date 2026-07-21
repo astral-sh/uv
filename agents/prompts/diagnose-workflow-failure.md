@@ -26,8 +26,8 @@ Set `decision` to exactly one of:
   includes a failing default-branch workflow, a confirmed CI flake, or infrastructure behavior the
   repository should mitigate.
 - `duplicate` when an existing issue or pull request already tracks the same underlying failure. Put
-  the canonical open issue in the originating repository first in `related.items` when one exists so
-  the failed run can be reported as another sample.
+  the canonical open issue in `astral-sh/uv-dev` first in `related.items` when one exists so the
+  failed run can be reported as another sample.
 - `ignore` when there is nothing for maintainers to fix, including an expected compile, lint, or
   test failure caused by the pull request; a superseded or follow-on failure; or a transient
   external outage with no repository-side remediation.
