@@ -2279,9 +2279,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// especially useful for packages that publish many releases with unchanged dependencies,
     /// since rejecting the range lets the parent backtrack past all of them at once.
     ///
-    /// The optimization is deliberately limited to specific-environment wheel resolutions after
-    /// repeated backtracking. Every adjacent candidate must already have metadata in memory and
-    /// have identical raw requirements and scoped dependency effects. For multiple indexes, the
+    /// The optimization is deliberately limited to unforked wheel dependencies after repeated
+    /// backtracking. Every adjacent candidate must already have metadata in memory and have
+    /// identical raw requirements and scoped dependency effects. For multiple indexes, the
     /// candidate is selected in index-priority order without materializing lazy entries.
     fn shared_dependency_versions(
         &self,
@@ -2298,8 +2298,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         else {
             return None;
         };
-        if state.env.marker_environment().is_none()
-            || state.fork_urls.get(name).is_some()
+        if state.fork_urls.get(name).is_some()
             || !self.preferences.get(name).is_empty()
             || !self.installed_packages.get_packages(name).is_empty()
         {
@@ -2424,9 +2423,37 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if dist.wheel().is_none()
             || dist.for_resolution().index() != version_map.index()
             || Self::check_requires_python(&dist, &state.python_requirement).is_some()
+            // Universal resolution may need to fork or reject a platform-limited version when
+            // checking required environments or local-version coverage.
+            || (state.env.marker_environment().is_none()
+                && (!self.options.artifact_environments.is_empty()
+                    || candidate_version.is_local())
+                && !dist.implied_markers().is_true())
         {
             return false;
         }
+
+        // CUDA system dependencies are synthesized from the selected index, so identical archive
+        // metadata is not sufficient when adjacent candidates come from different backends.
+        if self.options.torch_backend.as_ref().is_some_and(|backend| {
+            matches!(backend, TorchStrategy::Cuda { .. }) && backend.has_system_dependency(name)
+        }) {
+            let current_system_dependency = state
+                .pins
+                .get(name, version)
+                .and_then(ResolvedDist::index)
+                .map(IndexUrl::url)
+                .and_then(SystemDependency::from_index);
+            let candidate_system_dependency = dist
+                .for_resolution()
+                .index()
+                .map(IndexUrl::url)
+                .and_then(SystemDependency::from_index);
+            if current_system_dependency != candidate_system_dependency {
+                return false;
+            }
+        }
+
         let metadata_id = dist.for_resolution().distribution_id();
         let Some(response) = self.index.distributions().get(&metadata_id) else {
             return false;
