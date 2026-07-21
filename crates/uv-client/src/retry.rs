@@ -9,6 +9,7 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     RetryPolicy, Retryable, RetryableStrategy, default_on_request_error, default_on_request_success,
 };
+use rustls::{AlertDescription, Error as RustlsError};
 use tracing::{debug, trace};
 use url::Url;
 
@@ -174,8 +175,8 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
 
         if let Some(reqwest_err) = reqwest_err {
             has_known_error = true;
-            if is_tls_request_error(reqwest_err) {
-                trace!("Fatal nested reqwest TLS error");
+            if is_tls_certificate_error(reqwest_err) {
+                trace!("Fatal nested reqwest TLS certificate error");
                 return Some(Retryable::Fatal);
             }
             // Ignore the default retry strategy returning fatal.
@@ -259,8 +260,31 @@ fn is_retryable_status_error(reqwest_err: &reqwest::Error) -> bool {
         || status == StatusCode::TOO_MANY_REQUESTS
 }
 
-fn is_tls_request_error(reqwest_err: &reqwest::Error) -> bool {
-    reqwest_err.is_connect() && find_source_with_io::<rustls::Error>(reqwest_err).is_some()
+fn is_tls_certificate_error(reqwest_err: &reqwest::Error) -> bool {
+    find_source_with_io::<RustlsError>(reqwest_err).is_some_and(is_certificate_error)
+}
+
+fn is_certificate_error(error: &RustlsError) -> bool {
+    match error {
+        RustlsError::InvalidCertificate(_) | RustlsError::NoCertificatesPresented => true,
+        RustlsError::AlertReceived(alert) => matches!(
+            alert,
+            AlertDescription::AccessDenied
+                | AlertDescription::BadCertificate
+                | AlertDescription::BadCertificateHashValue
+                | AlertDescription::BadCertificateStatusResponse
+                | AlertDescription::CertificateExpired
+                | AlertDescription::CertificateRequired
+                | AlertDescription::CertificateRevoked
+                | AlertDescription::CertificateUnknown
+                | AlertDescription::CertificateUnobtainable
+                | AlertDescription::DecryptError
+                | AlertDescription::NoCertificate
+                | AlertDescription::UnknownCA
+                | AlertDescription::UnsupportedCertificate
+        ),
+        _ => false,
+    }
 }
 
 /// Find the first source error of a specific type.
@@ -313,6 +337,39 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::{UvRetryableStrategy, retryable_on_request_failure};
+
+    #[test]
+    fn recognizes_tls_certificate_errors() {
+        let certificate_alerts = [
+            AlertDescription::AccessDenied,
+            AlertDescription::BadCertificate,
+            AlertDescription::BadCertificateHashValue,
+            AlertDescription::BadCertificateStatusResponse,
+            AlertDescription::CertificateExpired,
+            AlertDescription::CertificateRequired,
+            AlertDescription::CertificateRevoked,
+            AlertDescription::CertificateUnknown,
+            AlertDescription::CertificateUnobtainable,
+            AlertDescription::DecryptError,
+            AlertDescription::NoCertificate,
+            AlertDescription::UnknownCA,
+            AlertDescription::UnsupportedCertificate,
+        ];
+
+        assert!(is_certificate_error(&RustlsError::InvalidCertificate(
+            rustls::CertificateError::UnknownIssuer
+        )));
+        assert!(is_certificate_error(&RustlsError::NoCertificatesPresented));
+        for alert in certificate_alerts {
+            assert!(
+                is_certificate_error(&RustlsError::AlertReceived(alert)),
+                "expected {alert:?} to be classified as a certificate error"
+            );
+        }
+        assert!(!is_certificate_error(&RustlsError::AlertReceived(
+            AlertDescription::InternalError
+        )));
+    }
 
     /// Enumerate which status codes we are retrying.
     #[tokio::test]

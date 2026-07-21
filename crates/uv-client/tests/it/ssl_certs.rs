@@ -8,6 +8,8 @@ use anyhow::Result;
 use rcgen::CustomExtension;
 use temp_env::async_with_vars;
 use tempfile::{NamedTempFile, TempDir};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 use url::Url;
 
 use uv_cache::Cache;
@@ -203,7 +205,7 @@ impl TestClient {
     /// error on the client side.
     async fn expect_https_connect_fails(&self, cert: &TestCertificate) {
         self.run_https(cert, |response, server_task| async move {
-            assert_connection_error(&response);
+            assert_fatal_reqwest_error(&response);
             // Server may or may not have errored — just ensure no panic.
             let _ = server_task.await;
         })
@@ -272,15 +274,18 @@ impl TestClient {
 
     /// Assert that an mTLS connection to `cert`'s server fails and the server
     /// reports a specific TLS error.
-    async fn expect_mtls_connect_fails_with_server_tls_error<F>(
+    async fn expect_mtls_connect_fails_with_tls_errors<F>(
         &self,
         cert: &TestCertificate,
-        assert_tls_error: F,
+        assert_tls_errors: F,
     ) where
-        F: FnOnce(&rustls::Error),
+        F: FnOnce(&rustls::Error, &rustls::Error),
     {
         self.run_mtls(cert, |response, server_task| async move {
-            assert_connection_error(&response);
+            let reqwest_error = assert_fatal_reqwest_error(&response);
+            let Some(client_tls_error) = find_source_with_io::<rustls::Error>(reqwest_error) else {
+                panic!("expected client TLS error, got: {reqwest_error:?}");
+            };
 
             let server_res = server_task.await.expect("server task panicked");
             let Err(anyhow_err) = server_res else {
@@ -295,7 +300,7 @@ impl TestClient {
             let Some(tls_err) = wrapped_err.downcast_ref::<rustls::Error>() else {
                 panic!("expected rustls::Error, got: {wrapped_err}");
             };
-            assert_tls_error(tls_err);
+            assert_tls_errors(client_tls_error, tls_err);
         })
         .await;
     }
@@ -303,10 +308,17 @@ impl TestClient {
     /// Assert that an mTLS connection to `cert`'s server fails because no
     /// valid client certificate was presented.
     async fn expect_mtls_connect_fails(&self, cert: &TestCertificate) {
-        self.expect_mtls_connect_fails_with_server_tls_error(cert, |tls_err| {
+        self.expect_mtls_connect_fails_with_tls_errors(cert, |client_tls_err, server_tls_err| {
             assert!(
-                matches!(tls_err, rustls::Error::NoCertificatesPresented),
-                "expected NoCertificatesPresented, got: {tls_err}"
+                matches!(
+                    client_tls_err,
+                    rustls::Error::AlertReceived(rustls::AlertDescription::CertificateRequired)
+                ),
+                "expected CertificateRequired alert, got: {client_tls_err}"
+            );
+            assert!(
+                matches!(server_tls_err, rustls::Error::NoCertificatesPresented),
+                "expected NoCertificatesPresented, got: {server_tls_err}"
             );
         })
         .await;
@@ -352,7 +364,7 @@ impl TestClient {
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
             let response = send_request_to(&url, system_certs).await;
-            assert_connection_error(&response);
+            assert_fatal_reqwest_error(&response);
         })
         .await;
     }
@@ -430,24 +442,19 @@ async fn send_request_to(
         .await
 }
 
-/// Assert that a request result is a TLS connection error.
-fn assert_connection_error(res: &Result<reqwest::Response, reqwest_middleware::Error>) {
+/// Assert that a request failed with a reqwest error without being retried.
+fn assert_fatal_reqwest_error(
+    res: &Result<reqwest::Response, reqwest_middleware::Error>,
+) -> &reqwest::Error {
     let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.as_ref().err() else {
         panic!("expected middleware error, got: {res:?}");
     };
-    let reqwest_error = middleware_error
-        .chain()
-        .find_map(|err| {
-            err.downcast_ref::<reqwest_middleware::Error>().map(|err| {
-                if let reqwest_middleware::Error::Reqwest(inner) = err {
-                    inner
-                } else {
-                    panic!("expected reqwest error, got: {err}")
-                }
-            })
-        })
-        .expect("expected reqwest error");
-    assert!(reqwest_error.is_connect());
+    let Some(reqwest_retry::RetryError::Error(reqwest_middleware::Error::Reqwest(reqwest_error))) =
+        middleware_error.downcast_ref::<reqwest_retry::RetryError>()
+    else {
+        panic!("expected fatal reqwest error without retries, got: {middleware_error:?}");
+    };
+    reqwest_error
 }
 
 /// Find the first source error of a specific type, including errors wrapped by [`io::Error`].
@@ -487,12 +494,9 @@ async fn test_tls_certificate_errors_are_not_retried() -> Result<()> {
     let cert = TestCertificate::new()?;
     client()
         .run_https(&cert, |response, server_task| async move {
-            assert!(
-                matches!(response, Err(reqwest_middleware::Error::Middleware(_))),
-                "expected middleware error, got: {response:?}"
-            );
+            assert_fatal_reqwest_error(&response);
             let Err(reqwest_middleware::Error::Middleware(middleware_error)) = response else {
-                return;
+                panic!("expected middleware error");
             };
             let tls_error = find_source_with_io::<rustls::Error>(middleware_error.as_ref());
             assert!(tls_error.is_some(), "expected TLS error in chain");
@@ -506,6 +510,38 @@ async fn test_tls_certificate_errors_are_not_retried() -> Result<()> {
             let _ = server_task.await;
         })
         .await;
+    Ok(())
+}
+
+/// TLS protocol failures that are not certificate errors remain retryable.
+#[tokio::test]
+async fn test_non_certificate_tls_errors_are_retried() -> Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    let server_task = tokio::spawn(async move {
+        for _ in 0..4 {
+            let (mut stream, _) = listener.accept().await?;
+            let mut client_hello = [0];
+            stream.read_exact(&mut client_hello).await?;
+            // A fatal TLS `internal_error` alert.
+            stream
+                .write_all(&[0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x50])
+                .await?;
+        }
+        Ok::<_, anyhow::Error>(())
+    });
+
+    let response = send_request(addr, false).await;
+    let Err(reqwest_middleware::Error::Middleware(middleware_error)) = response else {
+        panic!("expected middleware error, got: {response:?}");
+    };
+    let Some(reqwest_retry::RetryError::WithRetries { retries, .. }) =
+        middleware_error.downcast_ref::<reqwest_retry::RetryError>()
+    else {
+        panic!("expected retries after a non-certificate TLS error, got: {middleware_error:?}");
+    };
+    assert_eq!(*retries, 3);
+    server_task.await??;
     Ok(())
 }
 
@@ -760,16 +796,26 @@ async fn test_mtls_with_wrong_client_cert() -> Result<()> {
     client()
         .ssl_cert_file(&server_cert.trust_path)
         .ssl_client_cert(&other_cert.client_cert_path)
-        .expect_mtls_connect_fails_with_server_tls_error(&server_cert, |tls_err| {
+        .expect_mtls_connect_fails_with_tls_errors(&server_cert, |client_tls_err, server_tls_err| {
             assert!(
                 matches!(
-                    tls_err,
+                    client_tls_err,
+                    rustls::Error::AlertReceived(
+                        rustls::AlertDescription::DecryptError
+                            | rustls::AlertDescription::UnknownCA
+                    )
+                ),
+                "expected DecryptError or UnknownCA alert, got: {client_tls_err}"
+            );
+            assert!(
+                matches!(
+                    server_tls_err,
                     rustls::Error::InvalidCertificate(
                         rustls::CertificateError::BadSignature
                             | rustls::CertificateError::UnknownIssuer
                     )
                 ),
-                "expected InvalidCertificate(BadSignature | UnknownIssuer), got: {tls_err}"
+                "expected InvalidCertificate(BadSignature | UnknownIssuer), got: {server_tls_err}"
             );
         })
         .await;
