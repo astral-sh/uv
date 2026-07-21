@@ -363,48 +363,63 @@ impl PyProjectTomlMut {
         Ok(edit)
     }
 
-    /// Replaces a dependency in `project.dependencies` without modifying its source.
+    /// Replaces every exact match for a dependency declaration without modifying its source.
     ///
-    /// Returns `Some` if the dependency was replaced, or `None` if it was not found.
-    pub fn replace_dependency(
+    /// Returns the position of every dependency that was replaced.
+    pub fn replace_dependency_declaration(
         &mut self,
-        req: &Requirement,
-        raw: bool,
-    ) -> Result<Option<ArrayEdit>, Error> {
-        let Some(dependencies) = self
-            .project_mut()?
-            .and_then(|project| project.get_mut("dependencies"))
-            .map(|dependencies| {
-                dependencies
-                    .as_array_mut()
-                    .ok_or(Error::MalformedDependencies)
-            })
-            .transpose()?
-        else {
-            return Ok(None);
+        dependency_type: &DependencyType,
+        existing: &Requirement,
+        replacement: &Requirement,
+    ) -> Result<Vec<ArrayEdit>, Error> {
+        let Some(dependencies) = self.dependency_type_array_mut(dependency_type)? else {
+            return Ok(Vec::new());
         };
-        let mut to_replace = find_dependencies(&req.name, Some(&req.marker), dependencies);
 
-        match to_replace.as_slice() {
-            [] => Ok(None),
-            [_] => {
-                let (index, _) = to_replace.remove(0);
-                let req_string = if raw {
-                    req.displayable_with_credentials().to_string()
-                } else {
-                    req.to_string()
-                };
-                dependencies.replace(index, req_string);
-                Ok(Some(ArrayEdit::Update(index)))
+        let replacement = replacement.to_string();
+        let mut edits = Vec::new();
+        for (index, requirement) in
+            find_dependencies(&existing.name, Some(&existing.marker), dependencies)
+        {
+            if same_requirement_declaration(&requirement, existing) {
+                dependencies.replace(index, replacement.clone());
+                edits.push(ArrayEdit::Update(index));
             }
-            _ => Err(Error::Ambiguous {
-                package_name: req.name.clone(),
-                requirements: to_replace
-                    .into_iter()
-                    .map(|(_, requirement)| requirement)
-                    .collect(),
-            }),
         }
+        Ok(edits)
+    }
+
+    /// Removes every exact string match for a dependency declaration without modifying its source.
+    ///
+    /// Returns the position of every dependency that was removed.
+    pub fn remove_dependency_declaration_text(
+        &mut self,
+        dependency_type: &DependencyType,
+        existing: &str,
+    ) -> Result<Vec<ArrayEdit>, Error> {
+        let Some(dependencies) = self.dependency_type_array_mut(dependency_type)? else {
+            return Ok(Vec::new());
+        };
+
+        let mut edits = Vec::new();
+        for index in dependencies
+            .iter()
+            .enumerate()
+            .filter_map(|(index, dependency)| {
+                (dependency.as_str() == Some(existing)).then_some(index)
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
+            remove_dependency_at(index, dependencies);
+            edits.push(ArrayEdit::Update(index));
+        }
+        if !edits.is_empty() {
+            reformat_array_multiline(dependencies);
+        }
+        edits.reverse();
+        Ok(edits)
     }
 
     /// Adds a development dependency to `tool.uv.dev-dependencies`.
@@ -972,6 +987,89 @@ impl PyProjectTomlMut {
             .ok_or(Error::MalformedDependencies)?;
 
         Ok(group)
+    }
+
+    /// Get an existing TOML array for a dependency type.
+    fn dependency_type_array_mut(
+        &mut self,
+        dependency_type: &DependencyType,
+    ) -> Result<Option<&mut Array>, Error> {
+        let dependencies = match dependency_type {
+            DependencyType::Production => self
+                .project_mut()?
+                .and_then(|project| project.get_mut("dependencies"))
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+            DependencyType::Dev => self
+                .doc
+                .get_mut("tool")
+                .map(|tool| tool.as_table_mut().ok_or(Error::MalformedDependencies))
+                .transpose()?
+                .and_then(|tool| tool.get_mut("uv"))
+                .map(|tool_uv| tool_uv.as_table_mut().ok_or(Error::MalformedDependencies))
+                .transpose()?
+                .and_then(|tool_uv| tool_uv.get_mut("dev-dependencies"))
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+            DependencyType::Optional(extra) => self
+                .project_mut()?
+                .and_then(|project| project.get_mut("optional-dependencies"))
+                .map(|extras| {
+                    extras
+                        .as_table_like_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?
+                .and_then(|extras| {
+                    extras.iter_mut().find_map(|(key, value)| {
+                        if ExtraName::from_str(key.get()).is_ok_and(|name| name == *extra) {
+                            Some(value)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+            DependencyType::Group(group) => self
+                .doc
+                .get_mut("dependency-groups")
+                .map(|groups| {
+                    groups
+                        .as_table_like_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?
+                .and_then(|groups| {
+                    groups.iter_mut().find_map(|(key, value)| {
+                        if GroupName::from_str(key.get()).is_ok_and(|name| name == *group) {
+                            Some(value)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+        };
+
+        Ok(dependencies)
     }
 
     /// Adds a source to `tool.uv.sources`.
@@ -1637,37 +1735,7 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     let removed = find_dependencies(name, None, deps)
         .into_iter()
         .rev()
-        .filter_map(|(i, _)| {
-            if let Some(prefix) = deps
-                .get(i)
-                .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
-                .filter(|s| !s.is_empty())
-            {
-                let prefix = prefix.to_string();
-                if let Some(next) = deps.get(i + 1)
-                    && let Some(existing) = next.decor().prefix().and_then(|s| s.as_str())
-                {
-                    // Transfer removed item's prefix to the next item's prefix.
-                    let existing = existing.to_string();
-                    deps.get_mut(i + 1)
-                        .unwrap()
-                        .decor_mut()
-                        .set_prefix(format!("{prefix}{existing}"));
-                } else if let Some(next) = deps.get_mut(i + 1) {
-                    // Next item exists but has no prefix; use ours directly.
-                    next.decor_mut().set_prefix(&prefix);
-                } else if let Some(existing) = deps.trailing().as_str() {
-                    // No next item; move comments to the array trailing.
-                    deps.set_trailing(format!("{prefix}{existing}"));
-                } else {
-                    deps.set_trailing(&prefix);
-                }
-            }
-
-            deps.remove(i)
-                .as_str()
-                .and_then(|req| Requirement::from_str(req).ok())
-        })
+        .filter_map(|(i, _)| remove_dependency_at(i, deps))
         .collect::<Vec<_>>();
 
     if !removed.is_empty() {
@@ -1675,6 +1743,37 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     }
 
     removed
+}
+
+fn remove_dependency_at(index: usize, deps: &mut Array) -> Option<Requirement> {
+    if let Some(prefix) = deps
+        .get(index)
+        .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
+        .filter(|s| !s.is_empty())
+    {
+        let prefix = prefix.to_string();
+        if let Some(next) = deps.get(index + 1)
+            && let Some(existing) = next.decor().prefix().and_then(|s| s.as_str())
+        {
+            // Transfer removed item's prefix to the next item's prefix.
+            let existing = existing.to_string();
+            if let Some(next) = deps.get_mut(index + 1) {
+                next.decor_mut().set_prefix(format!("{prefix}{existing}"));
+            }
+        } else if let Some(next) = deps.get_mut(index + 1) {
+            // Next item exists but has no prefix; use ours directly.
+            next.decor_mut().set_prefix(&prefix);
+        } else if let Some(existing) = deps.trailing().as_str() {
+            // No next item; move comments to the array trailing.
+            deps.set_trailing(format!("{prefix}{existing}"));
+        } else {
+            deps.set_trailing(&prefix);
+        }
+    }
+
+    deps.remove(index)
+        .as_str()
+        .and_then(|req| Requirement::from_str(req).ok())
 }
 
 /// Returns a `Vec` containing the all dependencies with the given name, along with their positions
@@ -1694,6 +1793,14 @@ fn find_dependencies(
         }
     }
     to_replace
+}
+
+/// Return whether two requirements have the same serialized fields, ignoring their parsed origin.
+fn same_requirement_declaration(left: &Requirement, right: &Requirement) -> bool {
+    left.name == right.name
+        && left.extras == right.extras
+        && left.version_or_url == right.version_or_url
+        && left.marker == right.marker
 }
 
 /// Returns the key in `tool.uv.sources` that matches the given package name.
@@ -1865,8 +1972,10 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
+    use crate::pyproject::DependencyType;
+
     use super::{
-        AddBoundsKind, DependencyTarget, PyProjectTomlMut, reformat_array_multiline,
+        AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut, reformat_array_multiline,
         remove_dependency, split_specifiers,
     };
     use anyhow::Result;
@@ -1875,9 +1984,9 @@ mod test {
     use std::str::FromStr;
     use toml_edit::DocumentMut;
     use uv_distribution_types::Index;
-    use uv_normalize::PackageName;
+    use uv_normalize::{ExtraName, GroupName, PackageName};
     use uv_pep440::Version;
-    use uv_pep508::Requirement;
+    use uv_pep508::{Requirement, RequirementOrigin};
 
     #[test]
     fn split() {
@@ -2053,29 +2162,82 @@ dependencies = [
     }
 
     #[test]
-    fn replace_dependency_preserves_source() -> Result<()> {
+    fn replace_dependency_updates_every_exact_match() -> Result<()> {
         let mut pyproject = PyProjectTomlMut::from_toml(
             r#"[project]
-dependencies = ["anyio<=2"]
+dependencies = ["anyio<=2", "anyio>=1", "anyio<=2"]
 
 [tool.uv.sources]
 anyio = { index = "internal" }
             "#,
             DependencyTarget::PyProjectToml,
         )?;
-        let requirement = Requirement::from_str("anyio")?;
+        let existing = Requirement::from_str("anyio<=2")?.with_origin(RequirementOrigin::Workspace);
+        let replacement = Requirement::from_str("anyio<3")?;
 
-        let replaced = pyproject.replace_dependency(&requirement, false)?;
-        assert!(replaced.is_some());
+        let replaced = pyproject.replace_dependency_declaration(
+            &DependencyType::Production,
+            &existing,
+            &replacement,
+        )?;
+        assert_eq!(replaced, vec![ArrayEdit::Update(0), ArrayEdit::Update(2)]);
 
         assert_snapshot!(
             pyproject.to_string(),
             @r#"
 [project]
-dependencies = ["anyio"]
+dependencies = ["anyio<3", "anyio>=1", "anyio<3"]
 
 [tool.uv.sources]
 anyio = { index = "internal" }
+"#
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn replace_dependency_declaration_updates_selected_type() -> Result<()> {
+        let mut pyproject = PyProjectTomlMut::from_toml(
+            r#"[project]
+dependencies = ["anyio<=2"]
+
+[project.optional-dependencies]
+test = ["anyio<=2"]
+
+[dependency-groups]
+dev = ["anyio<=2"]
+            "#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        let existing = Requirement::from_str("anyio<=2")?;
+        let optional_replacement = Requirement::from_str("anyio<3")?;
+        let group_replacement = Requirement::from_str("anyio<4")?;
+
+        let replaced = pyproject.replace_dependency_declaration(
+            &DependencyType::Optional(ExtraName::from_str("test")?),
+            &existing,
+            &optional_replacement,
+        )?;
+        assert_eq!(replaced, vec![ArrayEdit::Update(0)]);
+
+        let replaced = pyproject.replace_dependency_declaration(
+            &DependencyType::Group(GroupName::from_str("dev")?),
+            &existing,
+            &group_replacement,
+        )?;
+        assert_eq!(replaced, vec![ArrayEdit::Update(0)]);
+
+        assert_snapshot!(
+            pyproject.to_string(),
+            @r#"
+[project]
+dependencies = ["anyio<=2"]
+
+[project.optional-dependencies]
+test = ["anyio<3"]
+
+[dependency-groups]
+dev = ["anyio<4"]
 "#
         );
         Ok(())

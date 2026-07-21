@@ -302,6 +302,24 @@ pub struct Lock {
     manifest: ResolverManifest,
 }
 
+/// Return the marker domain covered by the supported environments and `requires-python`.
+pub fn implicit_constraints_marker(
+    requires_python: MarkerTree,
+    supported_environments: &[MarkerTree],
+) -> MarkerTree {
+    let mut environments_union = if supported_environments.is_empty() {
+        MarkerTree::TRUE
+    } else {
+        let mut environments_union = MarkerTree::FALSE;
+        for environment in supported_environments {
+            environments_union.or(*environment);
+        }
+        environments_union
+    };
+    environments_union.and(requires_python);
+    environments_union
+}
+
 /// A direct dependency selected from a [`Lock`].
 #[derive(Clone, Debug)]
 pub struct SelectedDependency<'lock> {
@@ -1348,17 +1366,10 @@ impl Lock {
     /// Returns the actually covered and the expected marker space on validation error.
     pub fn check_marker_coverage(&self) -> Result<(), (MarkerTree, MarkerTree)> {
         let fork_markers_union = self.fork_markers_union();
-        let mut environments_union = if !self.supported_environments.is_empty() {
-            let mut environments_union = MarkerTree::FALSE;
-            for fork_marker in &self.supported_environments {
-                environments_union.or(*fork_marker);
-            }
-            environments_union
-        } else {
-            MarkerTree::TRUE
-        };
-        // When a user defines environments, they are implicitly constrained by requires-python.
-        environments_union.and(self.requires_python.to_marker_tree());
+        let environments_union = implicit_constraints_marker(
+            self.requires_python.to_marker_tree(),
+            &self.supported_environments,
+        );
         if fork_markers_union.negate().is_disjoint(environments_union) {
             Ok(())
         } else {
