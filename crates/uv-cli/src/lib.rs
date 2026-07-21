@@ -6535,8 +6535,7 @@ pub enum PythonCommand {
 
     /// Upgrade installed Python versions.
     ///
-    /// Upgrades versions to the latest supported patch release. Requires the `python-upgrade`
-    /// preview feature.
+    /// Upgrades versions to the latest supported patch release.
     ///
     /// A target Python minor version to upgrade may be provided, e.g., `3.13`. Multiple versions
     /// may be provided to perform more than one upgrade.
