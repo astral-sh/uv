@@ -603,15 +603,13 @@ impl EnvVars {
     /// Set to `1` to enable the automatic malware check that runs after `uv sync`.
     ///
     /// When enabled, uv performs a lightweight check against the OSV database for known
-    /// malware advisories after every lockfile sync. This variable overrides the
-    /// `audit.malware-check` setting. Set this variable to `0` to opt out.
+    /// malware advisories after every lockfile sync. Set this variable to `0` to opt out.
     #[attr_added_in("0.11.16")]
     pub const UV_MALWARE_CHECK: &'static str = "UV_MALWARE_CHECK";
 
     /// Override the vulnerability service URL for the automatic malware check.
     ///
-    /// This variable overrides the `audit.malware-check-url` setting. Defaults to the OSV API
-    /// endpoint (`https://api.osv.dev/`).
+    /// Defaults to the OSV API endpoint (`https://api.osv.dev/`).
     #[attr_added_in("0.11.16")]
     pub const UV_MALWARE_CHECK_URL: &'static str = "UV_MALWARE_CHECK_URL";
 
