@@ -1,0 +1,214 @@
+# Diagnose trusted workflow failures and report actionable problems without creating duplicates.
+name: "Diagnose workflow failure"
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "The failed workflow run ID"
+        required: true
+        type: string
+      head_sha:
+        description: "The failed workflow run head SHA"
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  diagnose:
+    if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.diagnose.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Collect workflow failure context"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          RUN_ID: ${{ inputs.run }}
+        run: |
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "Invalid workflow run ID: $RUN_ID" >&2
+            exit 1
+          fi
+          if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid workflow run head SHA: $HEAD_SHA" >&2
+            exit 1
+          fi
+
+          gh run view "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,workflowName,name,event,conclusion,attempt,headBranch,headSha,url,jobs \
+            > .workflow-failure-event.json
+
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
+            --jq '{repository: .repository.full_name, head_repository: .head_repository.full_name}' \
+            > "$RUNNER_TEMP/workflow-run-repositories.json"
+
+          if [ "$(jq -r '.headSha' .workflow-failure-event.json)" != "$HEAD_SHA" ]; then
+            echo "The workflow run head changed; refusing to diagnose a stale revision." >&2
+            exit 1
+          fi
+          if ! jq --exit-status --arg repository "$GITHUB_REPOSITORY" \
+            '.repository == $repository and (.head_repository | IN("astral-sh/uv", "astral-sh/uv-dev"))' \
+            "$RUNNER_TEMP/workflow-run-repositories.json" > /dev/null; then
+            echo "The workflow run is not from a trusted repository; refusing to diagnose untrusted code." >&2
+            exit 1
+          fi
+          if ! jq --exit-status '.event | IN("pull_request", "push", "schedule", "workflow_dispatch")' \
+            .workflow-failure-event.json > /dev/null; then
+            echo "The workflow run was not started by a trusted event; refusing to diagnose it." >&2
+            exit 1
+          fi
+          if ! jq --exit-status '.conclusion | IN("failure", "timed_out", "startup_failure")' \
+            .workflow-failure-event.json > /dev/null; then
+            echo "The workflow run did not fail; refusing to diagnose it." >&2
+            exit 1
+          fi
+
+          gh run view "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --attempt "$(jq -r '.attempt' .workflow-failure-event.json)" \
+            --log-failed \
+            > .workflow-failure-log.txt
+
+          {
+            printf 'Workflow failure diagnosis automation for run %s\n\n' "$RUN_ID"
+            cat agents/prompts/diagnose-workflow-failure.md
+          } > "$RUNNER_TEMP/diagnose-workflow-failure-prompt.md"
+
+      - name: "Diagnose workflow failure"
+        id: diagnose
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: "agents/codex"
+          permission-profile: "workflow-failure"
+          safety-strategy: drop-sudo
+          allow-users: "*"
+          allow-bot-users: "astral-automations-bot[bot]"
+          prompt-file: "${{ runner.temp }}/diagnose-workflow-failure-prompt.md"
+          output-schema-file: "agents/schemas/workflow-failure.json"
+
+      - name: "Upload Codex thread"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-workflow-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: agents/codex/sessions
+          if-no-files-found: warn
+
+  report:
+    needs: diagnose
+    if: >-
+      needs.diagnose.outputs.result != '' &&
+      (fromJSON(needs.diagnose.outputs.result).decision == 'create' ||
+      fromJSON(needs.diagnose.outputs.result).decision == 'duplicate')
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 5
+    permissions:
+      id-token: write # for the credential broker
+      issues: write # for upstream issue reports
+    steps:
+      - name: "Get uv-dev issue token"
+        id: token
+        if: github.repository == 'astral-sh/uv-dev'
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: |
+            issues: write
+
+      - name: "Report workflow failure"
+        env:
+          DIAGNOSIS: ${{ needs.diagnose.outputs.result }}
+          GH_TOKEN: ${{ steps.token.outputs.token || secrets.GITHUB_TOKEN }}
+          ISSUE_REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run }}
+        run: |
+          printf '%s\n' "$DIAGNOSIS" > "$RUNNER_TEMP/diagnosis.json"
+
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "Invalid workflow run ID: $RUN_ID" >&2
+            exit 1
+          fi
+
+          if [ "$(jq -r '.decision' "$RUNNER_TEMP/diagnosis.json")" = "duplicate" ]; then
+            duplicate_issue="$(jq -r --arg repository "$ISSUE_REPOSITORY" '
+              [
+                .related.items[]
+                | select(
+                    .kind == "issue"
+                    and .state == "open"
+                    and .number > 0
+                    and .url == ("https://github.com/" + $repository + "/issues/" + (.number | tostring))
+                  )
+              ][0].number // empty
+            ' "$RUNNER_TEMP/diagnosis.json")"
+            if [ -z "$duplicate_issue" ]; then
+              echo "No open issue in $ISSUE_REPOSITORY tracks this workflow failure."
+              exit 0
+            fi
+
+            run_url="https://github.com/$ISSUE_REPOSITORY/actions/runs/$RUN_ID"
+            gh issue comment "$duplicate_issue" \
+              --repo "$ISSUE_REPOSITORY" \
+              --body "Another workflow run encountered this failure: $run_url"
+            exit 0
+          fi
+
+          if ! jq --exit-status '
+            .decision == "create"
+            and (.issue.title | type == "string" and length > 0)
+            and (.issue.body | type == "string" and length > 0)
+            and (.issue.label | IN("bug", "ci-flake"))
+            and (.issue.body | test("@[A-Za-z0-9][A-Za-z0-9-]*") | not)
+          ' "$RUNNER_TEMP/diagnosis.json" > /dev/null; then
+            echo "The workflow failure diagnosis is invalid or contains a user mention; refusing to open an issue." >&2
+            exit 1
+          fi
+
+          issue_title="$(jq -r '.issue.title' "$RUNNER_TEMP/diagnosis.json")"
+          issue_label="$(jq -r '.issue.label' "$RUNNER_TEMP/diagnosis.json")"
+          jq -r '.issue.body' "$RUNNER_TEMP/diagnosis.json" > "$RUNNER_TEMP/issue.md"
+
+          gh issue list \
+            --repo "$ISSUE_REPOSITORY" \
+            --state all \
+            --search "$issue_title in:title" \
+            --limit 100 \
+            --json number,title,url \
+            > "$RUNNER_TEMP/existing-issues.json"
+          existing_issue="$(jq -r --arg title "$issue_title" \
+            '[.[] | select(.title == $title)][0].number // empty' \
+            "$RUNNER_TEMP/existing-issues.json")"
+          if [ -n "$existing_issue" ]; then
+            run_url="https://github.com/$ISSUE_REPOSITORY/actions/runs/$RUN_ID"
+            gh issue comment "$existing_issue" \
+              --repo "$ISSUE_REPOSITORY" \
+              --body "Another workflow run encountered this failure: $run_url"
+            exit 0
+          fi
+
+          gh issue create \
+            --repo "$ISSUE_REPOSITORY" \
+            --title "$issue_title" \
+            --body-file "$RUNNER_TEMP/issue.md" \
+            --label "$issue_label"
