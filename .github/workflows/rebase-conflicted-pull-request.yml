@@ -60,7 +60,7 @@ jobs:
           cp agents/codex/config.toml "$RUNNER_TEMP/codex-home/config.toml"
           cp agents/prompts/rebase-pull-request.md "$RUNNER_TEMP/rebase-pull-request.md"
 
-          git fetch --no-tags origin "refs/heads/$HEAD_REF"
+          git fetch --no-tags https://github.com/astral-sh/uv-dev.git "refs/heads/$HEAD_REF"
           current_head=$(git rev-parse 'FETCH_HEAD^{commit}')
           if [ "$current_head" != "$HEAD_SHA" ]; then
             echo "The pull request head changed; refusing to rebase a stale revision." >&2
@@ -175,5 +175,5 @@ jobs:
         run: |
           git -c core.hooksPath=/dev/null push \
             --force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA" \
-            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
             "${REBASED_HEAD}:refs/heads/$HEAD_REF"

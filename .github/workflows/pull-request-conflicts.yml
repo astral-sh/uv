@@ -15,7 +15,7 @@ concurrency:
 jobs:
   identify:
     name: Identify conflicted pull requests
-    if: github.repository == 'astral-sh/uv-dev'
+    if: github.repository == 'astral-sh/uv-dev' || github.repository == 'astral-sh/uv'
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -35,17 +35,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          pull_requests=$(./scripts/find-conflicted-pull-requests.sh)
+          if [[ "$GH_REPO" == "astral-sh/uv" ]]; then
+            pull_requests=$(./scripts/find-conflicted-pull-requests.sh --author app/astral-automations-bot)
+          else
+            pull_requests=$(./scripts/find-conflicted-pull-requests.sh)
+          fi
           conflicted=$(jq 'length' <<< "$pull_requests")
-          rebasable=$(jq '[.[] | select(.is_cross_repository | not)] | length' <<< "$pull_requests")
-          cross_repository=$(( conflicted - rebasable ))
+          rebasable=$(jq '[.[] | select(.head_repository == "astral-sh/uv-dev")] | length' <<< "$pull_requests")
+          unavailable=$(( conflicted - rebasable ))
 
           if (( rebasable > 256 )); then
             echo "Found $rebasable rebasable pull requests, which exceeds the GitHub Actions matrix limit of 256." >&2
             exit 1
           fi
 
-          matrix=$(jq --compact-output '{include: [.[] | select(.is_cross_repository | not) | {number, base_ref, head_ref, head_sha}]}' <<< "$pull_requests")
+          matrix=$(jq --compact-output '{include: [.[] | select(.head_repository == "astral-sh/uv-dev") | {number, base_ref, head_ref, head_sha}]}' <<< "$pull_requests")
           {
             echo "matrix=$matrix"
             echo "rebasable=$rebasable"
@@ -56,9 +60,9 @@ jobs:
             echo
             echo "Found $conflicted conflicted pull requests."
 
-            if (( cross_repository > 0 )); then
+            if (( unavailable > 0 )); then
               echo
-              echo "Skipping $cross_repository cross-repository pull requests that cannot be updated by the uv-dev app token."
+              echo "Skipping $unavailable pull requests whose heads cannot be updated by the uv-dev app token."
             fi
 
             if (( conflicted > 0 )); then
