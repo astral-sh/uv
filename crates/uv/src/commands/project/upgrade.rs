@@ -33,21 +33,41 @@ use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
-/// A dependency declaration selected for upgrading.
-struct UpgradableDeclaration {
+/// A dependency requirement selected for upgrading.
+struct UpgradableRequirement {
     package: PackageName,
     dependency_type: DependencyType,
-    text: String,
+    original_text: String,
     requirement: Requirement<VerbatimParsedUrl>,
     effective_marker: MarkerTree,
     resolved_versions: BTreeSet<Version>,
+}
+
+/// A selected requirement that cannot apply to the project.
+struct SkippedRequirement {
+    package: PackageName,
+    dependency_type: DependencyType,
+    original_text: String,
+    display_text: String,
+    reason: SkippedReason,
+}
+
+enum SkippedReason {
+    EnvironmentOrPythonRequirement,
+    UndefinedExtra,
+}
+
+/// The requirements selected for upgrade and those that cannot apply.
+struct RequirementSelection {
+    to_upgrade: Vec<UpgradableRequirement>,
+    skipped: Vec<SkippedRequirement>,
 }
 
 /// An existing requirement and its proposed replacement.
 struct RequirementUpdate {
     package: PackageName,
     dependency_type: DependencyType,
-    text: String,
+    original_text: String,
     existing: Requirement<VerbatimUrl>,
     replacement: Requirement<VerbatimUrl>,
 }
@@ -89,19 +109,34 @@ pub(crate) async fn upgrade(
         }
         Err(err) => return Err(err.into()),
     };
-    let mut requirements = select_requirements(&project, &package)?;
+    let RequirementSelection {
+        to_upgrade: mut requirements,
+        skipped,
+    } = select_requirements(&project, &package)?;
+    render_skipped_requirements(&skipped, printer)?;
+    if requirements.is_empty() {
+        return Ok(ExitStatus::Success);
+    }
+    validate_requirements(&project, &package, &requirements)?;
+
+    // Relax the selected requirements in a temporary manifest so the resolver can select newer
+    // versions without changing the user's manifest.
     let relaxed_requirements = requirements
         .iter()
         .map(|selected| {
-            Ok((
-                selected.package.clone(),
-                selected.dependency_type.clone(),
-                into_verbatim_requirement(selected.requirement.clone(), &selected.package)?,
-                into_verbatim_requirement(
+            Ok(RequirementUpdate {
+                package: selected.package.clone(),
+                dependency_type: selected.dependency_type.clone(),
+                original_text: selected.original_text.clone(),
+                existing: into_verbatim_requirement(
+                    selected.requirement.clone(),
+                    &selected.package,
+                )?,
+                replacement: into_verbatim_requirement(
                     relax_requirement(selected.requirement.clone()),
                     &selected.package,
                 )?,
-            ))
+            })
         })
         .collect::<Result<Vec<_>>>()?;
 
@@ -109,14 +144,30 @@ pub(crate) async fn upgrade(
         &project.current_project().pyproject_toml().raw,
         DependencyTarget::PyProjectToml,
     )?;
-    apply_requirement_replacements(
-        &mut pyproject,
-        relaxed_requirements
-            .iter()
-            .map(|(package, dependency_type, existing, replacement)| {
-                (package, dependency_type, existing, replacement)
-            }),
-    )?;
+    // Remove unreachable requirements from the temporary manifest, since URL requirements can be
+    // fetched during metadata preparation even when their markers cannot apply.
+    for (index, requirement) in skipped.iter().enumerate() {
+        if skipped[..index].iter().any(|removed| {
+            removed.dependency_type == requirement.dependency_type
+                && removed.original_text == requirement.original_text
+        }) {
+            continue;
+        }
+        if pyproject
+            .remove_dependency_declaration_text(
+                &requirement.dependency_type,
+                &requirement.original_text,
+            )?
+            .is_empty()
+        {
+            bail!(
+                "Dependency `{}` was not found in {}",
+                requirement.package,
+                requirement.dependency_type.toml_table_name()
+            );
+        }
+    }
+    apply_requirement_replacements(&mut pyproject, relaxed_requirements.iter())?;
     let pyproject = pyproject.to_string();
     let pyproject = PyProjectToml::from_toml(
         &pyproject,
@@ -264,7 +315,7 @@ pub(crate) async fn upgrade(
                 updated_requirements.push(RequirementUpdate {
                     package: selected.package.clone(),
                     dependency_type: selected.dependency_type.clone(),
-                    text: selected.text.clone(),
+                    original_text: selected.original_text.clone(),
                     existing,
                     replacement,
                 });
@@ -277,17 +328,7 @@ pub(crate) async fn upgrade(
             &project.current_project().pyproject_toml().raw,
             DependencyTarget::PyProjectToml,
         )?;
-        apply_requirement_replacements(
-            &mut pyproject,
-            updated_requirements.iter().map(|update| {
-                (
-                    &update.package,
-                    &update.dependency_type,
-                    &update.existing,
-                    &update.replacement,
-                )
-            }),
-        )?;
+        apply_requirement_replacements(&mut pyproject, updated_requirements.iter())?;
         let pyproject_path = project.project_root().join("pyproject.toml");
         fs_err::write(pyproject_path, pyproject.to_string())?;
     }
@@ -308,7 +349,7 @@ pub(crate) async fn upgrade(
         writeln!(
             printer.stderr(),
             "Updated requirement: `{}` -> `{}`",
-            update.text,
+            update.original_text,
             update.replacement
         )?;
     }
@@ -316,11 +357,11 @@ pub(crate) async fn upgrade(
     Ok(ExitStatus::Success)
 }
 
-/// Select the dependency declarations targeted by `uv upgrade`.
+/// Select the dependency requirements targeted by `uv upgrade`.
 fn select_requirements(
     project: &ProjectWorkspace,
     package: &PackageName,
-) -> Result<Vec<UpgradableDeclaration>> {
+) -> Result<RequirementSelection> {
     if project.workspace().packages().len() != 1 {
         bail!("`uv upgrade` does not support workspaces with multiple members yet");
     }
@@ -333,7 +374,14 @@ fn select_requirements(
         .as_deref()
         .unwrap_or_default();
     let pyproject_path = project.project_root().join("pyproject.toml");
+    let optional_dependencies = project
+        .current_project()
+        .project()
+        .optional_dependencies
+        .as_ref();
     let mut to_upgrade = Vec::new();
+    let mut skipped = Vec::new();
+    let mut found_matching_name = false;
     for dependency in dependencies {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str(dependency).with_context(|| {
@@ -343,17 +391,39 @@ fn select_requirements(
                 )
             })?;
         if requirement.name == *package {
+            found_matching_name = true;
             let mut effective_marker = requirement.marker;
             effective_marker.and(resolution_marker);
             if effective_marker.is_false() {
-                bail!(
-                    "Dependency `{package}` has declarations excluded by the project's Python or environment constraints and cannot be upgraded"
-                );
+                skipped.push(SkippedRequirement {
+                    package: package.clone(),
+                    dependency_type: DependencyType::Production,
+                    original_text: dependency.clone(),
+                    display_text: display_requirement(&requirement),
+                    reason: SkippedReason::EnvironmentOrPythonRequirement,
+                });
+                continue;
             }
-            to_upgrade.push(UpgradableDeclaration {
+
+            effective_marker = effective_marker.simplify_not_extras_with(|extra| {
+                optional_dependencies
+                    .is_none_or(|optional_dependencies| !optional_dependencies.contains_key(extra))
+            });
+            if effective_marker.is_false() {
+                skipped.push(SkippedRequirement {
+                    package: package.clone(),
+                    dependency_type: DependencyType::Production,
+                    original_text: dependency.clone(),
+                    display_text: display_requirement(&requirement),
+                    reason: SkippedReason::UndefinedExtra,
+                });
+                continue;
+            }
+
+            to_upgrade.push(UpgradableRequirement {
                 package: package.clone(),
                 dependency_type: DependencyType::Production,
-                text: dependency.clone(),
+                original_text: dependency.clone(),
                 requirement,
                 effective_marker,
                 resolved_versions: BTreeSet::new(),
@@ -361,11 +431,22 @@ fn select_requirements(
         }
     }
 
-    if to_upgrade.is_empty() {
+    if !found_matching_name {
         bail!("Dependency `{package}` was not found in `project.dependencies`");
     }
 
-    if to_upgrade.iter().any(|selected| {
+    Ok(RequirementSelection {
+        to_upgrade,
+        skipped,
+    })
+}
+
+fn validate_requirements(
+    project: &ProjectWorkspace,
+    package: &PackageName,
+    requirements: &[UpgradableRequirement],
+) -> Result<()> {
+    if requirements.iter().any(|selected| {
         matches!(
             selected.requirement.version_or_url,
             Some(VersionOrUrl::Url(_))
@@ -388,7 +469,7 @@ fn select_requirements(
         .and_then(|sources| sources.inner().get(package))
         .or_else(|| project.workspace().sources().get(package));
     let applies_to_selected_requirement = |source| {
-        to_upgrade.iter().any(|selected| {
+        requirements.iter().any(|selected| {
             source_is_applicable(source, &selected.dependency_type, selected.effective_marker)
         })
     };
@@ -412,7 +493,39 @@ fn select_requirements(
         );
     }
 
-    Ok(to_upgrade)
+    Ok(())
+}
+
+/// Return a requirement suitable for diagnostics without exposing URL query parameters.
+fn display_requirement(requirement: &Requirement<VerbatimParsedUrl>) -> String {
+    let mut requirement = requirement.clone();
+    if let Some(VersionOrUrl::Url(url)) = &mut requirement.version_or_url {
+        let mut display_url = url.verbatim.to_url();
+        display_url.set_query(None);
+        url.verbatim = VerbatimUrl::from_url(display_url);
+    }
+    requirement.to_string()
+}
+
+fn render_skipped_requirements(skipped: &[SkippedRequirement], printer: Printer) -> Result<()> {
+    for requirement in skipped {
+        let reason = match requirement.reason {
+            SkippedReason::EnvironmentOrPythonRequirement => {
+                "excluded by the project's environments or Python requirement"
+            }
+            SkippedReason::UndefinedExtra => {
+                "references an extra that the project does not provide"
+            }
+        };
+        writeln!(
+            printer.stderr(),
+            "warning: Skipping dependency `{}` in {}: `{}` ({reason})",
+            requirement.package,
+            requirement.dependency_type.toml_table_name(),
+            requirement.display_text
+        )?;
+    }
+    Ok(())
 }
 
 /// Return the marker domain that the project will resolve for dependency declarations.
@@ -433,17 +546,17 @@ fn project_resolution_marker(project: &ProjectWorkspace) -> Result<MarkerTree> {
 /// Apply exact requirement replacements, coalescing repeated identical declarations.
 fn apply_requirement_replacements<'a>(
     pyproject: &mut PyProjectTomlMut,
-    replacements: impl IntoIterator<
-        Item = (
-            &'a PackageName,
-            &'a DependencyType,
-            &'a Requirement<VerbatimUrl>,
-            &'a Requirement<VerbatimUrl>,
-        ),
-    >,
+    replacements: impl IntoIterator<Item = &'a RequirementUpdate>,
 ) -> Result<()> {
     let mut applied = Vec::new();
-    for (package, dependency_type, existing, replacement) in replacements {
+    for RequirementUpdate {
+        package,
+        dependency_type,
+        existing,
+        replacement,
+        ..
+    } in replacements
+    {
         if let Some((_, _, applied_replacement)) =
             applied
                 .iter()
@@ -458,7 +571,7 @@ fn apply_requirement_replacements<'a>(
         }
 
         if pyproject
-            .replace_dependency_declaration(dependency_type, existing, replacement, false)?
+            .replace_dependency_declaration(dependency_type, existing, replacement)?
             .is_empty()
         {
             bail!(

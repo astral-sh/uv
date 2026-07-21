@@ -371,17 +371,12 @@ impl PyProjectTomlMut {
         dependency_type: &DependencyType,
         existing: &Requirement,
         replacement: &Requirement,
-        raw: bool,
     ) -> Result<Vec<ArrayEdit>, Error> {
         let Some(dependencies) = self.dependency_type_array_mut(dependency_type)? else {
             return Ok(Vec::new());
         };
 
-        let replacement = if raw {
-            replacement.displayable_with_credentials().to_string()
-        } else {
-            replacement.to_string()
-        };
+        let replacement = replacement.to_string();
         let mut edits = Vec::new();
         for (index, requirement) in
             find_dependencies(&existing.name, Some(&existing.marker), dependencies)
@@ -391,6 +386,39 @@ impl PyProjectTomlMut {
                 edits.push(ArrayEdit::Update(index));
             }
         }
+        Ok(edits)
+    }
+
+    /// Removes every exact string match for a dependency declaration without modifying its source.
+    ///
+    /// Returns the position of every dependency that was removed.
+    pub fn remove_dependency_declaration_text(
+        &mut self,
+        dependency_type: &DependencyType,
+        existing: &str,
+    ) -> Result<Vec<ArrayEdit>, Error> {
+        let Some(dependencies) = self.dependency_type_array_mut(dependency_type)? else {
+            return Ok(Vec::new());
+        };
+
+        let mut edits = Vec::new();
+        for index in dependencies
+            .iter()
+            .enumerate()
+            .filter_map(|(index, dependency)| {
+                (dependency.as_str() == Some(existing)).then_some(index)
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
+            remove_dependency_at(index, dependencies);
+            edits.push(ArrayEdit::Update(index));
+        }
+        if !edits.is_empty() {
+            reformat_array_multiline(dependencies);
+        }
+        edits.reverse();
         Ok(edits)
     }
 
@@ -1767,7 +1795,7 @@ fn find_dependencies(
     to_replace
 }
 
-/// Return whether two requirements represent the same serialized dependency declaration.
+/// Return whether two requirements have the same serialized fields, ignoring their parsed origin.
 fn same_requirement_declaration(left: &Requirement, right: &Requirement) -> bool {
     left.name == right.name
         && left.extras == right.extras
@@ -2151,7 +2179,6 @@ anyio = { index = "internal" }
             &DependencyType::Production,
             &existing,
             &replacement,
-            false,
         )?;
         assert_eq!(replaced, vec![ArrayEdit::Update(0), ArrayEdit::Update(2)]);
 
@@ -2190,7 +2217,6 @@ dev = ["anyio<=2"]
             &DependencyType::Optional(ExtraName::from_str("test")?),
             &existing,
             &optional_replacement,
-            false,
         )?;
         assert_eq!(replaced, vec![ArrayEdit::Update(0)]);
 
@@ -2198,7 +2224,6 @@ dev = ["anyio<=2"]
             &DependencyType::Group(GroupName::from_str("dev")?),
             &existing,
             &group_replacement,
-            false,
         )?;
         assert_eq!(replaced, vec![ArrayEdit::Update(0)]);
 

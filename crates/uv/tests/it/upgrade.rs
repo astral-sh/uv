@@ -223,7 +223,7 @@ fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<(
 }
 
 #[test]
-fn upgrade_rejects_inapplicable_marked_dependency() -> Result<()> {
+fn upgrade_skips_inapplicable_marked_dependency() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
         [project]
@@ -237,12 +237,71 @@ fn upgrade_rejects_inapplicable_marked_dependency() -> Result<()> {
         .child("pyproject.toml")
         .write_str(pyproject_toml)?;
     uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Skipping dependency `anyio` in `project.dependencies`: `anyio<3 ; python_full_version < '3.12'` (excluded by the project's environments or Python requirement)
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_skips_undefined_extra() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<3 ; extra == 'does-not-exist'"]
+
+        [project.optional-dependencies]
+        test = []
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Skipping dependency `anyio` in `project.dependencies`: `anyio<3 ; extra == 'does-not-exist'` (references an extra that the project does not provide)
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_warns_for_skipped_requirement_before_validation_error() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar @ https://example.com/bar-1.0.0-py3-none-any.whl",
+            "bar<2 ; python_version < '3.12'",
+        ]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    uv_snapshot!(context.filters(), context.upgrade().arg("bar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Dependency `anyio` has declarations excluded by the project's Python or environment constraints and cannot be upgraded
+    warning: Skipping dependency `bar` in `project.dependencies`: `bar<2 ; python_full_version < '3.12'` (excluded by the project's environments or Python requirement)
+    error: Dependency `bar` is a direct URL requirement and cannot be upgraded
     ");
 
     assert_project_unchanged(&context, pyproject_toml)
@@ -698,26 +757,26 @@ fn upgrade_updates_multiple_marked_production_dependencies() -> Result<()> {
             updated_pyproject_toml,
             @r#"
 
-[project]
-name = "example"
-version = "0.1.0"
-requires-python = ">=3.12"
-dependencies = [
-    # No upper bound to upgrade.
-    "bar>=1",
-    "bar<2 ; sys_platform == 'linux'",
-    "bar<3 ; sys_platform != 'linux'",
-    "bar<3 ; sys_platform != 'linux'",
-    "foo==1",
-]
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # No upper bound to upgrade.
+            "bar>=1",
+            "bar<2 ; sys_platform == 'linux'",
+            "bar<3 ; sys_platform != 'linux'",
+            "bar<3 ; sys_platform != 'linux'",
+            "foo==1",
+        ]
 
-[tool.uv]
-environments = ["sys_platform != 'win32'"]
+        [tool.uv]
+        environments = ["sys_platform != 'win32'"]
 
-[[tool.uv.index]]
-url = "http://[LOCALHOST]/simple/"
-default = true
-"#
+        [[tool.uv.index]]
+        url = "http://[LOCALHOST]/simple/"
+        default = true
+        "#
         );
     });
     assert!(!context.temp_dir.child("uv.lock").exists());
@@ -956,7 +1015,7 @@ fn upgrade_rejects_non_registry_sources() -> Result<()> {
 }
 
 #[test]
-fn upgrade_rejects_non_registry_source_for_top_level_extra() -> Result<()> {
+fn upgrade_skips_non_registry_source_for_undefined_extra() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
         [project]
@@ -976,12 +1035,12 @@ fn upgrade_rejects_non_registry_source_for_top_level_extra() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Dependency `requests` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
+    warning: Skipping dependency `requests` in `project.dependencies`: `requests>=2 ; extra == 'gpu'` (references an extra that the project does not provide)
     "
     );
 
@@ -1104,40 +1163,66 @@ fn upgrade_ignores_inapplicable_non_registry_source() -> Result<()> {
 }
 
 #[test]
-fn upgrade_rejects_excluded_declaration() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
-    let pyproject_toml = r#"
+fn upgrade_skips_excluded_declarations_and_updates_applicable_requirement() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
             "bar<2",
-            "bar @ https://example.com/bar-1.0.0-py3-none-any.whl ; python_version < '3.12' or sys_platform == 'win32'",
+            "bar>=1 ; extra == 'does-not-exist' or sys_platform != 'win32'",
+            "bar @ https://user:secret@example.com/bar-1.0.0-py3-none-any.whl?token=secret ; python_version < '3.12' or sys_platform == 'win32'",
+            "bar<2 ; extra == 'does-not-exist'",
+            "foo==2",
         ]
 
         [tool.uv]
         environments = ["sys_platform != 'win32'"]
-    "#;
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(pyproject_toml)?;
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        context.filters(),
-        context.upgrade().arg("bar"),
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Dependency `bar` has declarations excluded by the project's Python or environment constraints and cannot be upgraded
+    warning: Skipping dependency `bar` in `project.dependencies`: `bar @ https://user:****@example.com/bar-1.0.0-py3-none-any.whl ; python_full_version < '3.12' or sys_platform == 'win32'` (excluded by the project's environments or Python requirement)
+    warning: Skipping dependency `bar` in `project.dependencies`: `bar<2 ; extra == 'does-not-exist'` (references an extra that the project does not provide)
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add bar v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
     "
     );
 
-    assert_project_unchanged(&context, pyproject_toml)
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replacen("bar<2\",", "bar<3\",", 1)
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
 }
 
 #[test]
