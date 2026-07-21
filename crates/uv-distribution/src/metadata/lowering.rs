@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use either::Either;
 use futures::future::join_all;
@@ -850,15 +849,30 @@ async fn workspace_source(
             )
         }
         WorkspaceReference::Path(path) => {
-            let target_workspace = discover_workspace_from_source_path(
-                path.as_ref(),
-                origin,
-                project_dir,
-                workspace_root,
+            let base = match origin {
+                RequirementOrigin::Project => project_dir,
+                RequirementOrigin::Workspace => workspace_root,
+            };
+            let workspace_path = VerbatimUrl::from_path(path.as_ref(), base)?
+                .to_file_path()
+                .map_err(|()| {
+                    LoweringError::RelativeTo(io::Error::other("Invalid path in file URL"))
+                })?;
+            let target_workspace = Workspace::discover(
+                &workspace_path,
+                &DiscoveryOptions::default(),
                 cache,
                 workspace_cache,
             )
             .await?;
+
+            if target_workspace.install_path() != &workspace_path {
+                return Err(LoweringError::WorkspaceSourceNotRoot {
+                    path: workspace_path,
+                    root: target_workspace.install_path().clone(),
+                });
+            }
+
             let member = target_workspace
                 .packages()
                 .get(&requirement.name)
@@ -871,10 +885,6 @@ async fn workspace_source(
                 Some(source_editable.unwrap_or(true))
             } else {
                 Some(false)
-            };
-            let base = match origin {
-                RequirementOrigin::Project => project_dir,
-                RequirementOrigin::Workspace => workspace_root,
             };
             let member_path =
                 uv_fs::relative_to(member.root(), base).unwrap_or_else(|_| member.root().into());
@@ -890,40 +900,6 @@ async fn workspace_source(
             )
         }
     }
-}
-
-async fn discover_workspace_from_source_path(
-    path: &Path,
-    origin: RequirementOrigin,
-    project_dir: &Path,
-    workspace_root: &Path,
-    cache: &Cache,
-    workspace_cache: &WorkspaceCache,
-) -> Result<Arc<Workspace>, LoweringError> {
-    let base = match origin {
-        RequirementOrigin::Project => project_dir,
-        RequirementOrigin::Workspace => workspace_root,
-    };
-    let workspace_path = VerbatimUrl::from_path(path, base)?
-        .to_file_path()
-        .map_err(|()| LoweringError::RelativeTo(io::Error::other("Invalid path in file URL")))?;
-
-    let workspace = Workspace::discover(
-        &workspace_path,
-        &DiscoveryOptions::default(),
-        cache,
-        workspace_cache,
-    )
-    .await?;
-
-    if workspace.install_path() != &workspace_path {
-        return Err(LoweringError::WorkspaceSourceNotRoot {
-            path: workspace_path,
-            root: workspace.install_path().clone(),
-        });
-    }
-
-    Ok(workspace)
 }
 
 /// Convert a path string to a file or directory source.

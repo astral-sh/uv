@@ -107,6 +107,7 @@ impl BuildRequires {
                 .unwrap_or(&empty)
         };
 
+        // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
         let project_sources = if sources.all() {
             &empty

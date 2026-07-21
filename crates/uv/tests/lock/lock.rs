@@ -10873,17 +10873,7 @@ fn lock_external_workspace_source() -> Result<()> {
         );
     });
 
-    Ok(())
-}
-
-/// Lock a project that incorrectly points at an external workspace member instead of the workspace
-/// root.
-#[cfg(feature = "test-universal")]
-#[test]
-fn lock_external_workspace_source_not_root() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let project = context.temp_dir.child("project");
+    // A workspace source must point to the workspace root, not one of its members.
     project.child("pyproject.toml").write_str(
         r#"
         [project]
@@ -10897,25 +10887,7 @@ fn lock_external_workspace_source_not_root() -> Result<()> {
         "#,
     )?;
 
-    let external_workspace = context.temp_dir.child("external-workspace");
-    external_workspace.child("pyproject.toml").write_str(
-        r#"
-        [tool.uv.workspace]
-        members = ["packages/*"]
-        "#,
-    )?;
-
-    let external_member = external_workspace.child("packages").child("pkg-b");
-    fs_err::create_dir_all(&external_member)?;
-    external_member.child("pyproject.toml").write_str(
-        r#"
-        [project]
-        name = "pkg-b"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-        "#,
-    )?;
+    fs_err::remove_file(project.join("uv.lock"))?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&project), @"
     success: false
@@ -10993,27 +10965,6 @@ fn lock_workspace_member_with_external_workspace_source() -> Result<()> {
         [project]
         name = "child"
         version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-        "#,
-    )?;
-
-    let external_workspace = context.temp_dir.child("external-workspace");
-    fs_err::create_dir_all(&external_workspace)?;
-    external_workspace.child("pyproject.toml").write_str(
-        r#"
-        [tool.uv.workspace]
-        members = ["packages/*"]
-        "#,
-    )?;
-
-    let external_child = external_workspace.child("packages").child("child");
-    fs_err::create_dir_all(&external_child)?;
-    external_child.child("pyproject.toml").write_str(
-        r#"
-        [project]
-        name = "child"
-        version = "0.2.0"
         requires-python = ">=3.12"
         dependencies = []
         "#,
