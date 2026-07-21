@@ -2315,14 +2315,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return None;
         };
 
-        let current_index = state.pins.get(name, version)?.index();
+        let (current_dist, current_metadata_id) = state.pins.dist_and_id(name, version)?;
+        let current_index = current_dist.index();
         if !version_maps
             .iter()
             .any(|version_map| version_map.index() == current_index)
         {
             return None;
         }
-        let (_, current_metadata_id) = state.pins.dist_and_id(name, version)?;
         let current_response = self.index.distributions().get(current_metadata_id)?;
         let MetadataResponse::Found(current_metadata) = &*current_response else {
             return None;

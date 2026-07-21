@@ -9,9 +9,8 @@ leaf = "1.0.0"
 parent = "2.0.0"
 core = "2.0.0"
 
-[resolver_options]
-test = "compile"
-universal = false
+[testgen]
+disable = true
 
 [root]
 requires = ["leaf==1.0.0", "parent"]

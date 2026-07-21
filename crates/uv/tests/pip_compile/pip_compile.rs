@@ -13642,6 +13642,18 @@ fn compile_index_url_unsafe_lowest() -> Result<()> {
     Ok(())
 }
 
+const COALESCING_FILTERS: [(&str, &str); 3] = [
+    (
+        r"(?m)^DEBUG Coalescing dependencies for core.*\n",
+        "Coalesced prefetched core dependencies\n",
+    ),
+    (r"(?m)^DEBUG .*\n", ""),
+    (
+        r"(?:Coalesced prefetched core dependencies\n)+",
+        "Coalesced prefetched core dependencies\n",
+    ),
+];
+
 /// Coalesce matching, prefetched dependencies when a higher-priority index only has incompatible
 /// wheels for the same versions.
 #[test]
@@ -13679,15 +13691,7 @@ fn coalesce_prefetched_dependencies_multiple_indexes() -> Result<()> {
     requirements_in.write_str("leaf==1.0.0\nparent")?;
 
     let mut filters = context.filters();
-    filters.push((
-        r"(?m)^DEBUG Coalescing dependencies for core.*\n",
-        "Coalesced prefetched core dependencies\n",
-    ));
-    filters.push((r"(?m)^DEBUG .*\n", ""));
-    filters.push((
-        r"(?:Coalesced prefetched core dependencies\n)+",
-        "Coalesced prefetched core dependencies\n",
-    ));
+    filters.extend(COALESCING_FILTERS);
 
     uv_snapshot!(filters, context.pip_compile()
         .arg("requirements.in")
@@ -13786,15 +13790,7 @@ fn coalesce_prefetched_dependencies_universal() -> Result<()> {
     requirements_in.write_str("leaf==1.0.0\nparent")?;
 
     let mut filters = context.filters();
-    filters.push((
-        r"(?m)^DEBUG Coalescing dependencies for core.*\n",
-        "Coalesced prefetched core dependencies\n",
-    ));
-    filters.push((r"(?m)^DEBUG .*\n", ""));
-    filters.push((
-        r"(?:Coalesced prefetched core dependencies\n)+",
-        "Coalesced prefetched core dependencies\n",
-    ));
+    filters.extend(COALESCING_FILTERS);
 
     uv_snapshot!(filters, context.pip_compile()
         .arg("requirements.in")
@@ -13869,18 +13865,10 @@ fn coalesce_prefetched_dependencies_universal_required_environment() -> Result<(
 
     let mut filters = context.filters();
     filters.push((
-        r"(?m)^DEBUG Coalescing dependencies for core.*\n",
-        "Coalesced prefetched core dependencies\n",
-    ));
-    filters.push((
         r"(?m)^DEBUG Forking on required platform .* for core==3\.0\.12.*\n",
         "Forked required platform for core==3.0.12\n",
     ));
-    filters.push((r"(?m)^DEBUG .*\n", ""));
-    filters.push((
-        r"(?:Coalesced prefetched core dependencies\n)+",
-        "Coalesced prefetched core dependencies\n",
-    ));
+    filters.extend(COALESCING_FILTERS);
 
     uv_snapshot!(filters, context.pip_compile()
         .arg("pyproject.toml")
