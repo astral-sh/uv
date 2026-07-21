@@ -157,7 +157,7 @@ impl PythonRequirement {
     }
 
     /// Return the exact version of Python.
-    pub(crate) fn exact(&self) -> &Version {
+    pub fn exact(&self) -> &Version {
         &self.exact
     }
 
@@ -167,7 +167,7 @@ impl PythonRequirement {
     }
 
     /// Return the target version of Python.
-    pub(crate) fn target(&self) -> &RequiresPython {
+    pub fn target(&self) -> &RequiresPython {
         &self.target
     }
 

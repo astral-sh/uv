@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::NoSources;
-use uv_distribution_types::{IndexLocations, Requirement};
+use uv_distribution_types::{IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
@@ -48,7 +48,13 @@ use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 #[derive(Debug, Clone)]
 pub struct SourcedDependencyGroups {
     pub name: Option<PackageName>,
-    pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
+    pub dependency_groups: BTreeMap<GroupName, SourcedDependencyGroup>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SourcedDependencyGroup {
+    pub requirements: Box<[Requirement]>,
+    pub requires_python: Option<RequiresPython>,
 }
 
 impl SourcedDependencyGroups {
@@ -104,12 +110,23 @@ impl SourcedDependencyGroups {
                 dependency_groups: dependency_groups
                     .into_iter()
                     .map(|(name, group)| {
+                        let requires_python = group
+                            .requires_python
+                            .as_ref()
+                            .map(RequiresPython::from_specifiers);
+
                         let requirements = group
                             .requirements
                             .into_iter()
                             .map(Requirement::from)
                             .collect();
-                        (name, requirements)
+                        (
+                            name,
+                            SourcedDependencyGroup {
+                                requirements,
+                                requires_python,
+                            },
+                        )
                     })
                     .collect(),
             });
@@ -144,6 +161,11 @@ impl SourcedDependencyGroups {
         let dependency_groups = dependency_groups
             .into_iter()
             .map(|(name, group)| {
+                let requires_python = group
+                    .requires_python
+                    .as_ref()
+                    .map(RequiresPython::from_specifiers);
+
                 let requirements = group
                     .requirements
                     .into_iter()
@@ -183,7 +205,13 @@ impl SourcedDependencyGroups {
                         }
                     })
                     .collect::<Result<Box<_>, _>>()?;
-                Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))
+                Ok::<(GroupName, SourcedDependencyGroup), MetadataError>((
+                    name,
+                    SourcedDependencyGroup {
+                        requirements,
+                        requires_python,
+                    },
+                ))
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
 
