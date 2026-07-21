@@ -15,7 +15,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
 use crate::{Error, Prompt};
-use uv_fs::{CWD, Simplified, cachedir};
+use uv_fs::{CWD, Simplified, cachedir, escape_for_python};
 use uv_platform_tags::Os;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
@@ -33,6 +33,7 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ("activate.csh", include_str!("activator/activate.csh")),
     ("activate.fish", include_str!("activator/activate.fish")),
     ("activate.nu", include_str!("activator/activate.nu")),
+    ("activate.xsh", include_str!("activator/activate.xsh")),
     ("activate.ps1", include_str!("activator/activate.ps1")),
     ("activate.bat", include_str!("activator/activate.bat")),
     ("deactivate.bat", include_str!("activator/deactivate.bat")),
@@ -504,16 +505,23 @@ pub(crate) fn create(
                 "'{}'",
                 escape_posix_for_single_quotes(location_string)
             )),
+            (_, "activate.xsh") => Cow::Borrowed(r"dirname(dirname(realpath(__file__)))"),
             // Note: `activate.ps1` is already relocatable by default.
             _ => escape_posix_for_single_quotes(location_string),
         };
 
+        let virtual_prompt = prompt.as_deref().unwrap_or_default();
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
             .replace("{{ BIN_NAME }}", bin_name)
             .replace(
-                "{{ VIRTUAL_PROMPT }}",
-                prompt.as_deref().unwrap_or_default(),
+                "{{ BIN_NAME_LITERAL }}",
+                &format!(r#""{}""#, escape_for_python(bin_name)),
+            )
+            .replace("{{ VIRTUAL_PROMPT }}", virtual_prompt)
+            .replace(
+                "{{ VIRTUAL_PROMPT_LITERAL }}",
+                &format!(r#""{}""#, escape_for_python(virtual_prompt)),
             )
             .replace("{{ PATH_SEP }}", path_sep)
             .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
