@@ -9,6 +9,7 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     RetryPolicy, Retryable, RetryableStrategy, default_on_request_error, default_on_request_success,
 };
+use rustls::{AlertDescription, Error as RustlsError};
 use tracing::{debug, trace};
 use url::Url;
 
@@ -174,6 +175,10 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
 
         if let Some(reqwest_err) = reqwest_err {
             has_known_error = true;
+            if is_tls_certificate_error(reqwest_err) {
+                trace!("Fatal nested reqwest TLS certificate error");
+                return Some(Retryable::Fatal);
+            }
             // Ignore the default retry strategy returning fatal.
             if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
                 trace!("Transient nested reqwest error");
@@ -255,14 +260,52 @@ fn is_retryable_status_error(reqwest_err: &reqwest::Error) -> bool {
         || status == StatusCode::TOO_MANY_REQUESTS
 }
 
-/// Find the first source error of a specific type.
+fn is_tls_certificate_error(reqwest_err: &reqwest::Error) -> bool {
+    let Some(rustls_error) = find_source::<RustlsError>(reqwest_err) else {
+        return false;
+    };
+
+    // TODO(konsti): https://github.com/seanmonstar/reqwest/issues/2819#issuecomment-5032072023
+    match rustls_error {
+        RustlsError::InvalidCertificate(_) | RustlsError::NoCertificatesPresented => true,
+        RustlsError::AlertReceived(alert) => matches!(
+            alert,
+            AlertDescription::AccessDenied
+                | AlertDescription::BadCertificate
+                | AlertDescription::BadCertificateHashValue
+                | AlertDescription::BadCertificateStatusResponse
+                | AlertDescription::CertificateExpired
+                | AlertDescription::CertificateRequired
+                | AlertDescription::CertificateRevoked
+                | AlertDescription::CertificateUnknown
+                | AlertDescription::CertificateUnobtainable
+                | AlertDescription::DecryptError
+                | AlertDescription::NoCertificate
+                | AlertDescription::UnknownCA
+                | AlertDescription::UnsupportedCertificate
+        ),
+        _ => false,
+    }
+}
+
+/// Find the first source error of a specific type, including errors wrapped by [`io::Error`].
 ///
-/// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
+/// Inspired by <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
+/// See <https://github.com/hyperium/h2/issues/862>
 fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
     let mut cause = orig.source();
     while let Some(err) = cause {
-        if let Some(typed) = err.downcast_ref() {
-            return Some(typed);
+        if let Some(concrete_err) = err.downcast_ref() {
+            return Some(concrete_err);
+        }
+        if let Some(io_err) = err.downcast_ref::<io::Error>()
+            && let Some(inner_err) = io_err.get_ref()
+        {
+            if let Some(concrete_err) = inner_err.downcast_ref() {
+                return Some(concrete_err);
+            }
+            cause = Some(inner_err);
+            continue;
         }
         cause = err.source();
     }

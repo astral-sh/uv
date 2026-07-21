@@ -64,6 +64,7 @@ reqwest-retry = { workspace = true }
 rkyv = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
+rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pki-types = { workspace = true }
 serde = { workspace = true }
@@ -86,7 +87,6 @@ hyper-util = { workspace = true }
 insta = { workspace = true }
 rcgen = { workspace = true }
 regex = { workspace = true }
-rustls = { workspace = true }
 temp-env = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
