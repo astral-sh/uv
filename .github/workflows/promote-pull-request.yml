@@ -137,19 +137,9 @@ jobs:
           upstream_number=$(jq --exit-status --raw-output '.number | select(type == "number")' <<< "$upstream_pull_request")
           echo "number=$upstream_number" >> "$GITHUB_OUTPUT"
 
-      - name: Get uv-dev token
-        id: uv-dev-token
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
-        with:
-          exchange-url: ${{ secrets.STS_API_URL }}/exchange
-          audience: ${{ secrets.STS_API_URL }}
-          repository: astral-sh/uv-dev
-          permissions: |
-            pull_requests: write
-
       - name: Close uv-dev pull request
         env:
-          GH_TOKEN: ${{ steps.uv-dev-token.outputs.token }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
           UPSTREAM_NUMBER: ${{ steps.promote.outputs.number }}
         run: |
