@@ -59,7 +59,7 @@ impl RequirementsSource {
             .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
         {
             Err(anyhow::anyhow!(
-                "`{}` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)",
+                "`{}` is not a valid PEP 751 filename: expected `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots",
                 path.user_display(),
             ))
         } else if path
@@ -329,7 +329,13 @@ impl std::fmt::Display for RequirementsSource {
 }
 
 /// Returns `true` if a file name matches the `pylock.toml` pattern defined in PEP 751.
-#[expect(clippy::case_sensitive_file_extension_comparisons)]
 pub fn is_pylock_toml(file_name: &str) -> bool {
-    file_name.starts_with("pylock.") && file_name.ends_with(".toml")
+    if file_name == "pylock.toml" {
+        return true;
+    }
+
+    file_name
+        .strip_prefix("pylock.")
+        .and_then(|name| name.strip_suffix(".toml"))
+        .is_some_and(|name| !name.is_empty() && !name.contains('.'))
 }

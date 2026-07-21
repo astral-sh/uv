@@ -642,7 +642,40 @@ fn invalid_toml_filename() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `test.toml` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)
+    error: `test.toml` is not a valid PEP 751 filename: expected `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_pylock_toml_filename() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pylock..toml").touch()?;
+    context.temp_dir.child("pylock.foo.bar.toml").touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("pylock..toml"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `pylock..toml` is not a valid PEP 751 filename: expected `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots
+    "
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("pylock.foo.bar.toml"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `pylock.foo.bar.toml` is not a valid PEP 751 filename: expected `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots
     "
     );
 
