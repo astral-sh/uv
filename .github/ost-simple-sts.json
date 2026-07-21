@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "subject": "repo:astral-sh/uv:environment:release",
+      "repository": "astral-sh/uv",
+      "repository_id": 699532645,
+      "ref": "refs/heads/main",
+      "workflow_path": ".github/workflows/release.yml",
+      "allowed_events": ["workflow_dispatch"],
+      "permissions": { "contents": "write", "workflows": "write" },
+      "target_repository": "astral-sh/uv",
+      "target_repository_id": 699532645
+    },
+    {
+      "subject": "repo:astral-sh@115962839/uv-dev@1302176231:environment:automations",
+      "repository": "astral-sh/uv-dev",
+      "repository_id": 1302176231,
+      "ref": "refs/heads/main",
+      "workflow_path": ".github/workflows/promote-pull-request.yml",
+      "allowed_events": ["workflow_dispatch"],
+      "permissions": { "contents": "write", "pull_requests": "write" },
+      "target_repositories": [
+        { "repository": "astral-sh/uv", "repository_id": 699532645 },
+        { "repository": "astral-sh/uv-dev", "repository_id": 1302176231 }
+      ],
+      "target_installation_id": 146796415
+    },
+    {
+      "subject": "repo:astral-sh/uv:environment:automations",
+      "repository": "astral-sh/uv",
+      "repository_id": 699532645,
+      "ref": "refs/heads/main",
+      "workflow_path": ".github/workflows/issue-triage.yml",
+      "job_workflow_path": ".github/workflows/reproduce-bug.yml",
+      "allowed_events": ["issues", "workflow_dispatch"],
+      "permissions": { "contents": "write", "pull_requests": "write" },
+      "target_repository": "astral-sh/uv-dev",
+      "target_repository_id": 1302176231
+    },
+    {
+      "subject": "repo:astral-sh/uv:environment:automations",
+      "repository": "astral-sh/uv",
+      "repository_id": 699532645,
+      "ref": "refs/heads/main",
+      "workflow_path": ".github/workflows/reproduce-bug.yml",
+      "allowed_events": ["workflow_dispatch"],
+      "permissions": { "contents": "write", "pull_requests": "write" },
+      "target_repository": "astral-sh/uv-dev",
+      "target_repository_id": 1302176231
+    },
+    {
+      "subject": "repo:astral-sh/uv:environment:automations",
+      "repository": "astral-sh/uv",
+      "repository_id": 699532645,
+      "ref": "refs/heads/main",
+      "workflow_path": ".github/workflows/sync-uv-dev.yml",
+      "allowed_events": ["push", "workflow_dispatch"],
+      "permissions": { "contents": "write", "workflows": "write" },
+      "target_repository": "astral-sh/uv-dev",
+      "target_repository_id": 1302176231
+    },
+    {
+      "subject": "repo:astral-sh/uv:environment:automations",
+      "repository": "astral-sh/uv",
+      "repository_id": 699532645,
+      "ref": "refs/pull/*/merge",
+      "workflow_path": ".github/workflows/ci.yml",
+      "job_workflow_path": ".github/workflows/pull-request-security-review.yml",
+      "allowed_events": ["pull_request"],
+      "permissions": { "pull_requests": "write" },
+      "target_repository": "astral-sh/uv",
+      "target_repository_id": 699532645
+    },
+    {
+      "subject": "repo:astral-sh@115962839/uv-dev@1302176231:environment:automations",
+      "repository": "astral-sh/uv-dev",
+      "repository_id": 1302176231,
+      "ref": "refs/heads/main",
+      "workflow_path": ".github/workflows/pull-request-conflicts.yml",
+      "job_workflow_path": ".github/workflows/rebase-conflicted-pull-request.yml",
+      "allowed_events": ["push", "workflow_dispatch"],
+      "permissions": { "contents": "write", "workflows": "write" },
+      "target_repository": "astral-sh/uv-dev",
+      "target_repository_id": 1302176231
+    },
+    {
+      "subject": "repo:astral-sh/uv:environment:automations",
+      "repository": "astral-sh/uv",
+      "repository_id": 699532645,
+      "ref": "refs/heads/main",
+      "workflow_path": ".github/workflows/pull-request-conflicts.yml",
+      "job_workflow_path": ".github/workflows/rebase-conflicted-pull-request.yml",
+      "allowed_events": ["push", "workflow_dispatch"],
+      "permissions": { "contents": "write", "workflows": "write" },
+      "target_repository": "astral-sh/uv-dev",
+      "target_repository_id": 1302176231
+    },
+    {
+      "subject": "repo:astral-sh@115962839/uv-dev@1302176231:environment:automations",
+      "repository": "astral-sh/uv-dev",
+      "repository_id": 1302176231,
+      "ref": "refs/heads/main",
+      "workflow_path": ".github/workflows/diagnose-workflow-failure.yml",
+      "allowed_events": ["workflow_dispatch"],
+      "permissions": { "issues": "write" },
+      "target_repository": "astral-sh/uv-dev",
+      "target_repository_id": 1302176231
+    },
+    {
+      "subject": "repo:astral-sh/uv:environment:automations",
+      "repository": "astral-sh/uv",
+      "repository_id": 699532645,
+      "ref": "refs/heads/main",
+      "workflow_path": ".github/workflows/diagnose-workflow-failure.yml",
+      "allowed_events": ["workflow_dispatch"],
+      "permissions": { "issues": "write" },
+      "target_repository": "astral-sh/uv-dev",
+      "target_repository_id": 1302176231
+    }
+  ]
+}
