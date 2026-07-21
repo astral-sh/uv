@@ -876,6 +876,7 @@ fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
         implementation = CPython
         uv = [UV_VERSION]
         version_info = 3.10
+        python-version = 3.10
         include-system-site-packages = false
         prompt = project
         ");
@@ -975,6 +976,7 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
         implementation = CPython
         uv = [UV_VERSION]
         version_info = 3.10.17
+        python-version = 3.10
         include-system-site-packages = false
         prompt = project
         ");
