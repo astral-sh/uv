@@ -124,13 +124,13 @@ jobs:
     permissions:
       id-token: write # for the credential broker
     steps:
-      - name: "Get issue token"
+      - name: "Get uv-dev issue token"
         id: token
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
-          repository: ${{ github.repository }}
+          repository: astral-sh/uv-dev
           permissions: |
             issues: write
 
@@ -138,7 +138,7 @@ jobs:
         env:
           DIAGNOSIS: ${{ needs.diagnose.outputs.result }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          ISSUE_REPOSITORY: ${{ github.repository }}
+          ISSUE_REPOSITORY: astral-sh/uv-dev
           RUN_ID: ${{ inputs.run }}
         run: |
           printf '%s\n' "$DIAGNOSIS" > "$RUNNER_TEMP/diagnosis.json"
@@ -156,7 +156,7 @@ jobs:
             exit 1
           fi
 
-          run_url="https://github.com/$ISSUE_REPOSITORY/actions/runs/$RUN_ID"
+          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
           jq --raw-output --arg run_url "$run_url" '
             "Another workflow run encountered this failure: " + $run_url
             + (if (.comment_note | length) > 0 then "\n\n" + .comment_note else "" end)
