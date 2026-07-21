@@ -2875,7 +2875,7 @@ fn run_no_sync() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    // Running with `--no-sync` should succeed error, even if the lockfile isn't present.
+    // Running with `--no-sync` should succeed, even if the lockfile isn't present.
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @"
     success: true
     exit_code: 0
@@ -3729,7 +3729,7 @@ fn run_no_project() -> Result<()> {
     ----- stderr -----
     ");
 
-    // `run --no-project --locked` should fail.
+    // `run --no-project --locked` should warn about `--locked`.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--locked").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
     success: true
     exit_code: 0

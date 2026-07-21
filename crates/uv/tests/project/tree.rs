@@ -1850,8 +1850,8 @@ fn platform_dependencies() -> Result<()> {
     Resolved 8 packages in [TIME]
     ");
 
-    // When `--universal` is _not_ provided, should include `colorama`, even though it's only
-    // included on Windows.
+    // When `--universal` is provided, should include `colorama`, even though it's only included on
+    // Windows.
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0

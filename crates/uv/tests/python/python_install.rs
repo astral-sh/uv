@@ -2477,7 +2477,7 @@ fn python_install_default_prerelease() {
         .with_managed_python_dirs()
         .with_python_download_cache();
 
-    // Install Python 3.15, which currently only exists as a pre-release (3.15.0a1).
+    // Install Python 3.15, which currently only exists as a pre-release.
     context
         .python_install()
         .arg("--default")

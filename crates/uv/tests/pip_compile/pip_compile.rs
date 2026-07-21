@@ -538,8 +538,7 @@ fn compile_constraints_markers() -> Result<()> {
 }
 
 /// Resolve a package from a `requirements.in` file, with a `constraints.txt` file that uses an
-/// extra. The constraint should be enforced, but the extra should _not_ be included in the output
-/// (though it currently _is_ included).
+/// extra. The constraint should be enforced, but the extra should _not_ be included in the output.
 #[test]
 fn compile_constraint_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");

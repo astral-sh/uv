@@ -4160,7 +4160,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         "#,
     )?;
 
-    // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
+    // This shouldn't install two versions of `idna`, only one, `idna==3.6`.
     uv_snapshot!(context.filters(), context.sync().arg("--extra=bar"), @"
     success: true
     exit_code: 0
@@ -4301,7 +4301,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         "#,
     )?;
 
-    // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
+    // This shouldn't install two versions of `idna`, only one, `idna==3.6`.
     uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @"
     success: true
     exit_code: 0
@@ -4447,7 +4447,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         "#,
     )?;
 
-    // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
+    // This shouldn't install two versions of `idna`, only one, `idna==3.6`.
     uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @"
     success: true
     exit_code: 0
