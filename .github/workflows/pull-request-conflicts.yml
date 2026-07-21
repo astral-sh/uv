@@ -35,7 +35,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          pull_requests=$(./scripts/find-conflicted-pull-requests.sh)
+          if [[ "$GH_REPO" == "astral-sh/uv" ]]; then
+            pull_requests=$(./scripts/find-conflicted-pull-requests.sh --author app/astral-automations-bot)
+          else
+            pull_requests=$(./scripts/find-conflicted-pull-requests.sh)
+          fi
           conflicted=$(jq 'length' <<< "$pull_requests")
           rebasable=$(jq '[.[] | select(.head_repository == "astral-sh/uv-dev")] | length' <<< "$pull_requests")
           unavailable=$(( conflicted - rebasable ))
