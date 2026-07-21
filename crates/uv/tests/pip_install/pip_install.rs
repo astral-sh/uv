@@ -8414,7 +8414,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
         "werkzeug==3.0.0 --hash=sha256:cbb2600f7eabe51dbc0502f58be0b3e1b96b893b05695ea2b35b43d4de2d9962",
     )?;
 
-    // Install without error when `--require-hashes` is omitted.
+    // Error on the transitive dependency when `--require-hashes` is passed.
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
