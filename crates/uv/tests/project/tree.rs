@@ -3571,7 +3571,6 @@ fn invert_preserves_marker_split_versions() -> Result<()> {
         └── foo v1.0.0
 
     ----- stderr -----
-
     ");
 
     Ok(())
@@ -3694,7 +3693,6 @@ fn invert_preserves_conflict_marker_attribution() -> Result<()> {
     └── p v0.1.0 (extra: foo)
 
     ----- stderr -----
-
     ");
 
     Ok(())
