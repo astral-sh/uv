@@ -289,10 +289,10 @@ fn configured_precompile_bytecode_can_be_disabled() -> Result<()> {
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(indoc! {r#"
+        .write_str(indoc! {r"
         [tool.uv]
         precompile-bytecode = true
-    "#})?;
+    "})?;
 
     uv_snapshot!(context.pip_install()
         .arg("sniffio==1.3.1")
@@ -322,7 +322,7 @@ fn configured_precompile_bytecode_can_be_disabled() -> Result<()> {
 
 /// Fall back to in-place compilation when Python uses an external bytecode cache.
 #[test]
-fn precompile_bytecode_respects_python_pycache_prefix() -> Result<()> {
+fn precompile_bytecode_respects_python_pycache_prefix() {
     let context = uv_test::test_context!("3.12");
     let pycache = context.temp_dir.child("python-bytecode-cache");
 
@@ -366,8 +366,6 @@ fn precompile_bytecode_respects_python_pycache_prefix() -> Result<()> {
                 .is_some_and(|extension| extension == "pyc")),
         "cached source wheel archives must not contain installed bytecode"
     );
-
-    Ok(())
 }
 
 /// Fall back to in-place compilation when timestamp invalidation is explicitly requested.

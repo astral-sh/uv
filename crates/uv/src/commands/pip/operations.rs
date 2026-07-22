@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, anyhow};
+use futures::{StreamExt, TryStreamExt, stream};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
@@ -46,13 +47,14 @@ use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
     Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput, UpgradePackages,
 };
+use uv_static::EnvVars;
 use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, compile_bytecode_files};
+use crate::commands::write_bytecode_summary;
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -777,9 +779,12 @@ impl InstallationPlan {
             );
         }
 
-        // An external Python bytecode cache does not use wheel-relative `__pycache__` overlays.
-        // Compile directly into the configured prefix instead of populating an unusable cache.
-        let compile = if env::var_os("PYTHONPYCACHEPREFIX").is_some() {
+        // External Python cache prefixes cannot use wheel-relative overlays, and timestamp-based
+        // bytecode becomes invalid when installing a source file changes its modification time.
+        // Fall back to destination-side compilation for either explicitly configured mode.
+        let compile = if env::var_os("PYTHONPYCACHEPREFIX").is_some()
+            || env::var(EnvVars::PYC_INVALIDATION_MODE).is_ok_and(|mode| mode == "TIMESTAMP")
+        {
             match compile {
                 Some(BytecodeCompilation::PrecompileAll) => Some(BytecodeCompilation::All),
                 Some(BytecodeCompilation::PrecompileInstalled) => {
@@ -840,6 +845,26 @@ impl InstallationPlan {
 
         let has_isolated_phase = !isolated_phase.is_empty();
         let has_shared_phase = !shared_phase.is_empty();
+        let has_installs = !isolated_phase.cached.is_empty()
+            || !isolated_phase.remote.is_empty()
+            || !shared_phase.cached.is_empty()
+            || !shared_phase.remote.is_empty();
+        let compiler = if matches!(
+            compile,
+            Some(BytecodeCompilation::All | BytecodeCompilation::PrecompileAll)
+        ) || (compile.is_some() && has_installs)
+        {
+            Some(Arc::new(
+                uv_installer::WheelCompiler::new(
+                    venv.python_executable(),
+                    concurrency,
+                    cache.root(),
+                )
+                .map_err(anyhow::Error::new)?,
+            ))
+        } else {
+            None
+        };
 
         let mut installs = vec![];
         let mut uninstalls = vec![];
@@ -854,6 +879,7 @@ impl InstallationPlan {
                 build_options,
                 link_mode,
                 compile.is_some_and(BytecodeCompilation::precompile),
+                compiler.as_ref(),
                 hasher,
                 tags,
                 client,
@@ -885,6 +911,7 @@ impl InstallationPlan {
                 build_options,
                 link_mode,
                 compile.is_some_and(BytecodeCompilation::precompile),
+                compiler.as_ref(),
                 hasher,
                 tags,
                 client,
@@ -904,27 +931,79 @@ impl InstallationPlan {
             precompiled += shared_precompiled;
         }
 
-        if let Some(compile) = compile {
+        if let (Some(compile), Some(compiler)) = (compile, compiler) {
+            let start = Instant::now();
             match compile {
                 BytecodeCompilation::All => {
-                    compile_bytecode(venv, concurrency, cache, &HashSet::new(), 0, printer).await?;
+                    for site_packages in venv.site_packages() {
+                        let site_packages = CWD.join(site_packages);
+                        if !site_packages.exists() {
+                            debug!(
+                                "Skipping non-existent site-packages directory: {}",
+                                site_packages.display()
+                            );
+                            continue;
+                        }
+                        compiler.queue_tree(&site_packages).with_context(|| {
+                            format!(
+                                "Failed to bytecode-compile Python file in: {}",
+                                site_packages.user_display()
+                            )
+                        })?;
+                    }
                 }
                 BytecodeCompilation::Installed => {
-                    let files = python_source_files_for_installs(venv, &installs);
-                    compile_bytecode_files(files, venv, concurrency, cache, 0, printer).await?;
+                    for source_file in python_source_files_for_installs(venv, &installs) {
+                        compiler
+                            .queue_file(source_file?)
+                            .context("Failed to bytecode-compile installed packages")?;
+                    }
                 }
                 BytecodeCompilation::PrecompileAll => {
                     let excluded = precompiled_source_files(venv, &installs)?;
-                    compile_bytecode(venv, concurrency, cache, &excluded, precompiled, printer)
-                        .await?;
+                    for site_packages in venv.site_packages() {
+                        let site_packages = CWD.join(site_packages);
+                        if !site_packages.exists() {
+                            debug!(
+                                "Skipping non-existent site-packages directory: {}",
+                                site_packages.display()
+                            );
+                            continue;
+                        }
+                        compiler
+                            .queue_tree_excluding(&site_packages, &excluded)
+                            .with_context(|| {
+                                format!(
+                                    "Failed to bytecode-compile Python file in: {}",
+                                    site_packages.user_display()
+                                )
+                            })?;
+                    }
                 }
                 BytecodeCompilation::PrecompileInstalled => {
                     let excluded = precompiled_source_files(venv, &installs)?;
-                    let files = python_source_files_for_installs(venv, &installs)
-                        .filter(|file| file.as_ref().map_or(true, |path| !excluded.contains(path)));
-                    compile_bytecode_files(files, venv, concurrency, cache, precompiled, printer)
-                        .await?;
+                    for source_file in python_source_files_for_installs(venv, &installs) {
+                        let source_file = source_file?;
+                        if !excluded.contains(&source_file) {
+                            compiler
+                                .queue_file(source_file)
+                                .context("Failed to bytecode-compile installed packages")?;
+                        }
+                    }
                 }
+            }
+            let files = precompiled
+                + compiler
+                    .finish()
+                    .await
+                    .context("Failed to bytecode-compile installed packages")?;
+            if files > 0
+                || matches!(
+                    compile,
+                    BytecodeCompilation::All | BytecodeCompilation::PrecompileAll
+                )
+            {
+                write_bytecode_summary(files, start, printer)?;
             }
         }
 
@@ -1098,7 +1177,8 @@ async fn execute_plan(
     resolution: &Resolution,
     build_options: &BuildOptions,
     link_mode: LinkMode,
-    compile_bytecode: bool,
+    precompile_bytecode: bool,
+    bytecode_compiler: Option<&Arc<uv_installer::WheelCompiler>>,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -1119,7 +1199,7 @@ async fn execute_plan(
         extraneous,
     } = plan;
 
-    let compiler = compile_bytecode
+    let compiler = precompile_bytecode
         .then(|| {
             uv_installer::BytecodeCompiler::new(
                 venv.python_executable(),
@@ -1133,12 +1213,12 @@ async fn execute_plan(
 
     let cached_compilation = async {
         if let Some(compiler) = compiler.as_ref() {
-            for wheel in &cached {
-                compiler
-                    .compile_wheel(wheel.path())
-                    .await
-                    .map_err(anyhow::Error::new)?;
-            }
+            stream::iter(&cached)
+                .map(|wheel| compiler.compile_wheel(wheel.path()))
+                .buffer_unordered(concurrency.installs)
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(anyhow::Error::new)?;
         }
         Ok::<(), Error>(())
     };
@@ -1250,6 +1330,8 @@ async fn execute_plan(
             ));
         let installer = if let Some(bytecode_cache) = bytecode_cache {
             installer.with_bytecode_cache(bytecode_cache)
+        } else if let Some(bytecode_compiler) = bytecode_compiler {
+            installer.with_bytecode_compiler(Arc::clone(bytecode_compiler))
         } else {
             installer
         };

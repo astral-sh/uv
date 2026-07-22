@@ -13,13 +13,14 @@ use uv_install_wheel::{Layout, LinkMode};
 use uv_preview::Preview;
 use uv_python::PythonEnvironment;
 
-use crate::BytecodeCache;
+use crate::{BytecodeCache, WheelCompiler};
 
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
     link_mode: LinkMode,
     cache: Option<&'a Cache>,
     bytecode_cache: Option<BytecodeCache>,
+    bytecode_compiler: Option<Arc<WheelCompiler>>,
     reporter: Option<Arc<dyn Reporter>>,
     /// The name of the [`Installer`].
     name: Option<String>,
@@ -37,10 +38,20 @@ impl<'a> Installer<'a> {
             link_mode: LinkMode::default(),
             cache: None,
             bytecode_cache: None,
+            bytecode_compiler: None,
             reporter: None,
             name: Some("uv".to_string()),
             metadata: true,
             preview,
+        }
+    }
+
+    /// Queue each wheel for bytecode compilation immediately after it is installed.
+    #[must_use]
+    pub fn with_bytecode_compiler(self, bytecode_compiler: Arc<WheelCompiler>) -> Self {
+        Self {
+            bytecode_compiler: Some(bytecode_compiler),
+            ..self
         }
     }
 
@@ -102,6 +113,7 @@ impl<'a> Installer<'a> {
             venv,
             cache,
             bytecode_cache,
+            bytecode_compiler,
             link_mode,
             reporter,
             name: installer_name,
@@ -128,6 +140,7 @@ impl<'a> Installer<'a> {
                 wheels,
                 &layout,
                 bytecode_cache.as_ref(),
+                bytecode_compiler.as_deref(),
                 installer_name.as_deref(),
                 link_mode,
                 reporter.as_ref(),
@@ -160,6 +173,7 @@ impl<'a> Installer<'a> {
             wheels,
             &self.venv.interpreter().layout(),
             self.bytecode_cache.as_ref(),
+            self.bytecode_compiler.as_deref(),
             self.name.as_deref(),
             self.link_mode,
             self.reporter.as_ref(),
@@ -176,6 +190,7 @@ fn install(
     wheels: Vec<CachedDist>,
     layout: &Layout,
     bytecode_cache: Option<&BytecodeCache>,
+    bytecode_compiler: Option<&WheelCompiler>,
     installer_name: Option<&str>,
     link_mode: LinkMode,
     reporter: Option<&Arc<dyn Reporter>>,
@@ -221,6 +236,14 @@ fn install(
                     wheel.filename()
                 )
             })?;
+        } else if bytecode_cache.is_none()
+            && let Some(bytecode_compiler) = bytecode_compiler
+        {
+            bytecode_compiler
+                .queue_wheel(layout, wheel)
+                .with_context(|| {
+                    format!("Failed to queue installed wheel for bytecode compilation: {wheel}")
+                })?;
         }
 
         if let Some(reporter) = reporter.as_ref() {

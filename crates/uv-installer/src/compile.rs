@@ -3,25 +3,28 @@ use std::ffi::{OsStr, OsString};
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex as StdMutex, Weak};
 use std::time::Duration;
 use std::{env, io, panic};
 
+use anyhow::anyhow;
 use async_channel::{Receiver, SendError, Sender};
 use serde::Serialize;
 use tempfile::{TempDir, tempdir_in};
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
-use tokio::sync::{Mutex, Notify, oneshot};
+use tokio::sync::{Mutex as TokioMutex, Notify, oneshot};
 use tracing::{debug, instrument};
 use walkdir::WalkDir;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry};
 use uv_cache_key::cache_digest;
 use uv_configuration::Concurrency;
-use uv_fs::Simplified;
+use uv_distribution_types::CachedDist;
+use uv_fs::{CWD, Simplified};
+use uv_install_wheel::{Layout, installed_dist_info_path};
 use uv_python::Interpreter;
 use uv_static::EnvVars;
 
@@ -152,7 +155,7 @@ fn spawn_workers(
     dir: &Path,
     python_executable: &Path,
     pip_compileall_py: &Path,
-    receiver: &Receiver<CompileTask>,
+    receiver: &Arc<Receiver<CompileTask>>,
     worker_count: usize,
     timeout: Option<Duration>,
 ) -> Vec<WorkerHandle> {
@@ -160,12 +163,13 @@ fn spawn_workers(
     let mut worker_handles = Vec::with_capacity(worker_count);
     for _ in 0..worker_count {
         let (tx, rx) = oneshot::channel();
+        let receiver = Arc::clone(receiver);
 
         let worker = worker(
             dir.to_path_buf(),
             python_executable.to_path_buf(),
             pip_compileall_py.to_path_buf(),
-            receiver.clone(),
+            receiver.as_ref().clone(),
             timeout,
         );
 
@@ -173,6 +177,9 @@ fn spawn_workers(
         std::thread::Builder::new()
             .name("uv-compile".to_owned())
             .spawn(move || {
+                // Keep the shared receiver alive only while a worker is running. This lets the
+                // wheel compiler grow its pool without hiding the disappearance of every worker.
+                let _receiver = receiver;
                 // Report panics back to the main thread.
                 let result = panic::catch_unwind(AssertUnwindSafe(|| {
                     tokio::runtime::Builder::new_current_thread()
@@ -264,6 +271,196 @@ fn count_wheel_python_source_files(dir: &Path) -> Result<usize, CompileError> {
     wheel_python_source_files(dir).try_fold(0, |count, source| {
         source.map(|_| count + 1).map_err(CompileError::from)
     })
+}
+
+struct WheelCompilerWorkers {
+    sender: Sender<CompileTask>,
+    receiver: Weak<Receiver<CompileTask>>,
+    worker_handles: Vec<WorkerHandle>,
+    tempdir: TempDir,
+    timeout: Option<Duration>,
+}
+
+/// A shared pool of Python interpreters for compiling installed wheels.
+pub struct WheelCompiler {
+    python_executable: PathBuf,
+    cache: PathBuf,
+    worker_count: usize,
+    workers: StdMutex<Option<WheelCompilerWorkers>>,
+    send_error: StdMutex<Option<SendError<CompileTask>>>,
+    queued: StdMutex<HashSet<PathBuf>>,
+    source_files: AtomicUsize,
+}
+
+impl WheelCompiler {
+    /// Create a shared pool that starts Python workers when the first source is queued.
+    pub fn new(
+        python_executable: &Path,
+        concurrency: &Concurrency,
+        cache: &Path,
+    ) -> Result<Self, CompileError> {
+        Ok(Self {
+            python_executable: python_executable.to_path_buf(),
+            cache: cache.to_path_buf(),
+            worker_count: concurrency.installs.max(1),
+            workers: StdMutex::new(None),
+            send_error: StdMutex::new(None),
+            queued: StdMutex::new(HashSet::new()),
+            source_files: AtomicUsize::new(0),
+        })
+    }
+
+    fn sender(&self, worker_count: usize) -> Result<Sender<CompileTask>, CompileError> {
+        let mut workers = self.workers.lock().map_err(|_| CompileError::Join)?;
+        if let Some(workers) = workers.as_mut() {
+            let additional = worker_count.saturating_sub(workers.worker_handles.len());
+            if additional > 0
+                && let Some(receiver) = workers.receiver.upgrade()
+            {
+                workers.worker_handles.extend(spawn_workers(
+                    &self.cache,
+                    &self.python_executable,
+                    &workers.tempdir.path().join("pip_compileall.py"),
+                    &receiver,
+                    additional,
+                    workers.timeout,
+                ));
+            }
+            return Ok(workers.sender.clone());
+        }
+
+        // A larger buffer is significantly faster than just 1 or the worker count.
+        let (sender, receiver) =
+            async_channel::bounded::<CompileTask>(self.worker_count.saturating_mul(10));
+        let receiver = Arc::new(receiver);
+        // Running Python with an actual file will produce better error messages.
+        let tempdir = tempdir_in(&self.cache).map_err(CompileError::TempFile)?;
+        let pip_compileall_py = tempdir.path().join("pip_compileall.py");
+        let timeout = compile_timeout()?;
+        let worker_handles = spawn_workers(
+            &self.cache,
+            &self.python_executable,
+            &pip_compileall_py,
+            &receiver,
+            worker_count,
+            timeout,
+        );
+        let shared_receiver = Arc::downgrade(&receiver);
+        *workers = Some(WheelCompilerWorkers {
+            sender: sender.clone(),
+            receiver: shared_receiver,
+            worker_handles,
+            tempdir,
+            timeout,
+        });
+        Ok(sender)
+    }
+
+    /// Queue an installed Python source file for bytecode compilation.
+    pub fn queue_file(&self, source_file: PathBuf) -> Result<(), CompileError> {
+        debug_assert!(
+            source_file.is_absolute(),
+            "compileall doesn't work with relative paths: `{}`",
+            source_file.display()
+        );
+
+        let task = CompileTask::in_place(&source_file);
+        let mut queued = self.queued.lock().map_err(|_| CompileError::Join)?;
+        if !queued.insert(source_file) {
+            return Ok(());
+        }
+        let worker_count = queued.len().min(self.worker_count);
+        drop(queued);
+
+        if let Err(err) = self.sender(worker_count)?.send_blocking(task) {
+            let mut send_error = self.send_error.lock().map_err(|_| CompileError::Join)?;
+            if send_error.is_none() {
+                *send_error = Some(err);
+            }
+        } else {
+            self.source_files.fetch_add(1, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+
+    /// Queue the root Python source files belonging to an installed wheel.
+    pub(crate) fn queue_wheel(
+        &self,
+        layout: &Layout,
+        wheel: &CachedDist,
+    ) -> Result<(), CompileError> {
+        let dist_info = installed_dist_info_path(layout, wheel.path())
+            .map_err(|err| CompileError::SourceFiles(err.into()))?;
+        let site_packages = dist_info.parent().ok_or_else(|| {
+            CompileError::SourceFiles(anyhow!(
+                "Installed distribution has no site-packages parent: `{wheel}`"
+            ))
+        })?;
+
+        // Files in `.data` are relocated during installation. They are queued from the installed
+        // RECORD after all wheels have been installed.
+        for source_file in python_source_files(wheel.path(), true, None) {
+            let source_file = source_file?;
+            let relative = source_file.strip_prefix(wheel.path()).map_err(|_| {
+                CompileError::SourceFiles(anyhow!(
+                    "Python source is outside its cached wheel: `{}`",
+                    source_file.display()
+                ))
+            })?;
+            self.queue_file(CWD.join(site_packages.join(relative)))?;
+        }
+        Ok(())
+    }
+
+    /// Queue the Python source files in an installed directory.
+    pub fn queue_tree(&self, dir: &Path) -> Result<(), CompileError> {
+        for source_file in python_source_files(dir, false, None) {
+            self.queue_file(source_file?)?;
+        }
+        Ok(())
+    }
+
+    /// Queue Python source files in an installed directory, except for already compiled paths.
+    pub fn queue_tree_excluding(
+        &self,
+        dir: &Path,
+        excluded: &HashSet<PathBuf>,
+    ) -> Result<(), CompileError> {
+        for source_file in python_source_files(dir, false, Some(excluded)) {
+            self.queue_file(source_file?)?;
+        }
+        Ok(())
+    }
+
+    /// Finish all queued compilation tasks and shut down the worker pool.
+    pub async fn finish(self: Arc<Self>) -> Result<usize, CompileError> {
+        let compiler = Arc::try_unwrap(self).map_err(|_| CompileError::Join)?;
+        let Self {
+            python_executable: _,
+            cache: _,
+            worker_count: _,
+            workers,
+            send_error,
+            queued: _,
+            source_files,
+        } = compiler;
+        if let Some(WheelCompilerWorkers {
+            sender,
+            receiver: _,
+            worker_handles,
+            tempdir,
+            timeout: _,
+        }) = workers.into_inner().map_err(|_| CompileError::Join)?
+        {
+            drop(sender);
+            let send_error = send_error.into_inner().map_err(|_| CompileError::Join)?;
+            let result = wait_for_workers(worker_handles, send_error).await;
+            // Keep the compile script alive until all workers have exited.
+            drop(tempdir);
+            result?;
+        }
+        Ok(source_files.into_inner())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -433,8 +630,8 @@ pub struct BytecodeCompiler {
     cache: BytecodeCache,
     python_executable: PathBuf,
     worker_count: usize,
-    workers: Mutex<Option<Workers>>,
-    send_error: Mutex<Option<SendError<CompileTask>>>,
+    workers: TokioMutex<Option<Workers>>,
+    send_error: TokioMutex<Option<SendError<CompileTask>>>,
     source_files: AtomicUsize,
 }
 
@@ -449,8 +646,8 @@ impl BytecodeCompiler {
             cache: BytecodeCache::new(cache, interpreter)?,
             python_executable: python_executable.to_path_buf(),
             worker_count: concurrency.installs,
-            workers: Mutex::new(None),
-            send_error: Mutex::new(None),
+            workers: TokioMutex::new(None),
+            send_error: TokioMutex::new(None),
             source_files: AtomicUsize::new(0),
         })
     }
@@ -463,6 +660,7 @@ impl BytecodeCompiler {
 
         // A larger buffer is significantly faster than just 1 or the worker count.
         let (sender, receiver) = async_channel::bounded::<CompileTask>(self.worker_count * 10);
+        let receiver = Arc::new(receiver);
         let tempdir = tempdir_in(self.cache.cache.root()).map_err(CompileError::TempFile)?;
         let pip_compileall_py = tempdir.path().join("pip_compileall.py");
         let timeout = compile_timeout()?;
@@ -642,6 +840,7 @@ async fn compile_tree_inner(
 
     // A larger buffer is significantly faster than just 1 or the worker count.
     let (sender, receiver) = async_channel::bounded::<CompileTask>(worker_count * 10);
+    let receiver = Arc::new(receiver);
 
     // Running Python with an actual file will produce better error messages.
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
@@ -704,6 +903,7 @@ pub async fn compile_files(
 
     let worker_count = initial_files.len();
     let (sender, receiver) = async_channel::bounded::<CompileTask>(worker_count * 10);
+    let receiver = Arc::new(receiver);
 
     // Running Python with an actual file will produce better error messages.
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
@@ -978,7 +1178,7 @@ mod tests {
     use uv_configuration::Concurrency;
     use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 
-    use super::{BytecodeCacheKey, BytecodeCompiler};
+    use super::{BytecodeCacheKey, BytecodeCompiler, WheelCompiler};
 
     #[test]
     fn bytecode_cache_key_isolates_interpreters() {
@@ -1241,5 +1441,78 @@ mod tests {
         );
         let (_, total) = compiler.finish().await.expect("cache hits should finish");
         assert_eq!(total, 2);
+    }
+
+    #[tokio::test]
+    async fn wheel_compiler_reuses_pool_and_deduplicates_files() {
+        let cache = Cache::temp().expect("cache should be available");
+        let wheel = tempfile::tempdir_in(cache.root()).expect("wheel directory should exist");
+        let package = wheel.path().join("package");
+        fs_err::create_dir_all(&package).expect("package directory should exist");
+        fs_err::write(package.join("__init__.py"), "VALUE = 1\n")
+            .expect("package source should be written");
+
+        let environment = PythonEnvironment::find(
+            &PythonRequest::Any,
+            EnvironmentPreference::Any,
+            PythonPreference::System,
+            &cache,
+        )
+        .expect("Python environment should be available");
+        let concurrency = Concurrency::new(1, 1, 4, 1);
+
+        let other_wheel = tempfile::tempdir_in(cache.root()).expect("wheel directory should exist");
+        let other_package = other_wheel.path().join("other_package");
+        fs_err::create_dir_all(&other_package).expect("package directory should exist");
+        fs_err::write(other_package.join("__init__.py"), "VALUE = 2\n")
+            .expect("package source should be written");
+
+        let compiler = Arc::new(
+            WheelCompiler::new(environment.python_executable(), &concurrency, cache.root())
+                .expect("compiler should start"),
+        );
+        assert!(
+            compiler
+                .workers
+                .lock()
+                .expect("worker state should be available")
+                .is_none()
+        );
+        compiler
+            .queue_file(package.join("__init__.py"))
+            .expect("source should be queued");
+        assert_eq!(
+            compiler
+                .workers
+                .lock()
+                .expect("worker state should be available")
+                .as_ref()
+                .expect("worker should start for the first source")
+                .worker_handles
+                .len(),
+            1
+        );
+        compiler
+            .queue_file(package.join("__init__.py"))
+            .expect("duplicate source should be ignored");
+        compiler
+            .queue_file(other_package.join("__init__.py"))
+            .expect("source should be queued");
+        assert_eq!(
+            compiler
+                .workers
+                .lock()
+                .expect("worker state should be available")
+                .as_ref()
+                .expect("worker should remain available")
+                .worker_handles
+                .len(),
+            2
+        );
+        let compiled = compiler.finish().await.expect("sources should compile");
+
+        assert_eq!(compiled, 2);
+        assert!(package.join("__pycache__").exists());
+        assert!(other_package.join("__pycache__").exists());
     }
 }
