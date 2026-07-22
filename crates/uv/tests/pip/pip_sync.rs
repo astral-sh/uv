@@ -5552,7 +5552,7 @@ fn target_no_build_isolation() -> Result<()> {
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
 
-    // Install `hatchling` into the current environment.
+    // Install `flit_core` into the current environment.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flit_core")?;
 
@@ -5569,7 +5569,7 @@ fn target_no_build_isolation() -> Result<()> {
      + flit-core==3.9.0
     ");
 
-    // Install `iniconfig` to the target directory.
+    // Install `wheel` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("wheel")?;
 
@@ -5653,7 +5653,7 @@ fn prefix() -> Result<()> {
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
 
-    // Install `iniconfig` to the target directory.
+    // Install `iniconfig` to the prefix directory.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
