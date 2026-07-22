@@ -16,10 +16,13 @@ fn tool_run_args() {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
     let context = context
         .with_filter((
-            r"Usage: uv(\.exe)? tool run \[OPTIONS\] (?s).*",
-            "[UV TOOL RUN HELP]",
+            r"Usage: uv(?:\.exe)? tool run \[OPTIONS\] (?s:.*?)(\n----- stderr -----|$)",
+            "[UV TOOL RUN HELP]$1",
         ))
-        .with_filter((r"usage: pytest \[options\] (?s).*", "[PYTEST HELP]"));
+        .with_filter((
+            r"usage: pytest \[options\] (?s:.*?)(\n----- stderr -----|$)",
+            "[PYTEST HELP]$1",
+        ));
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -35,6 +38,7 @@ fn tool_run_args() {
     Run a command provided by a Python package
 
     [UV TOOL RUN HELP]
+    ----- stderr -----
     ");
 
     // We don't treat arguments after the command as uv tool run arguments
@@ -47,6 +51,14 @@ fn tool_run_args() {
     exit_code: 0
     ----- stdout -----
     [PYTEST HELP]
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
     ");
 
     // Can use `--` to separate uv arguments from the command arguments.
