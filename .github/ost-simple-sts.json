@@ -26,6 +26,14 @@
       "target": "uv"
     },
     {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "release-prepare.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": { "contents": "write", "pull_requests": "write" },
+      "target": "uv"
+    },
+    {
       "caller": "uv-dev",
       "environment": "automations",
       "caller_workflow": "promote-pull-request.yml",
