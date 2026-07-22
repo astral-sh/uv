@@ -100,6 +100,15 @@ pub enum ListFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum ToolUpgradeFormat {
+    /// Display the result in a human-readable format.
+    #[default]
+    Text,
+    /// Display the result in JSON format.
+    Json,
+}
+
 fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
     ExtraName::from_str(arg).map_err(|_err| {
         anyhow!(
@@ -6489,6 +6498,10 @@ pub struct ToolUpgradeArgs {
 
     #[command(flatten)]
     pub build: BuildOptionsArgs,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = ToolUpgradeFormat::default())]
+    pub output_format: ToolUpgradeFormat,
 }
 
 #[derive(Args)]

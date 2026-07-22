@@ -20,8 +20,8 @@ use uv_cli::{
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
     SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec,
-    VersionFormat,
+    ToolUninstallArgs, ToolUpgradeFormat, TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs,
+    VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, CheckArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
@@ -1154,6 +1154,7 @@ pub(crate) struct ToolUpgradeSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) args: ResolverInstallerOptions,
     pub(crate) filesystem: ResolverInstallerOptions,
+    pub(crate) output_format: ToolUpgradeFormat,
 }
 impl ToolUpgradeSettings {
     /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
@@ -1193,6 +1194,7 @@ impl ToolUpgradeSettings {
             no_sources_package,
             exclude_newer_package,
             build,
+            output_format,
         } = args;
 
         if upgrade {
@@ -1257,6 +1259,7 @@ impl ToolUpgradeSettings {
                 .install_mirrors
                 .clone()
                 .combine(filesystem_install_mirrors),
+            output_format,
         }
     }
 }
