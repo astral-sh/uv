@@ -791,3 +791,178 @@ fn tool_list_show_all() {
     ----- stderr -----
     ");
 }
+
+#[test]
+fn tool_list_empty_json() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--output-format=json")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "tools": []
+    }
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn tool_list_outdated_empty_json() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // With no tools installed, `--outdated` should produce the same output as the base case.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--output-format=json")
+    .arg("--outdated")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "tools": []
+    }
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn tool_list_outdated_json() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install an older version of `black`.
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // With `--outdated`, the installed (older) version should be listed with the latest version.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--output-format=json")
+    .arg("--outdated")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "tools": [
+        {
+          "name": "black",
+          "version": "24.2.0",
+          "latest_version": "24.3.0",
+          "path": "[TEMP_DIR]/tools/black",
+          "commands": [
+            {
+              "name": "black",
+              "path": "[TEMP_DIR]/bin/black"
+            },
+            {
+              "name": "blackd",
+              "path": "[TEMP_DIR]/bin/blackd"
+            }
+          ],
+          "extras": [],
+          "version_specifiers": "==24.2.0",
+          "with": [],
+          "python": {
+            "implementation": "cpython",
+            "version": "3.12.[X]",
+            "key": "cpython-3.12.[X]-linux-x86_64-gnu"
+          }
+        }
+      ]
+    }
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn tool_list_json() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install flask with extras and additional stuff.
+    context
+        .tool_install()
+        .arg("flask[async,dotenv]!=42,<69")
+        .arg("--with")
+        .arg("requests!=69")
+        .arg("--with")
+        .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // With `--outdated`, the installed (older) version should be listed with the latest version.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--output-format=json")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "tools": [
+        {
+          "name": "flask",
+          "version": "3.0.2",
+          "latest_version": null,
+          "path": "[TEMP_DIR]/tools/flask",
+          "commands": [
+            {
+              "name": "flask",
+              "path": "[TEMP_DIR]/bin/flask"
+            }
+          ],
+          "extras": [
+            "async",
+            "dotenv"
+          ],
+          "version_specifiers": "!=42, <69",
+          "with": [
+            "requests!=69",
+            "black"
+          ],
+          "python": {
+            "implementation": "cpython",
+            "version": "3.12.[X]",
+            "key": "cpython-3.12.[X]-linux-x86_64-gnu"
+          }
+        }
+      ]
+    }
+
+    ----- stderr -----
+    "###);
+}
