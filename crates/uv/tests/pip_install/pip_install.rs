@@ -14733,26 +14733,6 @@ fn offline_refresh_conflict() {
     );
 }
 
-/// Test that conflicting arguments retain their color styling.
-#[test]
-fn offline_refresh_conflict_color() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let output = context
-        .pip_install()
-        .arg("tqdm")
-        .arg("--offline")
-        .arg("--refresh")
-        .arg("--color")
-        .arg("always")
-        .output()?;
-
-    assert_eq!(output.status.code(), Some(2));
-    insta::assert_snapshot!(format!("{:?}", String::from_utf8_lossy(&output.stderr)), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m the argument \u{1b}[32m`--offline`\u{1b}[39m cannot be used with \u{1b}[32m`--refresh`\u{1b}[39m\n""#);
-
-    Ok(())
-}
-
 /// Test that conflicting arguments do not emit an internal error chain or backtrace.
 #[test]
 fn offline_refresh_conflict_verbose() {

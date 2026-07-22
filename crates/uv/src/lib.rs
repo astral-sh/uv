@@ -544,6 +544,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         uv_warnings::enable();
     }
 
+    anstream::ColorChoice::write_global(globals.color.into());
+
     if global_initialization.needs_initialization() {
         miette::set_hook(Box::new(|_| {
             Box::new(
