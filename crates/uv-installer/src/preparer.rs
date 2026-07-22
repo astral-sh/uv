@@ -3,7 +3,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use futures::{FutureExt, Stream, TryFutureExt, TryStreamExt, stream::FuturesUnordered};
-use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 use uv_cache::Cache;
@@ -29,7 +28,6 @@ pub struct Preparer<'a, Context: BuildContext> {
     database: DistributionDatabase<'a, Context>,
     reporter: Option<Arc<dyn Reporter>>,
     bytecode_compilation: Option<(&'a Path, &'a Concurrency)>,
-    bytecode_lock: Mutex<()>,
 }
 
 impl<'a, Context: BuildContext> Preparer<'a, Context> {
@@ -48,7 +46,6 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
             database,
             reporter: None,
             bytecode_compilation: None,
-            bytecode_lock: Mutex::new(()),
         }
     }
 
@@ -65,7 +62,6 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .with_reporter(reporter.clone().into_distribution_reporter()),
             reporter: Some(reporter),
             bytecode_compilation: self.bytecode_compilation,
-            bytecode_lock: self.bytecode_lock,
         }
     }
 
@@ -88,26 +84,17 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         distributions: Vec<Arc<Dist>>,
         in_flight: &'stream InFlight,
         resolution: &'stream Resolution,
+        compiler: Option<&'stream crate::compile::WheelCompiler>,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         distributions
             .into_iter()
-            .map(async |dist| {
+            .map(move |dist| async move {
                 let wheel = self
                     .get_wheel((*dist).clone(), in_flight, resolution)
                     .boxed_local()
                     .await?;
-                if let Some((python_executable, concurrency)) = self.bytecode_compilation {
-                    // Each compilation uses the install concurrency limit internally. Keep one
-                    // wheel compiling at a time so downloads can continue without starting a
-                    // worker pool for every completed wheel.
-                    let _guard = self.bytecode_lock.lock().await;
-                    crate::compile::compile_wheel(
-                        wheel.path(),
-                        python_executable,
-                        concurrency,
-                        self.cache.root(),
-                    )
-                    .await?;
+                if let Some(compiler) = compiler {
+                    compiler.compile_wheel(wheel.path()).await?;
                 }
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&wheel);
@@ -129,10 +116,27 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         distributions
             .sort_unstable_by_key(|distribution| Reverse(distribution.size().unwrap_or(u64::MAX)));
 
+        let compiler = self
+            .bytecode_compilation
+            .map(|(python_executable, concurrency)| {
+                crate::compile::WheelCompiler::new(
+                    python_executable,
+                    concurrency,
+                    self.cache.root(),
+                )
+            })
+            .transpose()?;
         let wheels = self
-            .prepare_stream(distributions, in_flight, resolution)
+            .prepare_stream(distributions, in_flight, resolution, compiler.as_ref())
             .try_collect()
-            .await?;
+            .await;
+        let compilation = if let Some(compiler) = compiler {
+            compiler.finish().await
+        } else {
+            Ok(())
+        };
+        let wheels = wheels?;
+        compilation?;
 
         if let Some(reporter) = self.reporter.as_ref() {
             reporter.on_complete();

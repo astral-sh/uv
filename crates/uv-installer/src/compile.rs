@@ -4,12 +4,12 @@ use std::process::Stdio;
 use std::time::Duration;
 use std::{env, io, panic};
 
-use async_channel::{Receiver, SendError};
-use tempfile::tempdir_in;
+use async_channel::{Receiver, SendError, Sender};
+use tempfile::{TempDir, tempdir_in};
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
-use tokio::sync::oneshot;
+use tokio::sync::{Mutex, oneshot};
 use tracing::{debug, instrument};
 use walkdir::WalkDir;
 
@@ -158,6 +158,120 @@ async fn wait_for_workers(
     Ok(())
 }
 
+fn python_source_files(
+    dir: &Path,
+    skip_wheel_data: bool,
+) -> impl Iterator<Item = Result<PathBuf, walkdir::Error>> + '_ {
+    // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
+    WalkDir::new(dir)
+        .into_iter()
+        // Otherwise we stumble over temporary files from `compileall`.
+        .filter_entry(move |entry| {
+            entry.file_name() != "__pycache__"
+                && !(skip_wheel_data
+                    && entry.depth() == 1
+                    && entry
+                        .path()
+                        .extension()
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("data")))
+        })
+        .filter_map(|entry| {
+            let (entry, metadata) =
+                match entry.and_then(|entry| entry.metadata().map(|metadata| (entry, metadata))) {
+                    Ok((entry, metadata)) => (entry, metadata),
+                    Err(err)
+                        if err
+                            .io_error()
+                            .is_some_and(|err| err.kind() == io::ErrorKind::NotFound) =>
+                    {
+                        return None;
+                    }
+                    Err(err) => return Some(Err(err)),
+                };
+            (metadata.is_file() && entry.path().extension().is_some_and(|ext| ext == "py"))
+                .then(|| Ok(entry.into_path()))
+        })
+}
+
+/// A shared pool of Python interpreters for compiling unpacked wheels.
+pub(crate) struct WheelCompiler {
+    sender: Sender<PathBuf>,
+    send_error: Mutex<Option<SendError<PathBuf>>>,
+    worker_handles: Vec<WorkerHandle>,
+    tempdir: TempDir,
+}
+
+impl WheelCompiler {
+    pub(crate) fn new(
+        python_executable: &Path,
+        concurrency: &Concurrency,
+        cache: &Path,
+    ) -> Result<Self, CompileError> {
+        let worker_count = concurrency.installs;
+        // A larger buffer is significantly faster than just 1 or the worker count.
+        let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
+
+        // Running Python with an actual file will produce better error messages.
+        let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
+        let pip_compileall_py = tempdir.path().join("pip_compileall.py");
+        let timeout = compile_timeout()?;
+        let worker_handles = spawn_workers(
+            cache,
+            python_executable,
+            &pip_compileall_py,
+            &receiver,
+            worker_count,
+            timeout,
+        );
+        // Make sure the channel gets closed when all workers exit.
+        drop(receiver);
+
+        Ok(Self {
+            sender,
+            send_error: Mutex::new(None),
+            worker_handles,
+            tempdir,
+        })
+    }
+
+    /// Queue the Python source files in an unpacked wheel for bytecode compilation.
+    pub(crate) async fn compile_wheel(&self, dir: &Path) -> Result<usize, CompileError> {
+        debug_assert!(
+            dir.is_absolute(),
+            "compileall doesn't work with relative paths: `{}`",
+            dir.display()
+        );
+
+        let mut source_files = 0;
+        for source_file in python_source_files(dir, true) {
+            source_files += 1;
+            if let Err(err) = self.sender.send(source_file?).await {
+                let mut send_error = self.send_error.lock().await;
+                if send_error.is_none() {
+                    *send_error = Some(err);
+                }
+                break;
+            }
+        }
+        Ok(source_files)
+    }
+
+    /// Finish all queued compilation tasks and shut down the worker pool.
+    pub(crate) async fn finish(self) -> Result<(), CompileError> {
+        let Self {
+            sender,
+            send_error,
+            worker_handles,
+            tempdir,
+        } = self;
+        drop(sender);
+        let result = wait_for_workers(worker_handles, send_error.into_inner()).await;
+        // Keep the compile script alive until all workers have exited.
+        drop(tempdir);
+        result
+    }
+}
+
 /// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
 /// that calls `compileall.compile_file`.
 ///
@@ -176,20 +290,7 @@ pub async fn compile_tree(
     concurrency: &Concurrency,
     cache: &Path,
 ) -> Result<usize, CompileError> {
-    compile_tree_inner(dir, python_executable, concurrency, cache, false).await
-}
-
-/// Bytecode compile Python source files in an unpacked wheel.
-///
-/// Files in the wheel's `.data` directory are skipped. Their bytecode files would not be listed in
-/// `RECORD`, which prevents the installer from relocating them safely.
-pub(crate) async fn compile_wheel(
-    dir: &Path,
-    python_executable: &Path,
-    concurrency: &Concurrency,
-    cache: &Path,
-) -> Result<usize, CompileError> {
-    compile_tree_inner(dir, python_executable, concurrency, cache, true).await
+    compile_tree_inner(dir, python_executable, concurrency, cache).await
 }
 
 async fn compile_tree_inner(
@@ -197,7 +298,6 @@ async fn compile_tree_inner(
     python_executable: &Path,
     concurrency: &Concurrency,
     cache: &Path,
-    skip_wheel_data: bool,
 ) -> Result<usize, CompileError> {
     debug_assert!(
         dir.is_absolute(),
@@ -227,45 +327,15 @@ async fn compile_tree_inner(
     // Start the producer, sending all `.py` files to workers.
     let mut source_files = 0;
     let mut send_error = None;
-    let walker = WalkDir::new(dir)
-        .into_iter()
-        // Otherwise we stumble over temporary files from `compileall`.
-        .filter_entry(|entry| {
-            entry.file_name() != "__pycache__"
-                && !(skip_wheel_data
-                    && entry.depth() == 1
-                    && entry
-                        .path()
-                        .extension()
-                        .is_some_and(|extension| extension.eq_ignore_ascii_case("data")))
-        });
-    for entry in walker {
-        // Retrieve the entry and its metadata, with shared handling for IO errors
-        let (entry, metadata) =
-            match entry.and_then(|entry| entry.metadata().map(|metadata| (entry, metadata))) {
-                Ok((entry, metadata)) => (entry, metadata),
-                Err(err) => {
-                    if err
-                        .io_error()
-                        .is_some_and(|err| err.kind() == io::ErrorKind::NotFound)
-                    {
-                        // The directory was removed, just ignore it
-                        continue;
-                    }
-                    return Err(err.into());
-                }
-            };
-        // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
-        if metadata.is_file() && entry.path().extension().is_some_and(|ext| ext == "py") {
-            source_files += 1;
-            if let Err(err) = sender.send(entry.path().to_owned()).await {
-                // The workers exited.
-                // If e.g. something with the Python interpreter is wrong, the workers have exited
-                // with an error. We try to report this informative error and only if that fails,
-                // report the send error.
-                send_error = Some(err);
-                break;
-            }
+    for source_file in python_source_files(dir, false) {
+        source_files += 1;
+        if let Err(err) = sender.send(source_file?).await {
+            // The workers exited.
+            // If e.g. something with the Python interpreter is wrong, the workers have exited
+            // with an error. We try to report this informative error and only if that fails,
+            // report the send error.
+            send_error = Some(err);
+            break;
         }
     }
 
@@ -569,10 +639,10 @@ mod tests {
     use uv_configuration::Concurrency;
     use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 
-    use super::compile_wheel;
+    use super::WheelCompiler;
 
     #[tokio::test]
-    async fn wheel_compilation_skips_data_directory() {
+    async fn wheel_compiler_reuses_pool_and_skips_data_directory() {
         let cache = Cache::temp().expect("cache should be available");
         let wheel = tempfile::tempdir_in(cache.root()).expect("wheel directory should exist");
         let package = wheel.path().join("package");
@@ -593,17 +663,29 @@ mod tests {
         .expect("Python environment should be available");
         let concurrency = Concurrency::new(1, 1, 1, 1);
 
-        let compiled = compile_wheel(
-            wheel.path(),
-            environment.python_executable(),
-            &concurrency,
-            cache.root(),
-        )
-        .await
-        .expect("wheel should compile");
+        let other_wheel = tempfile::tempdir_in(cache.root()).expect("wheel directory should exist");
+        let other_package = other_wheel.path().join("other_package");
+        fs_err::create_dir_all(&other_package).expect("package directory should exist");
+        fs_err::write(other_package.join("__init__.py"), "VALUE = 2\n")
+            .expect("package source should be written");
+
+        let compiler =
+            WheelCompiler::new(environment.python_executable(), &concurrency, cache.root())
+                .expect("compiler should start");
+        let compiled = compiler
+            .compile_wheel(wheel.path())
+            .await
+            .expect("wheel should be queued");
+        let other_compiled = compiler
+            .compile_wheel(other_wheel.path())
+            .await
+            .expect("wheel should be queued");
+        compiler.finish().await.expect("wheels should compile");
 
         assert_eq!(compiled, 1);
+        assert_eq!(other_compiled, 1);
         assert!(package.join("__pycache__").exists());
+        assert!(other_package.join("__pycache__").exists());
         assert!(!scripts.join("__pycache__").exists());
     }
 }
