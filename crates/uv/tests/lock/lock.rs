@@ -18542,6 +18542,129 @@ fn lock_rename_project() -> Result<()> {
     Ok(())
 }
 
+/// Preserve merged extras when equivalent dependency edges appear in every dependency context.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_dependency_context_edges_merge() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "httpx",
+            "httpx[http2] ; python_version >= '3.12'",
+        ]
+
+        [project.optional-dependencies]
+        test = [
+            "httpx",
+            "httpx[http2] ; python_version >= '3.12'",
+        ]
+
+        [dependency-groups]
+        dev = [
+            "httpx",
+            "httpx[http2] ; python_version >= '3.12'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "h2"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/h2-1.0.0.tar.gz", hash = "sha256:6647256773f689a545c76cd7a714ff21277543a3b6ede25a2b9a46fc874ceae5", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/h2-1.0.0-py3-none-any.whl", hash = "sha256:33a63cbe8d76a8ee81d34a146d0140aaa55d29187aef7f00e5e8a922e03c7bde", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "httpx"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/httpx-1.0.0.tar.gz", hash = "sha256:fa888edbf5bf960e7e6920012e870d9e32bcee4d201210189a4e9be81a49407d", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/httpx-1.0.0-py3-none-any.whl", hash = "sha256:4154c3c1f739176378d6865841d67718bc624c0f2f0ccf87364c8141a0c93603", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [package.optional-dependencies]
+        http2 = [
+            { name = "h2" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "httpx", extra = ["http2"] },
+        ]
+
+        [package.optional-dependencies]
+        test = [
+            { name = "httpx", extra = ["http2"] },
+        ]
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "httpx", extra = ["http2"] },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "httpx" },
+            { name = "httpx", marker = "extra == 'test'" },
+            { name = "httpx", extras = ["http2"], marker = "python_full_version >= '3.12'" },
+            { name = "httpx", extras = ["http2"], marker = "python_full_version >= '3.12' and extra == 'test'" },
+        ]
+        provides-extras = ["test"]
+
+        [package.metadata.requires-dev]
+        dev = [
+            { name = "httpx" },
+            { name = "httpx", extras = ["http2"], marker = "python_full_version >= '3.12'" },
+        ]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test backwards compatibility for `[package.metadata]`.
 #[cfg(feature = "test-universal")]
 #[test]

@@ -501,26 +501,14 @@ impl Lock {
                 )
             });
 
-            // Add all dependencies
-            for edge in resolution.graph.edges(node_index) {
-                let ResolutionGraphNode::Dist(dependency_dist) = &resolution.graph[edge.target()]
-                else {
-                    continue;
-                };
-                let marker = simplify_dependency_marker(
-                    &requires_python,
-                    environment,
-                    dist.marker,
-                    *edge.weight(),
-                );
-                package.add_dependency(
-                    DependencyContext::Production,
-                    &requires_python,
-                    dependency_dist,
-                    marker,
-                    root,
-                )?;
-            }
+            package.add_dependencies(
+                DependencyContext::Production,
+                &requires_python,
+                resolution,
+                node_index,
+                environment,
+                root,
+            )?;
 
             let id = package.id.clone();
             if let Some(locked_dist) = packages.insert(id, package) {
@@ -545,26 +533,14 @@ impl Lock {
                     }
                     .into());
                 };
-                for edge in resolution.graph.edges(node_index) {
-                    let ResolutionGraphNode::Dist(dependency_dist) =
-                        &resolution.graph[edge.target()]
-                    else {
-                        continue;
-                    };
-                    let marker = simplify_dependency_marker(
-                        &requires_python,
-                        environment,
-                        dist.marker,
-                        *edge.weight(),
-                    );
-                    package.add_dependency(
-                        DependencyContext::Extra(extra),
-                        &requires_python,
-                        dependency_dist,
-                        marker,
-                        root,
-                    )?;
-                }
+                package.add_dependencies(
+                    DependencyContext::Extra(extra),
+                    &requires_python,
+                    resolution,
+                    node_index,
+                    environment,
+                    root,
+                )?;
             }
             if let Some(group) = dist.group.as_ref() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
@@ -575,26 +551,14 @@ impl Lock {
                     }
                     .into());
                 };
-                for edge in resolution.graph.edges(node_index) {
-                    let ResolutionGraphNode::Dist(dependency_dist) =
-                        &resolution.graph[edge.target()]
-                    else {
-                        continue;
-                    };
-                    let marker = simplify_dependency_marker(
-                        &requires_python,
-                        environment,
-                        dist.marker,
-                        *edge.weight(),
-                    );
-                    package.add_dependency(
-                        DependencyContext::Group(group),
-                        &requires_python,
-                        dependency_dist,
-                        marker,
-                        root,
-                    )?;
-                }
+                package.add_dependencies(
+                    DependencyContext::Group(group),
+                    &requires_python,
+                    resolution,
+                    node_index,
+                    environment,
+                    root,
+                )?;
             }
         }
 
@@ -2942,6 +2906,33 @@ impl Package {
                 dependency_groups,
             },
         })
+    }
+
+    /// Add the dependencies of a resolution node to the [`Package`] in the given context.
+    fn add_dependencies(
+        &mut self,
+        context: DependencyContext<'_>,
+        requires_python: &RequiresPython,
+        resolution: &ResolverOutput,
+        node_index: NodeIndex,
+        environment: SimplifiedMarkerTree,
+        root: &Path,
+    ) -> Result<(), LockError> {
+        let parent_marker = *resolution.graph[node_index].marker();
+        for edge in resolution.graph.edges(node_index) {
+            let ResolutionGraphNode::Dist(dependency_dist) = &resolution.graph[edge.target()]
+            else {
+                continue;
+            };
+            let marker = simplify_dependency_marker(
+                requires_python,
+                environment,
+                parent_marker,
+                *edge.weight(),
+            );
+            self.add_dependency(context, requires_python, dependency_dist, marker, root)?;
+        }
+        Ok(())
     }
 
     /// Add the [`AnnotatedDist`] as a dependency of the [`Package`] in the given context.
