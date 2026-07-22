@@ -7,11 +7,6 @@
 
 Released on 2026-07-21.
 
-### Security
-
-- Update `open` to 5.4.0 to avoid vulnerable launcher behavior ([#20584](https://github.com/astral-sh/uv/pull/20584))
-- Update `reqsign` to 0.20.2 and `quick-xml` to 0.41.0 ([#20583](https://github.com/astral-sh/uv/pull/20583))
-
 ### Enhancements
 
 - Allow workspace sources to reference members in another workspace by path ([#18401](https://github.com/astral-sh/uv/pull/18401))
