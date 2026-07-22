@@ -17,7 +17,7 @@ use uv_pypi_types::HashAlgorithm;
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
 
-use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
+use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Origin, Verbatim};
 
 pub static PYPI_URL: LazyLock<DisplaySafeUrl> =
     LazyLock::new(|| DisplaySafeUrl::parse("https://pypi.org/simple").unwrap());
@@ -493,11 +493,19 @@ impl<'a> IndexLocations {
         Either::Right(non_default.into_iter().chain(default))
     }
 
-    /// Return the configured index matching the given URL.
+    /// Return the configured index matching the given URL, preferring file-defined indexes.
     fn index_for_url(&self, url: &IndexUrl) -> Option<&Index> {
         self.indexes
             .iter()
-            .find(|index| is_same_index(index.url(), url))
+            .find(|index| {
+                !matches!(index.origin, Some(Origin::Cli | Origin::RequirementsTxt))
+                    && is_same_index(index.url(), url)
+            })
+            .or_else(|| {
+                self.indexes
+                    .iter()
+                    .find(|index| is_same_index(index.url(), url))
+            })
     }
 
     /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
@@ -541,6 +549,7 @@ impl<'a> IndexLocations {
 impl From<&IndexLocations> for uv_auth::Indexes {
     fn from(index_locations: &IndexLocations) -> Self {
         Self::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
+            let configured_index = index_locations.index_for_url(index.url()).unwrap_or(index);
             let mut url = index.url().url().clone();
             url.set_username("").ok();
             url.set_password(None).ok();
@@ -550,7 +559,7 @@ impl From<&IndexLocations> for uv_auth::Indexes {
             uv_auth::Index {
                 url,
                 root_url,
-                auth_policy: index.authenticate,
+                auth_policy: configured_index.authenticate,
             }
         }))
     }
@@ -749,6 +758,60 @@ mod tests {
         let url3 = IndexUrl::from_str("https://index3.example.com/simple").unwrap();
         assert_eq!(index_locations.simple_api_cache_control_for(&url3), None);
         assert_eq!(index_locations.artifact_cache_control_for(&url3), None);
+    }
+
+    #[test]
+    fn configured_index_settings_take_precedence_over_duplicate_index() {
+        let cli = Index::from_str("cli=https://index.example.com/simple")
+            .unwrap()
+            .with_origin(Origin::Cli);
+        let project = toml::from_str::<Index>(
+            r#"
+            url = "https://index.example.com/simple/"
+            authenticate = "always"
+            ignore-error-codes = [403]
+            cache-control = { api = "max-age=300", files = "max-age=1800" }
+            hash-algorithm = "sha256"
+            exclude-newer = false
+            "#,
+        )
+        .unwrap();
+        let user = toml::from_str::<Index>(
+            r#"
+            name = "user"
+            url = "https://index.example.com/simple"
+            authenticate = "never"
+            ignore-error-codes = [401]
+            cache-control = { api = "max-age=600", files = "max-age=3600" }
+            hash-algorithm = "sha512"
+            exclude-newer = "2025-01-01T00:00:00Z"
+            "#,
+        )
+        .unwrap()
+        .with_origin(Origin::User);
+        let locations = IndexLocations::new(vec![cli, project.clone(), user], Vec::new(), false);
+        let url = IndexUrl::from_str("https://index.example.com/simple").unwrap();
+
+        assert_eq!(locations.index_for_url(&url), Some(&project));
+        assert_eq!(
+            locations.status_code_strategy_for(&url),
+            project.status_code_strategy()
+        );
+        assert!(locations.ignores_error_code_for(&url, StatusCode::FORBIDDEN));
+        assert!(!locations.ignores_error_code_for(&url, StatusCode::UNAUTHORIZED));
+        assert_eq!(
+            locations.simple_api_cache_control_for(&url),
+            Some(HeaderValue::from_static("max-age=300"))
+        );
+        assert_eq!(
+            locations.artifact_cache_control_for(&url),
+            Some(HeaderValue::from_static("max-age=1800"))
+        );
+        assert_eq!(
+            locations.hash_algorithm_for(&url),
+            Some(HashAlgorithm::Sha256)
+        );
+        assert_eq!(locations.exclude_newer_for(&url), project.exclude_newer());
     }
 
     #[test]

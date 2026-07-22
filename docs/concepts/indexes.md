@@ -50,6 +50,10 @@ $ uv lock --index pytorch=https://download.pytorch.org/whl/cpu
 $ UV_INDEX=pytorch=https://download.pytorch.org/whl/cpu uv lock
 ```
 
+If an index provided via the command line or environment uses the same URL as an index in the
+configuration file, index-specific settings from the configuration file still apply. The command
+line or environment index continues to take precedence when ordering indexes for resolution.
+
 ## Pinning a package to an index
 
 A package can be pinned to a specific index by specifying the index in its `tool.uv.sources` entry.
