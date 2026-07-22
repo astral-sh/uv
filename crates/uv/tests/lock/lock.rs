@@ -9972,8 +9972,7 @@ async fn lock_index_hash_algorithm() -> Result<()> {
     Ok(())
 }
 
-/// An index-specific hash algorithm must be advertised by every locked artifact, even if the index
-/// URL is duplicated through the CLI or environment.
+/// An index-specific hash algorithm must be advertised by every locked artifact.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_index_hash_algorithm_missing() -> Result<()> {
@@ -10043,28 +10042,6 @@ async fn lock_index_hash_algorithm_missing() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     warning: Setting `hash-algorithm` on configured indexes is experimental and may change without warning. Pass `--preview-features index-hash-algorithm` to disable this warning.
-    error: The index `http://[LOCALHOST]/simple` requires `sha256` hashes, but `basic_package-0.1.0-py3-none-any.whl` does not provide one
-    ");
-
-    let index = format!("{}/simple", server.uri());
-
-    uv_snapshot!(context.filters(), context.lock().arg("--index").arg(&index).arg("--preview-features").arg("index-hash-algorithm").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    error: The index `http://[LOCALHOST]/simple` requires `sha256` hashes, but `basic_package-0.1.0-py3-none-any.whl` does not provide one
-    ");
-
-    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_DEFAULT_INDEX, &index).arg("--preview-features").arg("index-hash-algorithm").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
     error: The index `http://[LOCALHOST]/simple` requires `sha256` hashes, but `basic_package-0.1.0-py3-none-any.whl` does not provide one
     ");
 

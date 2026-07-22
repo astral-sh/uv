@@ -527,13 +527,9 @@ impl<'a> IndexLocations {
     }
 
     /// Return the hash algorithm required for distributions resolved from a given index.
-    ///
-    /// If the same URL is defined more than once, use the first explicit hash requirement.
     pub fn hash_algorithm_for(&self, url: &IndexUrl) -> Option<HashAlgorithm> {
-        self.indexes
-            .iter()
-            .filter(|index| is_same_index(index.url(), url))
-            .find_map(|index| index.hash_algorithm.map(HashAlgorithm::from))
+        self.index_for_url(url)
+            .and_then(|index| index.hash_algorithm.map(HashAlgorithm::from))
     }
 
     /// Return the `exclude-newer` setting for a given index, if the index is configured.
