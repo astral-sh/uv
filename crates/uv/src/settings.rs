@@ -2060,7 +2060,8 @@ impl LockSettings {
 /// The resolved settings to use for an `upgrade` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct UpgradeSettings {
-    pub(crate) package: PackageName,
+    pub(crate) packages: Vec<PackageName>,
+    pub(crate) exclude: Vec<PackageName>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) settings: ResolverSettings,
 }
@@ -2076,13 +2077,19 @@ impl UpgradeSettings {
             .clone()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
-        let package = args.package;
+        let packages = args.packages;
+        let exclude = args.exclude;
         let mut settings =
             ResolverSettings::combine(ResolverOptions::default(), filesystem, &environment);
-        settings.upgrade = Upgrade::package(package.clone());
+        settings.upgrade = if packages.is_empty() {
+            Upgrade::default()
+        } else {
+            Upgrade::from_packages(packages.clone())
+        };
 
         Self {
-            package,
+            packages,
+            exclude,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -5181,7 +5188,8 @@ mod tests {
         let package = PackageName::from_str("anyio")?;
         let settings = UpgradeSettings::resolve(
             UpgradeArgs {
-                package: package.clone(),
+                packages: vec![package.clone()],
+                exclude: Vec::new(),
             },
             None,
             EnvironmentOptions::new()?,
