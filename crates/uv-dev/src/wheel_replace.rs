@@ -11,7 +11,7 @@ use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use clap::Parser;
 use futures::io::{AllowStdIo, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha384, Sha512};
 
 const BUFFER_SIZE: usize = 128 * 1024;
 
@@ -55,6 +55,13 @@ impl FromStr for Replacement {
 struct RecordEntry {
     hash: String,
     size: u64,
+}
+
+#[derive(Debug)]
+struct HashDigests {
+    sha256: String,
+    sha384: String,
+    sha512: String,
 }
 
 pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
@@ -186,7 +193,7 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
             let mut output_entry = writer.write_entry_seekable(builder).await?;
             let (hash, size) = copy_hashed(&mut replacement, &mut output_entry).await?;
             output_entry.close().await?;
-            output_record.push((name, hash, size));
+            output_record.push((name, hash.sha256, size));
         } else {
             builder = builder.size(entry.compressed_size(), entry.uncompressed_size());
             let mut original = archive.reader_with_entry(index).await?;
@@ -194,7 +201,7 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
             let (hash, size) = copy_hashed(&mut original, &mut output_entry).await?;
             output_entry.close().await?;
             validate_record_entry(&name, &expected, &hash, size)?;
-            output_record.push((name, hash, size));
+            output_record.push((name, hash.sha256, size));
         }
     }
 
@@ -251,8 +258,10 @@ fn read_record(bytes: &[u8], record_path: &str) -> Result<BTreeMap<String, Recor
         }
         let hash = row.get(1).context("RECORD row has no hash")?;
         ensure!(
-            hash.starts_with("sha256="),
-            "RECORD entry `{path}` must use a sha256 hash"
+            hash.starts_with("sha256=")
+                || hash.starts_with("sha384=")
+                || hash.starts_with("sha512="),
+            "RECORD entry `{path}` must use a secure hash"
         );
         let size = row
             .get(2)
@@ -286,9 +295,21 @@ fn write_record(record_path: &str, entries: Vec<(String, String, u64)>) -> Resul
     writer.into_inner().context("failed to finish RECORD")
 }
 
-fn validate_record_entry(name: &str, expected: &RecordEntry, hash: &str, size: u64) -> Result<()> {
+fn validate_record_entry(
+    name: &str,
+    expected: &RecordEntry,
+    hash: &HashDigests,
+    size: u64,
+) -> Result<()> {
+    let actual = if expected.hash.starts_with("sha256=") {
+        format!("sha256={}", hash.sha256)
+    } else if expected.hash.starts_with("sha384=") {
+        format!("sha384={}", hash.sha384)
+    } else {
+        format!("sha512={}", hash.sha512)
+    };
     ensure!(
-        expected.hash == format!("sha256={hash}"),
+        expected.hash == actual,
         "RECORD hash for `{name}` does not match its contents"
     );
     ensure!(
@@ -332,15 +353,17 @@ fn validate_member_type(name: &str, permissions: Option<u16>, directory: bool) -
     Ok(())
 }
 
-async fn hash_reader(reader: &mut (impl AsyncRead + Unpin)) -> Result<(String, u64)> {
+async fn hash_reader(reader: &mut (impl AsyncRead + Unpin)) -> Result<(HashDigests, u64)> {
     copy_hashed(reader, &mut futures::io::sink()).await
 }
 
 async fn copy_hashed(
     reader: &mut (impl AsyncRead + Unpin),
     writer: &mut (impl AsyncWrite + Unpin),
-) -> Result<(String, u64)> {
-    let mut hasher = Sha256::new();
+) -> Result<(HashDigests, u64)> {
+    let mut sha256 = Sha256::new();
+    let mut sha384 = Sha384::new();
+    let mut sha512 = Sha512::new();
     let mut size: u64 = 0;
     let mut buffer = vec![0; BUFFER_SIZE];
     loop {
@@ -349,12 +372,21 @@ async fn copy_hashed(
             break;
         }
         writer.write_all(&buffer[..read]).await?;
-        hasher.update(&buffer[..read]);
+        sha256.update(&buffer[..read]);
+        sha384.update(&buffer[..read]);
+        sha512.update(&buffer[..read]);
         size = size
             .checked_add(read as u64)
             .context("wheel member size overflowed")?;
     }
-    Ok((BASE64_URL_SAFE_NO_PAD.encode(hasher.finalize()), size))
+    Ok((
+        HashDigests {
+            sha256: BASE64_URL_SAFE_NO_PAD.encode(sha256.finalize()),
+            sha384: BASE64_URL_SAFE_NO_PAD.encode(sha384.finalize()),
+            sha512: BASE64_URL_SAFE_NO_PAD.encode(sha512.finalize()),
+        },
+        size,
+    ))
 }
 
 #[cfg(test)]
@@ -363,13 +395,26 @@ mod tests {
 
     use super::*;
 
-    async fn write_wheel(path: &Path, tamper_record: bool, executable_mode: u16) -> Result<()> {
+    async fn write_wheel(
+        path: &Path,
+        tamper_record: bool,
+        executable_mode: u16,
+        algorithm: &str,
+    ) -> Result<()> {
         let executable = b"unsigned executable";
         let metadata = b"Metadata-Version: 2.4\nName: uv\nVersion: 1.2.3\n";
-        let executable_hash = BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(executable));
-        let metadata_hash = BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(metadata));
+        let digest = |bytes: &[u8]| -> Result<String> {
+            match algorithm {
+                "sha256" => Ok(BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(bytes))),
+                "sha384" => Ok(BASE64_URL_SAFE_NO_PAD.encode(Sha384::digest(bytes))),
+                "sha512" => Ok(BASE64_URL_SAFE_NO_PAD.encode(Sha512::digest(bytes))),
+                _ => bail!("unsupported test hash algorithm `{algorithm}`"),
+            }
+        };
+        let executable_hash = digest(executable)?;
+        let metadata_hash = digest(metadata)?;
         let record = format!(
-            "uv-1.2.3.data/scripts/uv,sha256={},{}\nuv-1.2.3.dist-info/METADATA,sha256={metadata_hash},{}\nuv-1.2.3.dist-info/RECORD,,\n",
+            "uv-1.2.3.data/scripts/uv,{algorithm}={},{}\nuv-1.2.3.dist-info/METADATA,{algorithm}={metadata_hash},{}\nuv-1.2.3.dist-info/RECORD,,\n",
             if tamper_record {
                 "invalid"
             } else {
@@ -438,7 +483,7 @@ mod tests {
         let input = temporary.path().join("unsigned.whl");
         let output = temporary.path().join("signed.whl");
         let replacement = temporary.path().join("uv");
-        write_wheel(&input, false, 0o100_755).await?;
+        write_wheel(&input, false, 0o100_755, "sha256").await?;
         fs_err::write(&replacement, b"signed executable")?;
 
         wheel_replace(WheelReplaceArgs {
@@ -480,7 +525,7 @@ mod tests {
         let input = temporary.path().join("unsigned.whl");
         let output = temporary.path().join("signed.whl");
         let replacement = temporary.path().join("uv");
-        write_wheel(&input, true, 0o100_755).await?;
+        write_wheel(&input, true, 0o100_755, "sha256").await?;
         fs_err::write(&replacement, b"signed executable")?;
 
         let error = wheel_replace(WheelReplaceArgs {
@@ -508,7 +553,7 @@ mod tests {
         let input = temporary.path().join("unsigned.whl");
         let output = temporary.path().join("signed.whl");
         let replacement = temporary.path().join("uv");
-        write_wheel(&input, false, 0o120_777).await?;
+        write_wheel(&input, false, 0o120_777, "sha256").await?;
         fs_err::write(&replacement, b"signed executable")?;
 
         let error = wheel_replace(WheelReplaceArgs {
@@ -527,6 +572,34 @@ mod tests {
             "wheel member `uv-1.2.3.data/scripts/uv` is not a regular file or directory"
         );
         assert!(!output.exists());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn accepts_secure_input_record_hashes() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        for algorithm in ["sha384", "sha512"] {
+            let input = temporary.path().join(format!("unsigned-{algorithm}.whl"));
+            let output = temporary.path().join(format!("signed-{algorithm}.whl"));
+            let replacement = temporary.path().join(format!("uv-{algorithm}"));
+            write_wheel(&input, false, 0o100_755, algorithm).await?;
+            fs_err::write(&replacement, b"signed executable")?;
+
+            wheel_replace(WheelReplaceArgs {
+                input,
+                output: output.clone(),
+                replacements: vec![Replacement {
+                    member: "uv-1.2.3.data/scripts/uv".to_string(),
+                    path: replacement,
+                }],
+            })
+            .await?;
+
+            let (record, _, _) = read_entry(&output, "uv-1.2.3.dist-info/RECORD").await?;
+            let record = String::from_utf8(record)?;
+            assert!(record.contains(",sha256="));
+            assert!(!record.contains(&format!(",{algorithm}=")));
+        }
         Ok(())
     }
 
