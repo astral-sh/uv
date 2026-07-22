@@ -104,6 +104,7 @@ pub(crate) async fn pip_install(
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
+    precompile: bool,
     hash_checking: Option<HashCheckingMode>,
     installer_metadata: bool,
     config_settings: &ConfigSettings,
@@ -667,7 +668,11 @@ pub(crate) async fn pip_install(
         &reinstall,
         &build_options,
         link_mode,
-        compile.then_some(operations::BytecodeCompilation::Installed),
+        if precompile {
+            Some(operations::BytecodeCompilation::PrecompileInstalled)
+        } else {
+            compile.then_some(operations::BytecodeCompilation::Installed)
+        },
         &hasher,
         &tags,
         &client,

@@ -332,6 +332,7 @@ impl From<InstallerArgs> for PipOptions {
             exclude_newer,
             link_mode,
             compile_bytecode,
+            precompile_bytecode,
             no_compile_bytecode,
             no_sources,
             no_sources_package,
@@ -355,6 +356,7 @@ impl From<InstallerArgs> for PipOptions {
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
+            precompile_bytecode: precompile_bytecode.then_some(true),
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: if no_sources_package.is_empty() {
                 None
@@ -391,6 +393,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             exclude_newer,
             link_mode,
             compile_bytecode,
+            precompile_bytecode,
             no_compile_bytecode,
             no_sources,
             no_sources_package,
@@ -434,6 +437,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
+            precompile_bytecode: precompile_bytecode.then_some(true),
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: if no_sources_package.is_empty() {
                 None
@@ -651,6 +655,7 @@ pub fn resolver_installer_options_with_indexes(
         exclude_newer_package,
         link_mode,
         compile_bytecode,
+        precompile_bytecode,
         no_compile_bytecode,
         no_sources,
         no_sources_package,
@@ -721,6 +726,7 @@ pub fn resolver_installer_options_with_indexes(
         exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
         link_mode,
         compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
+        precompile_bytecode: precompile_bytecode.then_some(true),
         no_build: flag(no_build, build, "build"),
         no_build_package: if no_build_package.is_empty() {
             None

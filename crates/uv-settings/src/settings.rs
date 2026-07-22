@@ -522,6 +522,7 @@ pub struct InstallerOptions {
     exclude_newer: Option<ExcludeNewerOverride>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
+    precompile_bytecode: Option<bool>,
     reinstall: Option<Reinstall>,
     build_isolation: Option<BuildIsolation>,
     no_build: Option<bool>,
@@ -589,6 +590,7 @@ pub struct ResolverInstallerOptions {
     pub link_mode: Option<LinkMode>,
     pub torch_backend: Option<TorchMode>,
     pub compile_bytecode: Option<bool>,
+    pub precompile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
     pub no_sources_package: Option<Vec<PackageName>>,
     pub upgrade: Option<Upgrade>,
@@ -624,6 +626,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             link_mode,
             torch_backend,
             compile_bytecode,
+            precompile_bytecode,
             no_sources,
             no_sources_package,
             upgrade,
@@ -660,6 +663,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             link_mode,
             torch_backend,
             compile_bytecode,
+            precompile_bytecode,
             no_sources,
             no_sources_package,
             upgrade: Upgrade::from_args(
@@ -1072,6 +1076,21 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub compile_bytecode: Option<bool>,
+    /// Compile Python files to bytecode before installation.
+    ///
+    /// Compiles cached wheels during package preparation, persists the compiled bytecode in the
+    /// cache, and reuses it across subsequent installations. This option implies bytecode
+    /// compilation.
+    ///
+    /// This option is experimental and may change without warning.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            precompile-bytecode = true
+        "#
+    )]
+    pub precompile_bytecode: Option<bool>,
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any local or Git
     /// sources.
@@ -1958,6 +1977,21 @@ pub struct PipOptions {
         "#
     )]
     pub compile_bytecode: Option<bool>,
+    /// Compile Python files to bytecode before installation.
+    ///
+    /// Compiles cached wheels during package preparation, persists the compiled bytecode in the
+    /// cache, and reuses it across subsequent installations. This option implies bytecode
+    /// compilation.
+    ///
+    /// This option is experimental and may change without warning.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            precompile-bytecode = true
+        "#
+    )]
+    pub precompile_bytecode: Option<bool>,
     /// Require a matching hash for each requirement.
     ///
     /// Hash-checking mode is all or nothing. If enabled, _all_ requirements must be provided
@@ -2175,6 +2209,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
+            precompile_bytecode: value.precompile_bytecode,
             reinstall: Reinstall::from_args(
                 value.reinstall,
                 value.reinstall_package.unwrap_or_default(),
@@ -2223,6 +2258,7 @@ pub struct ToolOptions {
     exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
+    precompile_bytecode: Option<bool>,
     no_sources: Option<bool>,
     no_sources_package: Option<Vec<PackageName>>,
     no_build: Option<bool>,
@@ -2258,6 +2294,7 @@ pub struct ToolOptionsWire {
     exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
+    precompile_bytecode: Option<bool>,
     no_sources: Option<bool>,
     no_sources_package: Option<Vec<PackageName>>,
     no_build: Option<bool>,
@@ -2295,6 +2332,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
+            precompile_bytecode: value.precompile_bytecode,
             no_sources: value.no_sources,
             no_sources_package: value.no_sources_package,
             no_build: value.no_build,
@@ -2345,6 +2383,7 @@ impl From<ToolOptionsWire> for ToolOptions {
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
+            precompile_bytecode: value.precompile_bytecode,
             no_sources: value.no_sources,
             no_sources_package: value.no_sources_package,
             no_build: value.no_build,
@@ -2394,6 +2433,7 @@ impl From<ToolOptions> for ToolOptionsWire {
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
+            precompile_bytecode: value.precompile_bytecode,
             no_sources: value.no_sources,
             no_sources_package: value.no_sources_package,
             no_build: value.no_build,
@@ -2428,6 +2468,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
+            precompile_bytecode: value.precompile_bytecode,
             no_sources: value.no_sources,
             no_sources_package: value.no_sources_package,
             upgrade: None,
@@ -2489,6 +2530,7 @@ struct OptionsWire {
     exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
+    precompile_bytecode: Option<bool>,
     no_sources: Option<bool>,
     no_sources_package: Option<Vec<PackageName>>,
     upgrade: Option<bool>,
@@ -2592,6 +2634,7 @@ impl TryFrom<OptionsWire> for Options {
             exclude_newer_package,
             link_mode,
             compile_bytecode,
+            precompile_bytecode,
             no_sources,
             no_sources_package,
             upgrade,
@@ -2672,6 +2715,7 @@ impl TryFrom<OptionsWire> for Options {
                 exclude_newer_package,
                 link_mode,
                 compile_bytecode,
+                precompile_bytecode,
                 no_sources,
                 no_sources_package,
                 upgrade,

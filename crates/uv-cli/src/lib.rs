@@ -6463,6 +6463,16 @@ pub struct ToolUpgradeArgs {
     )]
     pub compile_bytecode: bool,
 
+    /// Compile Python files to bytecode before installation.
+    ///
+    /// Compiles cached wheels during package preparation, persists the compiled bytecode in the
+    /// cache, and reuses it across subsequent installations. This option implies bytecode
+    /// compilation.
+    ///
+    /// This option is experimental and may change without warning.
+    #[arg(long, help_heading = "Installer options")]
+    pub precompile_bytecode: bool,
+
     #[arg(
         long,
         alias = "no-compile",
@@ -7537,6 +7547,16 @@ pub struct InstallerArgs {
     )]
     compile_bytecode: bool,
 
+    /// Compile Python files to bytecode before installation.
+    ///
+    /// Compiles cached wheels during package preparation, persists the compiled bytecode in the
+    /// cache, and reuses it across subsequent installations. This option implies bytecode
+    /// compilation.
+    ///
+    /// This option is experimental and may change without warning.
+    #[arg(long, help_heading = "Installer options")]
+    precompile_bytecode: bool,
+
     #[arg(
         long,
         alias = "no-compile",
@@ -8038,6 +8058,16 @@ pub struct ResolverInstallerArgs {
         value_parser = clap::builder::BoolishValueParser::new(),
     )]
     pub compile_bytecode: bool,
+
+    /// Compile Python files to bytecode before installation.
+    ///
+    /// Compiles cached wheels during package preparation, persists the compiled bytecode in the
+    /// cache, and reuses it across subsequent installations. This option implies bytecode
+    /// compilation.
+    ///
+    /// This option is experimental and may change without warning.
+    #[arg(long, help_heading = "Installer options")]
+    pub precompile_bytecode: bool,
 
     #[arg(
         long,

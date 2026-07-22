@@ -61,6 +61,7 @@ pub(crate) async fn pip_sync(
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
+    precompile: bool,
     hash_checking: Option<HashCheckingMode>,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
@@ -534,7 +535,11 @@ pub(crate) async fn pip_sync(
         &reinstall,
         &build_options,
         link_mode,
-        compile.then_some(operations::BytecodeCompilation::All),
+        if precompile {
+            Some(operations::BytecodeCompilation::PrecompileAll)
+        } else {
+            compile.then_some(operations::BytecodeCompilation::All)
+        },
         &hasher,
         &tags,
         &client,

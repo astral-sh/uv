@@ -33,7 +33,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin, VerbatimUrl};
 use uv_platform_tags::Tags;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -559,10 +559,21 @@ impl Changelog {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BytecodeCompilation {
-    /// Compile all Python source files in the environment.
+    /// Compile all Python source files in the environment after installation.
     All,
-    /// Compile Python source files installed by this operation.
+    /// Compile Python source files installed by this operation after installation.
     Installed,
+    /// Compile wheels before installation, then compile any remaining files in the environment.
+    PrecompileAll,
+    /// Compile wheels before installation, then compile any remaining installed files.
+    PrecompileInstalled,
+}
+
+impl BytecodeCompilation {
+    /// Returns `true` if wheels should be compiled before installation.
+    fn precompile(self) -> bool {
+        matches!(self, Self::PrecompileAll | Self::PrecompileInstalled)
+    }
 }
 
 /// An installation plan and the time required to create it.
@@ -756,6 +767,15 @@ impl InstallationPlan {
     ) -> Result<Changelog, Error> {
         let (plan, start) = self.into_parts();
 
+        if compile.is_some_and(BytecodeCompilation::precompile)
+            && !preview.is_enabled(PreviewFeature::PrecompileBytecode)
+        {
+            warn_user!(
+                "The `--precompile-bytecode` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::PrecompileBytecode
+            );
+        }
+
         if dry_run.enabled() {
             return report_dry_run(
                 dry_run,
@@ -818,7 +838,7 @@ impl InstallationPlan {
                 resolution,
                 build_options,
                 link_mode,
-                matches!(compile, Some(BytecodeCompilation::All)),
+                compile.is_some_and(BytecodeCompilation::precompile),
                 hasher,
                 tags,
                 client,
@@ -849,7 +869,7 @@ impl InstallationPlan {
                 resolution,
                 build_options,
                 link_mode,
-                matches!(compile, Some(BytecodeCompilation::All)),
+                compile.is_some_and(BytecodeCompilation::precompile),
                 hasher,
                 tags,
                 client,
@@ -872,13 +892,23 @@ impl InstallationPlan {
         if let Some(compile) = compile {
             match compile {
                 BytecodeCompilation::All => {
+                    compile_bytecode(venv, concurrency, cache, &HashSet::new(), 0, printer).await?;
+                }
+                BytecodeCompilation::Installed => {
+                    let files = python_source_files_for_installs(venv, &installs);
+                    compile_bytecode_files(files, venv, concurrency, cache, 0, printer).await?;
+                }
+                BytecodeCompilation::PrecompileAll => {
                     let excluded = precompiled_source_files(venv, &installs)?;
                     compile_bytecode(venv, concurrency, cache, &excluded, precompiled, printer)
                         .await?;
                 }
-                BytecodeCompilation::Installed => {
-                    let files = python_source_files_for_installs(venv, &installs);
-                    compile_bytecode_files(files, venv, concurrency, cache, printer).await?;
+                BytecodeCompilation::PrecompileInstalled => {
+                    let excluded = precompiled_source_files(venv, &installs)?;
+                    let files = python_source_files_for_installs(venv, &installs)
+                        .filter(|file| file.as_ref().map_or(true, |path| !excluded.contains(path)));
+                    compile_bytecode_files(files, venv, concurrency, cache, precompiled, printer)
+                        .await?;
                 }
             }
         }

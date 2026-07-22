@@ -197,6 +197,7 @@ fn pip_compile_baseline() {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
+            precompile_bytecode: false,
             sources: None,
             hash_checking: Some(
                 Verify,
@@ -564,6 +565,7 @@ fn pip_install_baseline() {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
+            precompile_bytecode: false,
             sources: None,
             hash_checking: Some(
                 Verify,
@@ -828,6 +830,7 @@ fn version_baseline() {
                 },
             },
             compile_bytecode: false,
+            precompile_bytecode: false,
             reinstall: None,
         },
         malware_settings: MalwareCheckSettings {
@@ -938,6 +941,7 @@ fn tool_install_baseline() {
             ),
             torch_backend: None,
             compile_bytecode: None,
+            precompile_bytecode: None,
             no_sources: None,
             no_sources_package: None,
             upgrade: None,
@@ -996,6 +1000,7 @@ fn tool_install_baseline() {
                 },
             },
             compile_bytecode: false,
+            precompile_bytecode: false,
             reinstall: None,
         },
         force: false,
@@ -2680,7 +2685,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
           |
         1 | [project]
           |  ^^^^^^^
-        unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+        unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `precompile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -3093,8 +3098,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--no-verify-hashes")
             .arg("--show-settings"), @"
     ...
-             link_mode: Clone,
              compile_bytecode: false,
+             precompile_bytecode: false,
              sources: None,
     -        hash_checking: Some(
     -            Verify,
@@ -3114,7 +3119,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--require-hashes")
             .arg("--show-settings"), @"
     ...
-             compile_bytecode: false,
+             precompile_bytecode: false,
              sources: None,
              hash_checking: Some(
     -            Verify,
@@ -3133,8 +3138,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--no-require-hashes")
             .arg("--show-settings"), @"
     ...
-             link_mode: Clone,
              compile_bytecode: false,
+             precompile_bytecode: false,
              sources: None,
     -        hash_checking: Some(
     -            Verify,
@@ -3154,8 +3159,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             .env(EnvVars::UV_NO_VERIFY_HASHES, "1")
             .arg("--show-settings"), @"
     ...
-             link_mode: Clone,
              compile_bytecode: false,
+             precompile_bytecode: false,
              sources: None,
     -        hash_checking: Some(
     -            Verify,
@@ -3244,6 +3249,7 @@ fn preview_features() {
     +            ToolInstallLocks,
     +            WorkspaceListScripts,
     +            NoDistutilsPatch,
+    +            PrecompileBytecode,
     +        ],
          },
          python_preference: Managed,

@@ -55,6 +55,36 @@ fn sync() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_precompile_bytecode_preview_warning() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--precompile-bytecode"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: The `--precompile-bytecode` option is experimental and may change without warning. Pass `--preview-features precompile-bytecode` to disable this warning.
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// Compile a prepared wheel in the cache while another wheel is still downloading.
 #[tokio::test]
 async fn sync_compile_bytecode_while_preparing() -> Result<()> {
@@ -128,7 +158,9 @@ async fn sync_compile_bytecode_while_preparing() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--frozen")
-        .arg("--compile-bytecode")
+        .arg("--preview-features")
+        .arg("precompile-bytecode")
+        .arg("--precompile-bytecode")
         .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "2")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "2"), @"
     success: true
@@ -273,10 +305,26 @@ fn sync_reuses_persistent_bytecode_cache() -> Result<()> {
         "#,
     )?;
 
-    context.sync().arg("--compile-bytecode").assert().success();
-
     let cache = uv_cache::Cache::from_path(context.cache_dir.path());
     let bytecode_root = context.cache_dir.join("bytecode-v0");
+
+    // The existing option retains its post-install behavior and does not populate the persistent
+    // cache.
+    context.sync().arg("--compile-bytecode").assert().success();
+    assert!(!bytecode_root.exists());
+    fs_err::remove_dir_all(&context.venv)?;
+
+    // The wheel is already cached, so precompilation should happen during package preparation
+    // without requiring network access.
+    context
+        .sync()
+        .arg("--offline")
+        .arg("--preview-features")
+        .arg("precompile-bytecode")
+        .arg("--precompile-bytecode")
+        .assert()
+        .success();
+
     let bytecode_entries = || -> Result<Vec<_>> {
         WalkDir::new(&bytecode_root)
             .min_depth(2)
@@ -327,7 +375,9 @@ fn sync_reuses_persistent_bytecode_cache() -> Result<()> {
     context
         .sync()
         .arg("--offline")
-        .arg("--compile-bytecode")
+        .arg("--preview-features")
+        .arg("precompile-bytecode")
+        .arg("--precompile-bytecode")
         .assert()
         .success();
 

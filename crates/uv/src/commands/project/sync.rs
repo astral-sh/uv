@@ -659,6 +659,7 @@ pub(crate) async fn do_sync(
         exclude_newer,
         link_mode,
         compile_bytecode,
+        precompile_bytecode,
         reinstall,
         build_options,
         sources,
@@ -796,7 +797,11 @@ pub(crate) async fn do_sync(
     // Populate credentials from the target.
     store_credentials_from_target(target, &client_builder)?;
 
-    let bytecode_compilation = compile_bytecode.then_some(operations::BytecodeCompilation::All);
+    let bytecode_compilation = if precompile_bytecode {
+        Some(operations::BytecodeCompilation::PrecompileAll)
+    } else {
+        compile_bytecode.then_some(operations::BytecodeCompilation::All)
+    };
     let site_packages = SitePackages::from_environment(venv)?;
     let installation_plan = operations::InstallationPlan::build(
         &resolution,

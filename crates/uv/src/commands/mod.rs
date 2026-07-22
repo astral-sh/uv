@@ -320,12 +320,14 @@ pub(super) async fn compile_bytecode_files(
     venv: &PythonEnvironment,
     concurrency: &Concurrency,
     cache: &Cache,
+    precompiled: usize,
     printer: Printer,
 ) -> anyhow::Result<()> {
     let start = std::time::Instant::now();
-    let files = compile_files(files, venv.python_executable(), concurrency, cache.root())
-        .await
-        .context("Failed to bytecode-compile installed packages")?;
+    let files = precompiled
+        + compile_files(files, venv.python_executable(), concurrency, cache.root())
+            .await
+            .context("Failed to bytecode-compile installed packages")?;
     if files == 0 {
         return Ok(());
     }

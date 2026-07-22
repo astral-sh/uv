@@ -171,7 +171,9 @@ fn compile_bytecode_for_installed_distributions() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("anyio==3.7.1")
-        .arg("--compile-bytecode")
+        .arg("--preview-features")
+        .arg("precompile-bytecode")
+        .arg("--precompile-bytecode")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "1"), @"
     success: true
     exit_code: 0
@@ -211,6 +213,7 @@ fn compile_bytecode_for_installed_distributions() -> Result<()> {
             .join("__init__.cpython-312.pyc")
             .exists()
     );
+    assert!(context.cache_dir.join("bytecode-v0").exists());
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(&wheel)
