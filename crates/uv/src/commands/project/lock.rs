@@ -1061,6 +1061,7 @@ async fn do_lock(
                 &resolution,
                 target.install_path(),
                 lock_supported_environments.clone().into_markers(),
+                index_locations,
             )?
             .with_manifest(manifest)
             .with_conflicts(conflicts)
@@ -1273,6 +1274,11 @@ impl ValidatedLock {
             debug!(
                 "Resolving despite existing lockfile due to `--upgrade-package` or `--upgrade-group`"
             );
+            return Ok(Self::Preferable(lock));
+        }
+
+        if !lock.satisfies_hash_algorithms(install_path, index_locations)? {
+            debug!("Resolving despite existing lockfile due to mismatched hash algorithm");
             return Ok(Self::Preferable(lock));
         }
 

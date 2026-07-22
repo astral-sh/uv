@@ -22,8 +22,8 @@ use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, InstalledDist, Name, Requirement, RequiresPython,
-    Resolution, UnresolvedRequirement,
+    DependencyMetadata, HashGeneration, Index, IndexLocations, InstalledDist, Name, Requirement,
+    RequiresPython, Resolution, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
@@ -336,8 +336,9 @@ impl ToolLock {
         root: &Path,
         resolution: &ResolverOutput,
         manifest: &ResolverManifest,
+        index_locations: &IndexLocations,
     ) -> anyhow::Result<Self> {
-        let lock = Lock::from_resolution(resolution, root, Vec::new())?;
+        let lock = Lock::from_resolution(resolution, root, Vec::new(), index_locations)?;
         let manifest = manifest.clone().relative_to(root)?;
         Ok(Self {
             root: root.to_path_buf(),

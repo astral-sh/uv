@@ -13,6 +13,7 @@ use url::{ParseError, Url};
 use uv_auth::RealmRef;
 use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
+use uv_pypi_types::HashAlgorithm;
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
 
@@ -525,6 +526,12 @@ impl<'a> IndexLocations {
             .and_then(Index::artifact_cache_control)
     }
 
+    /// Return the hash algorithm required for distributions resolved from a given index.
+    pub fn hash_algorithm_for(&self, url: &IndexUrl) -> Option<HashAlgorithm> {
+        self.index_for_url(url)
+            .and_then(|index| index.hash_algorithm.map(HashAlgorithm::from))
+    }
+
     /// Return the `exclude-newer` setting for a given index, if the index is configured.
     pub fn exclude_newer_for(&self, url: &IndexUrl) -> Option<&ExcludeNewerOverride> {
         self.index_for_url(url).and_then(Index::exclude_newer)
@@ -704,6 +711,7 @@ mod tests {
                 publish_url: None,
                 authenticate: uv_auth::AuthPolicy::default(),
                 ignore_error_codes: None,
+                hash_algorithm: None,
                 exclude_newer: None,
             },
             Index {
@@ -717,6 +725,7 @@ mod tests {
                 publish_url: None,
                 authenticate: uv_auth::AuthPolicy::default(),
                 ignore_error_codes: None,
+                hash_algorithm: None,
                 exclude_newer: None,
             },
         ];
@@ -756,6 +765,7 @@ mod tests {
             publish_url: None,
             authenticate: uv_auth::AuthPolicy::default(),
             ignore_error_codes: None,
+            hash_algorithm: None,
             exclude_newer: None,
         }];
 
@@ -792,6 +802,7 @@ mod tests {
             publish_url: None,
             authenticate: uv_auth::AuthPolicy::default(),
             ignore_error_codes: None,
+            hash_algorithm: None,
             exclude_newer: None,
         }];
 
@@ -823,6 +834,7 @@ mod tests {
             publish_url: None,
             authenticate: uv_auth::AuthPolicy::default(),
             ignore_error_codes: None,
+            hash_algorithm: None,
             exclude_newer: None,
         }];
 

@@ -1042,6 +1042,17 @@
           ],
           "default": "simple"
         },
+        "hash-algorithm": {
+          "description": "The hash algorithm that must be used for distributions resolved from this index.\n\nIf a distribution does not advertise a hash using this algorithm, lockfile generation\nwill fail.\n\nThis option is in preview and may change in any future release.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nhash-algorithm = \"sha256\"\n```",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexHashAlgorithm"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "ignore-error-codes": {
           "description": "Status codes that uv should ignore when deciding whether to continue resolution after a\nrequest to this index fails.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nignore-error-codes = [401, 403]\n```",
           "type": ["array", "null"],
@@ -1110,6 +1121,11 @@
           "const": "flat"
         }
       ]
+    },
+    "IndexHashAlgorithm": {
+      "description": "A hash algorithm that can be required for distributions resolved from an index.",
+      "type": "string",
+      "enum": ["md5", "sha256", "sha384", "sha512", "blake2b"]
     },
     "IndexName": {
       "description": "The normalized name of an index.\n\nIndex names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
@@ -1786,7 +1802,8 @@
             "centralized-project-envs",
             "tool-install-locks",
             "workspace-list-scripts",
-            "no-distutils-patch"
+            "no-distutils-patch",
+            "index-hash-algorithm"
           ]
         },
         {

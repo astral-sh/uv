@@ -7,6 +7,7 @@ use thiserror::Error;
 use url::Url;
 
 use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
+use uv_pypi_types::HashAlgorithm;
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
@@ -230,6 +231,21 @@ pub struct Index {
     /// ```
     #[serde(default)]
     pub cache_control: Option<IndexCacheControl>,
+    /// The hash algorithm that must be used for distributions resolved from this index.
+    ///
+    /// If a distribution does not advertise a hash using this algorithm, lockfile generation
+    /// will fail.
+    ///
+    /// This option is in preview and may change in any future release.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "my-index"
+    /// url = "https://<omitted>/simple"
+    /// hash-algorithm = "sha256"
+    /// ```
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash_algorithm: Option<IndexHashAlgorithm>,
     /// An index-specific `exclude-newer` cutoff.
     ///
     /// Accepts the same date, timestamp, and duration values as the global `exclude-newer`
@@ -276,6 +292,7 @@ impl PartialEq for Index {
             authenticate,
             ignore_error_codes,
             cache_control,
+            hash_algorithm,
             exclude_newer,
         } = self;
         *url == other.url
@@ -287,6 +304,7 @@ impl PartialEq for Index {
             && *authenticate == other.authenticate
             && *ignore_error_codes == other.ignore_error_codes
             && *cache_control == other.cache_control
+            && *hash_algorithm == other.hash_algorithm
             && *exclude_newer == other.exclude_newer
     }
 }
@@ -312,6 +330,7 @@ impl Ord for Index {
             authenticate,
             ignore_error_codes,
             cache_control,
+            hash_algorithm,
             exclude_newer,
         } = self;
         url.cmp(&other.url)
@@ -323,6 +342,7 @@ impl Ord for Index {
             .then_with(|| authenticate.cmp(&other.authenticate))
             .then_with(|| ignore_error_codes.cmp(&other.ignore_error_codes))
             .then_with(|| cache_control.cmp(&other.cache_control))
+            .then_with(|| hash_algorithm.cmp(&other.hash_algorithm))
             .then_with(|| exclude_newer.cmp(&other.exclude_newer))
     }
 }
@@ -340,6 +360,7 @@ impl std::hash::Hash for Index {
             authenticate,
             ignore_error_codes,
             cache_control,
+            hash_algorithm,
             exclude_newer,
         } = self;
         url.hash(state);
@@ -351,6 +372,7 @@ impl std::hash::Hash for Index {
         authenticate.hash(state);
         ignore_error_codes.hash(state);
         cache_control.hash(state);
+        hash_algorithm.hash(state);
         exclude_newer.hash(state);
     }
 }
@@ -378,6 +400,32 @@ pub enum IndexFormat {
     Flat,
 }
 
+/// A hash algorithm that can be required for distributions resolved from an index.
+#[derive(
+    Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum IndexHashAlgorithm {
+    Md5,
+    Sha256,
+    Sha384,
+    Sha512,
+    Blake2b,
+}
+
+impl From<IndexHashAlgorithm> for HashAlgorithm {
+    fn from(value: IndexHashAlgorithm) -> Self {
+        match value {
+            IndexHashAlgorithm::Md5 => Self::Md5,
+            IndexHashAlgorithm::Sha256 => Self::Sha256,
+            IndexHashAlgorithm::Sha384 => Self::Sha384,
+            IndexHashAlgorithm::Sha512 => Self::Sha512,
+            IndexHashAlgorithm::Blake2b => Self::Blake2b,
+        }
+    }
+}
+
 impl Index {
     /// Initialize an [`Index`] from a pip-style `--index-url`.
     pub fn from_index_url(url: IndexUrl) -> Self {
@@ -392,6 +440,7 @@ impl Index {
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
             cache_control: None,
+            hash_algorithm: None,
             exclude_newer: None,
         }
     }
@@ -409,6 +458,7 @@ impl Index {
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
             cache_control: None,
+            hash_algorithm: None,
             exclude_newer: None,
         }
     }
@@ -426,6 +476,7 @@ impl Index {
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
             cache_control: None,
+            hash_algorithm: None,
             exclude_newer: None,
         }
     }
@@ -564,6 +615,7 @@ impl From<IndexUrl> for Index {
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
             cache_control: None,
+            hash_algorithm: None,
             exclude_newer: None,
         }
     }
@@ -590,6 +642,7 @@ impl FromStr for Index {
                 authenticate: AuthPolicy::default(),
                 ignore_error_codes: None,
                 cache_control: None,
+                hash_algorithm: None,
                 exclude_newer: None,
             });
         }
@@ -607,6 +660,7 @@ impl FromStr for Index {
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
             cache_control: None,
+            hash_algorithm: None,
             exclude_newer: None,
         })
     }
@@ -700,6 +754,8 @@ struct IndexWire {
     #[serde(default)]
     cache_control: Option<IndexCacheControl>,
     #[serde(default)]
+    hash_algorithm: Option<IndexHashAlgorithm>,
+    #[serde(default)]
     exclude_newer: Option<ExcludeNewerOverride>,
 }
 
@@ -728,6 +784,7 @@ impl<'de> Deserialize<'de> for Index {
             authenticate: wire.authenticate,
             ignore_error_codes: wire.ignore_error_codes,
             cache_control: wire.cache_control,
+            hash_algorithm: wire.hash_algorithm,
             exclude_newer: wire.exclude_newer,
         })
     }

@@ -46,6 +46,7 @@ use uv_pep508::{
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
     ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
@@ -53,6 +54,7 @@ use uv_pypi_types::{
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
+use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
@@ -399,11 +401,15 @@ impl<'lock> DependencySelection<'lock> {
 }
 
 impl Lock {
-    /// Initialize a [`Lock`] from a [`ResolverOutput`].
+    /// Initialize a [`Lock`] from a [`ResolverOutput`], applying any index-specific hash
+    /// requirements to registry artifacts.
+    ///
+    /// Returns an error if an artifact does not advertise its index's required algorithm.
     pub fn from_resolution(
         resolution: &ResolverOutput,
         root: &Path,
         supported_environments: Vec<MarkerTree>,
+        index_locations: &IndexLocations,
     ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
@@ -453,7 +459,8 @@ impl Lock {
                 vec![]
             };
 
-            let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
+            let mut package =
+                Package::from_annotated_dist(dist, fork_markers, root, index_locations)?;
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
                 wheel_marker.and(supported_environments_marker);
@@ -817,6 +824,41 @@ impl Lock {
     /// Returns the [`Package`] entries in this lock.
     pub fn packages(&self) -> &[Package] {
         &self.packages
+    }
+
+    /// Return whether every registry artifact in the lockfile has a hash using its index's
+    /// required algorithm, if any.
+    pub fn satisfies_hash_algorithms(
+        &self,
+        root: &Path,
+        index_locations: &IndexLocations,
+    ) -> Result<bool, LockError> {
+        for package in &self.packages {
+            let Some(index) = package.index(root)? else {
+                continue;
+            };
+            let Some(algorithm) = index_locations.hash_algorithm_for(&index) else {
+                continue;
+            };
+            warn_index_hash_algorithm_preview();
+
+            let mismatched =
+                |hash: Option<&Hash>| hash.is_none_or(|hash| hash.0.algorithm != algorithm);
+
+            if package.sdist.iter().any(|sdist| mismatched(sdist.hash()))
+                || package.wheels.iter().any(|wheel| {
+                    mismatched(wheel.hash.as_ref())
+                        || wheel
+                            .zstd
+                            .as_ref()
+                            .is_some_and(|zstd| mismatched(zstd.hash.as_ref()))
+                })
+            {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
     }
 
     /// Returns the supported Python version range for the lockfile, if present.
@@ -2812,10 +2854,11 @@ impl Package {
         annotated_dist: &AnnotatedDist,
         fork_markers: Vec<UniversalMarker>,
         root: &Path,
+        index_locations: &IndexLocations,
     ) -> Result<Self, LockError> {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
-        let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
-        let wheels = Wheel::from_annotated_dist(annotated_dist)?;
+        let sdist = SourceDist::from_annotated_dist(&id, annotated_dist, index_locations)?;
+        let wheels = Wheel::from_annotated_dist(annotated_dist, index_locations)?;
         let requires_dist = if id.source.is_immutable() {
             BTreeSet::default()
         } else {
@@ -4497,6 +4540,7 @@ impl SourceDist {
     fn from_annotated_dist(
         id: &PackageId,
         annotated_dist: &AnnotatedDist,
+        index_locations: &IndexLocations,
     ) -> Result<Option<Self>, LockError> {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
@@ -4506,6 +4550,7 @@ impl SourceDist {
                 dist,
                 annotated_dist.hashes.as_slice(),
                 annotated_dist.index(),
+                index_locations,
             ),
         }
     }
@@ -4515,16 +4560,19 @@ impl SourceDist {
         dist: &Dist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Option<Self>, LockError> {
         match *dist {
             Dist::Built(BuiltDist::Registry(ref built_dist)) => {
                 let Some(sdist) = built_dist.sdist.as_ref() else {
                     return Ok(None);
                 };
-                Self::from_registry_dist(sdist, index)
+                Self::from_registry_dist(sdist, index, index_locations)
             }
             Dist::Built(_) => Ok(None),
-            Dist::Source(ref source_dist) => Self::from_source_dist(id, source_dist, hashes, index),
+            Dist::Source(ref source_dist) => {
+                Self::from_source_dist(id, source_dist, hashes, index, index_locations)
+            }
         }
     }
 
@@ -4533,10 +4581,11 @@ impl SourceDist {
         source_dist: &uv_distribution_types::SourceDist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Option<Self>, LockError> {
         match *source_dist {
             uv_distribution_types::SourceDist::Registry(ref reg_dist) => {
-                Self::from_registry_dist(reg_dist, index)
+                Self::from_registry_dist(reg_dist, index, index_locations)
             }
             uv_distribution_types::SourceDist::DirectUrl(_) => {
                 Self::from_direct_dist(id, hashes).map(Some)
@@ -4555,6 +4604,7 @@ impl SourceDist {
     fn from_registry_dist(
         reg_dist: &RegistrySourceDist,
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Option<Self>, LockError> {
         // Reject distributions from registries that don't match the index URL, as can occur with
         // `--find-links`.
@@ -4562,12 +4612,18 @@ impl SourceDist {
             return Ok(None);
         }
 
+        let hash = select_registry_hash(
+            &reg_dist.file.hashes,
+            &reg_dist.index,
+            index_locations,
+            reg_dist.file.filename.as_ref(),
+        )?;
+
         match &reg_dist.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&reg_dist.file.url)
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
-                let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = reg_dist.file.size;
                 let upload_time = reg_dist
                     .file
@@ -4602,7 +4658,6 @@ impl SourceDist {
                         try_relative_to_if(&reg_dist_path, index_path, !path.was_given_absolute())
                             .map_err(LockErrorKind::DistributionRelativePath)?
                             .into_boxed_path();
-                    let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                     let size = reg_dist.file.size;
                     let upload_time = reg_dist
                         .file
@@ -4622,7 +4677,6 @@ impl SourceDist {
                     let url = normalize_file_location(&reg_dist.file.url)
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
-                    let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                     let size = reg_dist.file.size;
                     let upload_time = reg_dist
                         .file
@@ -4856,7 +4910,10 @@ struct Wheel {
 }
 
 impl Wheel {
-    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Vec<Self>, LockError> {
+    fn from_annotated_dist(
+        annotated_dist: &AnnotatedDist,
+        index_locations: &IndexLocations,
+    ) -> Result<Vec<Self>, LockError> {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
@@ -4864,6 +4921,7 @@ impl Wheel {
                 dist,
                 annotated_dist.hashes.as_slice(),
                 annotated_dist.index(),
+                index_locations,
             ),
         }
     }
@@ -4872,9 +4930,12 @@ impl Wheel {
         dist: &Dist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Vec<Self>, LockError> {
         match *dist {
-            Dist::Built(ref built_dist) => Self::from_built_dist(built_dist, hashes, index),
+            Dist::Built(ref built_dist) => {
+                Self::from_built_dist(built_dist, hashes, index, index_locations)
+            }
             Dist::Source(uv_distribution_types::SourceDist::Registry(ref source_dist)) => {
                 source_dist
                     .wheels
@@ -4884,7 +4945,7 @@ impl Wheel {
                         // `--find-links`.
                         index.is_some_and(|index| *index == wheel.index)
                     })
-                    .map(Self::from_registry_wheel)
+                    .map(|wheel| Self::from_registry_wheel(wheel, index_locations))
                     .collect()
             }
             Dist::Source(_) => Ok(vec![]),
@@ -4895,9 +4956,12 @@ impl Wheel {
         built_dist: &BuiltDist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Vec<Self>, LockError> {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => Self::from_registry_dist(reg_dist, index),
+            BuiltDist::Registry(ref reg_dist) => {
+                Self::from_registry_dist(reg_dist, index, index_locations)
+            }
             BuiltDist::DirectUrl(ref direct_dist) => {
                 Ok(vec![Self::from_direct_dist(direct_dist, hashes)])
             }
@@ -4911,6 +4975,7 @@ impl Wheel {
     fn from_registry_dist(
         reg_dist: &RegistryBuiltDist,
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Vec<Self>, LockError> {
         reg_dist
             .wheels
@@ -4920,11 +4985,14 @@ impl Wheel {
                 // `--find-links`.
                 index.is_some_and(|index| *index == wheel.index)
             })
-            .map(Self::from_registry_wheel)
+            .map(|wheel| Self::from_registry_wheel(wheel, index_locations))
             .collect()
     }
 
-    fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Self, LockError> {
+    fn from_registry_wheel(
+        wheel: &RegistryBuiltWheel,
+        index_locations: &IndexLocations,
+    ) -> Result<Self, LockError> {
         let url = match &wheel.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&wheel.file.url)
@@ -4956,7 +5024,12 @@ impl Wheel {
             }
         };
         let filename = wheel.filename.clone();
-        let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
+        let hash = select_registry_hash(
+            &wheel.file.hashes,
+            &wheel.index,
+            index_locations,
+            wheel.file.filename.as_ref(),
+        )?;
         let size = wheel.file.size;
         let upload_time = wheel
             .file
@@ -4964,10 +5037,19 @@ impl Wheel {
             .map(Timestamp::from_millisecond)
             .transpose()
             .map_err(LockErrorKind::InvalidTimestamp)?;
-        let zstd = wheel.file.zstd.as_ref().map(|zstd| ZstdWheel {
-            hash: zstd.hashes.iter().max().cloned().map(Hash::from),
-            size: zstd.size,
-        });
+        let zstd = if let Some(zstd) = wheel.file.zstd.as_ref() {
+            Some(ZstdWheel {
+                hash: select_registry_hash(
+                    &zstd.hashes,
+                    &wheel.index,
+                    index_locations,
+                    wheel.file.filename.as_ref(),
+                )?,
+                size: zstd.size,
+            })
+        } else {
+            None
+        };
         Ok(Self {
             url,
             hash,
@@ -5355,6 +5437,47 @@ struct Hash(HashDigest);
 impl From<HashDigest> for Hash {
     fn from(hd: HashDigest) -> Self {
         Self(hd)
+    }
+}
+
+/// Select the configured hash algorithm for a registry artifact, preserving the default hash
+/// selection when the index has no requirement.
+///
+/// Returns an error if the required algorithm is not advertised.
+fn select_registry_hash(
+    hashes: &HashDigests,
+    index: &IndexUrl,
+    index_locations: &IndexLocations,
+    filename: &str,
+) -> Result<Option<Hash>, LockError> {
+    let Some(algorithm) = index_locations.hash_algorithm_for(index) else {
+        return Ok(hashes.iter().max().cloned().map(Hash::from));
+    };
+    warn_index_hash_algorithm_preview();
+
+    hashes
+        .iter()
+        .find(|hash| hash.algorithm == algorithm)
+        .cloned()
+        .map(Hash::from)
+        .map(Some)
+        .ok_or_else(|| {
+            LockErrorKind::MissingHashAlgorithm {
+                index: index.clone(),
+                filename: filename.to_string(),
+                algorithm,
+            }
+            .into()
+        })
+}
+
+/// Warn if an index-specific hash algorithm is used without its preview feature enabled.
+fn warn_index_hash_algorithm_preview() {
+    if !uv_preview::is_enabled(PreviewFeature::IndexHashAlgorithm) {
+        warn_user_once!(
+            "Setting `hash-algorithm` on configured indexes is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::IndexHashAlgorithm
+        );
     }
 }
 
@@ -6175,6 +6298,16 @@ enum LockErrorKind {
         artifact_type: &'static str,
         /// Whether a hash was expected.
         expected: bool,
+    },
+    /// An error that occurs when an index requires a hash algorithm that an artifact does not
+    /// advertise.
+    #[error(
+        "The index `{index}` requires `{algorithm}` hashes, but `{filename}` does not provide one"
+    )]
+    MissingHashAlgorithm {
+        index: IndexUrl,
+        filename: String,
+        algorithm: HashAlgorithm,
     },
     /// An error that occurs when a package is included with an extra name,
     /// but no corresponding base package (i.e., without the extra) exists.
