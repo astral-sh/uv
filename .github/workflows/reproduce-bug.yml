@@ -69,7 +69,9 @@ jobs:
             > .issue-triage-event.json
 
           {
-            printf 'Bug reproduction automation for #%s\n\n' "$(jq -r '.number' .issue-triage-event.json)"
+            printf 'Bug reproduction for #%s: %s\n\n' \
+              "$(jq -r '.number' .issue-triage-event.json)" \
+              "$(jq -r '.title | gsub("[\r\n]+"; " ")' .issue-triage-event.json)"
             cat agents/prompts/reproduce-bug.md
           } > "$RUNNER_TEMP/reproduce-bug-prompt.md"
         env:
