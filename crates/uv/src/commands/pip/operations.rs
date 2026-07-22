@@ -51,7 +51,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, compile_bytecode_files};
+use crate::commands::write_bytecode_summary;
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -805,6 +805,24 @@ impl InstallationPlan {
 
         let has_isolated_phase = !isolated_phase.is_empty();
         let has_shared_phase = !shared_phase.is_empty();
+        let has_installs = !isolated_phase.cached.is_empty()
+            || !isolated_phase.remote.is_empty()
+            || !shared_phase.cached.is_empty()
+            || !shared_phase.remote.is_empty();
+        let compiler = if matches!(compile, Some(BytecodeCompilation::All))
+            || (compile.is_some() && has_installs)
+        {
+            Some(Arc::new(
+                uv_installer::WheelCompiler::new(
+                    venv.python_executable(),
+                    concurrency,
+                    cache.root(),
+                )
+                .map_err(anyhow::Error::new)?,
+            ))
+        } else {
+            None
+        };
 
         let mut installs = vec![];
         let mut uninstalls = vec![];
@@ -817,7 +835,7 @@ impl InstallationPlan {
                 resolution,
                 build_options,
                 link_mode,
-                matches!(compile, Some(BytecodeCompilation::All)),
+                compiler.as_ref(),
                 hasher,
                 tags,
                 client,
@@ -847,7 +865,7 @@ impl InstallationPlan {
                 resolution,
                 build_options,
                 link_mode,
-                matches!(compile, Some(BytecodeCompilation::All)),
+                compiler.as_ref(),
                 hasher,
                 tags,
                 client,
@@ -866,15 +884,41 @@ impl InstallationPlan {
             uninstalls.extend(shared_uninstalls);
         }
 
-        if let Some(compile) = compile {
+        if let (Some(compile), Some(compiler)) = (compile, compiler) {
+            let start = Instant::now();
             match compile {
                 BytecodeCompilation::All => {
-                    compile_bytecode(venv, concurrency, cache, printer).await?;
+                    for site_packages in venv.site_packages() {
+                        let site_packages = CWD.join(site_packages);
+                        if !site_packages.exists() {
+                            debug!(
+                                "Skipping non-existent site-packages directory: {}",
+                                site_packages.display()
+                            );
+                            continue;
+                        }
+                        compiler.queue_tree(&site_packages).with_context(|| {
+                            format!(
+                                "Failed to bytecode-compile Python file in: {}",
+                                site_packages.user_display()
+                            )
+                        })?;
+                    }
                 }
                 BytecodeCompilation::Installed => {
-                    let files = python_source_files_for_installs(venv, &installs);
-                    compile_bytecode_files(files, venv, concurrency, cache, printer).await?;
+                    for source_file in python_source_files_for_installs(venv, &installs) {
+                        compiler
+                            .queue_file(source_file?)
+                            .context("Failed to bytecode-compile installed packages")?;
+                    }
                 }
+            }
+            let files = compiler
+                .finish()
+                .await
+                .context("Failed to bytecode-compile installed packages")?;
+            if files > 0 || matches!(compile, BytecodeCompilation::All) {
+                write_bytecode_summary(files, start, printer)?;
             }
         }
 
@@ -1018,7 +1062,7 @@ async fn execute_plan(
     resolution: &Resolution,
     build_options: &BuildOptions,
     link_mode: LinkMode,
-    compile_bytecode: bool,
+    bytecode_compiler: Option<&Arc<uv_installer::WheelCompiler>>,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -1059,12 +1103,6 @@ async fn execute_plan(
         .with_reporter(Arc::new(
             PrepareReporter::from(printer).with_length(remote.len() as u64),
         ));
-        let preparer = if compile_bytecode {
-            preparer.with_bytecode_compilation(venv.python_executable(), concurrency)
-        } else {
-            preparer
-        };
-
         let wheels = preparer
             .prepare(remote.clone(), in_flight, resolution)
             .await?;
@@ -1125,13 +1163,19 @@ async fn execute_plan(
     let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !installs.is_empty() {
         let start = std::time::Instant::now();
-        installs = uv_installer::Installer::new(venv, preview)
+        let installer = uv_installer::Installer::new(venv, preview)
             .with_link_mode(link_mode)
             .with_cache(cache)
             .with_installer_metadata(installer_metadata)
             .with_reporter(Arc::new(
                 InstallReporter::from(printer).with_length(installs.len() as u64),
-            ))
+            ));
+        let installer = if let Some(bytecode_compiler) = bytecode_compiler {
+            installer.with_bytecode_compiler(Arc::clone(bytecode_compiler))
+        } else {
+            installer
+        };
+        installs = installer
             // This technically can block the runtime, but we are on the main thread and
             // have no other running tasks at this point, so this lets us avoid spawning a blocking
             // task.
