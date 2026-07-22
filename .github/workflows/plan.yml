@@ -1,4 +1,4 @@
-name: CI plan
+name: plan
 
 on:
   workflow_call:
