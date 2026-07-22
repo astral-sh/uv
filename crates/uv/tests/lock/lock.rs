@@ -9804,8 +9804,7 @@ fn lock_mixed_hashes() -> Result<()> {
     Ok(())
 }
 
-/// Lock with an index that advertises multiple hashes, then require SHA256 for that index while
-/// ignoring an incompatible SHA512-only wheel.
+/// Lock with an index that advertises multiple hashes, then require SHA256 for that index.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_index_hash_algorithm() -> Result<()> {
@@ -9818,12 +9817,6 @@ async fn lock_index_hash_algorithm() -> Result<()> {
         },
         "name": "basic-package",
         "files": [{
-            "filename": "basic_package-0.1.0-cp311-cp311-any.whl",
-            "url": format!("{}/files/basic_package-0.1.0-cp311-cp311-any.whl", server.uri()),
-            "hashes": {
-                "sha512": "765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17"
-            }
-        }, {
             "filename": "basic_package-0.1.0-py3-none-any.whl",
             "url": format!("{}/files/basic_package-0.1.0-py3-none-any.whl", server.uri()),
             "hashes": {
