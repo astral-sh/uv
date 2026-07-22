@@ -11,7 +11,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, Metadata10};
 
-use crate::linker::{InstallState, LinkMode, link_wheel_files};
+use crate::linker::{InstallState, LinkMode, link_bytecode_files, link_wheel_files};
 use crate::wheel::{
     LibKind, WheelFile, dist_info_metadata, find_dist_info, install_data, parse_scripts,
     read_record, write_installer_metadata, write_record, write_script_entrypoints,
@@ -163,4 +163,16 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     write_record(site_packages, &dist_info_prefix, record)?;
 
     Ok(())
+}
+
+/// Install a bytecode-only overlay for an unpacked wheel.
+pub fn install_bytecode(
+    layout: &Layout,
+    wheel: impl AsRef<Path>,
+    bytecode: impl AsRef<Path>,
+    link_mode: LinkMode,
+    state: &InstallState,
+) -> Result<(), Error> {
+    let (_, site_packages) = wheel_destination(layout, wheel.as_ref())?;
+    link_bytecode_files(link_mode, site_packages, bytecode, state)
 }

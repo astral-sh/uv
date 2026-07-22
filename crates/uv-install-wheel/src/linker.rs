@@ -281,6 +281,20 @@ pub(crate) fn link_wheel_files(
     Ok(())
 }
 
+/// Link a bytecode-only wheel overlay into site-packages.
+pub(crate) fn link_bytecode_files(
+    link_mode: LinkMode,
+    site_packages: impl AsRef<Path>,
+    bytecode: impl AsRef<Path>,
+    state: &InstallState,
+) -> Result<(), Error> {
+    let options = LinkOptions::new(link_mode)
+        .with_copy_locks(state.copy_locks())
+        .with_on_existing_directory(OnExistingDirectory::Merge);
+    link_dir(bytecode.as_ref(), site_packages.as_ref(), &options)?;
+    Ok(())
+}
+
 /// Update the mtime of the site-packages directory to the current time.
 fn update_site_packages_mtime(site_packages: &Path) {
     let now = SystemTime::now();

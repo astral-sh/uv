@@ -2172,6 +2172,7 @@ pub(crate) async fn resolve_names(
                 upgrade: _,
             },
         compile_bytecode: _,
+        precompile_bytecode: _,
         reinstall: _,
     } = settings;
 
@@ -2607,6 +2608,7 @@ pub(crate) async fn sync_environment(
         exclude_newer,
         link_mode,
         compile_bytecode,
+        precompile_bytecode,
         reinstall,
         build_options,
         sources,
@@ -2693,7 +2695,11 @@ pub(crate) async fn sync_environment(
         reinstall,
         build_options,
         link_mode,
-        compile_bytecode.then_some(pip::operations::BytecodeCompilation::All),
+        if precompile_bytecode {
+            Some(pip::operations::BytecodeCompilation::PrecompileAll)
+        } else {
+            compile_bytecode.then_some(pip::operations::BytecodeCompilation::All)
+        },
         &hasher,
         tags,
         &client,
@@ -2781,6 +2787,7 @@ pub(crate) async fn update_environment(
                 upgrade,
             },
         compile_bytecode,
+        precompile_bytecode,
         reinstall,
     } = settings;
 
@@ -2994,7 +3001,11 @@ pub(crate) async fn update_environment(
         reinstall,
         build_options,
         *link_mode,
-        (*compile_bytecode).then_some(pip::operations::BytecodeCompilation::All),
+        if *precompile_bytecode {
+            Some(pip::operations::BytecodeCompilation::PrecompileAll)
+        } else {
+            (*compile_bytecode).then_some(pip::operations::BytecodeCompilation::All)
+        },
         &hasher,
         &tags,
         &client,

@@ -466,7 +466,8 @@ async fn upgrade_tool(
             } else {
                 UpgradeOutcome::UpgradeDependencies
             };
-            let environment = if plan_is_empty && !settings.compile_bytecode {
+            let compile_bytecode = settings.compile_bytecode || settings.precompile_bytecode;
+            let environment = if plan_is_empty && !compile_bytecode {
                 environment.into_environment()
             } else {
                 sync_environment(

@@ -1,12 +1,14 @@
 //! Common operations shared across the `pip` API and subcommands.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::env;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, anyhow};
+use futures::{StreamExt, TryStreamExt, stream};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
@@ -33,7 +35,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin, VerbatimUrl};
 use uv_platform_tags::Tags;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -45,6 +47,7 @@ use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
     Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput, UpgradePackages,
 };
+use uv_static::EnvVars;
 use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
@@ -559,10 +562,21 @@ impl Changelog {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BytecodeCompilation {
-    /// Compile all Python source files in the environment.
+    /// Compile all Python source files in the environment after installation.
     All,
-    /// Compile Python source files installed by this operation.
+    /// Compile Python source files installed by this operation after installation.
     Installed,
+    /// Compile wheels before installation, then compile any remaining files in the environment.
+    PrecompileAll,
+    /// Compile wheels before installation, then compile any remaining installed files.
+    PrecompileInstalled,
+}
+
+impl BytecodeCompilation {
+    /// Returns `true` if wheels should be compiled before installation.
+    fn precompile(self) -> bool {
+        matches!(self, Self::PrecompileAll | Self::PrecompileInstalled)
+    }
 }
 
 /// An installation plan and the time required to create it.
@@ -756,6 +770,32 @@ impl InstallationPlan {
     ) -> Result<Changelog, Error> {
         let (plan, start) = self.into_parts();
 
+        if compile.is_some_and(BytecodeCompilation::precompile)
+            && !preview.is_enabled(PreviewFeature::PrecompileBytecode)
+        {
+            warn_user!(
+                "The `--precompile-bytecode` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::PrecompileBytecode
+            );
+        }
+
+        // External Python cache prefixes cannot use wheel-relative overlays, and timestamp-based
+        // bytecode becomes invalid when installing a source file changes its modification time.
+        // Fall back to destination-side compilation for either explicitly configured mode.
+        let compile = if env::var_os("PYTHONPYCACHEPREFIX").is_some()
+            || env::var(EnvVars::PYC_INVALIDATION_MODE).is_ok_and(|mode| mode == "TIMESTAMP")
+        {
+            match compile {
+                Some(BytecodeCompilation::PrecompileAll) => Some(BytecodeCompilation::All),
+                Some(BytecodeCompilation::PrecompileInstalled) => {
+                    Some(BytecodeCompilation::Installed)
+                }
+                compile => compile,
+            }
+        } else {
+            compile
+        };
+
         if dry_run.enabled() {
             return report_dry_run(
                 dry_run,
@@ -809,8 +849,10 @@ impl InstallationPlan {
             || !isolated_phase.remote.is_empty()
             || !shared_phase.cached.is_empty()
             || !shared_phase.remote.is_empty();
-        let compiler = if matches!(compile, Some(BytecodeCompilation::All))
-            || (compile.is_some() && has_installs)
+        let compiler = if matches!(
+            compile,
+            Some(BytecodeCompilation::All | BytecodeCompilation::PrecompileAll)
+        ) || (compile.is_some() && has_installs)
         {
             Some(Arc::new(
                 uv_installer::WheelCompiler::new(
@@ -826,15 +868,17 @@ impl InstallationPlan {
 
         let mut installs = vec![];
         let mut uninstalls = vec![];
+        let mut precompiled = 0;
 
         // Execute the isolated-build phase.
         if has_isolated_phase {
-            let (isolated_installs, isolated_uninstalls) = execute_plan(
+            let (isolated_installs, isolated_uninstalls, isolated_precompiled) = execute_plan(
                 isolated_phase,
                 None,
                 resolution,
                 build_options,
                 link_mode,
+                compile.is_some_and(BytecodeCompilation::precompile),
                 compiler.as_ref(),
                 hasher,
                 tags,
@@ -852,10 +896,11 @@ impl InstallationPlan {
             .await?;
             installs.extend(isolated_installs);
             uninstalls.extend(isolated_uninstalls);
+            precompiled += isolated_precompiled;
         }
 
         if has_shared_phase {
-            let (shared_installs, shared_uninstalls) = execute_plan(
+            let (shared_installs, shared_uninstalls, shared_precompiled) = execute_plan(
                 shared_phase,
                 if has_isolated_phase {
                     Some(InstallPhase::Shared)
@@ -865,6 +910,7 @@ impl InstallationPlan {
                 resolution,
                 build_options,
                 link_mode,
+                compile.is_some_and(BytecodeCompilation::precompile),
                 compiler.as_ref(),
                 hasher,
                 tags,
@@ -882,6 +928,7 @@ impl InstallationPlan {
             .await?;
             installs.extend(shared_installs);
             uninstalls.extend(shared_uninstalls);
+            precompiled += shared_precompiled;
         }
 
         if let (Some(compile), Some(compiler)) = (compile, compiler) {
@@ -912,12 +959,50 @@ impl InstallationPlan {
                             .context("Failed to bytecode-compile installed packages")?;
                     }
                 }
+                BytecodeCompilation::PrecompileAll => {
+                    let excluded = precompiled_source_files(venv, &installs)?;
+                    for site_packages in venv.site_packages() {
+                        let site_packages = CWD.join(site_packages);
+                        if !site_packages.exists() {
+                            debug!(
+                                "Skipping non-existent site-packages directory: {}",
+                                site_packages.display()
+                            );
+                            continue;
+                        }
+                        compiler
+                            .queue_tree_excluding(&site_packages, &excluded)
+                            .with_context(|| {
+                                format!(
+                                    "Failed to bytecode-compile Python file in: {}",
+                                    site_packages.user_display()
+                                )
+                            })?;
+                    }
+                }
+                BytecodeCompilation::PrecompileInstalled => {
+                    let excluded = precompiled_source_files(venv, &installs)?;
+                    for source_file in python_source_files_for_installs(venv, &installs) {
+                        let source_file = source_file?;
+                        if !excluded.contains(&source_file) {
+                            compiler
+                                .queue_file(source_file)
+                                .context("Failed to bytecode-compile installed packages")?;
+                        }
+                    }
+                }
             }
-            let files = compiler
-                .finish()
-                .await
-                .context("Failed to bytecode-compile installed packages")?;
-            if files > 0 || matches!(compile, BytecodeCompilation::All) {
+            let files = precompiled
+                + compiler
+                    .finish()
+                    .await
+                    .context("Failed to bytecode-compile installed packages")?;
+            if files > 0
+                || matches!(
+                    compile,
+                    BytecodeCompilation::All | BytecodeCompilation::PrecompileAll
+                )
+            {
                 write_bytecode_summary(files, start, printer)?;
             }
         }
@@ -933,6 +1018,36 @@ impl InstallationPlan {
 }
 
 type PythonSourceFileIterator = Box<dyn Iterator<Item = anyhow::Result<PathBuf>>>;
+
+/// Return the installed source paths represented by persistent bytecode sidecars.
+fn precompiled_source_files(
+    venv: &PythonEnvironment,
+    installs: &[CachedDist],
+) -> anyhow::Result<HashSet<PathBuf>> {
+    let layout = venv.interpreter().layout();
+    let mut sources = HashSet::new();
+    for install in installs {
+        let dist_info = installed_dist_info_path(&layout, install.path()).with_context(|| {
+            format!("Failed to locate installed distribution for bytecode cache: `{install}`")
+        })?;
+        let site_packages = dist_info.parent().ok_or_else(|| {
+            anyhow!("Installed distribution has no site-packages parent: `{install}`")
+        })?;
+        for source in uv_installer::wheel_python_source_files(install.path()) {
+            let source = source.with_context(|| {
+                format!("Failed to list Python source files for bytecode cache: `{install}`")
+            })?;
+            let relative = source.strip_prefix(install.path()).with_context(|| {
+                format!(
+                    "Python source is outside its cached wheel: `{}`",
+                    source.user_display()
+                )
+            })?;
+            sources.insert(CWD.join(site_packages.join(relative)));
+        }
+    }
+    Ok(sources)
+}
 
 /// Return the Python source files owned by the distributions installed by this operation.
 fn python_source_files_for_installs<'a>(
@@ -1062,6 +1177,7 @@ async fn execute_plan(
     resolution: &Resolution,
     build_options: &BuildOptions,
     link_mode: LinkMode,
+    precompile_bytecode: bool,
     bytecode_compiler: Option<&Arc<uv_installer::WheelCompiler>>,
     hasher: &HashStrategy,
     tags: &Tags,
@@ -1075,7 +1191,7 @@ async fn execute_plan(
     installer_metadata: bool,
     printer: Printer,
     preview: Preview,
-) -> Result<(Vec<CachedDist>, Vec<InstalledDist>), Error> {
+) -> Result<(Vec<CachedDist>, Vec<InstalledDist>, usize), Error> {
     let Plan {
         cached,
         remote,
@@ -1083,12 +1199,37 @@ async fn execute_plan(
         extraneous,
     } = plan;
 
-    // Download, build, and unzip any missing distributions.
-    let wheels = if remote.is_empty() {
-        vec![]
-    } else {
-        let start = std::time::Instant::now();
+    let compiler = precompile_bytecode
+        .then(|| {
+            uv_installer::BytecodeCompiler::new(
+                venv.python_executable(),
+                venv.interpreter(),
+                concurrency,
+                cache,
+            )
+        })
+        .transpose()
+        .map_err(anyhow::Error::new)?;
 
+    let cached_compilation = async {
+        if let Some(compiler) = compiler.as_ref() {
+            stream::iter(&cached)
+                .map(|wheel| compiler.compile_wheel(wheel.path()))
+                .buffer_unordered(concurrency.installs)
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(anyhow::Error::new)?;
+        }
+        Ok::<(), Error>(())
+    };
+
+    // Download, build, and unzip any missing distributions.
+    let preparation = async {
+        if remote.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let start = std::time::Instant::now();
         let preparer = Preparer::new(
             cache,
             tags,
@@ -1103,6 +1244,11 @@ async fn execute_plan(
         .with_reporter(Arc::new(
             PrepareReporter::from(printer).with_length(remote.len() as u64),
         ));
+        let preparer = if let Some(compiler) = compiler.as_ref() {
+            preparer.with_bytecode_compiler(compiler)
+        } else {
+            preparer
+        };
         let wheels = preparer
             .prepare(remote.clone(), in_flight, resolution)
             .await?;
@@ -1115,8 +1261,20 @@ async fn execute_plan(
             DryRun::Disabled,
         )?;
 
-        wheels
+        Ok::<Vec<CachedDist>, Error>(wheels)
     };
+    let preparation = tokio::try_join!(cached_compilation, preparation);
+    let compilation = if let Some(compiler) = compiler {
+        compiler
+            .finish()
+            .await
+            .map(|(cache, source_files)| (Some(cache), source_files))
+            .map_err(anyhow::Error::new)
+    } else {
+        Ok((None, 0))
+    };
+    let ((), wheels) = preparation?;
+    let (bytecode_cache, precompiled) = compilation?;
 
     // Remove any upgraded or extraneous installations.
     let uninstalls = extraneous.into_iter().chain(reinstalls).collect::<Vec<_>>();
@@ -1170,7 +1328,9 @@ async fn execute_plan(
             .with_reporter(Arc::new(
                 InstallReporter::from(printer).with_length(installs.len() as u64),
             ));
-        let installer = if let Some(bytecode_compiler) = bytecode_compiler {
+        let installer = if let Some(bytecode_cache) = bytecode_cache {
+            installer.with_bytecode_cache(bytecode_cache)
+        } else if let Some(bytecode_compiler) = bytecode_compiler {
             installer.with_bytecode_compiler(Arc::clone(bytecode_compiler))
         } else {
             installer
@@ -1184,7 +1344,7 @@ async fn execute_plan(
         logger.on_install(installs.len(), start, printer, DryRun::Disabled)?;
     }
 
-    Ok((installs, uninstalls))
+    Ok((installs, uninstalls, precompiled))
 }
 
 /// Display a message about the interpreter that was selected for the operation.

@@ -11,7 +11,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::Scheme;
 
-pub use install::{install_wheel, installed_dist_info_path};
+pub use install::{install_bytecode, install_wheel, installed_dist_info_path};
 pub use linker::{InstallState, LinkMode};
 pub use record::RecordEntry;
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};

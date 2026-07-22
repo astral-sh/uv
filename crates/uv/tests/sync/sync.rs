@@ -7,11 +7,14 @@ use predicates::prelude::predicate;
 use serde_json::json;
 #[cfg(feature = "test-git")]
 use std::process::Command;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use tempfile::tempdir_in;
 use url::Url;
 use walkdir::WalkDir;
 use wiremock::matchers::{basic_auth, body_string_contains, method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -48,6 +51,36 @@ fn sync() -> Result<()> {
     ");
 
     assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn sync_precompile_bytecode_preview_warning() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--precompile-bytecode"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: The `--precompile-bytecode` option is experimental and may change without warning. Pass `--preview-features precompile-bytecode` to disable this warning.
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     + iniconfig==2.0.0
+    ");
 
     Ok(())
 }
@@ -133,6 +166,107 @@ async fn sync_compile_bytecode_per_wheel() -> Result<()> {
                 .extension()
                 .is_some_and(|extension| extension == "pyc")),
         "cached source wheel archives must not contain installed bytecode"
+    );
+
+    Ok(())
+}
+
+/// Compile a prepared wheel in the cache while another wheel is still downloading.
+#[tokio::test]
+async fn sync_compile_bytecode_while_preparing() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let server = MockServer::start().await;
+
+    let fast_wheel = fs_err::read(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+    )?;
+    let slow_wheel = fs_err::read(
+        context
+            .workspace_root
+            .join("test/links/validation-1.0.0-py3-none-any.whl"),
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fast_wheel))
+        .mount(&server)
+        .await;
+
+    let delay_download = Arc::new(AtomicBool::new(false));
+    let compiled_while_downloading = Arc::new(AtomicBool::new(false));
+    let cache_dir = context.cache_dir.to_path_buf();
+    Mock::given(method("GET"))
+        .and(path("/files/validation-1.0.0-py3-none-any.whl"))
+        .respond_with({
+            let delay_download = Arc::clone(&delay_download);
+            let compiled_while_downloading = Arc::clone(&compiled_while_downloading);
+            move |_request: &Request| {
+                if delay_download.load(Ordering::Relaxed) {
+                    std::thread::sleep(Duration::from_secs(2));
+                    let compiled = WalkDir::new(&cache_dir)
+                        .into_iter()
+                        .filter_map(Result::ok)
+                        .any(|entry| {
+                            entry
+                                .path()
+                                .ends_with("basic_package/__pycache__/__init__.cpython-313.pyc")
+                        });
+                    compiled_while_downloading.store(compiled, Ordering::Relaxed);
+                }
+                ResponseTemplate::new(200).set_body_bytes(slow_wheel.clone())
+            }
+        })
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = [
+            "basic-package @ {server}/files/basic_package-0.1.0-py3-none-any.whl",
+            "validation @ {server}/files/validation-1.0.0-py3-none-any.whl",
+        ]
+        "#,
+            server = server.uri(),
+        })?;
+
+    context.lock().assert().success();
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    delay_download.store(true, Ordering::Relaxed);
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("precompile-bytecode")
+        .arg("--precompile-bytecode")
+        .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "2")
+        .env(EnvVars::UV_CONCURRENT_INSTALLS, "2"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+    Bytecode compiled 3 files in [TIME]
+     + basic-package==0.1.0 (from http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl)
+     + validation==1.0.0 (from http://[LOCALHOST]/files/validation-1.0.0-py3-none-any.whl)
+    ");
+
+    assert!(compiled_while_downloading.load(Ordering::Relaxed));
+    assert!(
+        context
+            .site_packages()
+            .join("basic_package/__pycache__/__init__.cpython-313.pyc")
+            .exists()
     );
 
     Ok(())
@@ -297,6 +431,102 @@ fn sync_compile_bytecode_for_cached_wheels() -> Result<()> {
                 .is_some_and(|extension| extension == "pyc")),
         "cached source wheel archives must remain immutable"
     );
+
+    Ok(())
+}
+
+/// Reuse interpreter-specific bytecode without modifying the cached wheel archive.
+#[test]
+fn sync_reuses_persistent_bytecode_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    let cache = uv_cache::Cache::from_path(context.cache_dir.path());
+    let bytecode_root = context.cache_dir.join("bytecode-v0");
+
+    // The existing option retains its post-install behavior and does not populate the persistent
+    // cache.
+    context.sync().arg("--compile-bytecode").assert().success();
+    assert!(!bytecode_root.exists());
+    fs_err::remove_dir_all(&context.venv)?;
+
+    // The wheel is already cached, so precompilation should happen during package preparation
+    // without requiring network access.
+    context
+        .sync()
+        .arg("--offline")
+        .arg("--preview-features")
+        .arg("precompile-bytecode")
+        .arg("--precompile-bytecode")
+        .assert()
+        .success();
+
+    let bytecode_entries = || -> Result<Vec<_>> {
+        WalkDir::new(&bytecode_root)
+            .min_depth(2)
+            .max_depth(2)
+            .into_iter()
+            .filter_map(|entry| match entry {
+                Ok(entry)
+                    if entry
+                        .path()
+                        .extension()
+                        .is_none_or(|extension| extension != "lock") =>
+                {
+                    Some(
+                        cache
+                            .resolve_link(entry.path())
+                            .map(|target| (entry.path().to_path_buf(), target))
+                            .map_err(anyhow::Error::from),
+                    )
+                }
+                Ok(_) => None,
+                Err(err) => Some(Err(err.into())),
+            })
+            .collect()
+    };
+
+    let entries = bytecode_entries()?;
+    assert_eq!(entries.len(), 1);
+    let source_archive = context.cache_dir.join("archive-v0").join(
+        entries[0]
+            .0
+            .parent()
+            .expect("entry has an archive ID")
+            .file_name()
+            .expect("bytecode entry parent should be a wheel archive ID"),
+    );
+    assert!(
+        !WalkDir::new(source_archive)
+            .into_iter()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "pyc")),
+        "the source wheel archive should remain immutable"
+    );
+
+    fs_err::remove_dir_all(&context.venv)?;
+    context
+        .sync()
+        .arg("--offline")
+        .arg("--preview-features")
+        .arg("precompile-bytecode")
+        .arg("--precompile-bytecode")
+        .assert()
+        .success();
+
+    let reused_entries = bytecode_entries()?;
+    assert_eq!(reused_entries, entries);
 
     Ok(())
 }

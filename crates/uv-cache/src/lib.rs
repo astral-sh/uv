@@ -297,6 +297,18 @@ impl Cache {
         self.bucket(CacheBucket::Archive).join(id)
     }
 
+    /// Return the [`ArchiveId`] for a path in the archive bucket.
+    pub fn archive_id(&self, path: &Path) -> Option<ArchiveId> {
+        let archive = fs_err::canonicalize(self.bucket(CacheBucket::Archive)).ok()?;
+        let relative = path.strip_prefix(archive).ok()?;
+        let mut components = relative.components();
+        let id = components.next()?.as_os_str().to_str()?;
+        if components.next().is_some() {
+            return None;
+        }
+        Some(ArchiveId::from_str(id).expect("archive IDs are infallible"))
+    }
+
     /// Create a temporary directory to be used as a Python virtual environment.
     pub fn venv_dir(&self) -> io::Result<tempfile::TempDir> {
         fs_err::create_dir_all(self.bucket(CacheBucket::Builds))?;
@@ -562,6 +574,8 @@ impl Cache {
             summary += bucket.remove(self, name)?;
         }
 
+        summary += self.remove_unreferenced_bytecode(&references)?;
+
         if references.is_empty() {
             return Ok(summary);
         }
@@ -570,7 +584,8 @@ impl Cache {
         // to paths outside the cache.
         let archive_root = fs_err::canonicalize(&self.root)?.join(CacheBucket::Archive.to_str());
 
-        // Remove any archives that are no longer referenced.
+        // Remove archives that were referenced before this package was removed and are no longer
+        // referenced afterwards.
         for (target, references) in references {
             if target.starts_with(&archive_root) && references.iter().all(|path| !path.exists()) {
                 debug!("Removing dangling cache entry: {}", target.display());
@@ -689,8 +704,10 @@ impl Cache {
             }
         }
 
-        // Fourth, remove any unused archives (by searching for archives that are not symlinked).
+        // Fourth, find archive references once, remove bytecode for source wheels that are no
+        // longer referenced, then use the surviving links to remove unused archives.
         let references = self.find_archive_references()?;
+        summary += self.remove_unreferenced_bytecode(&references)?;
 
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
             Ok(entries) => {
@@ -698,7 +715,10 @@ impl Cache {
                     let entry = entry?;
                     let path = entry.path();
                     let target = fs_err::canonicalize(&path)?;
-                    if !references.contains_key(&target) {
+                    if references
+                        .get(&target)
+                        .is_none_or(|references| references.iter().all(|path| !path.exists()))
+                    {
                         debug!("Removing dangling cache archive: {}", path.display());
                         summary += rm_rf(path)?;
                     }
@@ -706,6 +726,53 @@ impl Cache {
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),
             Err(err) => return Err(err),
+        }
+
+        Ok(summary)
+    }
+
+    /// Remove bytecode entries whose source wheel archive is no longer referenced.
+    fn remove_unreferenced_bytecode(
+        &self,
+        archive_references: &FxHashMap<PathBuf, Vec<PathBuf>>,
+    ) -> Result<Removal, io::Error> {
+        let mut summary = Removal::default();
+        let entries = match fs_err::read_dir(self.bucket(CacheBucket::Bytecode)) {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(summary),
+            Err(err) => return Err(err),
+        };
+        let source_buckets = [
+            self.bucket(CacheBucket::SourceDistributions),
+            self.bucket(CacheBucket::Wheels),
+        ];
+
+        for entry in entries {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir() {
+                summary += rm_rf(entry.path())?;
+                continue;
+            }
+
+            let source = self.bucket(CacheBucket::Archive).join(entry.file_name());
+            let referenced = fs_err::canonicalize(&source)
+                .ok()
+                .and_then(|source| archive_references.get(&source))
+                .is_some_and(|references| {
+                    references.iter().any(|reference| {
+                        source_buckets
+                            .iter()
+                            .any(|bucket| reference.starts_with(bucket))
+                            && reference.exists()
+                    })
+                });
+            if !referenced {
+                debug!(
+                    "Removing bytecode for an unused wheel archive: {}",
+                    entry.path().display()
+                );
+                summary += rm_rf(entry.path())?;
+            }
         }
 
         Ok(summary)
@@ -719,7 +786,11 @@ impl Cache {
     /// Returns a map from archive path to paths that reference it.
     fn find_archive_references(&self) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
         let mut references = FxHashMap::<PathBuf, Vec<PathBuf>>::default();
-        for bucket in [CacheBucket::SourceDistributions, CacheBucket::Wheels] {
+        for bucket in [
+            CacheBucket::SourceDistributions,
+            CacheBucket::Wheels,
+            CacheBucket::Bytecode,
+        ] {
             let bucket_path = self.bucket(bucket);
             if bucket_path.is_dir() {
                 let walker = walkdir::WalkDir::new(&bucket_path).into_iter();
@@ -1175,6 +1246,13 @@ pub enum CacheBucket {
     /// that cache entries can be atomically replaced and removed, as storing directories in the
     /// other buckets directly would make atomic operations impossible.
     Archive,
+    /// Python bytecode compiled from cached wheel archives.
+    ///
+    /// Cache structure:
+    ///  * `bytecode-v0/<wheel-archive-id>/<interpreter-fingerprint>`
+    ///
+    /// Each entry links to a mirrored bytecode-only tree in [`CacheBucket::Archive`].
+    Bytecode,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Builds,
     /// Reusable virtual environments for Python tools and projects.
@@ -1210,6 +1288,7 @@ impl CacheBucket {
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
+            Self::Bytecode => "bytecode-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
@@ -1319,6 +1398,7 @@ impl CacheBucket {
             Self::Git
             | Self::Interpreter
             | Self::Archive
+            | Self::Bytecode
             | Self::Builds
             | Self::Environments
             | Self::Python
@@ -1340,6 +1420,7 @@ impl CacheBucket {
             Self::Interpreter,
             Self::Simple,
             Self::Archive,
+            Self::Bytecode,
             Self::Builds,
             Self::Environments,
             Self::Python,
@@ -1458,6 +1539,79 @@ mod tests {
         assert!(Link::from_str("archive/foo").is_err());
         assert!(Link::from_str("v1/foo").is_err());
         assert!(Link::from_str("archive-v0/").is_err());
+    }
+
+    #[tokio::test]
+    async fn prune_removes_bytecode_for_unreferenced_wheel() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().expect("cache root should exist");
+        let cache = Cache::from_path(cache_root.path());
+        fs_err::create_dir_all(cache.root()).expect("cache directory should exist");
+
+        let wheel = tempfile::tempdir_in(cache.root()).expect("wheel directory should exist");
+        fs_err::write(wheel.path().join("module.py"), "VALUE = 1\n")
+            .expect("wheel source should be written");
+        let wheel_entry = cache.bucket(CacheBucket::Wheels).join("pypi/package/wheel");
+        let wheel_id = cache
+            .persist(wheel.path(), &wheel_entry)
+            .await
+            .expect("wheel should be persisted");
+
+        let bytecode = tempfile::tempdir_in(cache.root()).expect("bytecode directory should exist");
+        fs_err::write(bytecode.path().join("module.pyc"), "bytecode")
+            .expect("bytecode should be written");
+        let bytecode_entry = cache.entry(CacheBucket::Bytecode, &wheel_id, "fingerprint");
+        let bytecode_id = cache
+            .persist(bytecode.path(), bytecode_entry.path())
+            .await
+            .expect("bytecode should be persisted");
+
+        cache.prune(false).expect("referenced cache should prune");
+        assert!(cache.archive(&wheel_id).exists());
+        assert!(cache.archive(&bytecode_id).exists());
+        assert!(bytecode_entry.path().exists());
+
+        fs_err::remove_file(&wheel_entry).expect("wheel reference should be removed");
+        cache.prune(false).expect("unreferenced cache should prune");
+        assert!(!cache.archive(&wheel_id).exists());
+        assert!(!cache.archive(&bytecode_id).exists());
+        assert!(!bytecode_entry.path().exists());
+    }
+
+    #[tokio::test]
+    async fn remove_package_removes_cached_bytecode() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().expect("cache root should exist");
+        let cache = Cache::from_path(cache_root.path());
+        fs_err::create_dir_all(cache.root()).expect("cache directory should exist");
+
+        let wheel = tempfile::tempdir_in(cache.root()).expect("wheel directory should exist");
+        fs_err::write(wheel.path().join("module.py"), "VALUE = 1\n")
+            .expect("wheel source should be written");
+        let wheel_entry = cache.bucket(CacheBucket::Wheels).join("pypi/package/wheel");
+        let wheel_id = cache
+            .persist(wheel.path(), &wheel_entry)
+            .await
+            .expect("wheel should be persisted");
+
+        let bytecode = tempfile::tempdir_in(cache.root()).expect("bytecode directory should exist");
+        fs_err::write(bytecode.path().join("module.pyc"), "bytecode")
+            .expect("bytecode should be written");
+        let bytecode_entry = cache.entry(CacheBucket::Bytecode, &wheel_id, "fingerprint");
+        let bytecode_id = cache
+            .persist(bytecode.path(), bytecode_entry.path())
+            .await
+            .expect("bytecode should be persisted");
+
+        cache
+            .remove(&"package".parse().expect("package name should be valid"))
+            .expect("package should be removed");
+
+        assert!(!cache.archive(&wheel_id).exists());
+        assert!(!cache.archive(&bytecode_id).exists());
+        assert!(!bytecode_entry.path().exists());
     }
 
     #[test]

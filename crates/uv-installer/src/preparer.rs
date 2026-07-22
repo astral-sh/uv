@@ -26,6 +26,7 @@ pub struct Preparer<'a, Context: BuildContext> {
     build_options: &'a BuildOptions,
     database: DistributionDatabase<'a, Context>,
     reporter: Option<Arc<dyn Reporter>>,
+    bytecode_compiler: Option<&'a crate::BytecodeCompiler>,
 }
 
 impl<'a, Context: BuildContext> Preparer<'a, Context> {
@@ -43,6 +44,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
             build_options,
             database,
             reporter: None,
+            bytecode_compiler: None,
         }
     }
 
@@ -58,6 +60,16 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .database
                 .with_reporter(reporter.clone().into_distribution_reporter()),
             reporter: Some(reporter),
+            bytecode_compiler: self.bytecode_compiler,
+        }
+    }
+
+    /// Bytecode-compile each unpacked wheel before the next installation phase.
+    #[must_use]
+    pub fn with_bytecode_compiler(self, compiler: &'a crate::BytecodeCompiler) -> Self {
+        Self {
+            bytecode_compiler: Some(compiler),
+            ..self
         }
     }
 
@@ -67,14 +79,18 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         distributions: Vec<Arc<Dist>>,
         in_flight: &'stream InFlight,
         resolution: &'stream Resolution,
+        compiler: Option<&'stream crate::BytecodeCompiler>,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         distributions
             .into_iter()
-            .map(async |dist| {
+            .map(move |dist| async move {
                 let wheel = self
                     .get_wheel((*dist).clone(), in_flight, resolution)
                     .boxed_local()
                     .await?;
+                if let Some(compiler) = compiler {
+                    compiler.compile_wheel(wheel.path()).await?;
+                }
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&wheel);
                 }
@@ -96,7 +112,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
             .sort_unstable_by_key(|distribution| Reverse(distribution.size().unwrap_or(u64::MAX)));
 
         let wheels = self
-            .prepare_stream(distributions, in_flight, resolution)
+            .prepare_stream(distributions, in_flight, resolution, self.bytecode_compiler)
             .try_collect()
             .await?;
 
@@ -219,6 +235,8 @@ pub enum Error {
     ),
     #[error("Cyclic build dependency detected for `{0}`")]
     CyclicBuildDependency(PackageName),
+    #[error("Failed to bytecode-compile a prepared wheel")]
+    Bytecode(#[from] crate::CompileError),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }

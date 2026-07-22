@@ -1188,6 +1188,7 @@ impl ToolUpgradeSettings {
             exclude_newer,
             link_mode,
             compile_bytecode,
+            precompile_bytecode,
             no_compile_bytecode,
             no_sources,
             no_sources_package,
@@ -1227,6 +1228,7 @@ impl ToolUpgradeSettings {
             exclude_newer_package,
             link_mode,
             compile_bytecode,
+            precompile_bytecode,
             no_compile_bytecode,
             no_sources,
             no_sources_package,
@@ -4278,6 +4280,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) exclude_newer: &'a ExcludeNewer,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
+    pub(crate) precompile_bytecode: bool,
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
     pub(crate) sources: NoSources,
@@ -4413,6 +4416,7 @@ impl From<ResolverOptions> for ResolverSettings {
 pub(crate) struct ResolverInstallerSettings {
     pub(crate) resolver: ResolverSettings,
     pub(crate) compile_bytecode: bool,
+    pub(crate) precompile_bytecode: bool,
     pub(crate) reinstall: Reinstall,
 }
 
@@ -4521,6 +4525,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 upgrade: value.upgrade.unwrap_or_default(),
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
+            precompile_bytecode: value.precompile_bytecode.unwrap_or_default(),
             reinstall: value.reinstall.unwrap_or_default(),
         }
     }
@@ -4579,6 +4584,7 @@ pub(crate) struct PipSettings {
     pub(crate) annotation_style: AnnotationStyle,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
+    pub(crate) precompile_bytecode: bool,
     pub(crate) sources: NoSources,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) upgrade: Upgrade,
@@ -4655,6 +4661,7 @@ impl PipSettings {
             annotation_style,
             link_mode,
             compile_bytecode,
+            precompile_bytecode,
             require_hashes,
             verify_hashes,
             no_sources,
@@ -4687,6 +4694,7 @@ impl PipSettings {
             exclude_newer: top_level_exclude_newer,
             link_mode: top_level_link_mode,
             compile_bytecode: top_level_compile_bytecode,
+            precompile_bytecode: top_level_precompile_bytecode,
             no_sources: top_level_no_sources,
             no_sources_package: top_level_no_sources_package,
             upgrade: top_level_upgrade,
@@ -4736,6 +4744,7 @@ impl PipSettings {
             .unwrap_or_default();
         let link_mode = link_mode.combine(top_level_link_mode);
         let compile_bytecode = compile_bytecode.combine(top_level_compile_bytecode);
+        let precompile_bytecode = precompile_bytecode.combine(top_level_precompile_bytecode);
         let no_sources = no_sources.combine(top_level_no_sources);
         let no_sources_package = no_sources_package.combine(top_level_no_sources_package);
         let upgrade = upgrade.combine(top_level_upgrade);
@@ -4901,6 +4910,10 @@ impl PipSettings {
                 .compile_bytecode
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
+            precompile_bytecode: args
+                .precompile_bytecode
+                .combine(precompile_bytecode)
+                .unwrap_or_default(),
             sources: NoSources::from_args(
                 args.no_sources.combine(no_sources),
                 args_no_sources_package
@@ -4973,6 +4986,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             exclude_newer: &settings.resolver.exclude_newer,
             link_mode: settings.resolver.link_mode,
             compile_bytecode: settings.compile_bytecode,
+            precompile_bytecode: settings.precompile_bytecode,
             reinstall: &settings.reinstall,
             build_options: &settings.resolver.build_options,
             sources: settings.resolver.sources.clone(),

@@ -63,6 +63,7 @@ pub(crate) async fn collect_module_owners(
         exclude_newer: &settings.exclude_newer,
         link_mode: settings.link_mode,
         compile_bytecode: false,
+        precompile_bytecode: false,
         reinstall: &reinstall,
         build_options: &settings.build_options,
         sources: settings.sources.clone(),

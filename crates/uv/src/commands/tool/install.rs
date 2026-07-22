@@ -775,8 +775,9 @@ pub(crate) async fn install(
                 &environment,
                 &tags,
             )?;
+            let compile_bytecode = settings.compile_bytecode || settings.precompile_bytecode;
             if plan.is_empty()
-                && !settings.compile_bytecode
+                && !compile_bytecode
                 && !request.is_latest()
                 && settings.reinstall.is_none()
                 && settings.resolver.upgrade.is_none()
@@ -810,7 +811,7 @@ pub(crate) async fn install(
                 )?;
                 return Ok(ExitStatus::Success);
             }
-            let environment = if plan.is_empty() && !settings.compile_bytecode {
+            let environment = if plan.is_empty() && !compile_bytecode {
                 environment
             } else {
                 sync_environment(

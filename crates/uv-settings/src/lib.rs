@@ -416,6 +416,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 exclude_newer_package,
                 link_mode,
                 compile_bytecode,
+                precompile_bytecode,
                 no_sources,
                 no_sources_package: _,
                 upgrade,
@@ -575,6 +576,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if compile_bytecode.is_some() {
         masked_fields.push("compile-bytecode");
+    }
+    if precompile_bytecode.is_some() {
+        masked_fields.push("precompile-bytecode");
     }
     if no_sources.is_some() {
         masked_fields.push("no-sources");

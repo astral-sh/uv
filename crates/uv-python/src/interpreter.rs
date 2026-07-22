@@ -45,6 +45,8 @@ use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FI
 pub struct Interpreter {
     platform: Platform,
     markers: Box<MarkerEnvironment>,
+    bytecode_cache_tag: Option<Box<str>>,
+    bytecode_magic_number: Box<str>,
     scheme: Scheme,
     virtualenv: Scheme,
     manylinux_compatible: bool,
@@ -79,6 +81,8 @@ impl Interpreter {
         Ok(Self {
             platform: info.platform,
             markers: Box::new(info.markers),
+            bytecode_cache_tag: info.bytecode_cache_tag,
+            bytecode_magic_number: info.bytecode_magic_number,
             scheme: info.scheme,
             virtualenv: info.virtualenv,
             manylinux_compatible: info.manylinux_compatible,
@@ -437,6 +441,16 @@ impl Interpreter {
     /// Returns the implementation name (e.g., `CPython` or `PyPy`).
     pub fn implementation_name(&self) -> &str {
         self.markers.implementation_name()
+    }
+
+    /// Return the implementation-specific tag used in bytecode cache filenames.
+    pub fn bytecode_cache_tag(&self) -> Option<&str> {
+        self.bytecode_cache_tag.as_deref()
+    }
+
+    /// Return the interpreter's bytecode magic number as lowercase hexadecimal.
+    pub fn bytecode_magic_number(&self) -> &str {
+        &self.bytecode_magic_number
     }
 
     /// Return the `sys.base_prefix` path for this Python interpreter.
@@ -938,6 +952,8 @@ pub enum InterpreterInfoError {
 struct InterpreterInfo {
     platform: Platform,
     markers: MarkerEnvironment,
+    bytecode_cache_tag: Option<Box<str>>,
+    bytecode_magic_number: Box<str>,
     scheme: Scheme,
     virtualenv: Scheme,
     manylinux_compatible: bool,
@@ -1372,6 +1388,8 @@ mod tests {
                 "python_version": "3.12",
                 "sys_platform": "linux"
             },
+            "bytecode_cache_tag": "cpython-312",
+            "bytecode_magic_number": "cb0d0d0a",
             "sys_base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
             "sys_base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
             "sys_prefix": "/home/ferris/projects/uv/.venv",

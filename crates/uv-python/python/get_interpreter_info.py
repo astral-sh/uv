@@ -5,6 +5,7 @@ The script will exit with status 0 on known error that are turned into rust erro
 """
 
 import importlib.machinery
+import importlib.util
 import json
 import os
 import platform
@@ -683,6 +684,8 @@ def main() -> None:
     interpreter_info = {
         "result": "success",
         "markers": markers,
+        "bytecode_cache_tag": getattr(sys.implementation, "cache_tag", None),
+        "bytecode_magic_number": importlib.util.MAGIC_NUMBER.hex(),
         "sys_base_prefix": sys.base_prefix,
         "sys_base_exec_prefix": sys.base_exec_prefix,
         "sys_prefix": sys.prefix,

@@ -171,7 +171,9 @@ fn compile_bytecode_for_installed_distributions() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("anyio==3.7.1")
-        .arg("--compile-bytecode")
+        .arg("--preview-features")
+        .arg("precompile-bytecode")
+        .arg("--precompile-bytecode")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "1"), @"
     success: true
     exit_code: 0
@@ -211,6 +213,7 @@ fn compile_bytecode_for_installed_distributions() -> Result<()> {
             .join("__init__.cpython-312.pyc")
             .exists()
     );
+    assert!(context.cache_dir.join("bytecode-v0").exists());
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(&wheel)
@@ -275,6 +278,130 @@ fn compile_bytecode_for_installed_distributions() -> Result<()> {
             .join("__init__.cpython-312.pyc")
             .exists()
     );
+
+    Ok(())
+}
+
+/// Disable configured precompilation for an individual installation.
+#[test]
+fn configured_precompile_bytecode_can_be_disabled() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r"
+        [tool.uv]
+        precompile-bytecode = true
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("sniffio==1.3.1")
+        .arg("--no-compile-bytecode"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    assert!(!context.cache_dir.join("bytecode-v0").exists());
+    assert!(
+        !context
+            .site_packages()
+            .join("sniffio")
+            .join("__pycache__")
+            .exists()
+    );
+
+    Ok(())
+}
+
+/// Fall back to in-place compilation when Python uses an external bytecode cache.
+#[test]
+fn precompile_bytecode_respects_python_pycache_prefix() {
+    let context = uv_test::test_context!("3.12");
+    let pycache = context.temp_dir.child("python-bytecode-cache");
+
+    uv_snapshot!(context.pip_install()
+        .arg("sniffio==1.3.1")
+        .arg("--preview-features")
+        .arg("precompile-bytecode")
+        .arg("--precompile-bytecode")
+        .env("PYTHONPYCACHEPREFIX", pycache.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    assert!(
+        WalkDir::new(pycache.path())
+            .into_iter()
+            .filter_map(Result::ok)
+            .any(|entry| {
+                entry
+                    .path()
+                    .ends_with(Path::new("sniffio").join("__init__.cpython-312.pyc"))
+            }),
+        "the installed package should be compiled beneath PYTHONPYCACHEPREFIX"
+    );
+    assert!(!context.cache_dir.join("bytecode-v0").exists());
+    assert!(
+        !WalkDir::new(context.cache_dir.join("archive-v0"))
+            .into_iter()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "pyc")),
+        "cached source wheel archives must not contain installed bytecode"
+    );
+}
+
+/// Fall back to in-place compilation when timestamp invalidation is explicitly requested.
+#[test]
+fn precompile_bytecode_respects_timestamp_invalidation_mode() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("sniffio==1.3.1")
+        .arg("--preview-features")
+        .arg("precompile-bytecode")
+        .arg("--precompile-bytecode")
+        .env(EnvVars::PYC_INVALIDATION_MODE, "TIMESTAMP"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    let bytecode = fs_err::read(
+        context
+            .site_packages()
+            .join("sniffio/__pycache__/__init__.cpython-312.pyc"),
+    )?;
+    let flags = bytecode
+        .get(4..8)
+        .context("Python bytecode should include invalidation flags")?
+        .try_into()?;
+    assert_eq!(u32::from_le_bytes(flags), 0);
+    assert!(!context.cache_dir.join("bytecode-v0").exists());
 
     Ok(())
 }
@@ -547,7 +674,7 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         |
       2 | unknown = "field"
         | ^^^^^^^
-      unknown field `unknown`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+      unknown field `unknown`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `precompile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
 
     Resolved in [TIME]
     Checked in [TIME]

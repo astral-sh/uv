@@ -1,28 +1,32 @@
 use std::collections::HashSet;
+use std::ffi::{OsStr, OsString};
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex as StdMutex, Weak};
 use std::time::Duration;
 use std::{env, io, panic};
 
 use anyhow::anyhow;
 use async_channel::{Receiver, SendError, Sender};
+use serde::Serialize;
 use tempfile::{TempDir, tempdir_in};
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
-use tokio::sync::oneshot;
+use tokio::sync::{Mutex as TokioMutex, Notify, oneshot};
 use tracing::{debug, instrument};
 use walkdir::WalkDir;
 
+use uv_cache::{Cache, CacheBucket, CacheEntry};
+use uv_cache_key::cache_digest;
 use uv_configuration::Concurrency;
 use uv_distribution_types::CachedDist;
 use uv_fs::{CWD, Simplified};
 use uv_install_wheel::{Layout, installed_dist_info_path};
+use uv_python::Interpreter;
 use uv_static::EnvVars;
-use uv_warnings::warn_user;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 /// This is longer than any compilation should ever take.
@@ -31,12 +35,52 @@ const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_mins(1);
 type WorkerOutcome = std::thread::Result<Result<(), CompileError>>;
 type WorkerHandle = oneshot::Receiver<WorkerOutcome>;
 
+#[derive(Debug, Serialize)]
+struct CompileTask {
+    source: String,
+    output: Option<String>,
+    display: Option<String>,
+    invalidation_mode: Option<String>,
+    #[serde(skip)]
+    completion: Option<WheelCompilationTask>,
+}
+
+impl CompileTask {
+    fn in_place(source_file: &Path) -> Self {
+        Self {
+            source: source_file.display().to_string(),
+            output: None,
+            display: None,
+            invalidation_mode: None,
+            completion: None,
+        }
+    }
+
+    fn cached(
+        source_file: &Path,
+        output_file: &Path,
+        display_file: &Path,
+        invalidation_mode: &str,
+        completion: WheelCompilationTask,
+    ) -> Self {
+        Self {
+            source: source_file.display().to_string(),
+            output: Some(output_file.display().to_string()),
+            display: Some(display_file.display().to_string()),
+            invalidation_mode: Some(invalidation_mode.to_owned()),
+            completion: Some(completion),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum CompileError {
     #[error("Failed to list files in `site-packages`")]
     Walkdir(#[from] walkdir::Error),
     #[error("Failed to send task to worker")]
-    WorkerDisappeared(SendError<PathBuf>),
+    WorkerDisappeared,
+    #[error("Failed to serialize bytecode compilation task")]
+    SerializeTask(#[from] serde_json::Error),
     #[error("Failed to identify Python source files")]
     SourceFiles(#[source] anyhow::Error),
     #[error("The task executor is broken, did some other task panic?")]
@@ -45,6 +89,16 @@ pub enum CompileError {
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to create temporary script file")]
     TempFile(#[source] io::Error),
+    #[error("Failed to access the bytecode cache")]
+    BytecodeCache(#[source] io::Error),
+    #[error("Failed to lock the bytecode cache")]
+    BytecodeCacheLock(#[source] uv_cache::Error),
+    #[error("Wheel path is not an archive in the cache: `{0}`")]
+    WheelCachePath(PathBuf),
+    #[error("Python interpreter does not report a bytecode cache tag")]
+    MissingCacheTag,
+    #[error("Python source is not contained in its wheel: `{0}`")]
+    WheelSource(PathBuf),
     #[error(r#"Bytecode compilation failed, expected "{0}", received: "{1}""#)]
     WrongPath(String, String),
     #[error("Failed to write to Python {device}")]
@@ -101,7 +155,7 @@ fn spawn_workers(
     dir: &Path,
     python_executable: &Path,
     pip_compileall_py: &Path,
-    receiver: &Arc<Receiver<PathBuf>>,
+    receiver: &Arc<Receiver<CompileTask>>,
     worker_count: usize,
     timeout: Option<Duration>,
 ) -> Vec<WorkerHandle> {
@@ -148,7 +202,7 @@ fn spawn_workers(
 /// Wait for all workers to exit so worker failures are not hidden by channel send errors.
 async fn wait_for_workers(
     worker_handles: Vec<WorkerHandle>,
-    send_error: Option<SendError<PathBuf>>,
+    send_error: Option<SendError<CompileTask>>,
 ) -> Result<(), CompileError> {
     for result in futures::future::join_all(worker_handles).await {
         match result {
@@ -159,19 +213,20 @@ async fn wait_for_workers(
         }
     }
 
-    if let Some(send_error) = send_error {
+    if send_error.is_some() {
         // This is suspicious: Why did the channel stop working, but all workers exited
         // successfully?
-        return Err(CompileError::WorkerDisappeared(send_error));
+        return Err(CompileError::WorkerDisappeared);
     }
 
     Ok(())
 }
 
-fn python_source_files(
-    dir: &Path,
+fn python_source_files<'a>(
+    dir: &'a Path,
     skip_wheel_data: bool,
-) -> impl Iterator<Item = Result<PathBuf, walkdir::Error>> + '_ {
+    excluded: Option<&'a HashSet<PathBuf>>,
+) -> impl Iterator<Item = Result<PathBuf, walkdir::Error>> + 'a {
     // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
     WalkDir::new(dir)
         .into_iter()
@@ -185,7 +240,7 @@ fn python_source_files(
                         .extension()
                         .is_some_and(|extension| extension.eq_ignore_ascii_case("data")))
         })
-        .filter_map(|entry| {
+        .filter_map(move |entry| {
             let (entry, metadata) =
                 match entry.and_then(|entry| entry.metadata().map(|metadata| (entry, metadata))) {
                     Ok((entry, metadata)) => (entry, metadata),
@@ -198,14 +253,29 @@ fn python_source_files(
                     }
                     Err(err) => return Some(Err(err)),
                 };
-            (metadata.is_file() && entry.path().extension().is_some_and(|ext| ext == "py"))
-                .then(|| Ok(entry.into_path()))
+            (metadata.is_file()
+                && entry.path().extension().is_some_and(|ext| ext == "py")
+                && excluded.is_none_or(|excluded| !excluded.contains(entry.path())))
+            .then(|| Ok(entry.into_path()))
         })
 }
 
+/// Return the Python source files in an unpacked wheel.
+pub fn wheel_python_source_files(
+    dir: &Path,
+) -> impl Iterator<Item = Result<PathBuf, walkdir::Error>> + '_ {
+    python_source_files(dir, true, None)
+}
+
+fn count_wheel_python_source_files(dir: &Path) -> Result<usize, CompileError> {
+    wheel_python_source_files(dir).try_fold(0, |count, source| {
+        source.map(|_| count + 1).map_err(CompileError::from)
+    })
+}
+
 struct WheelCompilerWorkers {
-    sender: Sender<PathBuf>,
-    receiver: Weak<Receiver<PathBuf>>,
+    sender: Sender<CompileTask>,
+    receiver: Weak<Receiver<CompileTask>>,
     worker_handles: Vec<WorkerHandle>,
     tempdir: TempDir,
     timeout: Option<Duration>,
@@ -216,9 +286,9 @@ pub struct WheelCompiler {
     python_executable: PathBuf,
     cache: PathBuf,
     worker_count: usize,
-    workers: Mutex<Option<WheelCompilerWorkers>>,
-    send_error: Mutex<Option<SendError<PathBuf>>>,
-    queued: Mutex<HashSet<PathBuf>>,
+    workers: StdMutex<Option<WheelCompilerWorkers>>,
+    send_error: StdMutex<Option<SendError<CompileTask>>>,
+    queued: StdMutex<HashSet<PathBuf>>,
     source_files: AtomicUsize,
 }
 
@@ -233,14 +303,14 @@ impl WheelCompiler {
             python_executable: python_executable.to_path_buf(),
             cache: cache.to_path_buf(),
             worker_count: concurrency.installs.max(1),
-            workers: Mutex::new(None),
-            send_error: Mutex::new(None),
-            queued: Mutex::new(HashSet::new()),
+            workers: StdMutex::new(None),
+            send_error: StdMutex::new(None),
+            queued: StdMutex::new(HashSet::new()),
             source_files: AtomicUsize::new(0),
         })
     }
 
-    fn sender(&self, worker_count: usize) -> Result<Sender<PathBuf>, CompileError> {
+    fn sender(&self, worker_count: usize) -> Result<Sender<CompileTask>, CompileError> {
         let mut workers = self.workers.lock().map_err(|_| CompileError::Join)?;
         if let Some(workers) = workers.as_mut() {
             let additional = worker_count.saturating_sub(workers.worker_handles.len());
@@ -261,7 +331,7 @@ impl WheelCompiler {
 
         // A larger buffer is significantly faster than just 1 or the worker count.
         let (sender, receiver) =
-            async_channel::bounded::<PathBuf>(self.worker_count.saturating_mul(10));
+            async_channel::bounded::<CompileTask>(self.worker_count.saturating_mul(10));
         let receiver = Arc::new(receiver);
         // Running Python with an actual file will produce better error messages.
         let tempdir = tempdir_in(&self.cache).map_err(CompileError::TempFile)?;
@@ -294,14 +364,15 @@ impl WheelCompiler {
             source_file.display()
         );
 
+        let task = CompileTask::in_place(&source_file);
         let mut queued = self.queued.lock().map_err(|_| CompileError::Join)?;
-        if !queued.insert(source_file.clone()) {
+        if !queued.insert(source_file) {
             return Ok(());
         }
         let worker_count = queued.len().min(self.worker_count);
         drop(queued);
 
-        if let Err(err) = self.sender(worker_count)?.send_blocking(source_file) {
+        if let Err(err) = self.sender(worker_count)?.send_blocking(task) {
             let mut send_error = self.send_error.lock().map_err(|_| CompileError::Join)?;
             if send_error.is_none() {
                 *send_error = Some(err);
@@ -328,7 +399,7 @@ impl WheelCompiler {
 
         // Files in `.data` are relocated during installation. They are queued from the installed
         // RECORD after all wheels have been installed.
-        for source_file in python_source_files(wheel.path(), true) {
+        for source_file in python_source_files(wheel.path(), true, None) {
             let source_file = source_file?;
             let relative = source_file.strip_prefix(wheel.path()).map_err(|_| {
                 CompileError::SourceFiles(anyhow!(
@@ -343,7 +414,19 @@ impl WheelCompiler {
 
     /// Queue the Python source files in an installed directory.
     pub fn queue_tree(&self, dir: &Path) -> Result<(), CompileError> {
-        for source_file in python_source_files(dir, false) {
+        for source_file in python_source_files(dir, false, None) {
+            self.queue_file(source_file?)?;
+        }
+        Ok(())
+    }
+
+    /// Queue Python source files in an installed directory, except for already compiled paths.
+    pub fn queue_tree_excluding(
+        &self,
+        dir: &Path,
+        excluded: &HashSet<PathBuf>,
+    ) -> Result<(), CompileError> {
+        for source_file in python_source_files(dir, false, Some(excluded)) {
             self.queue_file(source_file?)?;
         }
         Ok(())
@@ -380,6 +463,335 @@ impl WheelCompiler {
     }
 }
 
+#[derive(Debug, Clone)]
+struct BytecodeCacheKey {
+    fingerprint: String,
+    cache_tag: Box<str>,
+    optimization_level: u32,
+    invalidation_mode: Box<str>,
+}
+
+impl BytecodeCacheKey {
+    fn new(
+        cache_tag: &str,
+        magic_number: &str,
+        optimization_level: u32,
+        invalidation_mode: &str,
+    ) -> Self {
+        Self {
+            fingerprint: cache_digest(&(
+                cache_tag,
+                magic_number,
+                optimization_level,
+                invalidation_mode,
+            )),
+            cache_tag: cache_tag.into(),
+            optimization_level,
+            invalidation_mode: invalidation_mode.into(),
+        }
+    }
+
+    fn from_interpreter(interpreter: &Interpreter) -> Result<Self, CompileError> {
+        let cache_tag = interpreter
+            .bytecode_cache_tag()
+            .ok_or(CompileError::MissingCacheTag)?;
+        let optimization_level = match env::var("PYTHONOPTIMIZE") {
+            Ok(value) if value.is_empty() => 0,
+            Ok(value) => value.trim_start().parse().unwrap_or(1),
+            Err(env::VarError::NotPresent) => 0,
+            Err(env::VarError::NotUnicode(_)) => 1,
+        };
+        let invalidation_mode =
+            env::var(EnvVars::PYC_INVALIDATION_MODE).unwrap_or_else(|_| "CHECKED_HASH".to_string());
+        Ok(Self::new(
+            cache_tag,
+            interpreter.bytecode_magic_number(),
+            optimization_level,
+            &invalidation_mode,
+        ))
+    }
+
+    fn bytecode_filename(&self, stem: &OsStr) -> OsString {
+        let mut filename = OsString::from(stem);
+        filename.push(format!(".{}", self.cache_tag));
+        if self.optimization_level != 0 {
+            filename.push(format!(".opt-{}", self.optimization_level));
+        }
+        filename.push(".pyc");
+        filename
+    }
+}
+
+/// A persistent cache of Python bytecode compiled from wheel archives.
+#[derive(Debug, Clone)]
+pub struct BytecodeCache {
+    cache: Cache,
+    key: BytecodeCacheKey,
+}
+
+impl BytecodeCache {
+    fn new(cache: &Cache, interpreter: &Interpreter) -> Result<Self, CompileError> {
+        Ok(Self {
+            cache: cache.clone(),
+            key: BytecodeCacheKey::from_interpreter(interpreter)?,
+        })
+    }
+
+    fn entry(&self, wheel: &Path) -> Result<CacheEntry, CompileError> {
+        let archive_id = self
+            .cache
+            .archive_id(wheel)
+            .ok_or_else(|| CompileError::WheelCachePath(wheel.to_path_buf()))?;
+        Ok(self
+            .cache
+            .entry(CacheBucket::Bytecode, archive_id, &self.key.fingerprint))
+    }
+
+    pub(crate) fn get(&self, wheel: &Path) -> Result<Option<PathBuf>, CompileError> {
+        let entry = self.entry(wheel)?;
+        match self.cache.resolve_link(entry.path()) {
+            Ok(path) => Ok(Some(path)),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(CompileError::BytecodeCache(err)),
+        }
+    }
+}
+
+struct Workers {
+    sender: Sender<CompileTask>,
+    worker_handles: Vec<WorkerHandle>,
+    tempdir: TempDir,
+}
+
+#[derive(Debug)]
+struct WheelCompilation {
+    pending: AtomicUsize,
+    failed: AtomicBool,
+    completed: Notify,
+}
+
+impl WheelCompilation {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            // Keep the producer registered until every task has been queued.
+            pending: AtomicUsize::new(1),
+            failed: AtomicBool::new(false),
+            completed: Notify::new(),
+        })
+    }
+
+    fn task(self: &Arc<Self>) -> WheelCompilationTask {
+        self.pending.fetch_add(1, Ordering::Relaxed);
+        WheelCompilationTask {
+            compilation: Arc::clone(self),
+            completed: false,
+        }
+    }
+
+    fn complete_task(&self, completed: bool) {
+        if !completed {
+            self.failed.store(true, Ordering::Release);
+        }
+        if self.pending.fetch_sub(1, Ordering::AcqRel) == 1 {
+            self.completed.notify_one();
+        }
+    }
+
+    async fn finish(&self) -> Result<(), CompileError> {
+        self.complete_task(true);
+        self.completed.notified().await;
+        if self.failed.load(Ordering::Acquire) {
+            return Err(CompileError::WorkerDisappeared);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct WheelCompilationTask {
+    compilation: Arc<WheelCompilation>,
+    completed: bool,
+}
+
+impl WheelCompilationTask {
+    fn complete(mut self) {
+        self.completed = true;
+    }
+}
+
+impl Drop for WheelCompilationTask {
+    fn drop(&mut self) {
+        self.compilation.complete_task(self.completed);
+    }
+}
+
+/// A shared pool of Python interpreters for populating the persistent bytecode cache.
+pub struct BytecodeCompiler {
+    cache: BytecodeCache,
+    python_executable: PathBuf,
+    worker_count: usize,
+    workers: TokioMutex<Option<Workers>>,
+    send_error: TokioMutex<Option<SendError<CompileTask>>>,
+    source_files: AtomicUsize,
+}
+
+impl BytecodeCompiler {
+    pub fn new(
+        python_executable: &Path,
+        interpreter: &Interpreter,
+        concurrency: &Concurrency,
+        cache: &Cache,
+    ) -> Result<Self, CompileError> {
+        Ok(Self {
+            cache: BytecodeCache::new(cache, interpreter)?,
+            python_executable: python_executable.to_path_buf(),
+            worker_count: concurrency.installs,
+            workers: TokioMutex::new(None),
+            send_error: TokioMutex::new(None),
+            source_files: AtomicUsize::new(0),
+        })
+    }
+
+    async fn sender(&self) -> Result<Sender<CompileTask>, CompileError> {
+        let mut workers = self.workers.lock().await;
+        if let Some(workers) = workers.as_ref() {
+            return Ok(workers.sender.clone());
+        }
+
+        // A larger buffer is significantly faster than just 1 or the worker count.
+        let (sender, receiver) = async_channel::bounded::<CompileTask>(self.worker_count * 10);
+        let receiver = Arc::new(receiver);
+        let tempdir = tempdir_in(self.cache.cache.root()).map_err(CompileError::TempFile)?;
+        let pip_compileall_py = tempdir.path().join("pip_compileall.py");
+        let timeout = compile_timeout()?;
+        let worker_handles = spawn_workers(
+            self.cache.cache.root(),
+            &self.python_executable,
+            &pip_compileall_py,
+            &receiver,
+            self.worker_count,
+            timeout,
+        );
+        drop(receiver);
+        *workers = Some(Workers {
+            sender: sender.clone(),
+            worker_handles,
+            tempdir,
+        });
+        Ok(sender)
+    }
+
+    /// Queue the Python source files in an unpacked wheel for bytecode compilation.
+    pub async fn compile_wheel(&self, dir: &Path) -> Result<usize, CompileError> {
+        debug_assert!(
+            dir.is_absolute(),
+            "compileall doesn't work with relative paths: `{}`",
+            dir.display()
+        );
+
+        let entry = self.cache.entry(dir)?;
+        if self.cache.get(dir)?.is_some() {
+            let source_files = count_wheel_python_source_files(dir)?;
+            self.source_files.fetch_add(source_files, Ordering::Relaxed);
+            return Ok(source_files);
+        }
+
+        let lock_name = format!("{}.lock", self.cache.key.fingerprint);
+        let lock = CacheEntry::new(entry.dir(), lock_name)
+            .lock()
+            .await
+            .map_err(CompileError::BytecodeCacheLock)?;
+        if self.cache.get(dir)?.is_some() {
+            let source_files = count_wheel_python_source_files(dir)?;
+            self.source_files.fetch_add(source_files, Ordering::Relaxed);
+            return Ok(source_files);
+        }
+
+        let tempdir = tempdir_in(self.cache.cache.root()).map_err(CompileError::TempFile)?;
+        let completion = WheelCompilation::new();
+        let mut source_files = 0;
+        for source_file in wheel_python_source_files(dir) {
+            let source_file = source_file?;
+            let relative = source_file
+                .strip_prefix(dir)
+                .map_err(|_| CompileError::WheelSource(source_file.clone()))?;
+            let Some(parent) = relative.parent() else {
+                return Err(CompileError::WheelSource(source_file));
+            };
+            let Some(stem) = relative.file_stem() else {
+                return Err(CompileError::WheelSource(source_file));
+            };
+            let output_file = tempdir
+                .path()
+                .join(parent)
+                .join("__pycache__")
+                .join(self.cache.key.bytecode_filename(stem));
+            fs_err::create_dir_all(
+                output_file
+                    .parent()
+                    .expect("bytecode output always has a parent"),
+            )
+            .map_err(CompileError::BytecodeCache)?;
+
+            source_files += 1;
+            let sender = self.sender().await?;
+            if let Err(mut err) = sender
+                .send(CompileTask::cached(
+                    &source_file,
+                    &output_file,
+                    relative,
+                    &self.cache.key.invalidation_mode,
+                    completion.task(),
+                ))
+                .await
+            {
+                // The failed task will remain in `send_error` until the worker pool is joined.
+                // Release its completion handle now so this wheel cannot wait forever.
+                drop(err.0.completion.take());
+                let mut send_error = self.send_error.lock().await;
+                if send_error.is_none() {
+                    *send_error = Some(err);
+                }
+                break;
+            }
+        }
+        completion.finish().await?;
+        self.cache
+            .cache
+            .persist(tempdir.path(), entry.path())
+            .await
+            .map_err(CompileError::BytecodeCache)?;
+        // Never retain one wheel's lock while waiting for another wheel's lock.
+        drop(lock);
+        self.source_files.fetch_add(source_files, Ordering::Relaxed);
+        Ok(source_files)
+    }
+
+    /// Finish all queued compilation tasks and persist their bytecode cache entries.
+    pub async fn finish(self) -> Result<(BytecodeCache, usize), CompileError> {
+        let Self {
+            cache,
+            workers,
+            send_error,
+            source_files,
+            ..
+        } = self;
+        if let Some(Workers {
+            sender,
+            worker_handles,
+            tempdir,
+        }) = workers.into_inner()
+        {
+            drop(sender);
+            wait_for_workers(worker_handles, send_error.into_inner()).await?;
+            // Keep the compile script alive until all workers have exited.
+            drop(tempdir);
+        }
+
+        Ok((cache, source_files.into_inner()))
+    }
+}
+
 /// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
 /// that calls `compileall.compile_file`.
 ///
@@ -398,7 +810,18 @@ pub async fn compile_tree(
     concurrency: &Concurrency,
     cache: &Path,
 ) -> Result<usize, CompileError> {
-    compile_tree_inner(dir, python_executable, concurrency, cache).await
+    compile_tree_inner(dir, python_executable, concurrency, cache, None).await
+}
+
+/// Bytecode compile all Python source files in `dir`, except for the given paths.
+pub async fn compile_tree_excluding(
+    dir: &Path,
+    excluded: &HashSet<PathBuf>,
+    python_executable: &Path,
+    concurrency: &Concurrency,
+    cache: &Path,
+) -> Result<usize, CompileError> {
+    compile_tree_inner(dir, python_executable, concurrency, cache, Some(excluded)).await
 }
 
 async fn compile_tree_inner(
@@ -406,6 +829,7 @@ async fn compile_tree_inner(
     python_executable: &Path,
     concurrency: &Concurrency,
     cache: &Path,
+    excluded: Option<&HashSet<PathBuf>>,
 ) -> Result<usize, CompileError> {
     debug_assert!(
         dir.is_absolute(),
@@ -415,7 +839,7 @@ async fn compile_tree_inner(
     let worker_count = concurrency.installs;
 
     // A larger buffer is significantly faster than just 1 or the worker count.
-    let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
+    let (sender, receiver) = async_channel::bounded::<CompileTask>(worker_count * 10);
     let receiver = Arc::new(receiver);
 
     // Running Python with an actual file will produce better error messages.
@@ -436,9 +860,9 @@ async fn compile_tree_inner(
     // Start the producer, sending all `.py` files to workers.
     let mut source_files = 0;
     let mut send_error = None;
-    for source_file in python_source_files(dir, false) {
+    for source_file in python_source_files(dir, false, excluded) {
         source_files += 1;
-        if let Err(err) = sender.send(source_file?).await {
+        if let Err(err) = sender.send(CompileTask::in_place(&source_file?)).await {
             // The workers exited.
             // If e.g. something with the Python interpreter is wrong, the workers have exited
             // with an error. We try to report this informative error and only if that fails,
@@ -478,7 +902,7 @@ pub async fn compile_files(
     }
 
     let worker_count = initial_files.len();
-    let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
+    let (sender, receiver) = async_channel::bounded::<CompileTask>(worker_count * 10);
     let receiver = Arc::new(receiver);
 
     // Running Python with an actual file will produce better error messages.
@@ -512,7 +936,7 @@ pub async fn compile_files(
             file.display()
         );
         source_files += 1;
-        if let Err(err) = sender.send(file).await {
+        if let Err(err) = sender.send(CompileTask::in_place(&file)).await {
             send_error = Some(err);
             break;
         }
@@ -531,7 +955,7 @@ async fn worker(
     dir: PathBuf,
     interpreter: PathBuf,
     pip_compileall_py: PathBuf,
-    receiver: Receiver<PathBuf>,
+    receiver: Receiver<CompileTask>,
     timeout: Option<Duration>,
 ) -> Result<(), CompileError> {
     fs_err::tokio::write(&pip_compileall_py, COMPILEALL_SCRIPT)
@@ -686,20 +1110,17 @@ async fn launch_bytecode_compiler(
 /// we get the same path back from stdout. This way we ensure one worker is only working on one
 /// piece of work at the same time.
 async fn worker_main_loop(
-    receiver: Receiver<PathBuf>,
+    receiver: Receiver<CompileTask>,
     mut child_stdin: ChildStdin,
     child_stdout: &mut BufReader<ChildStdout>,
     timeout: Option<Duration>,
 ) -> Result<(), CompileError> {
     let mut out_line = String::new();
-    while let Ok(source_file) = receiver.recv().await {
-        let source_file = source_file.display().to_string();
-        if source_file.contains(['\r', '\n']) {
-            warn_user!("Path contains newline, skipping: {source_file:?}");
-            continue;
-        }
+    while let Ok(mut task) = receiver.recv().await {
+        let source_file = task.source.clone();
+        let serialized = serde_json::to_string(&task)?;
         // Luckily, LF alone works on windows too
-        let bytes = format!("{source_file}\n").into_bytes();
+        let bytes = format!("{serialized}\n").into_bytes();
 
         let python_handle = async {
             child_stdin
@@ -736,8 +1157,11 @@ async fn worker_main_loop(
         // This is a sanity check, if we don't get the path back something has gone wrong, e.g.
         // we're not actually running a python interpreter.
         let actual = out_line.trim_end_matches(['\n', '\r']);
-        if actual != source_file {
-            return Err(CompileError::WrongPath(source_file, actual.to_string()));
+        if actual != serialized {
+            return Err(CompileError::WrongPath(serialized, actual.to_string()));
+        }
+        if let Some(completion) = task.completion.take() {
+            completion.complete();
         }
     }
     Ok(())
@@ -745,13 +1169,279 @@ async fn worker_main_loop(
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
     use std::sync::Arc;
+    use std::time::Duration;
 
-    use uv_cache::Cache;
+    use tokio::sync::Barrier;
+    use uv_cache::{Cache, CacheBucket};
     use uv_configuration::Concurrency;
     use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 
-    use super::WheelCompiler;
+    use super::{BytecodeCacheKey, BytecodeCompiler, WheelCompiler};
+
+    #[test]
+    fn bytecode_cache_key_isolates_interpreters() {
+        let cpython_312 = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 0, "CHECKED_HASH");
+        let cpython_313 = BytecodeCacheKey::new("cpython-313", "f30d0d0a", 0, "CHECKED_HASH");
+        let other_magic = BytecodeCacheKey::new("cpython-312", "aa0d0d0a", 0, "CHECKED_HASH");
+        let optimized = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 1, "CHECKED_HASH");
+        let doubly_optimized = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 2, "CHECKED_HASH");
+        let unchecked = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 0, "UNCHECKED_HASH");
+        let timestamp = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 0, "TIMESTAMP");
+
+        assert_ne!(cpython_312.fingerprint, cpython_313.fingerprint);
+        assert_ne!(cpython_312.fingerprint, other_magic.fingerprint);
+        assert_ne!(cpython_312.fingerprint, optimized.fingerprint);
+        assert_ne!(optimized.fingerprint, doubly_optimized.fingerprint);
+        assert_ne!(cpython_312.fingerprint, unchecked.fingerprint);
+        assert_ne!(unchecked.fingerprint, timestamp.fingerprint);
+        assert_eq!(
+            cpython_312.bytecode_filename(OsStr::new("__init__")),
+            OsStr::new("__init__.cpython-312.pyc")
+        );
+        assert_eq!(
+            optimized.bytecode_filename(OsStr::new("__init__")),
+            OsStr::new("__init__.cpython-312.opt-1.pyc")
+        );
+        assert_eq!(
+            doubly_optimized.bytecode_filename(OsStr::new("__init__")),
+            OsStr::new("__init__.cpython-312.opt-2.pyc")
+        );
+    }
+
+    #[tokio::test]
+    async fn bytecode_compiler_releases_each_wheel_lock_before_compiling_another() {
+        let cache = Cache::temp().expect("cache should be available");
+        let environment = PythonEnvironment::find(
+            &PythonRequest::Any,
+            EnvironmentPreference::Any,
+            PythonPreference::System,
+            &cache,
+        )
+        .expect("Python environment should be available");
+        let concurrency = Concurrency::new(1, 1, 1, 1);
+
+        let first_directory =
+            tempfile::tempdir_in(cache.root()).expect("first wheel directory should exist");
+        let first_package = first_directory.path().join("first_package");
+        fs_err::create_dir_all(&first_package).expect("first package directory should exist");
+        fs_err::write(first_package.join("__init__.py"), "VALUE = 1\n")
+            .expect("first package source should be written");
+        let first_entry = cache.bucket(CacheBucket::Wheels).join("test").join("first");
+        cache
+            .persist(first_directory.path(), &first_entry)
+            .await
+            .expect("first wheel should be persisted");
+        let first_wheel = cache
+            .resolve_link(&first_entry)
+            .expect("first wheel should resolve");
+
+        let second_directory =
+            tempfile::tempdir_in(cache.root()).expect("second wheel directory should exist");
+        let second_package = second_directory.path().join("second_package");
+        fs_err::create_dir_all(&second_package).expect("second package directory should exist");
+        fs_err::write(second_package.join("__init__.py"), "VALUE = 2\n")
+            .expect("second package source should be written");
+        let second_entry = cache
+            .bucket(CacheBucket::Wheels)
+            .join("test")
+            .join("second");
+        cache
+            .persist(second_directory.path(), &second_entry)
+            .await
+            .expect("second wheel should be persisted");
+        let second_wheel = cache
+            .resolve_link(&second_entry)
+            .expect("second wheel should resolve");
+
+        let first_compiler = BytecodeCompiler::new(
+            environment.python_executable(),
+            environment.interpreter(),
+            &concurrency,
+            &cache,
+        )
+        .expect("first compiler should start");
+        let second_compiler = BytecodeCompiler::new(
+            environment.python_executable(),
+            environment.interpreter(),
+            &concurrency,
+            &cache,
+        )
+        .expect("second compiler should start");
+
+        let barrier = Arc::new(Barrier::new(2));
+        let first_barrier = Arc::clone(&barrier);
+        let first_first_wheel = first_wheel.clone();
+        let first_second_wheel = second_wheel.clone();
+        let first_install = async move {
+            first_compiler.compile_wheel(&first_first_wheel).await?;
+            first_barrier.wait().await;
+            first_compiler.compile_wheel(&first_second_wheel).await?;
+            first_compiler.finish().await
+        };
+
+        let second_barrier = Arc::clone(&barrier);
+        let second_install = async move {
+            second_compiler.compile_wheel(&second_wheel).await?;
+            second_barrier.wait().await;
+            second_compiler.compile_wheel(&first_wheel).await?;
+            second_compiler.finish().await
+        };
+
+        let ((first_cache, first_total), (second_cache, second_total)) =
+            tokio::time::timeout(Duration::from_secs(10), async {
+                tokio::try_join!(first_install, second_install)
+            })
+            .await
+            .expect("opposing wheel lock orders should not deadlock")
+            .expect("concurrent wheel compilation should succeed");
+
+        assert_eq!(first_total, 2);
+        assert_eq!(second_total, 2);
+        assert_eq!(first_cache.key.fingerprint, second_cache.key.fingerprint);
+    }
+
+    #[tokio::test]
+    async fn bytecode_compiler_reuses_pool_and_skips_data_directory() {
+        let cache = Cache::temp().expect("cache should be available");
+        let wheel = tempfile::tempdir_in(cache.root()).expect("wheel directory should exist");
+        let package = wheel.path().join("package");
+        let scripts = wheel.path().join("package-1.0.0.data/scripts");
+        fs_err::create_dir_all(&package).expect("package directory should exist");
+        fs_err::create_dir_all(&scripts).expect("scripts directory should exist");
+        fs_err::write(package.join("__init__.py"), "VALUE = 1\n")
+            .expect("package source should be written");
+        fs_err::write(scripts.join("script.py"), "VALUE = 1\n")
+            .expect("script source should be written");
+
+        let environment = PythonEnvironment::find(
+            &PythonRequest::Any,
+            EnvironmentPreference::Any,
+            PythonPreference::System,
+            &cache,
+        )
+        .expect("Python environment should be available");
+        let concurrency = Concurrency::new(1, 1, 1, 1);
+
+        let other_wheel = tempfile::tempdir_in(cache.root()).expect("wheel directory should exist");
+        let other_package = other_wheel.path().join("other_package");
+        fs_err::create_dir_all(&other_package).expect("package directory should exist");
+        fs_err::write(other_package.join("__init__.py"), "VALUE = 2\n")
+            .expect("package source should be written");
+
+        let wheel_entry = cache.bucket(CacheBucket::Wheels).join("test").join("wheel");
+        cache
+            .persist(wheel.path(), &wheel_entry)
+            .await
+            .expect("wheel should be persisted");
+        let wheel = cache
+            .resolve_link(&wheel_entry)
+            .expect("wheel should resolve");
+        let other_wheel_entry = cache
+            .bucket(CacheBucket::Wheels)
+            .join("test")
+            .join("other-wheel");
+        cache
+            .persist(other_wheel.path(), &other_wheel_entry)
+            .await
+            .expect("other wheel should be persisted");
+        let other_wheel = cache
+            .resolve_link(&other_wheel_entry)
+            .expect("other wheel should resolve");
+
+        let compiler = BytecodeCompiler::new(
+            environment.python_executable(),
+            environment.interpreter(),
+            &concurrency,
+            &cache,
+        )
+        .expect("compiler should start");
+        let compiled = compiler
+            .compile_wheel(&wheel)
+            .await
+            .expect("wheel should be queued");
+        let other_compiled = compiler
+            .compile_wheel(&other_wheel)
+            .await
+            .expect("wheel should be queued");
+        let (bytecode_cache, total) = compiler.finish().await.expect("wheels should compile");
+        let wheel_bytecode = bytecode_cache
+            .get(&wheel)
+            .expect("bytecode lookup should succeed")
+            .expect("wheel bytecode should be cached");
+        let other_wheel_bytecode = bytecode_cache
+            .get(&other_wheel)
+            .expect("bytecode lookup should succeed")
+            .expect("other wheel bytecode should be cached");
+
+        assert_eq!(compiled, 1);
+        assert_eq!(other_compiled, 1);
+        assert_eq!(total, 2);
+        assert!(!wheel.join("package/__pycache__").exists());
+        assert!(!other_wheel.join("other_package/__pycache__").exists());
+        assert!(
+            wheel_bytecode
+                .join("package/__pycache__")
+                .read_dir()
+                .expect("package bytecode directory should exist")
+                .next()
+                .is_some()
+        );
+        assert!(
+            other_wheel_bytecode
+                .join("other_package/__pycache__")
+                .read_dir()
+                .expect("other package bytecode directory should exist")
+                .next()
+                .is_some()
+        );
+        assert!(!wheel_bytecode.join("package-1.0.0.data").exists());
+
+        let bytecode_path = wheel_bytecode
+            .join("package/__pycache__")
+            .join(bytecode_cache.key.bytecode_filename(OsStr::new("__init__")));
+        let bytecode = fs_err::read(bytecode_path).expect("package bytecode should be readable");
+        let flags = bytecode
+            .get(4..8)
+            .expect("bytecode has a header")
+            .try_into()
+            .expect("bytecode flags are four bytes");
+        let expected_flags = if bytecode_cache.key.invalidation_mode.as_ref() == "UNCHECKED_HASH" {
+            1
+        } else if bytecode_cache.key.invalidation_mode.as_ref() == "TIMESTAMP" {
+            0
+        } else {
+            3
+        };
+        assert_eq!(
+            u32::from_le_bytes(flags),
+            expected_flags,
+            "cached bytecode should use the configured invalidation mode"
+        );
+
+        let compiler = BytecodeCompiler::new(
+            environment.python_executable(),
+            environment.interpreter(),
+            &concurrency,
+            &cache,
+        )
+        .expect("compiler should start");
+        compiler
+            .compile_wheel(&wheel)
+            .await
+            .expect("cached wheel should be reusable");
+        compiler
+            .compile_wheel(&other_wheel)
+            .await
+            .expect("other cached wheel should be reusable");
+        assert!(
+            compiler.workers.lock().await.is_none(),
+            "cache hits should not start compilation workers"
+        );
+        let (_, total) = compiler.finish().await.expect("cache hits should finish");
+        assert_eq!(total, 2);
+    }
 
     #[tokio::test]
     async fn wheel_compiler_reuses_pool_and_deduplicates_files() {

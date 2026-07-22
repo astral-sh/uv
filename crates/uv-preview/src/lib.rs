@@ -263,6 +263,7 @@ pub enum PreviewFeature {
     ToolInstallLocks = 1 << 36,
     WorkspaceListScripts = 1 << 37,
     NoDistutilsPatch = 1 << 38,
+    PrecompileBytecode = 1 << 39,
 }
 
 impl PreviewFeature {
@@ -308,6 +309,7 @@ impl PreviewFeature {
             Self::ToolInstallLocks => "tool-install-locks",
             Self::WorkspaceListScripts => "workspace-list-scripts",
             Self::NoDistutilsPatch => "no-distutils-patch",
+            Self::PrecompileBytecode => "precompile-bytecode",
         }
     }
 }
@@ -366,6 +368,7 @@ impl FromStr for PreviewFeature {
             "tool-install-locks" => Self::ToolInstallLocks,
             "workspace-list-scripts" => Self::WorkspaceListScripts,
             "no-distutils-patch" => Self::NoDistutilsPatch,
+            "precompile-bytecode" => Self::PrecompileBytecode,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -676,6 +679,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::NoDistutilsPatch.as_str(),
             "no-distutils-patch"
+        );
+        assert_eq!(
+            PreviewFeature::PrecompileBytecode.as_str(),
+            "precompile-bytecode"
         );
     }
 
