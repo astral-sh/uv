@@ -1,6 +1,7 @@
+use std::error::Error;
 use std::fmt;
 
-use anstream::eprintln;
+use anyhow::bail;
 
 use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
@@ -14,27 +15,32 @@ use crate::{
     ResolverInstallerArgs,
 };
 
+/// An error caused by an invalid combination of command-line arguments.
+#[derive(Debug)]
+pub struct ArgumentError(String);
+
+impl fmt::Display for ArgumentError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+impl Error for ArgumentError {}
+
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
-pub fn flag(yes: bool, no: bool, name: &str) -> Option<bool> {
+pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
     match (yes, no) {
-        (true, false) => Some(true),
-        (false, true) => Some(false),
-        (false, false) => None,
+        (true, false) => Ok(Some(true)),
+        (false, true) => Ok(Some(false)),
+        (false, false) => Ok(None),
         (..) => {
-            eprintln!(
-                "{}{} `{}` and `{}` cannot be used together. \
+            bail!(ArgumentError(format!(
+                "`{}` and `{}` cannot be used together. \
                 Boolean flags on different levels are currently not supported \
                 (https://github.com/clap-rs/clap/issues/6049)",
-                "error".bold().red(),
-                ":".bold(),
                 format!("--{name}").green(),
                 format!("--no-{name}").green(),
-            );
-            // No error forwarding since should eventually be solved on the clap side.
-            #[expect(clippy::exit)]
-            {
-                std::process::exit(2);
-            }
+            )));
         }
     }
 }
@@ -172,11 +178,11 @@ pub fn resolve_flag_pair(
     }
 }
 
-/// Check if two flags conflict and exit with an error if they do.
+/// Check if two flags conflict and return an error if they do.
 ///
 /// This function checks if both flags are enabled (truthy) and reports an error if so, including
 /// the source of each flag (CLI or environment variable) in the error message.
-pub fn check_conflicts(flag_a: Flag, flag_b: Flag) {
+pub fn check_conflicts(flag_a: Flag, flag_b: Flag) -> anyhow::Result<()> {
     if let (
         Flag::Enabled {
             source: source_a,
@@ -198,29 +204,29 @@ pub fn check_conflicts(flag_a: Flag, flag_b: Flag) {
             FlagSource::Env(env) => format!("`{env}` (environment variable)"),
             FlagSource::Config => format!("`{name_b}` (workspace configuration)"),
         };
-        eprintln!(
-            "{}{} the argument {} cannot be used with {}",
-            "error".bold().red(),
-            ":".bold(),
+        bail!(ArgumentError(format!(
+            "the argument {} cannot be used with {}",
             display_a.green(),
-            display_b.green(),
-        );
-        #[expect(clippy::exit)]
-        {
-            std::process::exit(2);
-        }
+            display_b.green()
+        )));
     }
+    Ok(())
 }
 
-impl From<RefreshArgs> for Refresh {
-    fn from(value: RefreshArgs) -> Self {
+impl TryFrom<RefreshArgs> for Refresh {
+    type Error = anyhow::Error;
+
+    fn try_from(value: RefreshArgs) -> anyhow::Result<Self> {
         let RefreshArgs {
             refresh,
             no_refresh,
             refresh_package,
         } = value;
 
-        Self::from_args(flag(refresh, no_refresh, "no-refresh"), refresh_package)
+        Ok(Self::from_args(
+            flag(refresh, no_refresh, "no-refresh")?,
+            refresh_package,
+        ))
     }
 }
 
@@ -245,8 +251,10 @@ pub fn indexes_from_args(
     default_index.combine(index)
 }
 
-impl From<ResolverArgs> for PipOptions {
-    fn from(args: ResolverArgs) -> Self {
+impl TryFrom<ResolverArgs> for PipOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(args: ResolverArgs) -> anyhow::Result<Self> {
         let ResolverArgs {
             index_args,
             upgrade,
@@ -272,17 +280,14 @@ impl From<ResolverArgs> for PipOptions {
         } = args;
 
         if !upgrade_group.is_empty() {
-            eprintln!(
-                "{}{} `{}` is not supported in `uv pip` commands",
-                "error".bold().red(),
-                ":".bold(),
-                "--upgrade-group".green(),
-            );
-            std::process::exit(2);
+            bail!(ArgumentError(format!(
+                "`{}` is not supported in `uv pip` commands",
+                "--upgrade-group".green()
+            )));
         }
 
-        Self {
-            upgrade: flag(upgrade, no_upgrade, "no-upgrade"),
+        Ok(Self {
+            upgrade: flag(upgrade, no_upgrade, "no-upgrade")?,
             upgrade_package: Some(upgrade_package),
             index_strategy,
             keyring_provider,
@@ -300,7 +305,7 @@ impl From<ResolverArgs> for PipOptions {
                     .into_iter()
                     .collect::<PackageConfigSettings>()
             }),
-            no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
+            no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
@@ -312,12 +317,14 @@ impl From<ResolverArgs> for PipOptions {
                 Some(no_sources_package)
             },
             ..Self::from(index_args)
-        }
+        })
     }
 }
 
-impl From<InstallerArgs> for PipOptions {
-    fn from(args: InstallerArgs) -> Self {
+impl TryFrom<InstallerArgs> for PipOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(args: InstallerArgs) -> anyhow::Result<Self> {
         let InstallerArgs {
             index_args,
             reinstall,
@@ -338,8 +345,8 @@ impl From<InstallerArgs> for PipOptions {
             exclude_newer_package,
         } = args;
 
-        Self {
-            reinstall: flag(reinstall, no_reinstall, "reinstall"),
+        Ok(Self {
+            reinstall: flag(reinstall, no_reinstall, "reinstall")?,
             reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
@@ -350,11 +357,11 @@ impl From<InstallerArgs> for PipOptions {
                     .into_iter()
                     .collect::<PackageConfigSettings>()
             }),
-            no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
+            no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation")?,
             exclude_newer,
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
-            compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode")?,
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: if no_sources_package.is_empty() {
                 None
@@ -362,12 +369,14 @@ impl From<InstallerArgs> for PipOptions {
                 Some(no_sources_package)
             },
             ..Self::from(index_args)
-        }
+        })
     }
 }
 
-impl From<ResolverInstallerArgs> for PipOptions {
-    fn from(args: ResolverInstallerArgs) -> Self {
+impl TryFrom<ResolverInstallerArgs> for PipOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(args: ResolverInstallerArgs) -> anyhow::Result<Self> {
         let ResolverInstallerArgs {
             index_args,
             upgrade,
@@ -398,19 +407,16 @@ impl From<ResolverInstallerArgs> for PipOptions {
         } = args;
 
         if !upgrade_group.is_empty() {
-            eprintln!(
-                "{}{} `{}` is not supported in `uv pip` commands",
-                "error".bold().red(),
-                ":".bold(),
-                "--upgrade-group".green(),
-            );
-            std::process::exit(2);
+            bail!(ArgumentError(format!(
+                "`{}` is not supported in `uv pip` commands",
+                "--upgrade-group".green()
+            )));
         }
 
-        Self {
-            upgrade: flag(upgrade, no_upgrade, "upgrade"),
+        Ok(Self {
+            upgrade: flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package: Some(upgrade_package),
-            reinstall: flag(reinstall, no_reinstall, "reinstall"),
+            reinstall: flag(reinstall, no_reinstall, "reinstall")?,
             reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
@@ -428,12 +434,12 @@ impl From<ResolverInstallerArgs> for PipOptions {
                     .into_iter()
                     .collect::<PackageConfigSettings>()
             }),
-            no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
+            no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
-            compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode")?,
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: if no_sources_package.is_empty() {
                 None
@@ -441,7 +447,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
                 Some(no_sources_package)
             },
             ..Self::from(index_args)
-        }
+        })
     }
 }
 
@@ -499,7 +505,7 @@ impl From<IndexArgs> for PipOptions {
 pub fn resolver_options(
     resolver_args: ResolverArgs,
     build_args: BuildOptionsArgs,
-) -> ResolverOptions {
+) -> anyhow::Result<ResolverOptions> {
     let ResolverArgs {
         index_args,
         upgrade,
@@ -533,7 +539,7 @@ pub fn resolver_options(
         no_binary_package,
     } = build_args;
 
-    ResolverOptions {
+    Ok(ResolverOptions {
         index: indexes_from_args(
             index_args.default_index.as_ref(),
             index_args.index.as_deref(),
@@ -557,7 +563,7 @@ pub fn resolver_options(
                 .collect()
         }),
         upgrade: Upgrade::from_args(
-            flag(upgrade, no_upgrade, "no-upgrade"),
+            flag(upgrade, no_upgrade, "no-upgrade")?,
             upgrade_package.into_iter().map(Requirement::from).collect(),
             upgrade_group,
         ),
@@ -579,7 +585,7 @@ pub fn resolver_options(
                 .collect::<PackageConfigSettings>()
         }),
         build_isolation: BuildIsolation::from_args(
-            flag(no_build_isolation, build_isolation, "build-isolation"),
+            flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
         extra_build_dependencies: None,
@@ -588,13 +594,13 @@ pub fn resolver_options(
         exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
         link_mode,
         torch_backend: None,
-        no_build: flag(no_build, build, "build"),
+        no_build: flag(no_build, build, "build")?,
         no_build_package: if no_build_package.is_empty() {
             None
         } else {
             Some(no_build_package)
         },
-        no_binary: flag(no_binary, binary, "binary"),
+        no_binary: flag(no_binary, binary, "binary")?,
         no_binary_package: if no_binary_package.is_empty() {
             None
         } else {
@@ -606,14 +612,14 @@ pub fn resolver_options(
         } else {
             Some(no_sources_package)
         },
-    }
+    })
 }
 
 /// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildOptionsArgs`].
 pub fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
-) -> ResolverInstallerOptions {
+) -> anyhow::Result<ResolverInstallerOptions> {
     let index = indexes_from_args(
         resolver_installer_args.index_args.default_index.as_ref(),
         resolver_installer_args.index_args.index.as_deref(),
@@ -626,7 +632,7 @@ pub fn resolver_installer_options_with_indexes(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
     index: Option<Vec<Index>>,
-) -> ResolverInstallerOptions {
+) -> anyhow::Result<ResolverInstallerOptions> {
     let ResolverInstallerArgs {
         index_args,
         upgrade,
@@ -665,7 +671,7 @@ pub fn resolver_installer_options_with_indexes(
         no_binary_package,
     } = build_args;
 
-    ResolverInstallerOptions {
+    Ok(ResolverInstallerOptions {
         index,
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
@@ -686,12 +692,12 @@ pub fn resolver_installer_options_with_indexes(
                 .collect()
         }),
         upgrade: Upgrade::from_args(
-            flag(upgrade, no_upgrade, "upgrade"),
+            flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package.into_iter().map(Requirement::from).collect(),
             upgrade_group,
         ),
         reinstall: Reinstall::from_args(
-            flag(reinstall, no_reinstall, "reinstall"),
+            flag(reinstall, no_reinstall, "reinstall")?,
             reinstall_package,
         ),
         index_strategy,
@@ -712,7 +718,7 @@ pub fn resolver_installer_options_with_indexes(
                 .collect::<PackageConfigSettings>()
         }),
         build_isolation: BuildIsolation::from_args(
-            flag(no_build_isolation, build_isolation, "build-isolation"),
+            flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
         extra_build_dependencies: None,
@@ -720,14 +726,14 @@ pub fn resolver_installer_options_with_indexes(
         exclude_newer,
         exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
         link_mode,
-        compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
-        no_build: flag(no_build, build, "build"),
+        compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode")?,
+        no_build: flag(no_build, build, "build")?,
         no_build_package: if no_build_package.is_empty() {
             None
         } else {
             Some(no_build_package)
         },
-        no_binary: flag(no_binary, binary, "binary"),
+        no_binary: flag(no_binary, binary, "binary")?,
         no_binary_package: if no_binary_package.is_empty() {
             None
         } else {
@@ -740,5 +746,5 @@ pub fn resolver_installer_options_with_indexes(
             Some(no_sources_package)
         },
         torch_backend: None,
-    }
+    })
 }
