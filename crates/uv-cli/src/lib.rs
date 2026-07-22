@@ -1469,6 +1469,19 @@ pub struct PipCompileArgs {
     )]
     pub excludes: Vec<Maybe<PathBuf>>,
 
+    /// Exclude the given packages from resolution.
+    ///
+    /// When a package is excluded, it will be omitted from the dependency list entirely and its own
+    /// dependencies will be ignored during the resolution phase.
+    ///
+    /// May be provided multiple times or multiple values can be provided separated by commas.
+    #[arg(
+        long = "exclude-packages",
+        alias = "exclude-package",
+        value_delimiter = ','
+    )]
+    pub exclude_packages: Vec<PackageName>,
+
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
     ///
@@ -2204,6 +2217,19 @@ pub struct PipInstallArgs {
         value_hint = ValueHint::FilePath,
     )]
     pub excludes: Vec<Maybe<PathBuf>>,
+
+    /// Exclude the given packages from resolution.
+    ///
+    /// When a package is excluded, it will be omitted from the dependency list entirely and its own
+    /// dependencies will be ignored during the resolution phase.
+    ///
+    /// May be provided multiple times or multiple values can be provided separated by commas.
+    #[arg(
+        long = "exclude-packages",
+        alias = "exclude-package",
+        value_delimiter = ','
+    )]
+    pub exclude_packages: Vec<PackageName>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -6005,6 +6031,19 @@ pub struct ToolInstallArgs {
         value_hint = ValueHint::FilePath,
     )]
     pub excludes: Vec<Maybe<PathBuf>>,
+
+    /// Exclude the given packages from resolution.
+    ///
+    /// When a package is excluded, it will be omitted from the dependency list entirely and its own
+    /// dependencies will be ignored during the resolution phase.
+    ///
+    /// May be provided multiple times or multiple values can be provided separated by commas.
+    #[arg(
+        long = "exclude-packages",
+        alias = "exclude-package",
+        value_delimiter = ','
+    )]
+    pub exclude_packages: Vec<PackageName>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
