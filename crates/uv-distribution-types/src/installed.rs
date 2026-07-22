@@ -102,7 +102,7 @@ impl PartialEq for InstalledDist {
 
 impl Eq for InstalledDist {}
 
-/// A built distribution (wheel) that is installed in a virtual environment.
+/// A distribution installed in a Python environment.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum InstalledDistKind {
     /// The distribution was derived from a registry, like `PyPI`.
