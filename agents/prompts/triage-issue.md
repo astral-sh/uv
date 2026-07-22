@@ -43,7 +43,10 @@ Set `type` to exactly one of these repository label names and explain the choice
   types.
 - `bug` when existing behavior is incorrect or does not work as intended. A source-confirmed
   correctness problem is still a bug when the reporter cannot provide a reproduction or frames the
-  report as a question; a documented limitation does not make incorrect behavior correct.
+  report as a question; a documented limitation does not make incorrect behavior correct. Treat
+  misleading user-facing output as incorrect behavior, including counts that overstate unique
+  objects or bytes by repeatedly counting shared underlying data. An explanation for the underlying
+  mechanism does not establish that the reported value is correct.
 - `enhancement` when the issue requests new functionality or an improvement to existing behavior.
 - `question` when the issue primarily asks for clarification or support and no incorrect behavior
   has been established.
