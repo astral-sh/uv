@@ -712,7 +712,7 @@ fn upgrade_updates_multiple_marked_production_dependencies() -> Result<()> {
             "bar>=1",
             "bar<1 ; sys_platform == 'linux'",
             "bar<2 ; sys_platform != 'linux'",
-            "bar<2 ; sys_platform != 'linux'",
+            "BAR<2; sys_platform != 'linux'",
             "foo==1",
         ]
 

@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
@@ -296,7 +296,7 @@ pub(crate) async fn upgrade(
         }
     }
 
-    let mut updated_requirements = Vec::new();
+    let mut updated_requirements = BTreeMap::new();
     for selected in &requirements {
         let Some(specifiers) =
             propose_specifiers(&selected.requirement, &selected.resolved_versions)?
@@ -308,22 +308,19 @@ pub(crate) async fn upgrade(
         let mut proposed_requirement = selected.requirement.clone();
         proposed_requirement.version_or_url = Some(VersionOrUrl::VersionSpecifier(specifiers));
         let replacement = into_verbatim_requirement(proposed_requirement, &selected.package)?;
-        if !updated_requirements
-            .iter()
-            .any(|update: &RequirementUpdate| {
-                update.dependency_type == selected.dependency_type
-                    && update.existing == existing
-                    && update.replacement == replacement
-            })
-        {
-            updated_requirements.push(RequirementUpdate {
+        updated_requirements
+            .entry((
+                selected.dependency_type.toml_table_name().into_owned(),
+                existing.clone(),
+                replacement.clone(),
+            ))
+            .or_insert_with(|| RequirementUpdate {
                 package: selected.package.clone(),
                 dependency_type: selected.dependency_type.clone(),
                 original_text: selected.original_text.clone(),
                 existing,
                 replacement,
             });
-        }
     }
 
     if !updated_requirements.is_empty() {
@@ -331,7 +328,7 @@ pub(crate) async fn upgrade(
             &project.current_project().pyproject_toml().raw,
             DependencyTarget::PyProjectToml,
         )?;
-        apply_requirement_replacements(&mut pyproject, updated_requirements.iter())?;
+        apply_requirement_replacements(&mut pyproject, updated_requirements.values())?;
         let pyproject_path = project.project_root().join("pyproject.toml");
         fs_err::write(pyproject_path, pyproject.to_string())?;
     }
@@ -348,7 +345,7 @@ pub(crate) async fn upgrade(
     } else {
         writeln!(printer.stderr(), "No version change for {package}")?;
     }
-    for update in updated_requirements {
+    for update in updated_requirements.into_values() {
         writeln!(
             printer.stderr(),
             "Updated requirement: `{}` -> `{}`",
