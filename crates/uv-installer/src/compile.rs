@@ -1,9 +1,10 @@
 use std::collections::HashSet;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 use std::{env, io, panic};
 
@@ -13,14 +14,14 @@ use tempfile::{TempDir, tempdir_in};
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::{Mutex, Notify, oneshot};
 use tracing::{debug, instrument};
 use walkdir::WalkDir;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry};
 use uv_cache_key::cache_digest;
 use uv_configuration::Concurrency;
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::Simplified;
 use uv_python::Interpreter;
 use uv_static::EnvVars;
 
@@ -31,11 +32,13 @@ const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_mins(1);
 type WorkerOutcome = std::thread::Result<Result<(), CompileError>>;
 type WorkerHandle = oneshot::Receiver<WorkerOutcome>;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 struct CompileTask {
     source: String,
     output: Option<String>,
     display: Option<String>,
+    #[serde(skip)]
+    completion: Option<WheelCompilationTask>,
 }
 
 impl CompileTask {
@@ -44,14 +47,21 @@ impl CompileTask {
             source: source_file.display().to_string(),
             output: None,
             display: None,
+            completion: None,
         }
     }
 
-    fn cached(source_file: &Path, output_file: &Path, display_file: &Path) -> Self {
+    fn cached(
+        source_file: &Path,
+        output_file: &Path,
+        display_file: &Path,
+        completion: WheelCompilationTask,
+    ) -> Self {
         Self {
             source: source_file.display().to_string(),
             output: Some(output_file.display().to_string()),
             display: Some(display_file.display().to_string()),
+            completion: Some(completion),
         }
     }
 }
@@ -256,13 +266,20 @@ fn count_wheel_python_source_files(dir: &Path) -> Result<usize, CompileError> {
 struct BytecodeCacheKey {
     fingerprint: String,
     cache_tag: Box<str>,
+    optimization_level: u32,
 }
 
 impl BytecodeCacheKey {
-    fn new(cache_tag: &str, magic_number: &str) -> Self {
+    fn new(cache_tag: &str, magic_number: &str, optimization_level: u32) -> Self {
         Self {
-            fingerprint: cache_digest(&(cache_tag, magic_number, 0u8, "checked-hash")),
+            fingerprint: cache_digest(&(
+                cache_tag,
+                magic_number,
+                optimization_level,
+                "checked-hash",
+            )),
             cache_tag: cache_tag.into(),
+            optimization_level,
         }
     }
 
@@ -270,7 +287,27 @@ impl BytecodeCacheKey {
         let cache_tag = interpreter
             .bytecode_cache_tag()
             .ok_or(CompileError::MissingCacheTag)?;
-        Ok(Self::new(cache_tag, interpreter.bytecode_magic_number()))
+        let optimization_level = match env::var("PYTHONOPTIMIZE") {
+            Ok(value) if value.is_empty() => 0,
+            Ok(value) => value.trim_start().parse().unwrap_or(1),
+            Err(env::VarError::NotPresent) => 0,
+            Err(env::VarError::NotUnicode(_)) => 1,
+        };
+        Ok(Self::new(
+            cache_tag,
+            interpreter.bytecode_magic_number(),
+            optimization_level,
+        ))
+    }
+
+    fn bytecode_filename(&self, stem: &OsStr) -> OsString {
+        let mut filename = OsString::from(stem);
+        filename.push(format!(".{}", self.cache_tag));
+        if self.optimization_level != 0 {
+            filename.push(format!(".opt-{}", self.optimization_level));
+        }
+        filename.push(".pyc");
+        filename
     }
 }
 
@@ -315,10 +352,66 @@ struct Workers {
     tempdir: TempDir,
 }
 
-struct PendingBytecode {
-    tempdir: TempDir,
-    entry: CacheEntry,
-    _lock: LockedFile,
+#[derive(Debug)]
+struct WheelCompilation {
+    pending: AtomicUsize,
+    failed: AtomicBool,
+    completed: Notify,
+}
+
+impl WheelCompilation {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            // Keep the producer registered until every task has been queued.
+            pending: AtomicUsize::new(1),
+            failed: AtomicBool::new(false),
+            completed: Notify::new(),
+        })
+    }
+
+    fn task(self: &Arc<Self>) -> WheelCompilationTask {
+        self.pending.fetch_add(1, Ordering::Relaxed);
+        WheelCompilationTask {
+            compilation: Arc::clone(self),
+            completed: false,
+        }
+    }
+
+    fn complete_task(&self, completed: bool) {
+        if !completed {
+            self.failed.store(true, Ordering::Release);
+        }
+        if self.pending.fetch_sub(1, Ordering::AcqRel) == 1 {
+            self.completed.notify_one();
+        }
+    }
+
+    async fn finish(&self) -> Result<(), CompileError> {
+        self.complete_task(true);
+        self.completed.notified().await;
+        if self.failed.load(Ordering::Acquire) {
+            return Err(CompileError::WorkerDisappeared);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct WheelCompilationTask {
+    compilation: Arc<WheelCompilation>,
+    completed: bool,
+}
+
+impl WheelCompilationTask {
+    fn complete(mut self) {
+        self.completed = true;
+    }
+}
+
+impl Drop for WheelCompilationTask {
+    fn drop(&mut self) {
+        self.compilation.complete_task(self.completed);
+    }
 }
 
 /// A shared pool of Python interpreters for populating the persistent bytecode cache.
@@ -328,7 +421,6 @@ pub struct BytecodeCompiler {
     worker_count: usize,
     workers: Mutex<Option<Workers>>,
     send_error: Mutex<Option<SendError<CompileTask>>>,
-    pending: Mutex<Vec<PendingBytecode>>,
     source_files: AtomicUsize,
 }
 
@@ -345,7 +437,6 @@ impl BytecodeCompiler {
             worker_count: concurrency.installs,
             workers: Mutex::new(None),
             send_error: Mutex::new(None),
-            pending: Mutex::new(Vec::new()),
             source_files: AtomicUsize::new(0),
         })
     }
@@ -405,6 +496,7 @@ impl BytecodeCompiler {
         }
 
         let tempdir = tempdir_in(self.cache.cache.root()).map_err(CompileError::TempFile)?;
+        let completion = WheelCompilation::new();
         let mut source_files = 0;
         for source_file in wheel_python_source_files(dir) {
             let source_file = source_file?;
@@ -417,13 +509,11 @@ impl BytecodeCompiler {
             let Some(stem) = relative.file_stem() else {
                 return Err(CompileError::WheelSource(source_file));
             };
-            let mut filename = OsString::from(stem);
-            filename.push(format!(".{}.pyc", self.cache.key.cache_tag));
             let output_file = tempdir
                 .path()
                 .join(parent)
                 .join("__pycache__")
-                .join(filename);
+                .join(self.cache.key.bytecode_filename(stem));
             fs_err::create_dir_all(
                 output_file
                     .parent()
@@ -433,10 +523,18 @@ impl BytecodeCompiler {
 
             source_files += 1;
             let sender = self.sender().await?;
-            if let Err(err) = sender
-                .send(CompileTask::cached(&source_file, &output_file, relative))
+            if let Err(mut err) = sender
+                .send(CompileTask::cached(
+                    &source_file,
+                    &output_file,
+                    relative,
+                    completion.task(),
+                ))
                 .await
             {
+                // The failed task will remain in `send_error` until the worker pool is joined.
+                // Release its completion handle now so this wheel cannot wait forever.
+                drop(err.0.completion.take());
                 let mut send_error = self.send_error.lock().await;
                 if send_error.is_none() {
                     *send_error = Some(err);
@@ -444,12 +542,15 @@ impl BytecodeCompiler {
                 break;
             }
         }
+        completion.finish().await?;
+        self.cache
+            .cache
+            .persist(tempdir.path(), entry.path())
+            .await
+            .map_err(CompileError::BytecodeCache)?;
+        // Never retain one wheel's lock while waiting for another wheel's lock.
+        drop(lock);
         self.source_files.fetch_add(source_files, Ordering::Relaxed);
-        self.pending.lock().await.push(PendingBytecode {
-            tempdir,
-            entry,
-            _lock: lock,
-        });
         Ok(source_files)
     }
 
@@ -459,7 +560,6 @@ impl BytecodeCompiler {
             cache,
             workers,
             send_error,
-            pending,
             source_files,
             ..
         } = self;
@@ -473,14 +573,6 @@ impl BytecodeCompiler {
             wait_for_workers(worker_handles, send_error.into_inner()).await?;
             // Keep the compile script alive until all workers have exited.
             drop(tempdir);
-        }
-
-        for pending in pending.into_inner() {
-            cache
-                .cache
-                .persist(pending.tempdir.path(), pending.entry.path())
-                .await
-                .map_err(CompileError::BytecodeCache)?;
         }
 
         Ok((cache, source_files.into_inner()))
@@ -809,11 +901,11 @@ async fn worker_main_loop(
     timeout: Option<Duration>,
 ) -> Result<(), CompileError> {
     let mut out_line = String::new();
-    while let Ok(task) = receiver.recv().await {
+    while let Ok(mut task) = receiver.recv().await {
         let source_file = task.source.clone();
-        let task = serde_json::to_string(&task)?;
+        let serialized = serde_json::to_string(&task)?;
         // Luckily, LF alone works on windows too
-        let bytes = format!("{task}\n").into_bytes();
+        let bytes = format!("{serialized}\n").into_bytes();
 
         let python_handle = async {
             child_stdin
@@ -850,8 +942,11 @@ async fn worker_main_loop(
         // This is a sanity check, if we don't get the path back something has gone wrong, e.g.
         // we're not actually running a python interpreter.
         let actual = out_line.trim_end_matches(['\n', '\r']);
-        if actual != task {
-            return Err(CompileError::WrongPath(task, actual.to_string()));
+        if actual != serialized {
+            return Err(CompileError::WrongPath(serialized, actual.to_string()));
+        }
+        if let Some(completion) = task.completion.take() {
+            completion.complete();
         }
     }
     Ok(())
@@ -859,6 +954,11 @@ async fn worker_main_loop(
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use tokio::sync::Barrier;
     use uv_cache::{Cache, CacheBucket};
     use uv_configuration::Concurrency;
     use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
@@ -867,12 +967,120 @@ mod tests {
 
     #[test]
     fn bytecode_cache_key_isolates_interpreters() {
-        let cpython_312 = BytecodeCacheKey::new("cpython-312", "cb0d0d0a");
-        let cpython_313 = BytecodeCacheKey::new("cpython-313", "f30d0d0a");
-        let other_magic = BytecodeCacheKey::new("cpython-312", "aa0d0d0a");
+        let cpython_312 = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 0);
+        let cpython_313 = BytecodeCacheKey::new("cpython-313", "f30d0d0a", 0);
+        let other_magic = BytecodeCacheKey::new("cpython-312", "aa0d0d0a", 0);
+        let optimized = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 1);
+        let doubly_optimized = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 2);
 
         assert_ne!(cpython_312.fingerprint, cpython_313.fingerprint);
         assert_ne!(cpython_312.fingerprint, other_magic.fingerprint);
+        assert_ne!(cpython_312.fingerprint, optimized.fingerprint);
+        assert_ne!(optimized.fingerprint, doubly_optimized.fingerprint);
+        assert_eq!(
+            cpython_312.bytecode_filename(OsStr::new("__init__")),
+            OsStr::new("__init__.cpython-312.pyc")
+        );
+        assert_eq!(
+            optimized.bytecode_filename(OsStr::new("__init__")),
+            OsStr::new("__init__.cpython-312.opt-1.pyc")
+        );
+        assert_eq!(
+            doubly_optimized.bytecode_filename(OsStr::new("__init__")),
+            OsStr::new("__init__.cpython-312.opt-2.pyc")
+        );
+    }
+
+    #[tokio::test]
+    async fn bytecode_compiler_releases_each_wheel_lock_before_compiling_another() {
+        let cache = Cache::temp().expect("cache should be available");
+        let environment = PythonEnvironment::find(
+            &PythonRequest::Any,
+            EnvironmentPreference::Any,
+            PythonPreference::System,
+            &cache,
+        )
+        .expect("Python environment should be available");
+        let concurrency = Concurrency::new(1, 1, 1, 1);
+
+        let first_directory =
+            tempfile::tempdir_in(cache.root()).expect("first wheel directory should exist");
+        let first_package = first_directory.path().join("first_package");
+        fs_err::create_dir_all(&first_package).expect("first package directory should exist");
+        fs_err::write(first_package.join("__init__.py"), "VALUE = 1\n")
+            .expect("first package source should be written");
+        let first_entry = cache.bucket(CacheBucket::Wheels).join("test").join("first");
+        cache
+            .persist(first_directory.path(), &first_entry)
+            .await
+            .expect("first wheel should be persisted");
+        let first_wheel = cache
+            .resolve_link(&first_entry)
+            .expect("first wheel should resolve");
+
+        let second_directory =
+            tempfile::tempdir_in(cache.root()).expect("second wheel directory should exist");
+        let second_package = second_directory.path().join("second_package");
+        fs_err::create_dir_all(&second_package).expect("second package directory should exist");
+        fs_err::write(second_package.join("__init__.py"), "VALUE = 2\n")
+            .expect("second package source should be written");
+        let second_entry = cache
+            .bucket(CacheBucket::Wheels)
+            .join("test")
+            .join("second");
+        cache
+            .persist(second_directory.path(), &second_entry)
+            .await
+            .expect("second wheel should be persisted");
+        let second_wheel = cache
+            .resolve_link(&second_entry)
+            .expect("second wheel should resolve");
+
+        let first_compiler = BytecodeCompiler::new(
+            environment.python_executable(),
+            environment.interpreter(),
+            &concurrency,
+            &cache,
+        )
+        .expect("first compiler should start");
+        let second_compiler = BytecodeCompiler::new(
+            environment.python_executable(),
+            environment.interpreter(),
+            &concurrency,
+            &cache,
+        )
+        .expect("second compiler should start");
+
+        let barrier = Arc::new(Barrier::new(2));
+        let first_barrier = Arc::clone(&barrier);
+        let first_first_wheel = first_wheel.clone();
+        let first_second_wheel = second_wheel.clone();
+        let first_install = async move {
+            first_compiler.compile_wheel(&first_first_wheel).await?;
+            first_barrier.wait().await;
+            first_compiler.compile_wheel(&first_second_wheel).await?;
+            first_compiler.finish().await
+        };
+
+        let second_barrier = Arc::clone(&barrier);
+        let second_install = async move {
+            second_compiler.compile_wheel(&second_wheel).await?;
+            second_barrier.wait().await;
+            second_compiler.compile_wheel(&first_wheel).await?;
+            second_compiler.finish().await
+        };
+
+        let ((first_cache, first_total), (second_cache, second_total)) =
+            tokio::time::timeout(Duration::from_secs(10), async {
+                tokio::try_join!(first_install, second_install)
+            })
+            .await
+            .expect("opposing wheel lock orders should not deadlock")
+            .expect("concurrent wheel compilation should succeed");
+
+        assert_eq!(first_total, 2);
+        assert_eq!(second_total, 2);
+        assert_eq!(first_cache.key.fingerprint, second_cache.key.fingerprint);
     }
 
     #[tokio::test]
@@ -971,17 +1179,10 @@ mod tests {
         );
         assert!(!wheel_bytecode.join("package-1.0.0.data").exists());
 
-        let bytecode = fs_err::read(
-            wheel_bytecode
-                .join("package/__pycache__")
-                .read_dir()
-                .expect("package bytecode directory should exist")
-                .next()
-                .expect("package bytecode should exist")
-                .expect("package bytecode should be readable")
-                .path(),
-        )
-        .expect("package bytecode should be readable");
+        let bytecode_path = wheel_bytecode
+            .join("package/__pycache__")
+            .join(bytecode_cache.key.bytecode_filename(OsStr::new("__init__")));
+        let bytecode = fs_err::read(bytecode_path).expect("package bytecode should be readable");
         let flags = bytecode
             .get(4..8)
             .expect("bytecode has a header")

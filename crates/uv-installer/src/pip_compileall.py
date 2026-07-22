@@ -79,7 +79,7 @@ with warnings.catch_warnings():
                     cfile=output_file,
                     dfile=display_file,
                     doraise=True,
-                    optimize=0,
+                    optimize=-1,
                     invalidation_mode=py_compile.PycInvalidationMode.CHECKED_HASH,
                 )
             except py_compile.PyCompileError:

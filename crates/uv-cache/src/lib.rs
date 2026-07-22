@@ -574,10 +574,11 @@ impl Cache {
             summary += bucket.remove(self, name)?;
         }
 
-        let source_references = self
-            .find_archive_references_in(&[CacheBucket::SourceDistributions, CacheBucket::Wheels])?;
-        summary += self.remove_unreferenced_bytecode(&source_references)?;
-        let remaining_references = self.find_archive_references()?;
+        summary += self.remove_unreferenced_bytecode(&references)?;
+
+        if references.is_empty() {
+            return Ok(summary);
+        }
 
         // Only remove targets in the archive bucket. Cache entries may contain unexpected links
         // to paths outside the cache.
@@ -585,8 +586,8 @@ impl Cache {
 
         // Remove archives that were referenced before this package was removed and are no longer
         // referenced afterwards.
-        for target in references.keys() {
-            if target.starts_with(&archive_root) && !remaining_references.contains_key(target) {
+        for (target, references) in references {
+            if target.starts_with(&archive_root) && references.iter().all(|path| !path.exists()) {
                 debug!("Removing dangling cache entry: {}", target.display());
                 summary += rm_rf(target)?;
             }
@@ -703,12 +704,10 @@ impl Cache {
             }
         }
 
-        let source_references = self
-            .find_archive_references_in(&[CacheBucket::SourceDistributions, CacheBucket::Wheels])?;
-        summary += self.remove_unreferenced_bytecode(&source_references)?;
-
-        // Fourth, remove any unused archives (by searching for archives that are not symlinked).
+        // Fourth, find archive references once, remove bytecode for source wheels that are no
+        // longer referenced, then use the surviving links to remove unused archives.
         let references = self.find_archive_references()?;
+        summary += self.remove_unreferenced_bytecode(&references)?;
 
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
             Ok(entries) => {
@@ -716,7 +715,10 @@ impl Cache {
                     let entry = entry?;
                     let path = entry.path();
                     let target = fs_err::canonicalize(&path)?;
-                    if !references.contains_key(&target) {
+                    if references
+                        .get(&target)
+                        .is_none_or(|references| references.iter().all(|path| !path.exists()))
+                    {
                         debug!("Removing dangling cache archive: {}", path.display());
                         summary += rm_rf(path)?;
                     }
@@ -732,7 +734,7 @@ impl Cache {
     /// Remove bytecode entries whose source wheel archive is no longer referenced.
     fn remove_unreferenced_bytecode(
         &self,
-        source_references: &FxHashMap<PathBuf, Vec<PathBuf>>,
+        archive_references: &FxHashMap<PathBuf, Vec<PathBuf>>,
     ) -> Result<Removal, io::Error> {
         let mut summary = Removal::default();
         let entries = match fs_err::read_dir(self.bucket(CacheBucket::Bytecode)) {
@@ -740,6 +742,10 @@ impl Cache {
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(summary),
             Err(err) => return Err(err),
         };
+        let source_buckets = [
+            self.bucket(CacheBucket::SourceDistributions),
+            self.bucket(CacheBucket::Wheels),
+        ];
 
         for entry in entries {
             let entry = entry?;
@@ -751,7 +757,15 @@ impl Cache {
             let source = self.bucket(CacheBucket::Archive).join(entry.file_name());
             let referenced = fs_err::canonicalize(&source)
                 .ok()
-                .is_some_and(|source| source_references.contains_key(&source));
+                .and_then(|source| archive_references.get(&source))
+                .is_some_and(|references| {
+                    references.iter().any(|reference| {
+                        source_buckets
+                            .iter()
+                            .any(|bucket| reference.starts_with(bucket))
+                            && reference.exists()
+                    })
+                });
             if !referenced {
                 debug!(
                     "Removing bytecode for an unused wheel archive: {}",
@@ -771,20 +785,12 @@ impl Cache {
     ///
     /// Returns a map from archive path to paths that reference it.
     fn find_archive_references(&self) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
-        self.find_archive_references_in(&[
+        let mut references = FxHashMap::<PathBuf, Vec<PathBuf>>::default();
+        for bucket in [
             CacheBucket::SourceDistributions,
             CacheBucket::Wheels,
             CacheBucket::Bytecode,
-        ])
-    }
-
-    /// Find archive references in the given cache buckets.
-    fn find_archive_references_in(
-        &self,
-        buckets: &[CacheBucket],
-    ) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
-        let mut references = FxHashMap::<PathBuf, Vec<PathBuf>>::default();
-        for bucket in buckets.iter().copied() {
+        ] {
             let bucket_path = self.bucket(bucket);
             if bucket_path.is_dir() {
                 let walker = walkdir::WalkDir::new(&bucket_path).into_iter();
@@ -1568,6 +1574,41 @@ mod tests {
 
         fs_err::remove_file(&wheel_entry).expect("wheel reference should be removed");
         cache.prune(false).expect("unreferenced cache should prune");
+        assert!(!cache.archive(&wheel_id).exists());
+        assert!(!cache.archive(&bytecode_id).exists());
+        assert!(!bytecode_entry.path().exists());
+    }
+
+    #[tokio::test]
+    async fn remove_package_removes_cached_bytecode() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().expect("cache root should exist");
+        let cache = Cache::from_path(cache_root.path());
+        fs_err::create_dir_all(cache.root()).expect("cache directory should exist");
+
+        let wheel = tempfile::tempdir_in(cache.root()).expect("wheel directory should exist");
+        fs_err::write(wheel.path().join("module.py"), "VALUE = 1\n")
+            .expect("wheel source should be written");
+        let wheel_entry = cache.bucket(CacheBucket::Wheels).join("pypi/package/wheel");
+        let wheel_id = cache
+            .persist(wheel.path(), &wheel_entry)
+            .await
+            .expect("wheel should be persisted");
+
+        let bytecode = tempfile::tempdir_in(cache.root()).expect("bytecode directory should exist");
+        fs_err::write(bytecode.path().join("module.pyc"), "bytecode")
+            .expect("bytecode should be written");
+        let bytecode_entry = cache.entry(CacheBucket::Bytecode, &wheel_id, "fingerprint");
+        let bytecode_id = cache
+            .persist(bytecode.path(), bytecode_entry.path())
+            .await
+            .expect("bytecode should be persisted");
+
+        cache
+            .remove(&"package".parse().expect("package name should be valid"))
+            .expect("package should be removed");
+
         assert!(!cache.archive(&wheel_id).exists());
         assert!(!cache.archive(&bytecode_id).exists());
         assert!(!bytecode_entry.path().exists());

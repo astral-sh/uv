@@ -1,6 +1,7 @@
 //! Common operations shared across the `pip` API and subcommands.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::env;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -775,6 +776,20 @@ impl InstallationPlan {
                 PreviewFeature::PrecompileBytecode
             );
         }
+
+        // An external Python bytecode cache does not use wheel-relative `__pycache__` overlays.
+        // Compile directly into the configured prefix instead of populating an unusable cache.
+        let compile = if env::var_os("PYTHONPYCACHEPREFIX").is_some() {
+            match compile {
+                Some(BytecodeCompilation::PrecompileAll) => Some(BytecodeCompilation::All),
+                Some(BytecodeCompilation::PrecompileInstalled) => {
+                    Some(BytecodeCompilation::Installed)
+                }
+                compile => compile,
+            }
+        } else {
+            compile
+        };
 
         if dry_run.enabled() {
             return report_dry_run(
