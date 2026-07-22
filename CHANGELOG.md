@@ -3,6 +3,35 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.31
+
+Released on 2026-07-21.
+
+### Enhancements
+
+- Allow workspace sources to reference members in another workspace by path ([#18401](https://github.com/astral-sh/uv/pull/18401))
+- Support `.venv` files containing paths to centralized project environments ([#20022](https://github.com/astral-sh/uv/pull/20022))
+- Update bundled Windows timezone data to IANA 2026c ([#20554](https://github.com/astral-sh/uv/pull/20554))
+
+### Preview features
+
+- Add an index-specific `hash-algorithm` setting for lockfile generation ([#20605](https://github.com/astral-sh/uv/pull/20605))
+
+### Configuration
+
+- Add `audit.malware-check` and `audit.malware-check-url` settings ([#20587](https://github.com/astral-sh/uv/pull/20587))
+
+### Performance
+
+- Avoid quadratic work when deduplicating transitive conflicts ([#20578](https://github.com/astral-sh/uv/pull/20578))
+
+### Bug fixes
+
+- Suggest `--emit-build-options` for unsupported `uv pip compile --emit-options` ([#20582](https://github.com/astral-sh/uv/pull/20582))
+- Reject source distributions and wheels with mismatched package names ([#20432](https://github.com/astral-sh/uv/pull/20432))
+- Avoid retrying TLS certificate verification failures ([#16245](https://github.com/astral-sh/uv/pull/16245))
+- Avoid warnings about `uv_build` settings for in-tree build backends ([#20153](https://github.com/astral-sh/uv/pull/20153))
+
 ## 0.11.30
 
 Released on 2026-07-20.
