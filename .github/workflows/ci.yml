@@ -80,7 +80,7 @@ jobs:
             [[ "$file" == "rust-toolchain.toml" || "$file" == "crates/uv-build/rust-toolchain.toml" || "$file" =~ ^\.cargo/ ]] && rust_config_changed=1
             [[ "$file" == "pyproject.toml" || "$file" =~ ^crates/.*/pyproject\.toml$ ]] && python_config_changed=1
             [[ "$file" =~ ^\.github/workflows/.*\.yml$ ]] && workflow_changed=1
-            [[ "$file" == ".github/workflows/build-release-binaries.yml" || "$file" == ".github/workflows/release.yml" ]] && release_workflow_changed=1
+            [[ "$file" == ".github/workflows/build-release-binaries.yml" || "$file" == ".github/workflows/sign-release-binaries.yml" || "$file" == ".github/workflows/release.yml" ]] && release_workflow_changed=1
             [[ "$file" == "scripts/check_uv_wheel_contents.py" || "$file" == "scripts/patch-dist-manifest-checksums.py" || "$file" == "scripts/repair-sdist-cargo-lock.py" ]] && release_build_changed=1
             [[ "$file" == ".github/workflows/ci.yml" ]] && ci_workflow_changed=1
             [[ "$file" == "uv.schema.json" ]] && schema_changed=1
@@ -272,6 +272,14 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
     uses: ./.github/workflows/build-release-binaries.yml
+    secrets: inherit
+
+  sign-release-binaries:
+    needs:
+      - plan
+      - build-release-binaries
+    if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && needs.plan.outputs.build-release-binaries == 'true' }}
+    uses: ./.github/workflows/sign-release-binaries.yml
     secrets: inherit
 
   build-docker:
