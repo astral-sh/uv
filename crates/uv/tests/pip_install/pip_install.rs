@@ -370,6 +370,44 @@ fn precompile_bytecode_respects_python_pycache_prefix() -> Result<()> {
     Ok(())
 }
 
+/// Fall back to in-place compilation when timestamp invalidation is explicitly requested.
+#[test]
+fn precompile_bytecode_respects_timestamp_invalidation_mode() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("sniffio==1.3.1")
+        .arg("--preview-features")
+        .arg("precompile-bytecode")
+        .arg("--precompile-bytecode")
+        .env(EnvVars::PYC_INVALIDATION_MODE, "TIMESTAMP"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    let bytecode = fs_err::read(
+        context
+            .site_packages()
+            .join("sniffio/__pycache__/__init__.cpython-312.pyc"),
+    )?;
+    let flags = bytecode
+        .get(4..8)
+        .context("Python bytecode should include invalidation flags")?
+        .try_into()?;
+    assert_eq!(u32::from_le_bytes(flags), 0);
+    assert!(!context.cache_dir.join("bytecode-v0").exists());
+
+    Ok(())
+}
+
 /// Compile symlinked source files installed by the current operation.
 #[test]
 #[cfg(unix)]

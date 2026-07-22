@@ -37,6 +37,7 @@ struct CompileTask {
     source: String,
     output: Option<String>,
     display: Option<String>,
+    invalidation_mode: Option<String>,
     #[serde(skip)]
     completion: Option<WheelCompilationTask>,
 }
@@ -47,6 +48,7 @@ impl CompileTask {
             source: source_file.display().to_string(),
             output: None,
             display: None,
+            invalidation_mode: None,
             completion: None,
         }
     }
@@ -55,12 +57,14 @@ impl CompileTask {
         source_file: &Path,
         output_file: &Path,
         display_file: &Path,
+        invalidation_mode: &str,
         completion: WheelCompilationTask,
     ) -> Self {
         Self {
             source: source_file.display().to_string(),
             output: Some(output_file.display().to_string()),
             display: Some(display_file.display().to_string()),
+            invalidation_mode: Some(invalidation_mode.to_owned()),
             completion: Some(completion),
         }
     }
@@ -267,19 +271,26 @@ struct BytecodeCacheKey {
     fingerprint: String,
     cache_tag: Box<str>,
     optimization_level: u32,
+    invalidation_mode: Box<str>,
 }
 
 impl BytecodeCacheKey {
-    fn new(cache_tag: &str, magic_number: &str, optimization_level: u32) -> Self {
+    fn new(
+        cache_tag: &str,
+        magic_number: &str,
+        optimization_level: u32,
+        invalidation_mode: &str,
+    ) -> Self {
         Self {
             fingerprint: cache_digest(&(
                 cache_tag,
                 magic_number,
                 optimization_level,
-                "checked-hash",
+                invalidation_mode,
             )),
             cache_tag: cache_tag.into(),
             optimization_level,
+            invalidation_mode: invalidation_mode.into(),
         }
     }
 
@@ -293,10 +304,13 @@ impl BytecodeCacheKey {
             Err(env::VarError::NotPresent) => 0,
             Err(env::VarError::NotUnicode(_)) => 1,
         };
+        let invalidation_mode =
+            env::var(EnvVars::PYC_INVALIDATION_MODE).unwrap_or_else(|_| "CHECKED_HASH".to_string());
         Ok(Self::new(
             cache_tag,
             interpreter.bytecode_magic_number(),
             optimization_level,
+            &invalidation_mode,
         ))
     }
 
@@ -528,6 +542,7 @@ impl BytecodeCompiler {
                     &source_file,
                     &output_file,
                     relative,
+                    &self.cache.key.invalidation_mode,
                     completion.task(),
                 ))
                 .await
@@ -967,16 +982,20 @@ mod tests {
 
     #[test]
     fn bytecode_cache_key_isolates_interpreters() {
-        let cpython_312 = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 0);
-        let cpython_313 = BytecodeCacheKey::new("cpython-313", "f30d0d0a", 0);
-        let other_magic = BytecodeCacheKey::new("cpython-312", "aa0d0d0a", 0);
-        let optimized = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 1);
-        let doubly_optimized = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 2);
+        let cpython_312 = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 0, "CHECKED_HASH");
+        let cpython_313 = BytecodeCacheKey::new("cpython-313", "f30d0d0a", 0, "CHECKED_HASH");
+        let other_magic = BytecodeCacheKey::new("cpython-312", "aa0d0d0a", 0, "CHECKED_HASH");
+        let optimized = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 1, "CHECKED_HASH");
+        let doubly_optimized = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 2, "CHECKED_HASH");
+        let unchecked = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 0, "UNCHECKED_HASH");
+        let timestamp = BytecodeCacheKey::new("cpython-312", "cb0d0d0a", 0, "TIMESTAMP");
 
         assert_ne!(cpython_312.fingerprint, cpython_313.fingerprint);
         assert_ne!(cpython_312.fingerprint, other_magic.fingerprint);
         assert_ne!(cpython_312.fingerprint, optimized.fingerprint);
         assert_ne!(optimized.fingerprint, doubly_optimized.fingerprint);
+        assert_ne!(cpython_312.fingerprint, unchecked.fingerprint);
+        assert_ne!(unchecked.fingerprint, timestamp.fingerprint);
         assert_eq!(
             cpython_312.bytecode_filename(OsStr::new("__init__")),
             OsStr::new("__init__.cpython-312.pyc")
@@ -1188,10 +1207,17 @@ mod tests {
             .expect("bytecode has a header")
             .try_into()
             .expect("bytecode flags are four bytes");
+        let expected_flags = if bytecode_cache.key.invalidation_mode.as_ref() == "UNCHECKED_HASH" {
+            1
+        } else if bytecode_cache.key.invalidation_mode.as_ref() == "TIMESTAMP" {
+            0
+        } else {
+            3
+        };
         assert_eq!(
             u32::from_le_bytes(flags),
-            3,
-            "cached bytecode should use checked-hash invalidation"
+            expected_flags,
+            "cached bytecode should use the configured invalidation mode"
         );
 
         let compiler = BytecodeCompiler::new(

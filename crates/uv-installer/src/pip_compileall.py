@@ -71,8 +71,8 @@ with warnings.catch_warnings():
             )
         else:
             # Keep cached bytecode independent of its eventual environment: a wheel-relative
-            # filename avoids embedding the cache path in tracebacks, and checked hashes remain
-            # valid when installation changes the source mtime.
+            # filename avoids embedding the cache path in tracebacks, and the selected
+            # invalidation mode preserves the configured bytecode semantics.
             try:
                 py_compile.compile(
                     path,
@@ -80,7 +80,9 @@ with warnings.catch_warnings():
                     dfile=display_file,
                     doraise=True,
                     optimize=-1,
-                    invalidation_mode=py_compile.PycInvalidationMode.CHECKED_HASH,
+                    invalidation_mode=py_compile.PycInvalidationMode[
+                        task["invalidation_mode"]
+                    ],
                 )
             except py_compile.PyCompileError:
                 pass
