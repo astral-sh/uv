@@ -24,14 +24,11 @@ fn tool_list() {
     uv_snapshot!(context.filters(), context.tool_list()
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0
     - black
     - blackd
-
-    ----- stderr -----
     ");
 }
 
@@ -53,14 +50,11 @@ fn tool_list_paths() {
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-paths")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
-
-    ----- stderr -----
     ");
 }
 
@@ -85,14 +79,11 @@ fn tool_list_paths_windows() {
     uv_snapshot!(context.filters_without_standard_filters(), context.tool_list().arg("--show-paths")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 ([TEMP_DIR]\tools\black)
     - black ([TEMP_DIR]\bin\black.exe)
     - blackd ([TEMP_DIR]\bin\blackd.exe)
-
-    ----- stderr -----
     "###);
 }
 
@@ -105,10 +96,7 @@ fn tool_list_empty() {
     uv_snapshot!(context.filters(), context.tool_list()
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     No tools installed
     ");
@@ -125,10 +113,7 @@ fn tool_list_outdated_empty() {
     .arg("--outdated")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     No tools installed
     ");
@@ -154,14 +139,11 @@ fn tool_list_outdated() {
     .arg("--outdated")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 [latest: 24.3.0]
     - black
     - blackd
-
-    ----- stderr -----
     ");
 }
 
@@ -188,11 +170,7 @@ fn tool_list_outdated_respects_exclude_newer() {
     .arg("--outdated")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 }
 
@@ -222,14 +200,11 @@ fn tool_list_outdated_recomputes_relative_exclude_newer() {
     .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 [latest: 24.3.0]
     - black
     - blackd
-
-    ----- stderr -----
     ");
 }
 
@@ -256,11 +231,7 @@ fn tool_list_outdated_cli_exclude_newer() {
     .arg("2024-03-01T00:00:00Z")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 }
 
@@ -284,10 +255,7 @@ fn tool_list_missing_receipt() {
     uv_snapshot!(context.filters(), context.tool_list()
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Ignoring malformed tool `black` (run `uv tool uninstall black` to remove)
     ");
@@ -331,8 +299,7 @@ fn tool_list_bad_environment() -> Result<()> {
             .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
             .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     ruff v0.3.4
     - ruff
@@ -394,14 +361,11 @@ fn tool_list_deprecated() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_list()
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0
     - black
     - blackd
-
-    ----- stderr -----
     ");
 
     // Replace with an invalid receipt.
@@ -421,10 +385,7 @@ fn tool_list_deprecated() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_list()
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Ignoring malformed tool `black` (run `uv tool uninstall black` to remove)
     ");
@@ -459,32 +420,26 @@ fn tool_list_show_version_specifiers() {
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-version-specifiers")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 [required: <24.3.0]
     - black
     - blackd
     flask v3.0.2
     - flask
-
-    ----- stderr -----
     ");
 
     // with paths
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-version-specifiers").arg("--show-paths")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 [required: <24.3.0] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
     flask v3.0.2 ([TEMP_DIR]/tools/flask)
     - flask ([TEMP_DIR]/bin/flask)
-
-    ----- stderr -----
     ");
 }
 
@@ -531,8 +486,7 @@ fn tool_list_show_with() {
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-with")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0
     - black
@@ -541,16 +495,13 @@ fn tool_list_show_with() {
     - flask
     ruff v0.3.4 [with: requests]
     - ruff
-
-    ----- stderr -----
     ");
 
     // Test with both --show-with and --show-paths
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-with").arg("--show-paths")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
@@ -559,16 +510,13 @@ fn tool_list_show_with() {
     - flask ([TEMP_DIR]/bin/flask)
     ruff v0.3.4 [with: requests] ([TEMP_DIR]/tools/ruff)
     - ruff ([TEMP_DIR]/bin/ruff)
-
-    ----- stderr -----
     ");
 
     // Test with both --show-with and --show-version-specifiers
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-with").arg("--show-version-specifiers")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 [required: ==24.2.0]
     - black
@@ -577,8 +525,6 @@ fn tool_list_show_with() {
     - flask
     ruff v0.3.4 [required: ==0.3.4] [with: requests]
     - ruff
-
-    ----- stderr -----
     ");
 
     // Test with all flags
@@ -588,8 +534,7 @@ fn tool_list_show_with() {
     .arg("--show-paths")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 [required: ==24.2.0] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
@@ -598,8 +543,6 @@ fn tool_list_show_with() {
     - flask ([TEMP_DIR]/bin/flask)
     ruff v0.3.4 [required: ==0.3.4] [with: requests] ([TEMP_DIR]/tools/ruff)
     - ruff ([TEMP_DIR]/bin/ruff)
-
-    ----- stderr -----
     ");
 }
 
@@ -633,64 +576,52 @@ fn tool_list_show_extras() {
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0
     - black
     - blackd
     flask v3.0.2 [extras: async, dotenv]
     - flask
-
-    ----- stderr -----
     ");
 
     // Test with both --show-extras and --show-with
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras").arg("--show-with")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0
     - black
     - blackd
     flask v3.0.2 [extras: async, dotenv] [with: requests]
     - flask
-
-    ----- stderr -----
     ");
 
     // Test with --show-extras and --show-paths
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras").arg("--show-paths")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
     flask v3.0.2 [extras: async, dotenv] ([TEMP_DIR]/tools/flask)
     - flask ([TEMP_DIR]/bin/flask)
-
-    ----- stderr -----
     ");
 
     // Test with --show-extras and --show-version-specifiers
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras").arg("--show-version-specifiers")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 [required: ==24.2.0]
     - black
     - blackd
     flask v3.0.2 [extras: async, dotenv]
     - flask
-
-    ----- stderr -----
     ");
 
     // Test with all flags including --show-extras
@@ -701,16 +632,13 @@ fn tool_list_show_extras() {
     .arg("--show-paths")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 [required: ==24.2.0] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
     flask v3.0.2 [extras: async, dotenv] [with: requests] ([TEMP_DIR]/tools/flask)
     - flask ([TEMP_DIR]/bin/flask)
-
-    ----- stderr -----
     ");
 }
 
@@ -733,14 +661,11 @@ fn tool_list_show_python() {
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-python")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 [CPython 3.12.[X]]
     - black
     - blackd
-
-    ----- stderr -----
     ");
 }
 
@@ -779,15 +704,12 @@ fn tool_list_show_all() {
     .arg("--show-python")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 [required: ==24.2.0] [CPython 3.12.[X]] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
     flask v3.0.2 [extras: async, dotenv] [with: requests] [CPython 3.12.[X]] ([TEMP_DIR]/tools/flask)
     - flask ([TEMP_DIR]/bin/flask)
-
-    ----- stderr -----
     ");
 }

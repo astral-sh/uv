@@ -27,8 +27,7 @@ fn check_project() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.check(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -68,8 +67,7 @@ fn check_no_sync_creates_lock_without_sync() -> Result<()> {
             .arg("--ty-version")
             .arg("0.0.17"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -149,8 +147,7 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
             .arg("--ty-version")
             .arg("0.0.17"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -211,8 +208,7 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
             .arg("--ty-version")
             .arg("0.0.17"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -305,10 +301,7 @@ fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
             .arg("--index")
             .arg(server.index_url()),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -342,10 +335,7 @@ fn check_no_sync_locked_requires_existing_lock() -> Result<()> {
         context.filters(),
         context.check().arg("--no-sync").arg("--locked"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
@@ -400,8 +390,7 @@ fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
             .arg("--ty-version")
             .arg("0.0.17"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -435,10 +424,7 @@ fn check_no_sync_frozen_requires_existing_lock() -> Result<()> {
         context.filters(),
         context.check().arg("--no-sync").arg("--frozen"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
@@ -480,8 +466,7 @@ fn check_no_sync_isolated_does_not_write_lock_or_sync() -> Result<()> {
             .arg("--ty-version")
             .arg("0.0.17"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -533,8 +518,7 @@ fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
             .arg("2026-02-15T00:00:00Z")
             .arg("--show-version"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -561,8 +545,7 @@ fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
             .arg("2026-02-15T00:00:00Z")
             .arg("--show-version"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -625,10 +608,7 @@ fn check_locked_tool_rejects_invalid_hash() -> Result<()> {
         context.filters(),
         context.check().arg("--no-sync").arg("--frozen"),
         @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
       × Failed to download `ty==0.0.17`
@@ -672,8 +652,7 @@ fn check_uses_ty_version_from_production_dependency() -> Result<()> {
             .check()
             .arg("--show-version"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -719,8 +698,7 @@ fn check_uses_ty_version_from_forked_lock() -> Result<()> {
             .check()
             .arg("--show-version"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -793,8 +771,7 @@ fn check_uses_workspace_ty_subgraph_from_lock() -> Result<()> {
         context.filters(),
         context.check().arg("--no-sync").arg("--show-version"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -850,8 +827,7 @@ fn check_virtual_root_uses_own_ty() -> Result<()> {
             .arg("--no-sync")
             .arg("--show-version"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -909,8 +885,7 @@ fn check_uses_ty_from_environment() -> Result<()> {
             .arg("--show-version")
             .env(EnvVars::TY, ty_path.as_os_str()),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -954,8 +929,7 @@ fn check_script() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.check().arg("--script").arg(script.path()).arg("--no-sync"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -997,8 +971,7 @@ fn check_script_uses_ty_version_from_forked_lock() -> Result<()> {
             .arg(script.path())
             .arg("--show-version"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1071,8 +1044,7 @@ fn check_script_uses_ty_from_path_with_transitive_dependency() -> Result<()> {
             .arg(script.path())
             .arg("--show-version"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1129,8 +1101,7 @@ fn check_script_ty_override_precedence() -> Result<()> {
             .arg("--show-version")
             .env(EnvVars::TY, ty_path.as_os_str()),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1151,8 +1122,7 @@ fn check_script_ty_override_precedence() -> Result<()> {
             .arg("0.0.17")
             .arg("--show-version"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1215,8 +1185,7 @@ fn check_script_ignores_transitive_ty_for_tool_selection() -> Result<()> {
             .arg("2026-02-15T00:00:00Z")
             .arg("--show-version"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1259,10 +1228,7 @@ fn check_no_sync_errors_on_invalid_lockfile() -> Result<()> {
             .arg("0.0.17")
             .env(EnvVars::RUST_LOG, "error"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to parse `uv.lock`
@@ -1306,10 +1272,7 @@ fn check_script_no_sync_errors_on_invalid_lockfile() -> Result<()> {
             .arg("0.0.17")
             .env(EnvVars::RUST_LOG, "error"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to parse `uv.lock`
@@ -1329,10 +1292,7 @@ fn check_rejects_tool_arguments() {
     let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.check().arg("--").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: unexpected argument 'main.py' found
 
@@ -1354,10 +1314,7 @@ fn check_ty_version_no_match() {
         context.filters(),
         context.check().arg("--ty-version").arg(">=999.0.0"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to find ty version matching: >=999.0.0
@@ -1387,8 +1344,7 @@ fn check_ty_version_show_version() -> Result<()> {
             .arg("0.0.17")
             .arg("--show-version"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1411,8 +1367,7 @@ fn check_missing_pyproject_toml() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.check(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1422,8 +1377,7 @@ fn check_missing_pyproject_toml() -> Result<()> {
 
     // Project-only settings are ignored without a discovered project.
     uv_snapshot!(context.filters(), context.check().arg("--group").arg("dev").arg("--frozen").arg("--no-sync"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1456,10 +1410,7 @@ fn check_no_project() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.check(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: No interpreter found for Python >=4.0 in [PYTHON SOURCES]
@@ -1467,8 +1418,7 @@ fn check_no_project() -> Result<()> {
 
     // The unavailable project environment is not initialized when project discovery is disabled.
     uv_snapshot!(context.filters(), context.check().arg("--no-project"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1489,8 +1439,7 @@ fn check_no_project() -> Result<()> {
             .arg("--locked")
             .arg("--no-sync"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1533,8 +1482,7 @@ fn check_isolated_no_project() -> Result<()> {
             .arg("--no-project")
             .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1562,8 +1510,7 @@ fn check_isolated_no_project() -> Result<()> {
             .env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z")
             .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()),
         @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     error[unresolved-import]: Cannot resolve imported module `active_only`
      --> main.py:1:8
@@ -1599,8 +1546,7 @@ fn check_type_error() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.check(), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     error[invalid-assignment]: Object of type `Literal["project"]` is not assignable to `int`
      --> main.py:2:10
@@ -1652,8 +1598,7 @@ fn check_with_declared_dependency() -> Result<()> {
             .arg("--index")
             .arg(server.index_url()),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1703,8 +1648,7 @@ fn check_isolated() -> Result<()> {
             .arg("--index")
             .arg(server.index_url()),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
 
@@ -1782,8 +1726,7 @@ fn check_with_undeclared_dependency() -> Result<()> {
 
     // ty should report a diagnostic for the unresolvable import.
     uv_snapshot!(filters, context.check(), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     error[unresolved-import]: Cannot resolve imported module `iniconfig`
      --> main.py:1:8

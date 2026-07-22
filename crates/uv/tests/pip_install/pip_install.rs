@@ -110,10 +110,7 @@ fn missing_requirements_txt() {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: File not found: `requirements.txt`
     "
@@ -132,10 +129,7 @@ fn empty_requirements_txt() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Requirements file `requirements.txt` does not contain any dependencies
     Checked in [TIME]
@@ -157,10 +151,7 @@ fn compile_bytecode_for_installed_distributions() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("sniffio==1.3.1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -173,10 +164,7 @@ fn compile_bytecode_for_installed_distributions() -> Result<()> {
         .arg("anyio==3.7.1")
         .arg("--compile-bytecode")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -216,10 +204,7 @@ fn compile_bytecode_for_installed_distributions() -> Result<()> {
         .arg(&wheel)
         .arg("--compile-bytecode")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -253,10 +238,7 @@ fn compile_bytecode_for_installed_distributions() -> Result<()> {
         .arg("--reinstall-package")
         .arg("sniffio")
         .arg("--compile-bytecode"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -290,10 +272,7 @@ fn compile_bytecode_with_symlink_link_mode() {
         .arg("--compile-bytecode")
         .arg("--link-mode")
         .arg("symlink"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -326,10 +305,7 @@ fn compile_bytecode_for_relative_install_root() {
         .arg("--target")
         .arg("target")
         .arg("--compile-bytecode"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
@@ -355,10 +331,7 @@ fn compile_bytecode_for_relative_install_root() {
         .arg("--prefix")
         .arg("prefix")
         .arg("--compile-bytecode"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
@@ -388,10 +361,7 @@ fn missing_pyproject_toml() {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("pyproject.toml"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: File not found: `pyproject.toml`
     "
@@ -410,10 +380,7 @@ fn missing_find_links() -> Result<()> {
         .arg("--find-links")
         .arg("./missing")
         .arg("--strict"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read `--find-links` directory: [TEMP_DIR]/missing
       Caused by: [OS ERROR 2]
@@ -432,10 +399,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("pyproject.toml"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: Failed to parse `pyproject.toml` during settings discovery:
       TOML parse error at line 1, column 5
@@ -466,10 +430,7 @@ fn invalid_pyproject_toml_project_schema() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("pyproject.toml"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
@@ -494,10 +455,7 @@ fn invalid_pyproject_toml_option_schema() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to parse `pyproject.toml` during settings discovery:
       TOML parse error at line 2, column 13
@@ -537,10 +495,7 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("pyproject.toml"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to parse `pyproject.toml` during settings discovery:
       TOML parse error at line 2, column 1
@@ -570,10 +525,7 @@ fn pyproject_required_version_preempts_settings_discovery_warning() -> Result<()
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("iniconfig"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Required uv version `>=9999` does not match the running version `[UV_VERSION]`
     "#
@@ -594,10 +546,7 @@ fn uv_toml_required_version_preempts_parse_error() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("iniconfig"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Required uv version `>=9999` does not match the running version `[UV_VERSION]`
     "#
@@ -620,10 +569,7 @@ fn uv_toml_required_version_preempts_pyproject_only_field() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("iniconfig"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Required uv version `>=9999` does not match the running version `[UV_VERSION]`
     "#
@@ -641,10 +587,7 @@ fn invalid_toml_filename() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("test.toml"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `test.toml` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)
     "
@@ -663,10 +606,7 @@ fn invalid_uv_toml_option_disallowed_automatic_discovery() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("iniconfig"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "
@@ -687,10 +627,7 @@ fn invalid_uv_toml_option_disallowed_command_line() -> Result<()> {
         .arg("iniconfig")
         .arg("--config-file")
         .arg("foo.toml"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `foo.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "
@@ -718,10 +655,7 @@ async fn cache_uv_toml_credentials() -> Result<()> {
         .arg("iniconfig")
         .arg("--extra-index-url")
         .arg(proxy.username_url("public", "/basic-auth/simple/")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -760,10 +694,7 @@ dependencies = ["flask==1.0.x"]
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @r##"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to build `project @ file://[TEMP_DIR]/path_dep`
       ├─▶ The build backend returned an error
@@ -836,10 +767,7 @@ fn invalid_python_version() {
         .arg("flask")
         .arg("--python-version")
         .arg("311"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: invalid value '311' for '--python-version <PYTHON_VERSION>': Python version `311` has an invalid major version (311)
 
@@ -851,10 +779,7 @@ fn invalid_python_version() {
 #[test]
 fn missing_pip() {
     uv_snapshot!(Command::new(get_bin!()).arg("install"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: unrecognized subcommand 'install'
 
@@ -874,10 +799,7 @@ fn no_solution() {
         .arg("flask>=3.0.2")
         .arg("WerkZeug<1.0.0")
         .arg("--strict"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because flask>=3.0.2 depends on werkzeug>=3.0.0 and you require flask>=3.0.2, we can conclude that you require werkzeug>=3.0.0.
@@ -894,10 +816,7 @@ fn install_package() {
     uv_snapshot!(context.pip_install()
         .arg("Flask")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -928,10 +847,7 @@ fn install_requirements_txt() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -956,10 +872,7 @@ fn install_requirements_txt() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -987,10 +900,7 @@ fn install_from_stdin() -> Result<()> {
         .arg("-r")
         .arg("-")
         .arg("--strict").stdin(std::fs::File::open(requirements_txt)?), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -1025,10 +935,7 @@ fn install_from_dev_stdin() -> Result<()> {
         .arg("-r")
         .arg("/dev/stdin")
         .arg("--strict").stdin(std::fs::File::open(requirements_txt)?), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -1066,10 +973,7 @@ async fn install_remote_requirements_txt() -> Result<()> {
         .arg("-r")
         .arg(requirements_url.as_str())
         .arg("--strict"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Error while accessing remote requirements file: `http://[LOCALHOST]/requirements.txt`
     "
@@ -1083,10 +987,7 @@ async fn install_remote_requirements_txt() -> Result<()> {
         .arg("-r")
         .arg(requirements_url.as_str())
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -1114,10 +1015,7 @@ async fn install_remote_requirements_txt() -> Result<()> {
         .arg("-r")
         .arg(requirements_url.as_str())
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1168,10 +1066,7 @@ fn install_unsupported_flag() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Ignoring unsupported option in `requirements.txt`: `--pre` (hint: pass `--pre` on the command line instead)
     warning: Ignoring unsupported option in `requirements.txt`: `--prefer-binary`
@@ -1211,10 +1106,7 @@ werkzeug==3.0.1
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because flask>=3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask>=3.0.2 are incompatible.
@@ -1244,10 +1136,7 @@ fn install_with_dependencies_from_script() -> Result<()> {
         .arg("-r")
         .arg("script.py")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -1275,10 +1164,7 @@ fn install_with_dependencies_from_script() -> Result<()> {
         .arg("-r")
         .arg("script.py")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -1321,10 +1207,7 @@ build-backend = "poetry.core.masonry.api"
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("test"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -1352,10 +1235,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -1380,10 +1260,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -1400,10 +1277,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1424,10 +1298,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
         .arg("--reinstall-package")
         .arg("Flask")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1448,10 +1319,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
         .arg("--reinstall-package")
         .arg("Flask")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1477,10 +1345,7 @@ fn reinstall_extras() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -1505,10 +1370,7 @@ fn reinstall_extras() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -1536,10 +1398,7 @@ fn reinstall_incomplete() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -1560,10 +1419,7 @@ fn reinstall_incomplete() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -1589,10 +1445,7 @@ fn exact_install_removes_extraneous_packages() -> Result<()> {
         .arg("--exact")
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1606,10 +1459,7 @@ fn exact_install_removes_extraneous_packages() -> Result<()> {
     // Install flask
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("flask"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1629,10 +1479,7 @@ fn exact_install_removes_extraneous_packages() -> Result<()> {
         .arg("--exact")
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -1649,10 +1496,7 @@ fn exact_install_removes_extraneous_packages() -> Result<()> {
     // Install flask again
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("flask"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1677,10 +1521,7 @@ fn exact_install_removes_extraneous_packages() -> Result<()> {
         .arg("--exact")
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1713,10 +1554,7 @@ fn allow_incompatibilities() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -1741,10 +1579,7 @@ fn allow_incompatibilities() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -1764,10 +1599,7 @@ fn allow_incompatibilities() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     warning: The package `flask` requires `jinja2>=3.1.2`, but `2.11.3` is installed
@@ -1786,10 +1618,7 @@ fn install_extras() -> Result<()> {
         .arg("--all-extras")
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
 
@@ -1801,10 +1630,7 @@ fn install_extras() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--all-extras")
         .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
 
@@ -1819,10 +1645,7 @@ fn install_extras() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--all-extras")
         .arg("-r").arg("requirements.txt"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
 
@@ -1843,10 +1666,7 @@ dependencies = ["anyio==3.7.0"]
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--all-extras")
         .arg("-r").arg("pyproject.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -1868,10 +1688,7 @@ fn install_editable() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -1887,10 +1704,7 @@ fn install_editable() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -1905,10 +1719,7 @@ fn install_editable() {
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/poetry_editable"))
         .arg("black"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -1934,10 +1745,7 @@ fn install_no_editable() {
         .arg("-e")
         .arg(&package)
         .arg("--no-editable"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1963,10 +1771,7 @@ fn install_no_editable_package() {
         .arg(&black)
         .arg("--no-editable-package")
         .arg("executable-file"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -1992,10 +1797,7 @@ fn install_no_editable_requirements_txt() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--no-editable"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2019,10 +1821,7 @@ fn install_no_editable_env_var() {
         .env(EnvVars::UV_NO_EDITABLE, "1")
         .arg("-e")
         .arg(&package), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2042,10 +1841,7 @@ fn install_editable_and_registry() {
     // Install the registry-based version of Black.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("black"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -2063,10 +1859,7 @@ fn install_editable_and_registry() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/black_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2082,10 +1875,7 @@ fn install_editable_and_registry() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("black")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -2095,10 +1885,7 @@ fn install_editable_and_registry() {
     // Re-install Black at a specific version. This should replace the editable version.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("black==23.10.0"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2120,10 +1907,7 @@ fn install_editable_no_binary() {
         .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg("--no-binary")
         .arg(":all:"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2146,10 +1930,7 @@ fn install_editable_compatible_constraint() -> Result<()> {
         .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg("--constraint")
         .arg("constraints.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2174,10 +1955,7 @@ fn install_editable_incompatible_constraint_version() -> Result<()> {
         .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg("--constraint")
         .arg("constraints.txt"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only black<=0.1.0 is available and you require black>0.1.0, we can conclude that your requirements are unsatisfiable.
@@ -2200,10 +1978,7 @@ fn install_editable_incompatible_constraint_url() -> Result<()> {
         .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg("--constraint")
         .arg("constraints.txt"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `black`:
     - file://[WORKSPACE]/test/packages/black_editable (editable)
@@ -2228,10 +2003,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
@@ -2256,10 +2028,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -2274,10 +2043,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -2292,10 +2058,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -2311,10 +2074,7 @@ fn install_editable_pep_508_cli() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(format!("black[d] @ file://{workspace_root}/test/packages/black_editable", workspace_root = context.workspace_root.simplified_display())), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
@@ -2341,10 +2101,7 @@ fn install_editable_bare_cli() {
         .arg("-e")
         .arg("black_editable")
         .current_dir(&packages_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using Python 3.12.[X] environment at: [VENV]/
     Resolved 1 package in [TIME]
@@ -2370,10 +2127,7 @@ fn install_editable_unnamed_no_build() -> Result<()> {
         .arg("--no-build")
         .arg("-e")
         .arg("editable"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2398,10 +2152,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
         .arg("-r")
         .arg(requirements_txt.path())
         .current_dir(&packages_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using Python 3.12.[X] environment at: [VENV]/
     Resolved 1 package in [TIME]
@@ -2424,10 +2175,7 @@ fn invalid_editable_no_url() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unsupported editable requirement in `requirements.txt`
       Caused by: Editable `black` must refer to a local directory, not a versioned package
@@ -2447,10 +2195,7 @@ fn invalid_editable_unnamed_https_url() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unsupported editable requirement in `requirements.txt`
       Caused by: Editable must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl`
@@ -2470,10 +2215,7 @@ fn invalid_editable_named_https_url() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unsupported editable requirement in `requirements.txt`
       Caused by: Editable `black` must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl`
@@ -2502,10 +2244,7 @@ fn reinstall_build_system() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
@@ -2532,10 +2271,7 @@ fn install_no_index() {
     uv_snapshot!(context.pip_install()
         .arg("Flask")
         .arg("--no-index"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because flask was not found in the provided package locations and you require flask, we can conclude that your requirements are unsatisfiable.
@@ -2556,10 +2292,7 @@ fn install_no_index_version() {
     uv_snapshot!(context.pip_install()
         .arg("Flask==3.0.0")
         .arg("--no-index"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
@@ -2602,10 +2335,7 @@ fn install_extra_index_url_has_priority() {
         // priority via --extra-index-url.
         .arg("black==24.2.0")
         .arg("--no-deps"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2642,10 +2372,7 @@ async fn install_deduplicated_indices() {
         .arg("--index-strategy")
         .arg("unsafe-first-match"),  // Anything but "first-index"
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2665,10 +2392,7 @@ fn install_git_public_https() {
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2769,10 +2493,7 @@ fn install_git_workspace_build_requirement() -> Result<()> {
         .arg(format!(
             "project @ git+{repository_url}#subdirectory=packages/project"
         )), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2796,10 +2517,7 @@ fn install_implicit_git_public_https() {
         .pip_install()
         .arg("uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2881,10 +2599,7 @@ fn install_git_percent_encoded_ref() -> Result<()> {
         .arg(format!(
             "example @ git+{repository_url}@pkg%401.2.3#subdirectory=packages/example"
         )), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2905,10 +2620,7 @@ fn install_git_unescaped_ref() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("example @ git+https://example.com/repository@pkg@1.2.3"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `example @ git+https://example.com/repository@pkg@1.2.3`
       Caused by: Ambiguous Git URL `https://example.com/repository@pkg@1.2.3`: the path contains multiple `@` characters. If the Git revision contains `@`, percent-encode it as `%40`
@@ -2928,10 +2640,7 @@ fn update_ref_git_public_https() {
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2948,10 +2657,7 @@ fn update_ref_git_public_https() {
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")
         .arg("--refresh"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2976,10 +2682,7 @@ fn install_git_public_https_missing_branch_or_tag() {
     uv_snapshot!(context.filters(), context.pip_install()
         // 2.0.0 does not exist
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0`
       ├─▶ Git operation failed
@@ -3007,10 +2710,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3038,10 +2738,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri())
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3068,10 +2765,7 @@ fn install_git_public_https_missing_commit() {
         // 2.0.0 does not exist
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
       ├─▶ Git operation failed
@@ -3103,10 +2797,7 @@ fn install_git_public_https_exact_commit() {
         .env(EnvVars::UV_NO_GITHUB_FAST_PATH, "true")
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
        Updating https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
         Updated https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
@@ -3124,10 +2815,7 @@ fn install_git_public_https_exact_commit() {
         .env(EnvVars::UV_NO_GITHUB_FAST_PATH, "true")
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked 1 package in [TIME]
@@ -3148,10 +2836,7 @@ fn install_git_private_https_pat() {
 
     uv_snapshot!(context.filters(), context.pip_install().arg(package)
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3176,10 +2861,7 @@ fn install_git_private_https_pat_mixed_with_public() {
 
     uv_snapshot!(context.filters(), context.pip_install().arg(package).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"),
     @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -3208,10 +2890,7 @@ fn install_git_private_https_multiple_pat() {
 
     uv_snapshot!(context.filters(), context.pip_install().arg(package_1).arg(package_2)
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -3246,10 +2925,7 @@ fn install_git_private_https_pat_at_ref() {
     );
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(package), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3271,10 +2947,7 @@ fn install_git_private_https_pat_and_username() {
 
     uv_snapshot!(context.filters(), context.pip_install().arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3301,10 +2974,7 @@ fn install_git_private_https_pat_not_authorized() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(format!("uv-private-pypackage @ git+https://git:{token}@github.com/astral-test/uv-private-pypackage"))
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
       ├─▶ Git operation failed
@@ -3332,10 +3002,7 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
 
     uv_snapshot!(context.filters(), context.pip_install().arg(private_package).arg(public_package),
     @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -3365,10 +3032,7 @@ fn install_github_artifact_private_https_multiple_pat() {
 
     uv_snapshot!(context.filters(), context.pip_install().arg(package_1).arg(package_2)
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -3399,10 +3063,7 @@ fn install_git_private_https_interactive() {
 
     uv_snapshot!(filters, context.pip_install().arg(package)
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `uv-private-pypackage @ git+https://github.com/astral-test/uv-private-pypackage`
       ├─▶ Git operation failed
@@ -3429,10 +3090,7 @@ fn reinstall_no_binary() {
     uv_snapshot!(
         command,
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3454,10 +3112,7 @@ fn reinstall_no_binary() {
         .arg("a")
         .arg("--strict");
     uv_snapshot!(command, @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -3478,10 +3133,7 @@ fn reinstall_no_binary() {
         .arg("a")
         .arg("--strict");
     uv_snapshot!(context.filters(), command, @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -3511,10 +3163,7 @@ fn install_no_binary_overrides_only_binary_all() {
     uv_snapshot!(
         command,
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -3542,10 +3191,7 @@ fn install_no_binary_comma_separated() {
     uv_snapshot!(
         command,
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -3570,10 +3216,7 @@ fn install_no_binary_env() {
     uv_snapshot!(
         command,
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -3592,10 +3235,7 @@ fn install_no_binary_env() {
     uv_snapshot!(
         command,
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -3618,10 +3258,7 @@ fn install_no_binary_env() {
     uv_snapshot!(
         command,
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -3656,10 +3293,7 @@ fn install_only_binary_overrides_no_binary_all() {
     uv_snapshot!(
         command,
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3685,10 +3319,7 @@ fn install_only_binary_comma_separated() {
     uv_snapshot!(
         command,
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -3720,10 +3351,7 @@ fn install_only_binary_all_and_no_binary_all() {
     uv_snapshot!(
         command,
         @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of anyio have no usable wheels and you require anyio, we can conclude that your requirements are unsatisfiable.
@@ -3745,10 +3373,7 @@ fn install_build_policy_cache() {
     uv_snapshot!(
         context.pip_install().arg("idna"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3764,10 +3389,7 @@ fn install_build_policy_cache() {
     uv_snapshot!(
         context.pip_install().arg("idna"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3783,10 +3405,7 @@ fn install_build_policy_cache() {
     uv_snapshot!(
         context.pip_install().arg("idna").arg("--no-binary").arg(":all:"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3808,10 +3427,7 @@ fn install_build_policy_cache() {
             .arg(":all:")
             .arg("--offline"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3831,10 +3447,7 @@ fn install_build_policy_cache() {
             .arg("--no-build")
             .arg("--offline"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3861,10 +3474,7 @@ fn only_binary_requirements_txt() {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
@@ -3885,10 +3495,7 @@ fn only_binary_editable() {
         .arg(":all:")
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/anyio_local")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3914,10 +3521,7 @@ fn only_binary_dependent_editables() {
         .arg(root_path.join("first_local"))
         .arg("-e")
         .arg(root_path.join("second_local")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -3939,10 +3543,7 @@ fn only_binary_editable_setup_py() {
         .arg(":all:")
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/setup_py_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
@@ -3980,10 +3581,7 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg("."), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to build `project @ file://[TEMP_DIR]/`
@@ -4006,10 +3604,7 @@ fn cache_priority() {
     uv_snapshot!(
         context.pip_install().arg("idna==3.6"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4022,10 +3617,7 @@ fn cache_priority() {
     uv_snapshot!(
         context.pip_install().arg("idna==3.0"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4043,10 +3635,7 @@ fn cache_priority() {
     uv_snapshot!(
         context.pip_install().arg("idna"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -4065,10 +3654,7 @@ fn install_executable() {
 
     uv_snapshot!(context.pip_install()
         .arg("pylint==3.0.0"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -4101,10 +3687,7 @@ fn install_executable_copy() {
         .arg("pylint==3.0.0")
         .arg("--link-mode")
         .arg("copy"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -4137,10 +3720,7 @@ fn install_executable_hardlink() {
         .arg("pylint==3.0.0")
         .arg("--link-mode")
         .arg("hardlink"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -4184,10 +3764,7 @@ fn install_executable_clone() -> anyhow::Result<()> {
         .arg(context.workspace_root.join("test/packages/executable_file"))
         .arg("--link-mode")
         .arg("clone"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4229,10 +3806,7 @@ fn no_deps() {
         .arg("Flask")
         .arg("--no-deps")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4260,10 +3834,7 @@ fn no_deps_editable() {
         .arg("--no-deps")
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/black_editable[dev]")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4302,10 +3873,7 @@ fn install_no_downgrade() -> Result<()> {
     // Install the local `idna`.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("./idna"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4317,10 +3885,7 @@ fn install_no_downgrade() -> Result<()> {
     // Install `anyio`, which depends on `idna`.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -4334,10 +3899,7 @@ fn install_no_downgrade() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-U")
         .arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked 3 packages in [TIME]
@@ -4354,10 +3916,7 @@ fn install_no_downgrade() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--reinstall")
         .arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4383,10 +3942,7 @@ fn install_upgrade() {
         .arg("anyio==3.6.2")
         .arg("httpcore==0.16.3")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -4407,10 +3963,7 @@ fn install_upgrade() {
         .arg("anyio")
         .arg("--upgrade-package")
         .arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -4426,10 +3979,7 @@ fn install_upgrade() {
         .arg("anyio")
         .arg("--upgrade-package")
         .arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked 3 packages in [TIME]
@@ -4441,10 +3991,7 @@ fn install_upgrade() {
         .arg("httpcore")
         .arg("--upgrade-package")
         .arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 6 packages in [TIME]
@@ -4455,10 +4002,7 @@ fn install_upgrade() {
     uv_snapshot!(context.pip_install()
         .arg("httpcore")
         .arg("--upgrade"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -4479,10 +4023,7 @@ fn install_upgrade_overrides_configured_upgrade_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio==3.6.2")
         .arg("httpcore==0.16.3"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -4506,10 +4047,7 @@ fn install_upgrade_overrides_configured_upgrade_package() -> Result<()> {
         .arg("anyio")
         .arg("httpcore")
         .arg("--upgrade"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -4539,10 +4077,7 @@ fn install_constraints_txt() -> Result<()> {
             .arg("requirements.txt")
             .arg("--constraint")
             .arg("constraints.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4573,10 +4108,7 @@ fn install_constraints_txt_from_stdin() -> Result<()> {
             .arg("--constraint")
             .arg("-")
             .stdin(std::fs::File::open(constraints_txt)?), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4613,10 +4145,7 @@ fn install_constraints_from_pyproject() -> Result<()> {
     uv_snapshot!(context.pip_install()
             .arg("-r")
             .arg("pyproject.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4643,10 +4172,7 @@ fn install_constraints_inline() -> Result<()> {
     uv_snapshot!(context.pip_install()
             .arg("-r")
             .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4669,10 +4195,7 @@ fn install_constraints_remote() {
             .arg("-c")
             .arg("https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt")
             .arg("typing_extensions>=4.0"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4693,10 +4216,7 @@ fn install_constraints_inline_remote() -> Result<()> {
     uv_snapshot!(context.pip_install()
             .arg("-r")
             .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4724,10 +4244,7 @@ fn install_constraints_extra() -> Result<()> {
         .arg("requirements.txt")
         .arg("-c")
         .arg("constraints.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
@@ -4754,10 +4271,7 @@ fn install_constraints_respects_offline_mode() {
             .arg("--offline")
             .arg("-r")
             .arg("http://example.com/requirements.txt"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Network connectivity is disabled, but a remote requirements file was requested: http://example.com/requirements.txt
     "
@@ -4772,10 +4286,7 @@ fn install_git_source_respects_offline_mode() {
     uv_snapshot!(context.filters(), context.pip_install()
             .arg("--offline")
             .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage`
       ├─▶ Git operation failed
@@ -4811,10 +4322,7 @@ fn build_prerelease_hint() -> Result<()> {
         context.filters(),
         command,
         @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to build `project @ file://[TEMP_DIR]/`
@@ -4847,10 +4355,7 @@ fn install_constraints_with_markers() -> Result<()> {
         .arg("requirements.txt")
         .arg("--constraint")
         .arg("constraints.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -4868,10 +4373,7 @@ fn install_constraints_with_markers() -> Result<()> {
         .arg("requirements.txt")
         .arg("--constraint")
         .arg("constraints.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -4897,10 +4399,7 @@ fn install_pinned_polars_invalid_metadata() {
     uv_snapshot!(context.pip_install()
         .arg("polars==0.14.0"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4924,10 +4423,7 @@ fn install_sdist_resolution_lowest() -> Result<()> {
             .arg("-r")
             .arg("requirements.in")
             .arg("--resolution=lowest-direct"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4957,10 +4453,7 @@ fn direct_url_zip_file_bunk_permissions() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -4995,10 +4488,7 @@ fn launcher() -> Result<()> {
         context.pip_install()
         .arg(format!("simple_launcher@{}", project_root.join("test/links/simple_launcher-0.1.0-py3-none-any.whl").display()))
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -5012,12 +4502,9 @@ fn launcher() -> Result<()> {
     uv_snapshot!(Command::new(
         context.venv.join(bin_path).join("simple_launcher")
     ), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hi from the simple launcher!
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -5041,10 +4528,7 @@ fn launcher_with_symlink() -> Result<()> {
             .arg(format!("simple_launcher@{}", project_root.join("test/links/simple_launcher-0.1.0-py3-none-any.whl").display()))
             .arg("--strict"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -5079,12 +4563,9 @@ fn launcher_with_symlink() -> Result<()> {
     uv_snapshot!(Command::new(
         context.temp_dir.join("simple_launcher")
     ), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hi from the simple launcher!
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -5101,10 +4582,7 @@ fn config_settings_registry() {
         .arg("--no-binary")
         .arg("iniconfig")
         .arg("-C=global-option=build_ext"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -5116,10 +4594,7 @@ fn config_settings_registry() {
     // Uninstall the package.
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
@@ -5131,10 +4606,7 @@ fn config_settings_registry() {
         .arg("--no-binary")
         .arg("iniconfig")
         .arg("-C=global-option=build_ext"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5145,10 +4617,7 @@ fn config_settings_registry() {
     // Uninstall the package.
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
@@ -5159,10 +4628,7 @@ fn config_settings_registry() {
         .arg("iniconfig")
         .arg("--no-binary")
         .arg("iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -5189,10 +4655,7 @@ fn config_settings_path() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -5215,10 +4678,7 @@ fn config_settings_path() -> Result<()> {
         .arg("-C")
         .arg("editable_mode=compat")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5280,10 +4740,7 @@ fn reinstall_duplicate() -> Result<()> {
         .arg("--no-deps")
         .arg("--reinstall"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -5306,10 +4763,7 @@ fn install_symlink() {
     uv_snapshot!(context.pip_install()
         .arg("pgpdump==1.5")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -5323,10 +4777,7 @@ fn install_symlink() {
     uv_snapshot!(context
         .pip_uninstall()
         .arg("pgpdump"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - pgpdump==1.5
@@ -5359,10 +4810,7 @@ requires-python = ">=3.8"
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -5378,10 +4826,7 @@ requires-python = ">=3.8"
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -5403,10 +4848,7 @@ requires-python = ">=3.8"
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -5451,10 +4893,7 @@ dependencies = {file = ["dependencies.txt"]}
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -5470,10 +4909,7 @@ dependencies = {file = ["dependencies.txt"]}
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -5507,10 +4943,7 @@ requires-python = ">=3.8"
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -5526,10 +4959,7 @@ requires-python = ">=3.8"
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -5551,10 +4981,7 @@ requires-python = ">=3.8"
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -5601,10 +5028,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -5620,10 +5044,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -5636,10 +5057,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5656,10 +5074,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5686,10 +5101,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -5718,10 +5130,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5738,10 +5147,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5799,10 +5205,7 @@ fn invalidate_path_on_worktree_packed_commit() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -5818,10 +5221,7 @@ fn invalidate_path_on_worktree_packed_commit() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -5836,10 +5236,7 @@ fn invalidate_path_on_worktree_packed_commit() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5877,10 +5274,7 @@ fn invalidate_path_on_env_var() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .env_remove("FOO"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -5897,10 +5291,7 @@ fn invalidate_path_on_env_var() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .env_remove("FOO"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -5911,10 +5302,7 @@ fn invalidate_path_on_env_var() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .env("FOO", "BAR"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5934,10 +5322,7 @@ fn path_name_version_change() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/links/ok-1.0.0-py3-none-any.whl")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -5949,10 +5334,7 @@ fn path_name_version_change() {
     // Installing the same path again should be a no-op
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/links/ok-1.0.0-py3-none-any.whl")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -5963,10 +5345,7 @@ fn path_name_version_change() {
         .arg(context.workspace_root.join("test/links/ok-1.0.0-py3-none-any.whl"))
         .arg("--no-deps")
         .arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -5979,10 +5358,7 @@ fn path_name_version_change() {
     // Installing a new path should succeed
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/links/ok-2.0.0-py3-none-any.whl")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -5996,10 +5372,7 @@ fn path_name_version_change() {
     // Installing a new path should succeed regardless of which version is "newer"
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/links/ok-1.0.0-py3-none-any.whl")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -6032,10 +5405,7 @@ fn path_changes_with_same_name() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(one_wheel.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -6046,10 +5416,7 @@ fn path_changes_with_same_name() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(two_wheel.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -6087,10 +5454,7 @@ requires-python = ">=3.11,<3.13"
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -6128,10 +5492,7 @@ requires-python = ">=3.13"
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
@@ -6176,10 +5537,7 @@ build-backend = "hatchling.build"
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-version=3.13")
         .arg(child_dir.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -6205,10 +5563,7 @@ fn requires_python_source_dist_installed_incompatible_registry() {
         .arg("--no-binary")
         .arg("iniconfig")
         .arg("iniconfig==2.3.0"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -6230,10 +5585,7 @@ fn no_build_isolation() -> Result<()> {
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-build-isolation"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       ├─▶ The build backend returned an error
@@ -6257,10 +5609,7 @@ fn no_build_isolation() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("setuptools")
         .arg("wheel"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -6274,10 +5623,7 @@ fn no_build_isolation() -> Result<()> {
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-build-isolation"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6303,10 +5649,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
         .arg("-r")
         .arg("requirements.in")
         .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       ├─▶ The build backend returned an error
@@ -6330,10 +5673,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("setuptools")
         .arg("wheel"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -6347,10 +5687,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
         .arg("-r")
         .arg("requirements.in")
         .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6376,10 +5713,7 @@ fn install_utf16le_requirements() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -6402,10 +5736,7 @@ fn install_utf16be_requirements() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -6447,10 +5778,7 @@ fn dry_run_install() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .arg("requirements.txt")
         .arg("--dry-run")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Would download 7 packages
@@ -6479,10 +5807,7 @@ fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::erro
         .arg("requirements.txt")
         .arg("--dry-run")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Would download 3 packages
@@ -6507,10 +5832,7 @@ fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::er
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6530,10 +5852,7 @@ fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::er
         .arg("anyio")
         .arg("--dry-run")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Would download 1 package
@@ -6558,10 +5877,7 @@ fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::e
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -6582,10 +5898,7 @@ fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::e
         .arg("requirements.txt")
         .arg("--dry-run")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     Would make no changes
@@ -6608,10 +5921,7 @@ fn dry_run_install_transitive_dependency_already_installed()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6629,10 +5939,7 @@ fn dry_run_install_transitive_dependency_already_installed()
         .arg("requirements.txt")
         .arg("--dry-run")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Would download 4 packages
@@ -6658,10 +5965,7 @@ fn dry_run_install_then_upgrade() -> std::result::Result<(), Box<dyn std::error:
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -6682,10 +5986,7 @@ fn dry_run_install_then_upgrade() -> std::result::Result<(), Box<dyn std::error:
         .arg("-r")
         .arg("requirements.txt")
         .arg("--dry-run"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Would download 1 package
@@ -6721,10 +6022,7 @@ requires-python = ">=3.13"
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(format!("example @ {}", editable_dir.path().display())), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
@@ -6747,10 +6045,7 @@ async fn install_package_basic_auth_from_url() {
         .arg("--index-url")
         .arg(index_url)
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6774,10 +6069,7 @@ fn install_package_basic_auth_invalid_utf8() {
         .arg("--index-url")
         .arg("https://user:%FF@example.com/simple")
         .arg("--strict"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse credentials in index URL: https://user:****@example.com/simple
       Caused by: URL password contains invalid UTF-8
@@ -6799,10 +6091,7 @@ async fn install_package_basic_auth_from_netrc_default() -> Result<()> {
         .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::NETRC, netrc.to_str().unwrap())
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6835,10 +6124,7 @@ async fn install_package_basic_auth_from_netrc() -> Result<()> {
         .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::NETRC, netrc.to_str().unwrap())
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6874,10 +6160,7 @@ async fn install_package_known_pyx_url_from_netrc_without_pyx_token() -> Result<
         .env(EnvVars::NETRC, netrc.as_os_str())
         .env(EnvVars::PYX_API_URL, proxy.uri())
         .env(EnvVars::PYX_CREDENTIALS_DIR, pyx_credentials_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6912,10 +6195,7 @@ async fn install_package_known_pyx_url_from_netrc_on_pyx_error() -> Result<()> {
         .env(EnvVars::PYX_API_URL, proxy.uri())
         .env(EnvVars::PYX_API_KEY, "invalid-api-key")
         .env(EnvVars::PYX_CREDENTIALS_DIR, pyx_credentials_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6952,10 +6232,7 @@ async fn install_package_known_pyx_url_prefers_pyx_token_to_netrc() -> Result<()
         .env(EnvVars::PYX_AUTH_TOKEN, crate::pypi_proxy::pyx_test_token())
         .env(EnvVars::PYX_CREDENTIALS_DIR, pyx_credentials_dir.as_os_str())
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6988,10 +6265,7 @@ async fn install_package_known_pyx_url_failure_shows_pyx_guidance() -> Result<()
         .env(EnvVars::PYX_API_KEY, "invalid-api-key")
         .env(EnvVars::PYX_CREDENTIALS_DIR, pyx_credentials_dir.as_os_str())
         .arg("--strict"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch: `http://[LOCALHOST]/bearer-auth/simple/anyio/`
       Caused by: Run `uv auth login pyx.dev` to authenticate uv with pyx
@@ -7024,10 +6298,7 @@ async fn install_package_basic_auth_from_netrc_index_in_requirements() -> Result
         .arg("requirements.txt")
         .env(EnvVars::NETRC, netrc.to_str().unwrap())
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -7054,10 +6325,7 @@ async fn install_index_with_relative_links() {
         .arg("--index-url")
         .arg(proxy.url("/relative/simple"))
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -7099,10 +6367,7 @@ async fn install_package_basic_auth_from_keyring() {
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Keyring request for public@http://[LOCALHOST]/basic-auth/simple
     Keyring request for public@[LOCALHOST]
@@ -7147,10 +6412,7 @@ async fn install_package_basic_auth_from_keyring_wrong_password() {
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "foobar"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Keyring request for public@http://[LOCALHOST]/basic-auth/simple
     Keyring request for public@[LOCALHOST]
@@ -7191,10 +6453,7 @@ async fn install_package_basic_auth_from_keyring_wrong_username() {
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"other": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Keyring request for public@http://[LOCALHOST]/basic-auth/simple
     Keyring request for public@[LOCALHOST]
@@ -7218,10 +6477,7 @@ async fn install_index_with_relative_links_authenticated() {
         .arg("--index-url")
         .arg(proxy.authenticated_url("public", "heron", "/basic-auth/relative/simple"))
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -7254,10 +6510,7 @@ fn install_site_packages_mtime_updated() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("anyio")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -7295,10 +6548,7 @@ fn deptry_gitignore() {
         .arg(format!("deptry_reproducer @ {}", source_dist_dir.join("deptry_reproducer-0.1.0.tar.gz").simplified_display()))
         .arg("--strict")
         .current_dir(source_dist_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using Python 3.12.[X] environment at: [VENV]/
     Resolved 3 packages in [TIME]
@@ -7325,10 +6575,7 @@ fn reinstall_no_index() {
     uv_snapshot!(context.pip_install()
         .arg("anyio")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -7344,10 +6591,7 @@ fn reinstall_no_index() {
         .arg("anyio")
         .arg("--no-index")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -7361,10 +6605,7 @@ fn reinstall_no_index() {
         .arg("--no-index")
         .arg("--reinstall")
         .arg("--strict"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the provided package locations and you require anyio, we can conclude that your requirements are unsatisfiable.
@@ -7383,10 +6624,7 @@ fn already_installed_remote_dependencies() {
         .arg("idna")
         .arg("sniffio")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -7400,10 +6638,7 @@ fn already_installed_remote_dependencies() {
     uv_snapshot!(context.pip_install()
         .arg("anyio")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -7426,10 +6661,7 @@ fn already_installed_dependent_editable() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(root_path.join("first_local")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -7447,10 +6679,7 @@ fn already_installed_dependent_editable() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(vendor.url()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -7464,10 +6693,7 @@ fn already_installed_dependent_editable() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(root_path.join("first_local")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -7488,10 +6714,7 @@ fn already_installed_dependent_editable() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(vendor.url()), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
@@ -7506,10 +6729,7 @@ fn already_installed_dependent_editable() {
         .arg(root_path.join("first_local"))
         .arg("--reinstall-package")
         .arg("first-local"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -7532,10 +6752,7 @@ fn already_installed_local_path_dependent() {
     // Install the first local
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(root_path.join("first_local")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -7552,10 +6769,7 @@ fn already_installed_local_path_dependent() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(vendor.url()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -7568,10 +6782,7 @@ fn already_installed_local_path_dependent() {
     // We should rebuild and reinstall it.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(root_path.join("first_local")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -7585,10 +6796,7 @@ fn already_installed_local_path_dependent() {
     // We should rebuild and reinstall it.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(format!("first-local @ {}", root_path.join("first_local").display())), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -7608,10 +6816,7 @@ fn already_installed_local_path_dependent() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(vendor.url()), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
@@ -7626,10 +6831,7 @@ fn already_installed_local_path_dependent() {
         .arg(root_path.join("first_local"))
         .arg("--reinstall-package")
         .arg("first-local"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -7650,10 +6852,7 @@ fn already_installed_local_path_dependent() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(vendor.url()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -7675,10 +6874,7 @@ fn already_installed_local_path_dependent() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(vendor.url()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -7699,10 +6895,7 @@ fn already_installed_local_version_of_remote_package() {
     // Install the local anyio first
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(root_path.join("anyio_local")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -7714,10 +6907,7 @@ fn already_installed_local_version_of_remote_package() {
     // Install again without specifying a local path — this should not pull from the index
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -7730,10 +6920,7 @@ fn already_installed_local_version_of_remote_package() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio==4.2.0")
         .arg("--no-index"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that your requirements are unsatisfiable.
@@ -7747,10 +6934,7 @@ fn already_installed_local_version_of_remote_package() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio==4.3.0+foo")
         .arg("--reinstall"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of anyio==4.3.0+foo and you require anyio==4.3.0+foo, we can conclude that your requirements are unsatisfiable.
@@ -7763,10 +6947,7 @@ fn already_installed_local_version_of_remote_package() {
         .arg(root_path.join("anyio_local"))
         .arg("--reinstall")
         .arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -7781,10 +6962,7 @@ fn already_installed_local_version_of_remote_package() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -7800,10 +6978,7 @@ fn already_installed_local_version_of_remote_package() {
     // Install the local anyio again so we can test upgrades
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(root_path.join("anyio_local")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -7819,10 +6994,7 @@ fn already_installed_local_version_of_remote_package() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--upgrade"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked 1 package in [TIME]
@@ -7833,10 +7005,7 @@ fn already_installed_local_version_of_remote_package() {
     // We shouldn't overwrite our local version with the remote anyio here
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("httpx"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -7885,10 +7054,7 @@ fn already_installed_multiple_versions() -> Result<()> {
     // Request the second anyio version again
     // Should remove both previous versions and reinstall the second one
     uv_snapshot!(context.filters(), context.pip_install().arg("anyio==4.0.0"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -7906,10 +7072,7 @@ fn already_installed_multiple_versions() -> Result<()> {
     // This is loosely a regression test for the ordering of the installation preferences
     // from existing site-packages
     uv_snapshot!(context.filters(), context.pip_install().arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -7932,10 +7095,7 @@ fn already_installed_remote_url() {
 
     // First, install from the remote URL
     uv_snapshot!(context.filters(), context.pip_install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -7949,10 +7109,7 @@ fn already_installed_remote_url() {
     // resolve the package (since we installed a specific commit, but are now requesting the default
     // branch), but not reinstall the package.
     uv_snapshot!(context.filters(), context.pip_install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked 1 package in [TIME]
@@ -7962,10 +7119,7 @@ fn already_installed_remote_url() {
     // commit. We should neither resolve nor reinstall the package, since it's already installed
     // at this precise commit.
     uv_snapshot!(context.filters(), context.pip_install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked 1 package in [TIME]
@@ -7975,10 +7129,7 @@ fn already_installed_remote_url() {
     // We should just audit the URL package since it fulfills this requirement
     uv_snapshot!(
         context.pip_install().arg("uv-public-pypackage"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     ");
@@ -7990,10 +7141,7 @@ fn already_installed_remote_url() {
         .arg("uv-public-pypackage")
         .arg("--no-index")
         .arg("--reinstall"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that your requirements are unsatisfiable.
@@ -8005,10 +7153,7 @@ fn already_installed_remote_url() {
     // We should just audit the existing package
     uv_snapshot!(
         context.pip_install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked 1 package in [TIME]
@@ -8020,10 +7165,7 @@ fn already_installed_remote_url() {
         context.pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -8036,10 +7178,7 @@ fn already_installed_remote_url() {
     // We should attempt to pull from the index since the local version does not match
     uv_snapshot!(
         context.pip_install().arg("uv-public-pypackage==0.2.0").arg("--no-index"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
@@ -8057,10 +7196,7 @@ fn find_links() {
         .arg("tqdm")
         .arg("--find-links")
         .arg(context.workspace_root.join("test/links/")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -8098,10 +7234,7 @@ fn find_links_multiple() -> Result<()> {
         .arg(first_links_dir.path())
         .arg("--find-links")
         .arg(second_links_dir.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -8143,10 +7276,7 @@ async fn find_links_uppercase_html() -> Result<()> {
         .arg("--no-index")
         .arg("--find-links")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -8209,10 +7339,7 @@ async fn reject_wheel_with_multiple_dist_info_directories() -> Result<()> {
         .arg("validation==3.0.0")
         .arg("--index-url")
         .arg(server.uri()), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to download `validation==3.0.0`
@@ -8234,10 +7361,7 @@ fn find_links_no_binary() {
         .arg(":all:")
         .arg("--find-links")
         .arg(context.workspace_root.join("test/links/")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -8272,10 +7396,7 @@ fn require_hashes() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -8308,10 +7429,7 @@ fn require_hashes_build_dependencies() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -8341,10 +7459,7 @@ fn require_hashes_no_deps() -> Result<()> {
         .arg("requirements.txt")
         .arg("--no-deps")
         .arg("--require-hashes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -8382,10 +7497,7 @@ fn require_hashes_mismatch() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
       × Failed to download `anyio==4.0.0`
@@ -8419,10 +7531,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `markupsafe`
     "
@@ -8448,10 +7557,7 @@ fn require_hashes_editable() -> Result<()> {
         .arg("-r")
         .arg(requirements_txt.path())
         .arg("--require-hashes"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/test/packages/black_editable[d]
     "
@@ -8480,10 +7586,7 @@ fn require_hashes_constraint() -> Result<()> {
         .arg("--require-hashes")
         .arg("-c")
         .arg(constraints_txt.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -8511,10 +7614,7 @@ fn require_hashes_constraint() -> Result<()> {
         .arg("--require-hashes")
         .arg("-c")
         .arg(constraints_txt.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "
@@ -8539,10 +7639,7 @@ fn require_hashes_constraint() -> Result<()> {
         .arg("--require-hashes")
         .arg("-c")
         .arg(constraints_txt.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: anyio==4.0.0
     "
@@ -8567,10 +7664,7 @@ fn require_hashes_constraint() -> Result<()> {
         .arg("--require-hashes")
         .arg("-c")
         .arg(constraints_txt.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -8598,10 +7692,7 @@ fn require_hashes_constraint() -> Result<()> {
         .arg("--require-hashes")
         .arg("-c")
         .arg(constraints_txt.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -8636,10 +7727,7 @@ fn require_hashes_unnamed() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -8681,10 +7769,7 @@ fn require_hashes_unnamed_repeated() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -8719,10 +7804,7 @@ fn require_hashes_override() -> Result<()> {
         .arg("--require-hashes")
         .arg("--override")
         .arg(overrides_txt.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: anyio==4.0.0
     "
@@ -8744,10 +7826,7 @@ fn require_hashes_override() -> Result<()> {
         .arg("--require-hashes")
         .arg("--override")
         .arg(overrides_txt.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "
@@ -8770,10 +7849,7 @@ fn install_with_overrides_from_stdin() -> Result<()> {
         .arg("--override")
         .arg("-")
         .stdin(std::fs::File::open(overrides_txt)?), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -8801,10 +7877,7 @@ fn install_with_excludes_from_stdin() -> Result<()> {
         .arg("--exclude")
         .arg("-")
         .stdin(std::fs::File::open(excludes_txt)?), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -8933,10 +8006,7 @@ fn require_hashes_marker() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -8977,10 +8047,7 @@ fn verify_hashes() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--verify-hashes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -9019,10 +8086,7 @@ fn verify_hashes_missing_version() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--verify-hashes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -9054,10 +8118,7 @@ fn verify_hashes_mismatch() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--verify-hashes"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to download `idna==3.6`
@@ -9077,10 +8138,7 @@ fn verify_hashes_mismatch() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--no-verify-hashes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -9107,10 +8165,7 @@ fn verify_hashes_match() -> Result<()> {
         .arg("--no-deps")
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9138,10 +8193,7 @@ fn verify_hashes_omit_dependency() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--verify-hashes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -9172,10 +8224,7 @@ fn verify_hashes_editable() -> Result<()> {
         .arg("-r")
         .arg(requirements_txt.path())
         .arg("--verify-hashes"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
@@ -9214,10 +8263,7 @@ fn double_quoted_arguments() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.in"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9249,10 +8295,7 @@ fn single_quoted_arguments() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.in"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9284,10 +8327,7 @@ fn unquoted_arguments() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.in"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9319,10 +8359,7 @@ fn concatenated_quoted_arguments() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.in"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9387,10 +8424,7 @@ fn tool_uv_sources() -> Result<()> {
         .arg(require_path)
         .arg("--extra")
         .arg("utils"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 9 packages in [TIME]
     Prepared 9 packages in [TIME]
@@ -9413,10 +8447,7 @@ fn tool_uv_sources() -> Result<()> {
         .arg(require_path)
         .arg("--extra")
         .arg("utils"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 9 packages in [TIME]
     Checked 9 packages in [TIME]
@@ -9445,10 +8476,7 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("pyproject.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9483,10 +8511,7 @@ fn recursive_extra_transitive_url() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(".[all]"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -9507,10 +8532,7 @@ fn prefer_editable() -> Result<()> {
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg(context.workspace_root.join("test/packages/black_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9536,10 +8558,7 @@ fn prefer_editable() -> Result<()> {
         .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9590,10 +8609,7 @@ fn local_index_absolute() -> Result<()> {
         .arg("tqdm")
         .arg("--index-url")
         .arg(Url::from_directory_path(root).unwrap().as_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9641,10 +8657,7 @@ fn local_index_relative() -> Result<()> {
         .arg("tqdm")
         .arg("--index-url")
         .arg("./simple-html"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9697,10 +8710,7 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9755,10 +8765,7 @@ fn local_index_requirements_txt_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9801,10 +8808,7 @@ fn local_index_fallback() -> Result<()> {
         .arg("iniconfig")
         .arg("--extra-index-url")
         .arg(Url::from_directory_path(root).unwrap().as_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -9824,10 +8828,7 @@ fn accept_existing_prerelease() -> Result<()> {
 
     // Install a pre-release version of `flask`.
     uv_snapshot!(context.filters(), context.pip_install().arg("Flask==2.0.0rc1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -9844,10 +8845,7 @@ fn accept_existing_prerelease() -> Result<()> {
     // Install `flask-login`, without enabling pre-releases. The existing version of `flask` should
     // still be accepted.
     uv_snapshot!(context.filters(), context.pip_install().arg("flask-login==0.6.0"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -9878,10 +8876,7 @@ fn unmanaged() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -9970,10 +8965,7 @@ fn install_incompatible_python_version() {
     // Request Python 3.12; which should fail
     uv_snapshot!(context.filters(), context.pip_install().arg("-p").arg("3.12")
         .arg("anyio"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No virtual environment found for Python 3.12; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
     "
@@ -10020,10 +9012,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
         .env(EnvVars::UV_PYTHON_SEARCH_PATH, path.as_os_str()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from first executable in the search path at `[BIN]/python3`
       Caused by: Querying Python at `[BIN]/python3` failed with exit status exit status: 1
@@ -10047,10 +9036,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
         .env(EnvVars::UV_PYTHON_SEARCH_PATH, path.as_os_str()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No virtual environment found for Python 3.12; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
     "
@@ -10074,10 +9060,7 @@ fn install_unsupported_environment_yml() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("environment.yml"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Conda environment files (i.e., `environment.yml`) are not supported
     ");
@@ -10097,10 +9080,7 @@ fn incompatible_build_constraint() -> Result<()> {
         .arg("requests==1.2")
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
@@ -10126,10 +9106,7 @@ fn incompatible_build_constraint_from_stdin() -> Result<()> {
         .arg("--build-constraint")
         .arg("-")
         .stdin(std::fs::File::open(constraints_txt)?), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
@@ -10153,10 +9130,7 @@ fn compatible_build_constraint() -> Result<()> {
         .arg("requests==1.2")
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -10184,10 +9158,7 @@ build-constraint-dependencies = [
 
     uv_snapshot!(context.pip_install()
         .arg("requests==1.2"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
@@ -10216,10 +9187,7 @@ build-constraint-dependencies = [
 
     uv_snapshot!(context.pip_install()
         .arg("requests==1.2"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -10252,10 +9220,7 @@ build-constraint-dependencies = [
         .arg("requests==1.2")
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
@@ -10280,10 +9245,7 @@ build-constraint-dependencies = [
         .arg("requests==1.2")
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
@@ -10315,10 +9277,7 @@ build-constraint-dependencies = [
         .arg("requests==1.2")
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -10352,10 +9311,7 @@ fn install_build_isolation_package() -> Result<()> {
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
         .arg(package.path()), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       ├─▶ The build backend returned an error
@@ -10377,10 +9333,7 @@ fn install_build_isolation_package() -> Result<()> {
 
     // Install `hatchinling`, `hatch-vs` for iniconfig
     uv_snapshot!(context.filters(), context.pip_install().arg("hatchling").arg("hatch-vcs"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 9 packages in [TIME]
     Prepared 9 packages in [TIME]
@@ -10401,10 +9354,7 @@ fn install_build_isolation_package() -> Result<()> {
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
         .arg(package.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -10426,10 +9376,7 @@ fn invalid_extension() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz")
         , @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`
       Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
@@ -10446,10 +9393,7 @@ fn no_extension() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6")
         , @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`
       Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
@@ -10470,10 +9414,7 @@ fn switch_python_version() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -10490,10 +9431,7 @@ fn switch_python_version() -> Result<()> {
         .arg("requirements.txt")
         .arg("--python-version")
         .arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -10526,10 +9464,7 @@ fn stale_egg_info() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -10557,10 +9492,7 @@ fn stale_egg_info() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -10597,10 +9529,7 @@ fn avoid_cached_wheel() {
         .arg("--python")
         .arg(".venv-3.10")
         .arg("multiprocess"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using Python 3.10.[X] environment at: .venv-3.10
     Resolved 2 packages in [TIME]
@@ -10625,10 +9554,7 @@ fn avoid_cached_wheel() {
         .arg("--python")
         .arg(".venv-3.11")
         .arg("multiprocess"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using Python 3.11.[X] environment at: .venv-3.11
     Resolved 2 packages in [TIME]
@@ -10649,10 +9575,7 @@ fn missing_top_level() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("suds-community==0.8.5"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -10663,10 +9586,7 @@ fn missing_top_level() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("suds-community==0.8.5"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top_level.txt` file. Installation may result in an incomplete environment.
@@ -10683,10 +9603,7 @@ fn sklearn() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.pip_install().arg("sklearn"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to build `sklearn==0.0.post12`
       ├─▶ The build backend returned an error
@@ -10739,10 +9656,7 @@ fn resolve_derivation_chain() -> Result<()> {
     uv_snapshot!(filters, context.pip_install()
         .arg("-e")
         .arg("."), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to build `wsgiref==0.1.2`
       ├─▶ The build backend returned an error
@@ -10785,10 +9699,7 @@ fn respect_no_installer_metadata_env_var() {
         .arg("urllib3==2.2.1")
         .arg("--strict")
         .env(EnvVars::UV_NO_INSTALLER_METADATA, "1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -10844,10 +9755,7 @@ fn test_dynamic_version_sdist_wrong_version() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(source_dist.path()), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to build `foo @ file://[TEMP_DIR]/foo-1.2.3.tar.gz`
@@ -10868,10 +9776,7 @@ fn build_tag() {
         .arg("build-tag")
         .arg("--find-links")
         .arg(context.workspace_root.join("test/links/")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -10885,12 +9790,9 @@ fn build_tag() {
         .arg("-c")
         .arg("import build_tag; build_tag.main()")
         .current_dir(&context.temp_dir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     5
-
-    ----- stderr -----
     ");
 }
 
@@ -10902,10 +9804,7 @@ fn missing_git_prefix() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test`
       Caused by: Direct URL (`https://github.com/astral-sh/workspace-in-root-test`) references a Git repository, but is missing the `git+` prefix (e.g., `git+https://github.com/astral-sh/workspace-in-root-test`)
@@ -10926,10 +9825,7 @@ fn missing_subdirectory_git() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing`
       ╰─▶ The source distribution `git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing` has no subdirectory `missing`
@@ -10947,10 +9843,7 @@ fn missing_subdirectory_url() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing`
       ╰─▶ The source distribution `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing` has no subdirectory `missing`
@@ -10971,10 +9864,7 @@ fn bad_crc32() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("--python-platform").arg("linux")
         .arg("osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 7 packages in [TIME]
       × Failed to download `osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl`
@@ -11009,10 +9899,7 @@ fn static_metadata_pyproject_toml() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("pyproject.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11048,10 +9935,7 @@ fn static_metadata_source_tree() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -11092,10 +9976,7 @@ fn direct_url_hash_source_tree_dependency() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("."), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to download `protobug @ https://files.pythonhosted.org/packages/f2/cc/db26b91cddffbcf0c6df7834fd642578f737fe34197635ae8ea64643a35f/protobug-0.3.0-py3-none-any.whl#sha256=ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c2026520`
@@ -11141,10 +10022,7 @@ fn direct_url_hash_source_tree_dependency_conflict() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("."), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Conflicting archive URL hashes for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a`: `sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f` conflicts with `sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a`
     "
@@ -11180,10 +10058,7 @@ fn direct_url_hash_source_tree_dependency_multiple_hash_algorithms() -> Result<(
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -11222,10 +10097,7 @@ fn static_metadata_already_installed() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("pyproject.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11238,10 +10110,7 @@ fn static_metadata_already_installed() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -11269,10 +10138,7 @@ fn cyclic_build_dependency() {
         .arg("unsafe-best-match")
         .arg("--no-binary")
         .arg("circular-one"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to download and build `circular-one==0.2.0`
@@ -11288,10 +10154,7 @@ fn cyclic_build_dependency() {
         .arg("https://test.pypi.org/simple")
         .arg("--index-strategy")
         .arg("unsafe-best-match"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -11314,10 +10177,7 @@ fn direct_url_json_git_preserves_repository_url() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -11352,10 +10212,7 @@ fn direct_url_json_git_tag() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -11389,10 +10246,7 @@ fn direct_url_json_direct_url() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -11457,10 +10311,7 @@ fn dependency_group() -> Result<()> {
     context = new_context(&server)?;
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -11474,10 +10325,7 @@ fn dependency_group() -> Result<()> {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("-r").arg("pyproject.toml")
         .arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11490,10 +10338,7 @@ fn dependency_group() -> Result<()> {
     context = new_context(&server)?;
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("pyproject.toml:bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -11507,10 +10352,7 @@ fn dependency_group() -> Result<()> {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("-r").arg("pyproject.toml")
         .arg("--group").arg("pyproject.toml:bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11523,10 +10365,7 @@ fn dependency_group() -> Result<()> {
     context = new_context(&server)?;
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -11540,10 +10379,7 @@ fn dependency_group() -> Result<()> {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("foo")
         .arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11558,10 +10394,7 @@ fn dependency_group() -> Result<()> {
         .arg("-r").arg("pyproject.toml")
         .arg("--group").arg("foo")
         .arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -11597,10 +10430,7 @@ fn recursive_dependency_group() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("test"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read dependency groups from: [TEMP_DIR]/pyproject.toml
       Caused by: Project `myproject` has malformed dependency groups
@@ -11629,10 +10459,7 @@ fn recursive_dependency_group() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("test"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read dependency groups from: [TEMP_DIR]/pyproject.toml
       Caused by: Project `myproject` has malformed dependency groups
@@ -11665,10 +10492,7 @@ fn virtual_dependency_group() -> Result<()> {
     let context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -11723,10 +10547,7 @@ fn many_pyproject_group() -> Result<()> {
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("pyproject.toml:foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -11737,10 +10558,7 @@ fn many_pyproject_group() -> Result<()> {
     // 'foo' from subtoml
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("subdir/pyproject.toml:foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -11754,10 +10572,7 @@ fn many_pyproject_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("pyproject.toml:foo")
         .arg("--group").arg("subdir/pyproject.toml:foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11799,10 +10614,7 @@ fn other_sources_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(".")
         .arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -11818,10 +10630,7 @@ fn other_sources_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e").arg(context.workspace_root.join("test/packages/poetry_editable"))
         .arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -11882,10 +10691,7 @@ fn suspicious_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("foo")
         .arg("--group").arg("subdir/pyproject.toml:foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11901,10 +10707,7 @@ fn suspicious_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("foo")
         .arg("--group").arg("subdir/pyproject.toml:bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11921,10 +10724,7 @@ fn suspicious_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r").arg("subdir/pyproject.toml")
         .arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11939,10 +10739,7 @@ fn suspicious_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r").arg("pyproject.toml")
         .arg("--group").arg("subdir/pyproject.toml:foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11997,10 +10794,7 @@ fn invalid_group() -> Result<()> {
     // Hey you passed a path and not a group!
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("subdir/"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: invalid value 'subdir/' for '--group <GROUP>': Not a valid package or extra name: "subdir/". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
 
@@ -12010,10 +10804,7 @@ fn invalid_group() -> Result<()> {
     // Hey this path needs to end with "pyproject.toml"!
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("./:foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: ./
 
@@ -12023,10 +10814,7 @@ fn invalid_group() -> Result<()> {
     // Hey this path needs to end with "pyproject.toml"!
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("subdir/:foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: subdir/
 
@@ -12039,10 +10827,7 @@ fn invalid_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("bar")
         .arg("--group").arg("subdir/pyproject.toml:bar"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The dependency group 'bar' was not found in the project: pyproject.toml
     ");
@@ -12094,10 +10879,7 @@ fn project_and_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--project").arg("subdir")
         .arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -12113,10 +10895,7 @@ fn project_and_group() -> Result<()> {
         .arg("--project").arg("subdir")
         .arg("--group").arg("subdir/pyproject.toml:bar")
         .arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -12133,10 +10912,7 @@ fn project_and_group() -> Result<()> {
         .arg("--project").arg("subdir")
         .arg("--group").arg("bar")
         .arg("--group").arg("pyproject.toml:foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -12153,10 +10929,7 @@ fn project_and_group() -> Result<()> {
         .arg("--project").arg("subdir")
         .arg("--group").arg("subdir/pyproject.toml:bar")
         .arg("--group").arg("pyproject.toml:foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -12215,10 +10988,7 @@ fn directory_and_group() -> Result<()> {
         .arg("--directory").arg("subdir")
         .arg("--group").arg("bar")
         .arg("--group").arg("../pyproject.toml:foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using Python 3.12.[X] environment at: [VENV]/
     Resolved 2 packages in [TIME]
@@ -12236,10 +11006,7 @@ fn directory_and_group() -> Result<()> {
         .arg("--directory").arg("subdir")
         .arg("--group").arg("pyproject.toml:bar")
         .arg("--group").arg("../pyproject.toml:foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using Python 3.12.[X] environment at: [VENV]/
     Resolved 2 packages in [TIME]
@@ -12258,10 +11025,7 @@ fn directory_and_group() -> Result<()> {
         .arg("--project").arg("../")
         .arg("--group").arg("pyproject.toml:bar")
         .arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using Python 3.12.[X] environment at: [VENV]/
     Resolved 2 packages in [TIME]
@@ -12328,10 +11092,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -12345,10 +11106,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
         .arg("--upgrade")
         .arg("--no-sources")
         .arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -12366,10 +11124,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--upgrade")
         .arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -12386,10 +11141,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
     .arg("--upgrade")
     .arg(".")
     .env(EnvVars::UV_NO_SOURCES, "true"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -12406,10 +11158,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
         .arg("--upgrade")
         .arg(".")
         .env(EnvVars::UV_NO_SOURCES, "false"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -12427,10 +11176,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
         .arg("--no-sources")
         .arg(".")
         .env(EnvVars::UV_NO_SOURCES, "False"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -12478,10 +11224,7 @@ fn pip_install_no_sources_package() -> Result<()> {
         .arg("--no-sources-package")
         .arg("anyio")
         .arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -12512,10 +11255,7 @@ fn install_git_with_git_envs_set() {
         .env(EnvVars::GIT_OBJECT_DIRECTORY, "/nonexistent")
         .env(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES, "/nonexistent"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -12531,10 +11271,7 @@ fn unsupported_git_scheme() {
     let context = uv_test::test_context!("3.12");
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("git+fantasy://foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `git+fantasy://foo`
       Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://foo` (expected one of `https:`, `ssh:`, or `file:`)
@@ -12698,10 +11435,7 @@ def main():
         .arg(format!("git+file://{}", mylib_dir.path().display()))
         // Pass through environment variable to allow file:// URLs in Git subprocesses
         .env("GIT_ALLOW_PROTOCOL", "file:ext:http:https:ssh"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -12721,10 +11455,7 @@ fn install_git_submodule_remote() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(format!("git+https://github.com/{TEST_REPO}@{TEST_REV}")), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -12744,10 +11475,7 @@ fn install_git_submodule_remote_relative() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(format!("git+https://github.com/{TEST_REPO}@{TEST_REV}")), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -12788,10 +11516,7 @@ fn change_layout_src() -> Result<()> {
 
     // Installing should build the package.
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -12803,10 +11528,7 @@ fn change_layout_src() -> Result<()> {
 
     // Reinstalling should have no effect.
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -12823,10 +11545,7 @@ fn change_layout_src() -> Result<()> {
 
     // Installing should rebuild the package.
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -12838,10 +11557,7 @@ fn change_layout_src() -> Result<()> {
 
     // Reinstalling should have no effect.
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -12885,10 +11601,7 @@ fn change_layout_custom_directory() -> Result<()> {
 
     // Installing should build the package.
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -12900,10 +11613,7 @@ fn change_layout_custom_directory() -> Result<()> {
 
     // Reinstalling should have no effect.
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -12914,10 +11624,7 @@ fn change_layout_custom_directory() -> Result<()> {
 
     // Installing should rebuild the package.
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -12929,10 +11636,7 @@ fn change_layout_custom_directory() -> Result<()> {
 
     // Reinstalling should have no effect.
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -12943,10 +11647,7 @@ fn change_layout_custom_directory() -> Result<()> {
 
     // Installing should rebuild the package.
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -12958,10 +11659,7 @@ fn change_layout_custom_directory() -> Result<()> {
 
     // Reinstalling should have no effect.
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -12996,10 +11694,7 @@ fn pep_751_install_registry_wheel() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -13016,10 +11711,7 @@ fn pep_751_install_registry_wheel() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -13054,10 +11746,7 @@ fn pep_751_install_registry_sdist() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -13069,10 +11758,7 @@ fn pep_751_install_registry_sdist() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -13105,10 +11791,7 @@ fn pep_751_install_invalid_artifact_urls() -> Result<()> {
         .arg("--dry-run")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Invalid artifact URL: `data:application/octet-stream,ignored`
     "
@@ -13133,10 +11816,7 @@ fn pep_751_install_invalid_artifact_urls() -> Result<()> {
         .arg("--dry-run")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Invalid artifact URL: `data:application/octet-stream,ignored`
     "
@@ -13196,10 +11876,7 @@ fn pep_751_install_directory() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -13214,10 +11891,7 @@ fn pep_751_install_directory() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 4 packages in [TIME]
     "
@@ -13269,10 +11943,7 @@ fn pep_751_install_require_hashes_directory() -> Result<()> {
         .arg("-r")
         .arg("pylock.toml")
         .arg("--require-hashes"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: foo
     "
@@ -13308,10 +11979,7 @@ fn pep_751_install_git() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -13323,10 +11991,7 @@ fn pep_751_install_git() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -13361,10 +12026,7 @@ fn pep_751_install_url_wheel() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -13378,10 +12040,7 @@ fn pep_751_install_url_wheel() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 3 packages in [TIME]
     "
@@ -13422,10 +12081,7 @@ fn pep_751_install_url_sdist() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -13439,10 +12095,7 @@ fn pep_751_install_url_sdist() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -13508,10 +12161,7 @@ fn pep_751_install_path_wheel() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl)
@@ -13522,10 +12172,7 @@ fn pep_751_install_path_wheel() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -13571,10 +12218,7 @@ fn pep_751_prefers_path_over_url() -> Result<()> {
         .arg("--no-build")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -13621,10 +12265,7 @@ fn pep_751_install_path_sdist() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -13636,10 +12277,7 @@ fn pep_751_install_path_sdist() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -13677,10 +12315,7 @@ fn pep_751_hash_mismatch() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to read `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`
@@ -13734,10 +12369,7 @@ fn pep_751_mix() -> Result<()> {
         .arg("pylock.toml")
         .arg("-r")
         .arg("pylock.dev.toml"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Multiple `pylock.toml` files specified: `pylock.toml` vs. `pylock.dev.toml`
     "
@@ -13749,10 +12381,7 @@ fn pep_751_mix() -> Result<()> {
         .arg("pylock.toml")
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot specify additional requirements alongside a `pylock.toml` file
     "
@@ -13764,10 +12393,7 @@ fn pep_751_mix() -> Result<()> {
         .arg("pylock.toml")
         .arg("-c")
         .arg("constraints.txt"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot specify constraints with a `pylock.toml` file
     "
@@ -13801,10 +12427,7 @@ fn pep_751_multiple_sources() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Package `typing-extensions` includes both a registry (`packages.wheels`) and an archive source (`packages.archive`)
     "
@@ -13925,10 +12548,7 @@ requires_python = "==3.13.*"
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -13943,10 +12563,7 @@ requires_python = "==3.13.*"
         .arg("pylock.toml")
         .arg("--extra")
         .arg("async"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -13963,10 +12580,7 @@ requires_python = "==3.13.*"
         .arg("pylock.toml")
         .arg("--group")
         .arg("test"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -13980,10 +12594,7 @@ requires_python = "==3.13.*"
         .arg("-r")
         .arg("pylock.toml")
         .arg("--all-extras"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -13998,10 +12609,7 @@ requires_python = "==3.13.*"
         .arg("pylock.toml")
         .arg("--group")
         .arg("pylock.toml:test"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: invalid value 'pylock.toml:test' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: pylock.toml
 
@@ -14029,10 +12637,7 @@ fn pep_751_lock_version() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Not a valid `pylock.toml` file: pylock.toml
       Caused by: TOML parse error at line 2, column 24
@@ -14056,10 +12661,7 @@ fn pep_751_lock_version() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     "#
@@ -14091,10 +12693,7 @@ fn pep_751_package_requires_python() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     "#
@@ -14116,10 +12715,7 @@ fn pep_751_package_requires_python() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Package `example` requires Python >=99, but the target Python version is 3.12.[X]
     "#
@@ -14161,10 +12757,7 @@ fn pep_751_requires_python() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the `pylock.toml`'s Python requirement: `>=3.13`
     "
@@ -14195,10 +12788,7 @@ async fn bogus_redirect() -> Result<()> {
             .arg(redirect_server.uri())
             .arg("sniffio"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The index returned metadata for the wrong package: expected distribution for sniffio, got distribution for anyio
     "
@@ -14236,10 +12826,7 @@ fn reserved_script_name() -> Result<()> {
         .touch()?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14266,10 +12853,7 @@ fn reserved_script_name() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg("."), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14342,10 +12926,7 @@ fn reject_wheel_entrypoint_paths() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14366,10 +12947,7 @@ fn reject_normalized_reserved_wheel_entrypoint_name() -> Result<()> {
         repacked_wheel_with_entrypoint(&context, "console_scripts", "nested/../python")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14388,10 +12966,7 @@ fn reject_normalized_reserved_gui_wheel_entrypoint_name() -> Result<()> {
         repacked_wheel_with_entrypoint(&context, "gui_scripts", "nested/../python")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14410,10 +12985,7 @@ fn reject_free_threaded_python_wheel_entrypoint_name() -> Result<()> {
         repacked_wheel_with_entrypoint(&context, "console_scripts", "python3.13t")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14432,10 +13004,7 @@ fn reject_windowed_free_threaded_python_wheel_entrypoint_name() -> Result<()> {
         repacked_wheel_with_entrypoint(&context, "console_scripts", "pythonw3.13t")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14453,10 +13022,7 @@ fn reject_windows_rewritten_python_wheel_entrypoint_name() -> Result<()> {
     let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "python.py")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14475,10 +13041,7 @@ fn reject_windows_rewritten_free_threaded_python_wheel_entrypoint_name() -> Resu
         repacked_wheel_with_entrypoint(&context, "console_scripts", "pythonw3.13t.py")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14496,10 +13059,7 @@ fn reject_pypy_major_wheel_entrypoint_name() -> Result<()> {
     let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "pypy3")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14517,10 +13077,7 @@ fn reject_windows_rewritten_pypy_wheel_entrypoint_name() -> Result<()> {
     let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "pypy.py")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14539,10 +13096,7 @@ fn warn_normalized_activation_wheel_entrypoint_name() -> Result<()> {
         repacked_wheel_with_entrypoint(&context, "console_scripts", "nested/../activate.bash")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14562,10 +13116,7 @@ fn accept_normalized_gui_wheel_entrypoint_paths() -> Result<()> {
         repacked_wheel_with_entrypoint(&context, "gui_scripts", "nested/../normalized-gui")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14592,10 +13143,7 @@ fn accept_normalized_wheel_entrypoint_paths() -> Result<()> {
         repacked_wheel_with_entrypoint(&context, "console_scripts", "nested/../normalized-script")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14654,10 +13202,7 @@ fn pep_751_dependency() -> Result<()> {
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -14682,10 +13227,7 @@ fn conflicting_flags_clap_bug() {
         .arg("install")
         .arg("--no-offline")
         .arg("tqdm"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `--offline` and `--no-offline` cannot be used together. Boolean flags on different levels are currently not supported (https://github.com/clap-rs/clap/issues/6049)
     "
@@ -14723,10 +13265,7 @@ fn offline_refresh_conflict() {
         .arg("tqdm")
         .arg("--offline")
         .arg("--refresh"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument `--offline` cannot be used with `--refresh`
     "
@@ -14745,10 +13284,7 @@ fn offline_refresh_conflict_verbose() {
         .arg("--verbose")
         .env(EnvVars::RUST_LOG, "uv=trace")
         .env(EnvVars::RUST_BACKTRACE, "1"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -14821,10 +13357,7 @@ fn strip_shebang_arguments() -> Result<()> {
 
     // Install the package.
     uv_snapshot!(context.filters(), context.pip_install().arg(project_dir.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14870,10 +13403,7 @@ fn install_python_preference() {
 
     // Create a managed interpreter environment
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X]
     Creating virtual environment at: .venv
@@ -14882,10 +13412,7 @@ fn install_python_preference() {
 
     // Install a package, requesting managed Python
     uv_snapshot!(context.filters(), context.pip_install().arg("anyio").arg("--managed-python"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -14898,10 +13425,7 @@ fn install_python_preference() {
     // Install a package, requesting unmanaged Python
     // This is allowed, because the virtual environment already exists
     uv_snapshot!(context.filters(), context.pip_install().arg("anyio").arg("--no-managed-python"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     ");
@@ -14909,10 +13433,7 @@ fn install_python_preference() {
     // This also works with `VIRTUAL_ENV` unset
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio").arg("--no-managed-python").env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     ");
@@ -14935,10 +13456,7 @@ fn config_settings_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -14957,10 +13475,7 @@ fn config_settings_package() -> Result<()> {
     // Uninstall the package.
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("setuptools-editable"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
@@ -14972,10 +13487,7 @@ fn config_settings_package() -> Result<()> {
         .arg("requirements.txt")
         .arg("--config-settings-package")
         .arg("setuptools-editable:editable_mode=compat"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -14993,10 +13505,7 @@ fn config_settings_package() -> Result<()> {
     // Uninstall the package.
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("setuptools-editable"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
@@ -15009,10 +13518,7 @@ fn config_settings_package() -> Result<()> {
         .arg("--config-settings-package")
         .arg("setuptools:editable_mode=compat")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
@@ -15035,10 +13541,7 @@ fn reject_invalid_archive_member_names() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheeldiff2==0.0.1"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to download `cbwheeldiff2==0.0.1`
@@ -15054,10 +13557,7 @@ fn reject_invalid_streaming_zip() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheelstreamtest==0.0.1"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to download `cbwheelstreamtest==0.0.1`
@@ -15073,10 +13573,7 @@ fn reject_invalid_double_zip() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheelziptest==0.0.2"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to download `cbwheelziptest==0.0.2`
@@ -15092,10 +13589,7 @@ fn reject_invalid_central_directory_offset() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl`
@@ -15112,10 +13606,7 @@ fn reject_invalid_crc32_mismatch() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl`
@@ -15131,10 +13622,7 @@ fn reject_invalid_crc32_non_data_descriptor() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl`
@@ -15150,10 +13638,7 @@ fn reject_invalid_duplicate_extra_field() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl`
       ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
@@ -15168,10 +13653,7 @@ fn reject_invalid_short_usize() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl`
@@ -15187,10 +13669,7 @@ fn reject_invalid_chained_extra_field() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl`
       ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
@@ -15205,10 +13684,7 @@ fn reject_invalid_short_usize_zip64() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl`
       ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
@@ -15270,10 +13746,7 @@ fn already_installed_url_dependency_no_sources() -> Result<()> {
 
     // Install `foo`.
     uv_snapshot!(context.filters(), context.pip_install().arg("./foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -15284,10 +13757,7 @@ fn already_installed_url_dependency_no_sources() -> Result<()> {
 
     // Install `bar` with `--no-sources`.
     uv_snapshot!(context.filters(), context.pip_install().arg("./bar").arg("--no-sources"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -15385,10 +13855,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // Ensure our build backend is checking the version correctly
     uv_snapshot!(context.filters(), context.pip_install().arg("--index-url").arg(server.index_url()).arg(".").env("EXPECTED_A_VERSION", "0.1"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -15420,10 +13887,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be built with a 0.2.
     uv_snapshot!(context.filters(), context.pip_install().arg("--index-url").arg(server.index_url()).arg(".").env("EXPECTED_A_VERSION", "0.2"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -15451,10 +13915,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     // The child should be rebuilt with a 0.1, without `--reinstall`.
     uv_snapshot!(context.filters(), context.pip_install().arg("--index-url").arg(server.index_url()).arg(".")
         .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.2"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -15471,10 +13932,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install().arg("--index-url").arg(server.index_url()).arg(".")
         .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -15525,10 +13983,7 @@ fn overlapping_packages_warning() -> Result<()> {
         .arg("--no-deps")
         .arg(&built_by_uv)
         .arg(also_build_by_uv.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -15548,10 +14003,7 @@ fn overlapping_packages_warning() -> Result<()> {
         .arg("detect-module-conflicts")
         .arg(&built_by_uv)
         .arg(also_build_by_uv.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -15569,10 +14021,7 @@ fn overlapping_packages_warning() -> Result<()> {
         .arg("--no-deps")
         .arg("poetry")
         .arg("poetry-core"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -15585,10 +14034,7 @@ fn overlapping_packages_warning() -> Result<()> {
     // Check that we can uninstall even if the venv is bogus.
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("built_by_uv"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - built-by-uv==0.1.0 (from file://[WORKSPACE]/test/packages/built-by-uv)
@@ -15596,10 +14042,7 @@ fn overlapping_packages_warning() -> Result<()> {
     );
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("also_built_by_uv"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
@@ -15610,10 +14053,7 @@ fn overlapping_packages_warning() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-deps")
         .arg(built_by_uv), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -15625,10 +14065,7 @@ fn overlapping_packages_warning() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-deps")
         .arg(also_build_by_uv.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -15709,10 +14146,7 @@ fn overlapping_empty_init_py() -> Result<()> {
         .arg("detect-module-conflicts")
         .arg("./gpu-a")
         .arg("./gpu-b"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -15799,10 +14233,7 @@ fn overlapping_nested_files() -> Result<()> {
         .arg("detect-module-conflicts")
         .arg("./gpu-a")
         .arg("./gpu-b"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -15875,10 +14306,7 @@ fn overlapping_file_without_enclosing_directory() -> Result<()> {
         .arg("detect-module-conflicts")
         .arg("./gpu-a")
         .arg("./gpu-b"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -15926,10 +14354,7 @@ fn transitive_dependency_config_settings_invalidation() -> Result<()> {
     // Install the local `idna` package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.temp_dir.child("idna").path()),  @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -15945,10 +14370,7 @@ fn transitive_dependency_config_settings_invalidation() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--config-settings=foo=bar"),  @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -15969,10 +14391,7 @@ fn switch_platform() {
         .arg("cffi")
         .arg("--python-platform")
         .arg("windows"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -15983,10 +14402,7 @@ fn switch_platform() {
     );
 
     uv_snapshot!(context.pip_check().arg("--python-platform").arg("windows"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 2 packages in [TIME]
     All installed packages are compatible
@@ -15994,10 +14410,7 @@ fn switch_platform() {
     );
 
     uv_snapshot!(context.pip_check().arg("--python-platform").arg("linux"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Checked 2 packages in [TIME]
     Found 1 incompatibility
@@ -16009,10 +14422,7 @@ fn switch_platform() {
         .arg("cffi")
         .arg("--python-platform")
         .arg("linux"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -16059,10 +14469,7 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg("./local_pkg"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16075,10 +14482,7 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("iniconfig")
         .arg("--no-sources"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     "
@@ -16105,10 +14509,7 @@ fn install_with_system_interpreter() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--system")
         .arg("anyio"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using Python 3.12.[LATEST] environment at: managed/cpython-3.12.[LATEST]-[PLATFORM]
     error: The interpreter at managed/cpython-3.12.[LATEST]-[PLATFORM] is externally managed, and indicates the following:
@@ -16133,10 +14534,7 @@ fn install_missing_python_no_target() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python").arg("3.12")
         .arg("anyio"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No virtual environment found for Python 3.12; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
     "
@@ -16158,10 +14556,7 @@ fn install_missing_python_with_target() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--target").arg(target_dir.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.14.[LATEST]
     Resolved 3 packages in [TIME]
@@ -16190,10 +14585,7 @@ fn install_missing_python_version_with_target() {
         .arg("anyio")
         .arg("--python").arg("3.12")
         .arg("--target").arg(target_dir.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[LATEST]
     Resolved 3 packages in [TIME]
@@ -16268,10 +14660,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .assert()
         .success();
     uv_snapshot!(context.filters(), context.pip_install().arg("./child"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16288,10 +14677,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .assert()
         .success();
     uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to build `py313 @ file://[TEMP_DIR]/child`
@@ -16307,10 +14693,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .assert()
         .success();
     uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16327,10 +14710,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .assert()
         .success();
     uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to build `py313 @ file://[TEMP_DIR]/child`
@@ -16368,10 +14748,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .assert()
         .success();
     uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16388,10 +14765,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .assert()
         .success();
     uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to build `parent @ file://[TEMP_DIR]/`
@@ -16453,10 +14827,7 @@ fn install_editable_uv_build_data() -> Result<()> {
         .child("data/project-config.txt")
         .write_str("project config")?;
     uv_snapshot!(context.filters(), context.pip_install().arg("-e").arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16603,10 +14974,7 @@ fn abi_compatibility_on_freethreaded_python() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
         .arg(wheel_path), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
@@ -16623,10 +14991,7 @@ fn abi_compatibility_on_freethreaded_python() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
         .arg(wheel_path), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
@@ -16643,10 +15008,7 @@ fn abi_compatibility_on_freethreaded_python() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
         .arg(wheel_path), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16735,10 +15097,7 @@ fn abi_compatibility_on_debug_python() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
         .arg(non_debug_wheel), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16751,10 +15110,7 @@ fn abi_compatibility_on_debug_python() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
         .arg(debug_wheel), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16774,10 +15130,7 @@ fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
         .arg(debug_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
@@ -16797,10 +15150,7 @@ fn warn_on_bz2_wheel() {
         context.pip_install()
             .arg(format!("futzed_bz2 @ {}/futzed_bz2-0.1.0-py3-none-any.whl", vendor.url())),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: One or more file entries in 'http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl' use the 'bzip2' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the 'stored', 'DEFLATE', or 'zstd' compression methods.
@@ -16821,10 +15171,7 @@ fn warn_on_lzma_wheel() {
         context.pip_install()
             .arg(format!("futzed_lzma @ {}/futzed_lzma-0.1.0-py3-none-any.whl", vendor.url())),
         @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `futzed-lzma @ http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
       ├─▶ Request failed after 3 retries in [TIME]
@@ -16849,10 +15196,7 @@ fn install_cross_device() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("iniconfig"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16882,10 +15226,7 @@ fn install_cross_device_explicit_copy() -> anyhow::Result<()> {
         .arg("--link-mode")
         .arg("copy")
         .arg("iniconfig"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16913,10 +15254,7 @@ fn install_cross_device_symlink() -> anyhow::Result<()> {
         .arg("--link-mode")
         .arg("symlink")
         .arg("iniconfig"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16944,10 +15282,7 @@ fn install_copy_on_write_fs() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("iniconfig"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16975,10 +15310,7 @@ fn install_no_copy_on_write_fs() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("iniconfig"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -16999,10 +15331,7 @@ fn upgrade_group_not_supported() {
         .arg("anyio")
         .arg("--upgrade-group")
         .arg("dev"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `--upgrade-group` is not supported in `uv pip` commands
     ");
@@ -17080,10 +15409,7 @@ fn handle_record_mismatches() -> Result<()> {
         .arg(context.temp_dir.as_ref())
         .arg("--offline")
         .arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -17243,10 +15569,7 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
     let output = uv_snapshot!(context.filters(), context.pip_install()
         .arg("sniffio==1.3.1")
         .arg("--compile-bytecode"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]

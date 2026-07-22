@@ -28,10 +28,7 @@ fn create_venv() {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -45,10 +42,7 @@ fn create_venv() {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -66,10 +60,7 @@ fn create_venv() {
         .arg("--clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -90,10 +81,7 @@ fn create_venv_preview_skips_distutils_patch_on_py310_plus() {
         .arg("3.12")
         .arg("--preview-features")
         .arg("no-distutils-patch"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -118,10 +106,7 @@ fn create_venv_preview_keeps_distutils_patch_on_py39() {
         .arg("3.9")
         .arg("--preview-features")
         .arg("no-distutils-patch"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment at: .venv
@@ -143,10 +128,7 @@ fn create_centralized_project_environment_bypasses() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg("--preview-features")
         .arg("centralized-project-envs"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -171,10 +153,7 @@ fn create_centralized_project_environment_bypasses() -> Result<()> {
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "explicit")
         .arg("--preview-features")
         .arg("centralized-project-envs"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: explicit
@@ -209,10 +188,7 @@ fn create_venv_313() {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     Creating virtual environment at: .venv
@@ -229,10 +205,7 @@ fn create_venv_project_environment() -> Result<()> {
 
     // `uv venv` ignores `UV_PROJECT_ENVIRONMENT` when it's not a project
     uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -259,10 +232,7 @@ fn create_venv_project_environment() -> Result<()> {
 
     // But, if we're in a project we'll respect it
     uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foo
@@ -280,10 +250,7 @@ fn create_venv_project_environment() -> Result<()> {
     child.create_dir_all()?;
 
     uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(child.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -297,10 +264,7 @@ fn create_venv_project_environment() -> Result<()> {
 
     // Or, if a name is provided
     uv_snapshot!(context.filters(), context.venv().arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: bar
@@ -315,10 +279,7 @@ fn create_venv_project_environment() -> Result<()> {
 
     // Or, of they opt-out with `--no-workspace` or `--no-project`
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-workspace"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -327,10 +288,7 @@ fn create_venv_project_environment() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-project"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -371,10 +329,7 @@ async fn create_venv_project_environment_lock() -> Result<()> {
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo")
         .env(EnvVars::RUST_LOG, "warn")
         .env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foo
@@ -422,10 +377,7 @@ fn create_centralized_project_environment() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
@@ -462,10 +414,7 @@ fn create_centralized_project_environment() -> Result<()> {
         .arg("--no-clear")
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
@@ -515,10 +464,7 @@ fn create_centralized_project_environment() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
@@ -569,10 +515,7 @@ fn create_centralized_project_environment_path_file() -> Result<()> {
         .arg("--allow-existing")
         .arg("--python")
         .arg("3.12"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
@@ -616,10 +559,7 @@ fn create_centralized_project_environment_link_failure() -> Result<()> {
     cfg_select! {
         unix => {
             uv_snapshot!(context.filters(), command, @r#"
-            success: true
-            exit_code: 0
-            ----- stdout -----
-
+            exit_code: 0 (success)
             ----- stderr -----
             Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
             Creating virtual environment `project-cp3.12.[X]-[HASH]`
@@ -629,10 +569,7 @@ fn create_centralized_project_environment_link_failure() -> Result<()> {
         },
         windows => {
             uv_snapshot!(context.filters(), command, @r#"
-            success: true
-            exit_code: 0
-            ----- stdout -----
-
+            exit_code: 0 (success)
             ----- stderr -----
             Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
             Creating virtual environment `project-cp3.12.[X]-[HASH]`
@@ -664,10 +601,7 @@ fn create_centralized_project_environment_no_cache() -> Result<()> {
         .arg("--no-cache")
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `centralized-project-envs` feature has no effect when `--no-cache` is enabled
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -700,10 +634,7 @@ fn create_centralized_project_environment_with_seed_packages() -> Result<()> {
         .arg("--seed")
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]` with seed packages
@@ -746,10 +677,7 @@ fn virtual_empty() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -774,10 +702,7 @@ fn virtual_dependency_group() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -793,10 +718,7 @@ fn create_venv_defaults_to_cwd() {
     uv_snapshot!(context.filters(), context.venv()
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -814,10 +736,7 @@ fn create_venv_ignores_virtual_env_variable() {
     // because we ignore virtual environment interpreter sources (we require a system interpreter)
     uv_snapshot!(context.filters(), context.venv()
         .env(EnvVars::VIRTUAL_ENV, context.temp_dir.child("does-not-exist").as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -832,10 +751,7 @@ fn create_venv_reads_request_from_python_version_file() {
 
     // Without the file, we should use the first on the PATH
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -851,10 +767,7 @@ fn create_venv_reads_request_from_python_version_file() {
         .unwrap();
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -871,10 +784,7 @@ fn create_venv_reads_request_from_python_versions_file() {
 
     // Without the file, we should use the first on the PATH
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -890,10 +800,7 @@ fn create_venv_reads_request_from_python_versions_file() {
         .unwrap();
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -910,10 +817,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
 
     // Without a Python requirement, we use the first on the PATH
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -933,10 +837,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment at: .venv
@@ -956,10 +857,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -979,10 +877,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -1013,10 +908,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -1036,10 +928,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -1059,10 +948,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1074,10 +960,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
 
     // We warn if we receive an incompatible version
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
@@ -1095,10 +978,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
 
     // Without a Python requirement, we use the first on the PATH
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment at: .venv
@@ -1126,10 +1006,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     Creating virtual environment at: .venv
@@ -1159,10 +1036,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -1192,10 +1066,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -1220,10 +1091,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `tool.uv.dependency-groups.dev.requires-python`).
@@ -1253,10 +1121,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Found conflicting Python requirements:
     - foo: <3.12
@@ -1275,10 +1140,7 @@ fn create_venv_ignores_missing_pyproject_metadata() -> Result<()> {
     pyproject_toml.write_str(indoc! { r"[tool.no.project.here]" })?;
 
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1299,10 +1161,7 @@ fn create_venv_warns_user_on_requires_python_discovery_error() -> Result<()> {
     pyproject_toml.write_str(indoc! { r"invalid toml" })?;
 
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to parse `pyproject.toml` during settings discovery:
       TOML parse error at line 1, column 9
@@ -1340,10 +1199,7 @@ fn create_venv_explicit_request_takes_priority_over_python_version_file() {
         .unwrap();
 
     uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -1363,10 +1219,7 @@ fn seed() {
         .arg("--seed")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment with seed packages at: .venv
@@ -1387,10 +1240,7 @@ fn seed_older_python_version() {
         .arg("--seed")
         .arg("--python")
         .arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment with seed packages at: .venv
@@ -1411,10 +1261,7 @@ fn create_venv_with_invalid_http_timeout() {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse environment variable `UV_HTTP_TIMEOUT` with invalid value `not_a_number`: invalid digit found in string; value should be an integer number of seconds
     ");
@@ -1427,10 +1274,7 @@ fn create_venv_with_invalid_concurrent_installs() {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse environment variable `UV_CONCURRENT_INSTALLS` with invalid value `0`: number would be zero for non-zero type
     ");
@@ -1444,10 +1288,7 @@ fn create_venv_with_invalid_cuda_driver_version() {
         .arg("--python")
         .arg("3.12")
         .env(EnvVars::UV_CUDA_DRIVER_VERSION, "invalid"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse environment variable `UV_CUDA_DRIVER_VERSION` with invalid value `invalid`: expected version to start with a number, but no leading ASCII digits were found
     ");
@@ -1461,10 +1302,7 @@ fn create_venv_with_invalid_amd_gpu_architecture() {
         .arg("--python")
         .arg("3.12")
         .env(EnvVars::UV_AMD_GPU_ARCHITECTURE, "invalid"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse environment variable `UV_AMD_GPU_ARCHITECTURE` with invalid value `invalid`: Unknown AMD GPU architecture: invalid
     ");
@@ -1484,10 +1322,7 @@ fn create_venv_unknown_python_minor() {
         .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH);
 
     uv_snapshot!(context.filters(), &mut command, @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for Python 3.100 in [PYTHON SOURCES]
     "
@@ -1510,10 +1345,7 @@ fn create_venv_unknown_python_patch() {
         .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH);
 
     uv_snapshot!(context.filters(), &mut command, @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for Python 3.12.[X] in [PYTHON SOURCES]
     "
@@ -1531,10 +1363,7 @@ fn create_venv_python_patch() {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12.9"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.9 interpreter at: [PYTHON-3.12.9]
     Creating virtual environment at: .venv
@@ -1556,10 +1385,7 @@ fn file_exists() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1583,10 +1409,7 @@ fn non_utf8_path() {
         .arg(&path)
         .arg("--python")
         .arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv-�
@@ -1608,10 +1431,7 @@ fn empty_dir_exists() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1637,10 +1457,7 @@ fn non_empty_dir_exists() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1655,10 +1472,7 @@ fn non_empty_dir_exists() -> Result<()> {
         .arg("--clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1683,10 +1497,7 @@ fn non_empty_dir_exists_clear_preview() -> Result<()> {
         .arg("venv-safe-clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .
@@ -1716,10 +1527,7 @@ fn non_empty_dir_exists_clear_preview_force() -> Result<()> {
         .arg("venv-safe-clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: not-a-virtualenv
@@ -1744,10 +1552,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1763,10 +1568,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
         .arg("--allow-existing")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1781,10 +1583,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
         .arg("--allow-existing")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1802,10 +1601,7 @@ fn create_venv_then_allow_existing() {
 
     // Create a venv
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1816,10 +1612,7 @@ fn create_venv_then_allow_existing() {
     // Create a venv again with `--allow-existing`
     uv_snapshot!(context.filters(), context.venv()
         .arg("--allow-existing"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1859,10 +1652,7 @@ fn windows_shims() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .env(EnvVars::UV_PYTHON_SEARCH_PATH, format!("{};{}", shim_path.display(), context.python_path().to_string_lossy())), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment at: .venv
@@ -2124,10 +1914,7 @@ fn path_with_trailing_space_gives_proper_error() {
     uv_snapshot!(context.filters(), std::process::Command::new(uv_test::get_bin!())
         .arg("venv")
         .env(EnvVars::UV_CACHE_DIR, path_with_trailing_slash), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to initialize cache at `[CACHE_DIR]/ `
       Caused by: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
@@ -2154,10 +1941,7 @@ fn create_venv_apostrophe() {
         .arg(&venv_dir)
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: Testing's
@@ -2197,10 +1981,7 @@ fn venv_python_preference() {
 
     // Create a managed interpreter environment
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X]
     Creating virtual environment at: .venv
@@ -2208,10 +1989,7 @@ fn venv_python_preference() {
     ");
 
     uv_snapshot!(context.filters(), context.venv().arg("--no-managed-python"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -2222,10 +2000,7 @@ fn venv_python_preference() {
     ");
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-managed-python"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -2233,10 +2008,7 @@ fn venv_python_preference() {
     ");
 
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X]
     Creating virtual environment at: .venv
@@ -2247,10 +2019,7 @@ fn venv_python_preference() {
     ");
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--managed-python"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X]
     Creating virtual environment at: .venv
@@ -2279,10 +2048,7 @@ fn create_venv_symlink_clear_preservation() -> Result<()> {
         .arg(symlink_path.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2299,10 +2065,7 @@ fn create_venv_symlink_clear_preservation() -> Result<()> {
         .arg("--clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2337,10 +2100,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
         .arg(symlink_path.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2357,10 +2117,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
         .arg("--clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2400,10 +2157,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
         .arg(symlink_path.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2421,10 +2175,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
         .arg("--clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2449,10 +2200,7 @@ fn create_venv_current_working_directory() {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2466,10 +2214,7 @@ fn create_venv_current_working_directory() {
         .arg("--python")
         .arg("3.12")
         .current_dir(&context.venv), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .
@@ -2491,10 +2236,7 @@ fn create_venv_current_working_directory() {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2508,10 +2250,7 @@ fn create_venv_current_working_directory() {
         .arg("--python")
         .arg("3.12")
         .current_dir(&context.venv), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .
@@ -2530,10 +2269,7 @@ fn no_clear_with_existing_directory() {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2547,10 +2283,7 @@ fn no_clear_with_existing_directory() {
         .arg("--no-clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2572,10 +2305,7 @@ fn no_clear_with_non_existent_directory() {
         .arg("--no-clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2601,10 +2331,7 @@ fn no_clear_overrides_clear() {
         .arg("--no-clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2631,10 +2358,7 @@ fn no_clear_overrides_clear_env_var() {
         .arg("--python")
         .arg("3.12")
         .env(EnvVars::UV_VENV_CLEAR, "1"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -2657,10 +2381,7 @@ fn no_clear_conflicts_with_allow_existing() {
         .arg("--allow-existing")
         .arg("--python")
         .arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--no-clear' cannot be used with '--allow-existing'
 

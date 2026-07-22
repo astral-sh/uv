@@ -35,10 +35,7 @@ fn sync() -> Result<()> {
 
     // Running `uv sync` should generate a lockfile.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -71,10 +68,7 @@ fn sync_relocatable_envs_default() -> Result<()> {
         .current_dir(project_dir.path())
         .arg("--preview-features")
         .arg("relocatable-envs-default"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -103,13 +97,10 @@ fn sync_relocatable_envs_default() -> Result<()> {
         .arg("--no-sync")
         .arg("black")
         .arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     black, 24.3.0 (compiled: yes)
     Python (CPython) 3.12.[X]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -141,10 +132,7 @@ fn sync_reuses_pip_install_wheel_cache() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--offline"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -189,10 +177,7 @@ fn sync_reuses_pip_install_sdist_cache() -> Result<()> {
         .arg("--offline")
         .arg("--no-binary-package")
         .arg("iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -221,10 +206,7 @@ fn locked() -> Result<()> {
 
     // Running with `--locked` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -247,10 +229,7 @@ fn locked() -> Result<()> {
 
     // Running with `--locked` should error.
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -260,10 +239,7 @@ fn locked() -> Result<()> {
 
     // Quiet mode suppresses the resolution summary, but preserves the user-facing failure.
     uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--quiet"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
@@ -272,11 +248,7 @@ fn locked() -> Result<()> {
 
     // Silent mode suppresses the final error too.
     uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--quiet").arg("--quiet"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 1 (failure)
     ");
 
     let updated = context.read("uv.lock");
@@ -304,10 +276,7 @@ fn frozen() -> Result<()> {
 
     // Running with `--frozen` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -327,10 +296,7 @@ fn frozen() -> Result<()> {
 
     // Running with `--frozen` should install the stale lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -344,10 +310,7 @@ fn frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--frozen")
         .env(EnvVars::RUST_LOG, "uv_client::base_client=debug"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 3 packages in [TIME]
     ");
@@ -369,10 +332,7 @@ fn empty() -> Result<()> {
 
     // Running `uv sync` should generate an empty lockfile.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
@@ -383,10 +343,7 @@ fn empty() -> Result<()> {
 
     // Running `uv sync` again should succeed.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
@@ -455,10 +412,7 @@ fn package() -> Result<()> {
         .touch()?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -543,10 +497,7 @@ fn multiple_packages() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--package").arg("foo")
         .arg("--package").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 9 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -564,10 +515,7 @@ fn multiple_packages() -> Result<()> {
         .arg("--package").arg("foo")
         .arg("--package").arg("bar")
         .arg("--package").arg("baz"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 9 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -599,8 +547,7 @@ fn sync_json() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--output-format").arg("json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -650,8 +597,7 @@ fn sync_json() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--frozen")
         .arg("--output-format").arg("json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -690,8 +636,7 @@ fn sync_json() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--locked")
         .arg("--output-format").arg("json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -743,10 +688,7 @@ fn sync_json() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--locked")
         .arg("--output-format").arg("json"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -759,8 +701,7 @@ fn sync_json() -> Result<()> {
         .arg("--quiet")
         .arg("--frozen")
         .arg("--output-format").arg("json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -791,8 +732,6 @@ fn sync_json() -> Result<()> {
       },
       "dry_run": false
     }
-
-    ----- stderr -----
     "#);
 
     Ok(())
@@ -818,8 +757,7 @@ fn sync_json_check_outdated_environment() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--check")
         .arg("--output-format").arg("json"), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     {
       "schema": {
@@ -890,8 +828,7 @@ fn sync_dry_json() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--output-format").arg("json")
         .arg("--dry-run"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -995,10 +932,7 @@ fn mixed_requires_python() -> Result<()> {
 
     // Running `uv sync` should succeed, locking for Python 3.12.
     uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -1013,10 +947,7 @@ fn mixed_requires_python() -> Result<()> {
 
     // Running `uv sync` again should fail.
     uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.9"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from workspace member `albatross`'s `project.requires-python`).
@@ -1059,10 +990,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     // even though it's not enabled!
     uv_snapshot!(context.filters(), context.sync()
         .arg("--no-dev"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
@@ -1076,10 +1004,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
 
     // Running `uv sync` should always fail, as now sphinx is involved
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
@@ -1110,10 +1035,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     // Running `uv sync --no-dev` should succeed, still using the Python 3.8.
     uv_snapshot!(context.filters(), context.sync()
         .arg("--no-dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 29 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -1127,10 +1049,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
 
     // Running `uv sync` should succeed, bumping to Python 3.9 as sphinx is now involved.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Removed virtual environment at: .venv
@@ -1203,10 +1122,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     // that the dependency-group containing sphinx will never successfully install,
     // even though it's not enabled, or even a default!
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
@@ -1221,10 +1137,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     // Running `uv sync --group mygroup` should definitely fail, as now sphinx is involved
     uv_snapshot!(context.filters(), context.sync()
         .arg("--group").arg("mygroup"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
@@ -1254,10 +1167,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
 
     // Running `uv sync` should succeed, locking for the previous picked Python 3.8.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 29 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -1273,10 +1183,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     // as the group requires-python saves us
     uv_snapshot!(context.filters(), context.sync()
         .arg("--group").arg("mygroup"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Removed virtual environment at: .venv
@@ -1333,10 +1240,7 @@ fn check() -> Result<()> {
 
     // Running `uv sync --check` should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--check"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Would use project environment at: .venv
     Resolved 2 packages in [TIME]
@@ -1349,10 +1253,7 @@ fn check() -> Result<()> {
 
     // Sync the environment.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -1364,10 +1265,7 @@ fn check() -> Result<()> {
 
     // Running `uv sync --check` should pass now that the environment is up to date.
     uv_snapshot!(context.filters(), context.sync().arg("--check"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Would use project environment at: .venv
     Resolved 2 packages in [TIME]
@@ -1423,10 +1321,7 @@ fn sync_non_project_dev_dependencies() -> Result<()> {
 
     // Syncing with `--no-dev` should omit all dependencies except `iniconfig`.
     uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 11 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -1438,10 +1333,7 @@ fn sync_non_project_dev_dependencies() -> Result<()> {
     // Syncing without `--no-dev` should include `anyio`, `requests`, `pysocks`, and their
     // dependencies, but not `typing-extensions`.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 11 packages in [TIME]
     Prepared 8 packages in [TIME]
@@ -1458,10 +1350,7 @@ fn sync_non_project_dev_dependencies() -> Result<()> {
 
     // Selecting a member still includes the non-project root's default dependency group.
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 11 packages in [TIME]
     Checked 10 packages in [TIME]
@@ -1514,10 +1403,7 @@ fn sync_non_project_frozen() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1529,10 +1415,7 @@ fn sync_non_project_frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--frozen")
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Found workspace root: `[TEMP_DIR]/`
     TRACE Discovering workspace members for: `[TEMP_DIR]/`
@@ -1575,10 +1458,7 @@ fn sync_non_project_group_standard() -> Result<()> {
         .touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 4 packages in [TIME]
@@ -1590,10 +1470,7 @@ fn sync_non_project_group_standard() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 4 packages in [TIME]
@@ -1603,10 +1480,7 @@ fn sync_non_project_group_standard() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 4 packages in [TIME]
@@ -1617,10 +1491,7 @@ fn sync_non_project_group_standard() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 4 packages in [TIME]
@@ -1679,10 +1550,7 @@ fn sync_non_project_group() -> Result<()> {
         .touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -1692,10 +1560,7 @@ fn sync_non_project_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -1706,10 +1571,7 @@ fn sync_non_project_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -1724,10 +1586,7 @@ fn sync_non_project_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("baz"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -1736,10 +1595,7 @@ fn sync_non_project_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bop"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     error: Group `bop` is not defined in any project's `dependency-groups` table
@@ -1769,10 +1625,7 @@ fn sync_non_project_frozen_modification() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("async"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -1794,10 +1647,7 @@ fn sync_non_project_frozen_modification() -> Result<()> {
 
     // This should succeed.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("async"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 3 packages in [TIME]
     ");
@@ -1831,10 +1681,7 @@ fn sync_build_isolation() -> Result<()> {
 
     // Install `setuptools` (for the root project) plus `hatchling` (for `source-distribution`).
     uv_snapshot!(context.filters(), context.pip_install().arg("wheel").arg("setuptools").arg("hatchling"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -1850,10 +1697,7 @@ fn sync_build_isolation() -> Result<()> {
 
     // Running `uv sync` should succeed.
     uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -1897,10 +1741,7 @@ fn sync_build_isolation_package() -> Result<()> {
 
     // Running `uv sync` should fail.
     uv_snapshot!(context.filters(), context.sync(), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
@@ -1923,10 +1764,7 @@ fn sync_build_isolation_package() -> Result<()> {
 
     // Install `hatchling` for `source-distribution`.
     uv_snapshot!(context.filters(), context.pip_install().arg("hatchling"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -1940,10 +1778,7 @@ fn sync_build_isolation_package() -> Result<()> {
 
     // Running `uv sync` should succeed.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -1985,10 +1820,7 @@ fn sync_build_isolation_package_order() -> Result<()> {
 
     // Running `uv sync` should fail.
     uv_snapshot!(context.filters(), context.sync(), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
@@ -2028,10 +1860,7 @@ fn sync_build_isolation_package_order() -> Result<()> {
 
     // Running `uv sync` should succeed; `hatchling` should be installed first.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -2065,10 +1894,7 @@ fn sync_build_isolation_package_order() -> Result<()> {
     // Running `uv sync` should uninstall `hatchling`, then build `source-distribution`, then uninstall
     // the existing `source-distribution`, and finally install the new one.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -2102,10 +1928,7 @@ fn sync_build_isolation_package_order() -> Result<()> {
 
     // Running `uv sync` should install everything in a single phase, since the build is cached.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -2159,10 +1982,7 @@ fn sync_build_isolation_extra() -> Result<()> {
 
     // Running `uv sync` should fail for the `compile` extra.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("compile"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2188,10 +2008,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     // Running `uv sync` with `--all-extras` should succeed, because we install the build dependencies
     // first.
     uv_snapshot!(context.filters(), context.sync().arg("--all-extras"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2214,10 +2031,7 @@ fn sync_build_isolation_extra() -> Result<()> {
 
     // Install the build dependencies.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("build"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2232,10 +2046,7 @@ fn sync_build_isolation_extra() -> Result<()> {
 
     // Running `uv sync` for the `compile` extra should succeed, and remove the build dependencies.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("compile"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2303,10 +2114,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     context.venv().arg("--clear").assert().success();
     // Running `uv sync` should fail due to missing build-dependencies
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -2338,10 +2146,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2351,10 +2156,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -2379,10 +2181,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -2448,10 +2247,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     // Confirm that `bad_child` fails if anyio is provided
     context.venv().arg("--clear").assert().success();
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `bad-child @ file://[TEMP_DIR]/bad_child`
@@ -2484,10 +2280,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2544,10 +2337,7 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
 
     // Running `uv sync` should fail due to missing build-dependencies
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
@@ -2577,10 +2367,7 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2649,10 +2436,7 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
 
     // Running `uv sync` should fail due to missing build-dependencies
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -2684,10 +2468,7 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2758,10 +2539,7 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
 
     // Running `uv sync` should succeed, as `anyio` is provided as a source
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2839,10 +2617,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
     // Ensure our build backend is checking the version correctly
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -2859,10 +2634,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
     // Ensure that we're resolving to `4.3.0`, the "latest" on PyPI.
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2894,10 +2666,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     // The child should be rebuilt with `3.5` on reinstall, the "latest" on Test PyPI.
     uv_snapshot!(context.filters(), context.sync()
         .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -2914,10 +2683,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.5"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -2991,10 +2757,7 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
 
     // Running `uv sync` should fail due to the unapplied source
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -3058,10 +2821,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     context.venv().arg("--clear").assert().success();
     // Running `uv sync` should fail due to missing build-dependencies
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -3101,10 +2861,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -3124,10 +2881,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     context.venv().arg("--clear").assert().success();
     // Running `uv sync` should fail due to missing build-dependencies
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -3201,10 +2955,7 @@ fn sync_reset_state() -> Result<()> {
 
     // Running `uv sync` should succeed.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -3255,10 +3006,7 @@ fn sync_relative_wheel() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -3308,10 +3056,7 @@ fn sync_relative_wheel() -> Result<()> {
 
     // Check that we can re-read the lockfile.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
@@ -3340,10 +3085,7 @@ fn sync_environment() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The current Python platform is not compatible with the lockfile's supported environments: `python_full_version < '3.11'`
@@ -3375,10 +3117,7 @@ fn sync_dev() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
@@ -3390,10 +3129,7 @@ fn sync_dev() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
@@ -3407,10 +3143,7 @@ fn sync_dev() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
@@ -3422,10 +3155,7 @@ fn sync_dev() -> Result<()> {
 
     // Using `--no-default-groups` should remove dev dependencies
     uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
@@ -3463,10 +3193,7 @@ fn sync_group() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -3476,10 +3203,7 @@ fn sync_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -3490,10 +3214,7 @@ fn sync_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -3510,10 +3231,7 @@ fn sync_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo").arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3524,20 +3242,14 @@ fn sync_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Checked 9 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups").arg("--no-group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -3548,10 +3260,7 @@ fn sync_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups").arg("--no-dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3564,10 +3273,7 @@ fn sync_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 7 packages in [TIME]
@@ -3583,10 +3289,7 @@ fn sync_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--dev").arg("--no-group").arg("dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3594,20 +3297,14 @@ fn sync_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--no-dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Checked 1 package in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -3623,10 +3320,7 @@ fn sync_group() -> Result<()> {
 
     // Using `--no-default-groups` should exclude all groups
     uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 8 packages in [TIME]
@@ -3641,10 +3335,7 @@ fn sync_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -3661,10 +3352,7 @@ fn sync_group() -> Result<()> {
     // Using `--no-default-groups` with `--group foo` and `--group bar` should include those groups,
     // excluding the remaining `dev` group.
     uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo").arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3696,10 +3384,7 @@ fn sync_include_group() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -3708,10 +3393,7 @@ fn sync_include_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -3723,10 +3405,7 @@ fn sync_include_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -3737,10 +3416,7 @@ fn sync_include_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo").arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3751,10 +3427,7 @@ fn sync_include_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3762,10 +3435,7 @@ fn sync_include_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Installed 1 package in [TIME]
@@ -3773,10 +3443,7 @@ fn sync_include_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -3787,10 +3454,7 @@ fn sync_include_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3801,10 +3465,7 @@ fn sync_include_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 5 packages in [TIME]
@@ -3835,10 +3496,7 @@ fn sync_exclude_group() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -3851,10 +3509,7 @@ fn sync_exclude_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo").arg("--no-group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -3865,10 +3520,7 @@ fn sync_exclude_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3878,10 +3530,7 @@ fn sync_exclude_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar").arg("--no-group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3918,10 +3567,7 @@ fn sync_exclude_group_with_environment_variable() -> Result<()> {
         .arg("--group").arg("foo")
         .arg("--group").arg("bar")
         .env(EnvVars::UV_NO_GROUP, "bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -3938,10 +3584,7 @@ fn sync_exclude_group_with_environment_variable() -> Result<()> {
         .arg("--group").arg("bar")
         .arg("--group").arg("baz")
         .env(EnvVars::UV_NO_GROUP, "bar baz"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -3955,10 +3598,7 @@ fn sync_exclude_group_with_environment_variable() -> Result<()> {
         .arg("--group").arg("baz")
         .arg("--no-group").arg("bar")
         .env(EnvVars::UV_NO_GROUP, "baz"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -3993,10 +3633,7 @@ fn sync_dev_group() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 6 packages in [TIME]
@@ -4035,20 +3672,14 @@ fn sync_non_existent_group() -> Result<()> {
 
     // Requesting a non-existent group should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("baz"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     error: Group `baz` is not defined in the project's `dependency-groups` table
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-group").arg("baz"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     error: Group `baz` is not defined in the project's `dependency-groups` table
@@ -4056,10 +3687,7 @@ fn sync_non_existent_group() -> Result<()> {
 
     // Requesting an empty group should succeed.
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -4070,10 +3698,7 @@ fn sync_non_existent_group() -> Result<()> {
     // Requesting with `--frozen` should respect the groups in the lockfile, rather than the
     // `pyproject.toml`.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -4099,19 +3724,13 @@ fn sync_non_existent_group() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 6 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("baz"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Group `baz` is not defined in the project's `dependency-groups` table
     ");
@@ -4148,10 +3767,7 @@ fn sync_corner_groups() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--no-dev")
         .arg("--only-dev"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--no-dev' cannot be used with '--only-dev'
 
@@ -4164,10 +3780,7 @@ fn sync_corner_groups() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--dev")
         .arg("--only-group").arg("bar"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--dev' cannot be used with '--only-group <ONLY_GROUP>'
 
@@ -4181,10 +3794,7 @@ fn sync_corner_groups() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--dev")
         .arg("--only-group").arg("dev"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--dev' cannot be used with '--only-group <ONLY_GROUP>'
 
@@ -4198,10 +3808,7 @@ fn sync_corner_groups() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--only-dev")
         .arg("--group").arg("bar"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--only-dev' cannot be used with '--group <GROUP>'
 
@@ -4215,10 +3822,7 @@ fn sync_corner_groups() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--only-dev")
         .arg("--group").arg("dev"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--only-dev' cannot be used with '--group <GROUP>'
 
@@ -4231,10 +3835,7 @@ fn sync_corner_groups() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--all-groups")
         .arg("--only-dev"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--all-groups' cannot be used with '--only-dev'
 
@@ -4247,10 +3848,7 @@ fn sync_corner_groups() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--all-groups")
         .arg("--only-group").arg("bar"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--all-groups' cannot be used with '--only-group <ONLY_GROUP>'
 
@@ -4263,10 +3861,7 @@ fn sync_corner_groups() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--group").arg("foo")
         .arg("--only-group").arg("bar"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--group <GROUP>' cannot be used with '--only-group <ONLY_GROUP>'
 
@@ -4280,10 +3875,7 @@ fn sync_corner_groups() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--group").arg("foo")
         .arg("--only-group").arg("foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--group <GROUP>' cannot be used with '--only-group <ONLY_GROUP>'
 
@@ -4296,10 +3888,7 @@ fn sync_corner_groups() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--all-groups")
         .arg("--no-default-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 9 packages in [TIME]
     Prepared 8 packages in [TIME]
@@ -4318,10 +3907,7 @@ fn sync_corner_groups() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--dev")
         .arg("--only-dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 9 packages in [TIME]
     Uninstalled 7 packages in [TIME]
@@ -4360,10 +3946,7 @@ fn sync_non_existent_default_group() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Default group `bar` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table
     ");
@@ -4395,10 +3978,7 @@ fn sync_default_groups() -> Result<()> {
 
     // The `dev` group should be synced by default.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -4427,10 +4007,7 @@ fn sync_default_groups() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4457,10 +4034,7 @@ fn sync_default_groups() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4490,10 +4064,7 @@ fn sync_default_groups() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -4504,10 +4075,7 @@ fn sync_default_groups() -> Result<()> {
 
     // Using `--group` should include the defaults
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -4519,10 +4087,7 @@ fn sync_default_groups() -> Result<()> {
 
     // Using `--all-groups` should include the defaults
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -4535,10 +4100,7 @@ fn sync_default_groups() -> Result<()> {
 
     // Using `--only-group` should exclude the defaults
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 8 packages in [TIME]
@@ -4553,10 +4115,7 @@ fn sync_default_groups() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -4572,10 +4131,7 @@ fn sync_default_groups() -> Result<()> {
 
     // Using `--no-default-groups` should exclude all groups
     uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 8 packages in [TIME]
@@ -4590,10 +4146,7 @@ fn sync_default_groups() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -4610,10 +4163,7 @@ fn sync_default_groups() -> Result<()> {
     // Using `--no-default-groups` with `--group foo` and `--group bar` should include those groups,
     // excluding the remaining `dev` group.
     uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo").arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4651,10 +4201,7 @@ fn sync_default_groups_all() -> Result<()> {
 
     // groups = "all" should behave like --all-groups in contexts where defaults exist
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Prepared 9 packages in [TIME]
@@ -4672,10 +4219,7 @@ fn sync_default_groups_all() -> Result<()> {
 
     // Using `--no-default-groups` should still work
     uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 8 packages in [TIME]
@@ -4691,10 +4235,7 @@ fn sync_default_groups_all() -> Result<()> {
 
     // Using `--all-groups` should be redundant and work fine
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -4710,10 +4251,7 @@ fn sync_default_groups_all() -> Result<()> {
 
     // Using `--no-dev` should exclude just the dev group
     uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4722,10 +4260,7 @@ fn sync_default_groups_all() -> Result<()> {
 
     // Using `--group` should be redundant and still work fine
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Installed 1 package in [TIME]
@@ -4734,10 +4269,7 @@ fn sync_default_groups_all() -> Result<()> {
 
     // Using `--only-group` should still disable defaults
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 6 packages in [TIME]
@@ -4777,10 +4309,7 @@ fn sync_default_groups_gibberish() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 14, column 26
@@ -4819,10 +4348,7 @@ fn sync_disable_default_groups_with_environment_variable() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Prepared 9 packages in [TIME]
@@ -4840,10 +4366,7 @@ fn sync_disable_default_groups_with_environment_variable() -> Result<()> {
 
     // Using `UV_NO_DEFAULT_GROUPS` should exclude all groups.
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_DEFAULT_GROUPS, "true"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 8 packages in [TIME]
@@ -4858,10 +4381,7 @@ fn sync_disable_default_groups_with_environment_variable() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -4881,10 +4401,7 @@ fn sync_disable_default_groups_with_environment_variable() -> Result<()> {
         .arg("--group").arg("foo")
         .arg("--group").arg("bar")
         .env(EnvVars::UV_NO_DEFAULT_GROUPS, "true"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4920,10 +4437,7 @@ fn sync_disable_default_groups_all_with_environment_variable() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Prepared 9 packages in [TIME]
@@ -4941,10 +4455,7 @@ fn sync_disable_default_groups_all_with_environment_variable() -> Result<()> {
 
     // Using `UV_NO_DEFAULT_GROUPS` should exclude all groups.
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_DEFAULT_GROUPS, "true"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     Uninstalled 8 packages in [TIME]
@@ -5017,10 +4528,7 @@ fn sync_group_member() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -5081,10 +4589,7 @@ fn sync_group_non_project_member() -> Result<()> {
 
     // Generate a lockfile.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -5147,10 +4652,7 @@ fn sync_group_non_project_member() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -5198,10 +4700,7 @@ fn sync_group_self() -> Result<()> {
 
     // Generate a lockfile.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -5287,10 +4786,7 @@ fn sync_group_self() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -5301,10 +4797,7 @@ fn sync_group_self() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5373,10 +4866,7 @@ fn sync_workspace_member_group_self_conflicting_extra() -> Result<()> {
             .arg("--group")
             .arg("ci"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -5412,10 +4902,7 @@ fn sync_non_existent_extra() -> Result<()> {
 
     // Requesting a non-existent extra should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("baz"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
@@ -5423,10 +4910,7 @@ fn sync_non_existent_extra() -> Result<()> {
 
     // Excluding a non-existing extra when requesting all extras should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--all-extras").arg("--no-extra").arg("baz"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
@@ -5453,10 +4937,7 @@ fn sync_non_existent_extra_no_optional_dependencies() -> Result<()> {
 
     // Requesting a non-existent extra should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("baz"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
@@ -5464,10 +4945,7 @@ fn sync_non_existent_extra_no_optional_dependencies() -> Result<()> {
 
     // Excluding a non-existing extra when requesting all extras should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--all-extras").arg("--no-extra").arg("baz"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
@@ -5525,10 +5003,7 @@ fn sync_ignore_extras_check_when_no_provides_extras() -> Result<()> {
 
     // Requesting a non-existent extra should not fail, as no validation should be performed.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("baz"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     ");
@@ -5603,10 +5078,7 @@ fn sync_workspace_members_with_transitive_dependencies() -> Result<()> {
     // Syncing should build the two transitive dependencies pkg-a and pkg-b,
     // but not pkg-c, which is not a dependency.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -5620,10 +5092,7 @@ fn sync_workspace_members_with_transitive_dependencies() -> Result<()> {
 
     // The lockfile should be valid.
     uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     ");
@@ -5675,10 +5144,7 @@ fn sync_non_existent_extra_workspace_member() -> Result<()> {
 
     // Requesting an extra that only exists in the child should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("async"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: Extra `async` is not defined in the `optional-dependencies` table for `project`
@@ -5686,10 +5152,7 @@ fn sync_non_existent_extra_workspace_member() -> Result<()> {
 
     // Unless we sync from the child directory.
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--extra").arg("async"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -5749,10 +5212,7 @@ fn sync_non_existent_extra_non_project_workspace() -> Result<()> {
     // Requesting an extra that only exists in the child should succeed, since we sync all members
     // by default.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("async"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -5764,10 +5224,7 @@ fn sync_non_existent_extra_non_project_workspace() -> Result<()> {
 
     // Syncing from the child should also succeed.
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--extra").arg("async"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked 3 packages in [TIME]
@@ -5775,10 +5232,7 @@ fn sync_non_existent_extra_non_project_workspace() -> Result<()> {
 
     // Syncing from an unrelated child should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("other").arg("--extra").arg("async"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: Extra `async` is not defined in the `optional-dependencies` table for `other`
@@ -5891,10 +5345,7 @@ fn no_install_project_singular_interval_requires_dist() -> Result<()> {
     fs_err::remove_file(context.temp_dir.join("src").join("__about__.py"))?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--no-install-project"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5936,10 +5387,7 @@ fn no_install_project() -> Result<()> {
 
     // Running with `--no-install-project` should install `anyio`, but not `project`.
     uv_snapshot!(context.filters(), context.sync().arg("--no-install-project"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -5952,10 +5400,7 @@ fn no_install_project() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_INSTALL_PROJECT, "1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -5967,10 +5412,7 @@ fn no_install_project() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_ONLY_INSTALL_PROJECT, "1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5986,10 +5428,7 @@ fn no_install_project() -> Result<()> {
     fs_err::remove_file(pyproject_toml)?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-install-project"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
     ");
@@ -6057,10 +5496,7 @@ fn no_install_workspace() -> Result<()> {
     // Running with `--no-install-workspace` should install `anyio` and `iniconfig`, but not
     // `project` or `child`.
     uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -6075,10 +5511,7 @@ fn no_install_workspace() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").env(EnvVars::UV_NO_INSTALL_WORKSPACE, "1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -6100,10 +5533,7 @@ fn no_install_workspace() -> Result<()> {
         .arg("--no-install-workspace")
         .arg("--frozen")
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Found workspace root: `[TEMP_DIR]/`
     TRACE Discovering workspace members for: `[TEMP_DIR]/`
@@ -6126,10 +5556,7 @@ fn no_install_workspace() -> Result<()> {
 
     // Even if `--package` is used.
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--no-install-workspace").arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 3 packages in [TIME]
      - anyio==3.7.0
@@ -6139,20 +5566,14 @@ fn no_install_workspace() -> Result<()> {
 
     // Unless the package doesn't exist.
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("fake").arg("--no-install-workspace").arg("--frozen"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Could not find root package `fake`
     ");
 
     // Even if `--all-packages` is used.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-install-workspace").arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 3 packages in [TIME]
      + anyio==3.7.0
@@ -6164,10 +5585,7 @@ fn no_install_workspace() -> Result<()> {
     fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace").arg("--frozen"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
     ");
@@ -6249,10 +5667,7 @@ fn no_install_local() -> Result<()> {
 
     context.lock().assert().success();
     uv_snapshot!(context.filters(), context.sync().arg("--no-install-local"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6265,10 +5680,7 @@ fn no_install_local() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").env(EnvVars::UV_NO_INSTALL_LOCAL, "1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -6295,19 +5707,13 @@ fn no_install_env_var_conflicts() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::UV_NO_INSTALL_PROJECT, "1"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument `UV_NO_INSTALL_PROJECT` (environment variable) cannot be used with `--script`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::UV_NO_INSTALL_PROJECT, "1").env(EnvVars::UV_ONLY_INSTALL_PROJECT, "1"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument `UV_NO_INSTALL_PROJECT` (environment variable) cannot be used with `UV_ONLY_INSTALL_PROJECT` (environment variable)
     ");
@@ -6346,10 +5752,7 @@ fn no_install_package() -> Result<()> {
 
     // Running with `--no-install-package anyio` should skip anyio but include everything else
     uv_snapshot!(context.filters(), context.sync().arg("--no-install-package").arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6362,10 +5765,7 @@ fn no_install_package() -> Result<()> {
     // Running with `--no-install-package project` should skip the project itself (not as a special
     // case, that's just the name of the project)
     uv_snapshot!(context.filters(), context.sync().arg("--no-install-package").arg("project"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -6403,10 +5803,7 @@ fn no_install_project_no_build() -> Result<()> {
 
     // `--no-build` should raise an error, since we try to install the project.
     uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
@@ -6415,10 +5812,7 @@ fn no_install_project_no_build() -> Result<()> {
     // But it's fine to combine `--no-install-project` with `--no-build`. We shouldn't error, since
     // we aren't building the project.
     uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--no-build").arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6480,10 +5874,7 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
         .arg("--no-install-project")
         .arg("--no-build")
         .arg("--locked"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
@@ -6546,10 +5937,7 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
 
     // Running `uv sync` should fail due to missing build-dependencies
     uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved [N] packages in [TIME]
@@ -6581,10 +5969,7 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
     // Running `uv sync` should now succeed due to extra build-dependencies
     context.venv().arg("--clear").assert().success();
     uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved [N] packages in [TIME]
@@ -6660,10 +6045,7 @@ fn sync_extra_build_dependencies_script_sources() -> Result<()> {
 
     // Running `uv sync` should succeed with the sources applied
     uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved [N] packages in [TIME]
@@ -6698,10 +6080,7 @@ fn virtual_no_build() -> Result<()> {
 
     // `--no-build` should not raise an error, since we don't install virtual projects.
     uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6726,10 +6105,7 @@ fn virtual_empty() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
@@ -6755,10 +6131,7 @@ fn virtual_dependency_group() -> Result<()> {
 
     // default groups
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
@@ -6770,10 +6143,7 @@ fn virtual_dependency_group() -> Result<()> {
     // explicit --group
     uv_snapshot!(context.filters(), context.sync()
         .arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
@@ -6785,10 +6155,7 @@ fn virtual_dependency_group() -> Result<()> {
     // explicit --only-group
     uv_snapshot!(context.filters(), context.sync()
         .arg("--only-group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
@@ -6832,10 +6199,7 @@ fn virtual_no_build_dynamic_cached() -> Result<()> {
     // `--no-build` should not raise an error, since we don't build or install the project (given
     // that it's virtual and the metadata is cached).
     uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -6879,10 +6243,7 @@ fn virtual_no_build_dynamic_no_cache() -> Result<()> {
 
     // `--no-build` should raise an error, since we need to build the project.
     uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to generate package metadata for `project==0.1.0 @ virtual+.`
       Caused by: Building source distributions for `project` is disabled
@@ -6919,10 +6280,7 @@ fn convert_to_virtual() -> Result<()> {
 
     // Running `uv sync` should install the project itself.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -6981,10 +6339,7 @@ fn convert_to_virtual() -> Result<()> {
 
     // Running `uv sync` should remove the project itself.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -7049,10 +6404,7 @@ fn convert_to_package() -> Result<()> {
 
     // Running `uv sync` should not install the project itself.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -7120,10 +6472,7 @@ fn convert_to_package() -> Result<()> {
 
     // Running `uv sync` should install the project itself.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -7190,10 +6539,7 @@ fn sync_custom_environment_path() -> Result<()> {
 
     // Running `uv sync` should create `.venv` by default
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -7210,10 +6556,7 @@ fn sync_custom_environment_path() -> Result<()> {
 
     // Running `uv sync` should create `foo` in the project directory when customized
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foo
@@ -7235,10 +6578,7 @@ fn sync_custom_environment_path() -> Result<()> {
 
     // An absolute path can be provided
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foobar/.venv"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foobar/.venv
@@ -7260,10 +6600,7 @@ fn sync_custom_environment_path() -> Result<()> {
 
     // An absolute path can be provided
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, context.temp_dir.join("bar")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: bar
@@ -7281,10 +6618,7 @@ fn sync_custom_environment_path() -> Result<()> {
     let tempdir = tempdir_in(TestContext::test_bucket_dir())?;
     context = context.with_filtered_path(tempdir.path(), "OTHER_TEMPDIR");
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, tempdir.path().join(".venv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: [OTHER_TEMPDIR]/.venv
@@ -7302,10 +6636,7 @@ fn sync_custom_environment_path() -> Result<()> {
     fs_err::create_dir(context.temp_dir.join("foo"))?;
     fs_err::write(context.temp_dir.join("foo").join("file"), b"")?;
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project virtual environment directory `[TEMP_DIR]/foo` cannot be used because it is not a valid Python environment (no Python executable was found)
     ");
@@ -7313,10 +6644,7 @@ fn sync_custom_environment_path() -> Result<()> {
     // But if it's just an incompatible virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join("foo"))?;
     uv_snapshot!(context.filters(), context.venv().arg("foo").arg("--python").arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
@@ -7329,10 +6657,7 @@ fn sync_custom_environment_path() -> Result<()> {
 
     // We can delete and use it
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: foo
@@ -7364,10 +6689,7 @@ fn sync_active_project_environment() -> Result<()> {
 
     // Running `uv sync` with `VIRTUAL_ENV` should warn
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
@@ -7390,10 +6712,7 @@ fn sync_active_project_environment() -> Result<()> {
 
     // Using `--active` should create the environment
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: foo
@@ -7409,10 +6728,7 @@ fn sync_active_project_environment() -> Result<()> {
 
     // A subsequent sync will re-use the environment
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -7423,10 +6739,7 @@ fn sync_active_project_environment() -> Result<()> {
         .arg("--active")
         .env(EnvVars::VIRTUAL_ENV, "foo")
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -7437,10 +6750,7 @@ fn sync_active_project_environment() -> Result<()> {
         .arg("--active")
         .env(EnvVars::VIRTUAL_ENV, "foo")
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -7454,10 +6764,7 @@ fn sync_active_project_environment() -> Result<()> {
     // Requesting another Python version will invalidate the environment
     uv_snapshot!(context.filters(), context.sync()
         .env(EnvVars::VIRTUAL_ENV, "foo").arg("--active").arg("-p").arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: foo
@@ -7557,10 +6864,7 @@ fn sync_active_script_environment() -> Result<()> {
 
     // Running `uv sync --script` with `VIRTUAL_ENV` should warn
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the script environment path `[CACHE_DIR]/environments-v2/script-[HASH]` and will be ignored; use `--active` to target the active environment instead
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
@@ -7579,10 +6883,7 @@ fn sync_active_script_environment() -> Result<()> {
 
     // Using `--active` should create the environment
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Creating script environment at: foo
     Resolved 3 packages in [TIME]
@@ -7599,10 +6900,7 @@ fn sync_active_script_environment() -> Result<()> {
 
     // A subsequent sync will re-use the environment
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using script environment at: foo
     Resolved 3 packages in [TIME]
@@ -7617,10 +6915,7 @@ fn sync_active_script_environment() -> Result<()> {
         .arg("--active")
         .arg("-p")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Updating script environment at: foo
     Resolved 3 packages in [TIME]
@@ -7657,8 +6952,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         .arg("--script").arg("script.py")
         .arg("--output-format").arg("json")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -7720,8 +7014,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         .arg("--script").arg("script.py")
         .arg("--output-format").arg("json")
         .env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -7778,10 +7071,7 @@ fn sync_active_script_environment_json() -> Result<()> {
 
     // A subsequent sync will re-use the environment
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using script environment at: foo
     Resolved 3 packages in [TIME]
@@ -7796,8 +7086,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         .arg("--active")
         .arg("-p")
         .arg("3.12"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -7871,10 +7160,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
     // Running `uv sync` should create `.venv` in the workspace root
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -7889,10 +7175,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
     // Similarly, `uv sync` from the child project uses `.venv` in the workspace root
     uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.join("child")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -7912,10 +7195,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
     // Running `uv sync` should create `foo` in the workspace root when customized
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foo
@@ -7937,10 +7217,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
     // Similarly, `uv sync` from the child project uses `foo` relative to  the workspace root
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(context.temp_dir.join("child")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -7960,10 +7237,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
     // And, `uv sync --package child` uses `foo` relative to  the workspace root
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked in [TIME]
@@ -8003,10 +7277,7 @@ fn sync_empty_virtual_environment() -> Result<()> {
 
     // Running `uv sync` should work
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -8037,10 +7308,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     // We should not warn if it matches the project environment
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, context.temp_dir.join(".venv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8050,10 +7318,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     // Including if it's a relative path that matches
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, ".venv"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -8068,10 +7333,7 @@ fn sync_virtual_env_warning() -> Result<()> {
         symlink(context.temp_dir.join(".venv"), &link)?;
 
         uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, link), @"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-
+        exit_code: 0 (success)
         ----- stderr -----
         Resolved 2 packages in [TIME]
         Checked 1 package in [TIME]
@@ -8080,10 +7342,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     // But we should warn if it's a different path
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
@@ -8092,10 +7351,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     // Including absolute paths
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, context.temp_dir.join("foo")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
@@ -8104,10 +7360,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     // We should not warn if the project environment has been customized and matches
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foo
@@ -8118,10 +7371,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     // But we should warn if they don't match still
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").env(EnvVars::UV_PROJECT_ENVIRONMENT, "bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -8137,10 +7387,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     // And `VIRTUAL_ENV` is resolved relative to the project root so with relative paths we should
     // warn from a child too
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(&child), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
@@ -8149,10 +7396,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     // But, a matching absolute path shouldn't warn
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, context.temp_dir.join("foo")).env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(&child), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -8177,10 +7421,7 @@ fn sync_update_project() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -8212,10 +7453,7 @@ fn sync_update_project() -> Result<()> {
         .touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8243,10 +7481,7 @@ fn sync_environment_prompt() -> Result<()> {
 
     // Running `uv sync` should create `.venv`
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -8282,10 +7517,7 @@ fn no_binary() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8296,10 +7528,7 @@ fn no_binary() -> Result<()> {
     assert!(context.temp_dir.child("uv.lock").exists());
 
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--no-binary"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8309,10 +7538,7 @@ fn no_binary() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BINARY_PACKAGE, "iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8322,10 +7548,7 @@ fn no_binary() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BINARY, "1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8335,10 +7558,7 @@ fn no_binary() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BINARY, "iniconfig"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: invalid value 'iniconfig' for '--no-binary': value was not a boolean
 
@@ -8366,10 +7586,7 @@ fn no_binary_package_empty_environment_variable() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_BINARY_PACKAGE, ""), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8398,10 +7615,7 @@ fn no_binary_error() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("odrive"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 31 packages in [TIME]
     error: Distribution `odrive==0.6.8 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-binary` but has no source distribution
@@ -8430,10 +7644,7 @@ fn no_build() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8444,10 +7655,7 @@ fn no_build() -> Result<()> {
     assert!(context.temp_dir.child("uv.lock").exists());
 
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD_PACKAGE, "iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8483,50 +7691,35 @@ fn no_build_error() -> Result<()> {
         .success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--no-build-package").arg("a"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--no-build"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall").env(EnvVars::UV_NO_BUILD, "1"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall").env(EnvVars::UV_NO_BUILD_PACKAGE, "a"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall").env(EnvVars::UV_NO_BUILD, "a"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: invalid value 'a' for '--no-build': value was not a boolean
 
@@ -8556,19 +7749,13 @@ fn sync_wheel_url_source_error() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: Distribution `cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
@@ -8607,19 +7794,13 @@ fn sync_wheel_path_source_error() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: Distribution `cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
@@ -8688,10 +7869,7 @@ fn sync_override_package() -> Result<()> {
 
     // Syncing the project should _not_ install `core`.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8720,10 +7898,7 @@ fn sync_override_package() -> Result<()> {
 
     // Syncing the project _should_ install `core`.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -8750,10 +7925,7 @@ fn sync_override_package() -> Result<()> {
 
     // Syncing the project _should_ install `core`.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8783,10 +7955,7 @@ fn sync_override_package() -> Result<()> {
 
     // Syncing the project should _not_ install `core`.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8835,10 +8004,7 @@ fn sync_override_package() -> Result<()> {
 
     // Syncing the project should _not_ install `core`.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8868,10 +8034,7 @@ fn sync_override_package() -> Result<()> {
 
     // Syncing the project _should_ install `core`.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -8948,10 +8111,7 @@ fn transitive_dev() -> Result<()> {
         .touch()?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `child/pyproject.toml`, `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 6 packages in [TIME]
@@ -9029,10 +8189,7 @@ fn sync_no_editable() -> Result<()> {
     init.touch()?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -9042,10 +8199,7 @@ fn sync_no_editable() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_EDITABLE, "1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
@@ -9056,11 +8210,7 @@ fn sync_no_editable() -> Result<()> {
 
     // Ensure that we can still import it.
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("python").arg("-c").arg("import child"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     Ok(())
@@ -9095,10 +8245,7 @@ fn sync_scripts_without_build_system() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: Skipping installation of entry points (`project.scripts`) for package `foo` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
@@ -9144,10 +8291,7 @@ fn sync_scripts_project_not_packaged() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: Skipping installation of entry points (`project.scripts`) for package `foo` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
@@ -9195,10 +8339,7 @@ fn sync_scripts_workspace_member_not_packaged() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     warning: Skipping installation of entry points (`project.scripts`) for package `member` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
@@ -9245,10 +8386,7 @@ fn sync_scripts_workspace_member_not_packaged_not_synced() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked in [TIME]
@@ -9286,10 +8424,7 @@ fn sync_dynamic_extra() -> Result<()> {
         .write_str("typing-extensions")?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -9359,10 +8494,7 @@ fn sync_dynamic_extra() -> Result<()> {
 
     // Check that we can re-read the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -9438,10 +8570,7 @@ fn build_system_requires_workspace() -> Result<()> {
         })?;
 
     uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.child("project")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -9518,10 +8647,7 @@ fn build_system_requires_path() -> Result<()> {
         })?;
 
     uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.child("project")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -9556,10 +8682,7 @@ fn sync_invalid_environment() -> Result<()> {
     fs_err::create_dir(context.temp_dir.join(".venv"))?;
     fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
     ");
@@ -9567,10 +8690,7 @@ fn sync_invalid_environment() -> Result<()> {
     // But if it's just an incompatible virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
     uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
@@ -9583,10 +8703,7 @@ fn sync_invalid_environment() -> Result<()> {
 
     // We can delete and use it
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: .venv
@@ -9605,10 +8722,7 @@ fn sync_invalid_environment() -> Result<()> {
         fs_err::remove_file(bin.join("python"))?;
         fs_err::os::unix::fs::symlink(context.temp_dir.join("does-not-exist"), bin.join("python"))?;
         uv_snapshot!(context.filters(), context.sync(), @"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-
+        exit_code: 0 (success)
         ----- stderr -----
         warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/[PYTHON] -> python
         Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -9623,10 +8737,7 @@ fn sync_invalid_environment() -> Result<()> {
     // If the Python executable is missing entirely, we'll delete and use it
     fs_err::remove_dir_all(&bin)?;
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: .venv
@@ -9639,10 +8750,7 @@ fn sync_invalid_environment() -> Result<()> {
     // But if it's not a virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
     uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
@@ -9658,10 +8766,7 @@ fn sync_invalid_environment() -> Result<()> {
 
     // We should never delete it
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: Project virtual environment directory `[VENV]/` cannot be used because it is not a compatible environment but cannot be recreated because it is not a virtual environment
@@ -9670,10 +8775,7 @@ fn sync_invalid_environment() -> Result<()> {
     // Even if there's no Python executable
     fs_err::remove_dir_all(&bin)?;
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
     ");
@@ -9701,10 +8803,7 @@ fn sync_partial_environment_delete() -> Result<()> {
 
     context.init().arg("-p").arg("3.12").assert().success();
     uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     Creating virtual environment at: .venv
@@ -9721,20 +8820,14 @@ fn sync_partial_environment_delete() -> Result<()> {
     fs_err::set_permissions(&unreadable2, perms)?;
 
     uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: failed to remove directory `[VENV]/z2.txt`: Permission denied (os error 13)
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: failed to remove directory `[VENV]/z2.txt`: Permission denied (os error 13)
@@ -9745,10 +8838,7 @@ fn sync_partial_environment_delete() -> Result<()> {
 
     // We should be able to remove the venv now
     uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: .venv
@@ -9790,10 +8880,7 @@ fn sync_no_sources_missing_member() -> Result<()> {
     init.touch()?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -9829,20 +8916,14 @@ fn sync_no_sources_package() -> Result<()> {
 
     // First lock the project
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
 
     // Sync with sources disabled for anyio only
     uv_snapshot!(context.filters(), context.sync().arg("--no-sources-package").arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -9871,10 +8952,7 @@ fn sync_python_version() -> Result<()> {
 
     // We should respect the project's required version, not the first on the path
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -9888,10 +8966,7 @@ fn sync_python_version() -> Result<()> {
 
     // Unless explicitly requested...
     uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.10"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     error: The requested interpreter resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11` (from `project.requires-python`)
@@ -9899,19 +8974,13 @@ fn sync_python_version() -> Result<()> {
 
     // But a pin should take precedence
     uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Pinned `.python-version` to `3.12`
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: .venv
@@ -9925,20 +8994,14 @@ fn sync_python_version() -> Result<()> {
 
     // Create a pin that's incompatible with the project
     uv_snapshot!(context.filters(), context.python_pin().arg("3.10").arg("--no-workspace"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Updated `.python-version` from `3.12` -> `3.10`
-
-    ----- stderr -----
     ");
 
     // We should warn on subsequent uses, but respect the pinned version?
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     error: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11` (from `project.requires-python`)
@@ -9961,10 +9024,7 @@ fn sync_python_version() -> Result<()> {
         .unwrap();
 
     uv_snapshot!(context.filters(), context.sync().current_dir(&child_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -9986,12 +9046,9 @@ fn sync_ignores_incompatible_global_python_version() -> Result<()> {
 
     // Create a global pin before creating the project (to avoid pin compatibility check)
     uv_snapshot!(context.filters(), context.python_pin().arg("--global").arg("3.10"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Pinned `[UV_USER_CONFIG_DIR]/.python-version` to `3.10`
-
-    ----- stderr -----
     ");
 
     // Now create a project that requires a different Python version
@@ -10006,10 +9063,7 @@ fn sync_ignores_incompatible_global_python_version() -> Result<()> {
 
     // Ensure sync succeeds and uses a compatible interpreter (ignoring the conflicting global pin)
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -10050,10 +9104,7 @@ fn sync_explicit() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -10066,10 +9117,7 @@ fn sync_explicit() -> Result<()> {
 
     // The package should be drawn from the cache.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -10139,10 +9187,7 @@ fn sync_all() -> Result<()> {
 
     // Sync all workspace members.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -10220,10 +9265,7 @@ fn sync_all_extras() -> Result<()> {
 
     // Sync an extra that exists in both the parent and child.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("types"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -10236,10 +9278,7 @@ fn sync_all_extras() -> Result<()> {
 
     // Sync an extra that only exists in the child.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("testing"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -10251,10 +9290,7 @@ fn sync_all_extras() -> Result<()> {
 
     // Sync all extras.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--all-extras"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -10267,10 +9303,7 @@ fn sync_all_extras() -> Result<()> {
 
     // Sync all extras excluding an extra that exists in both the parent and child.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--all-extras").arg("--no-extra").arg("types"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -10279,10 +9312,7 @@ fn sync_all_extras() -> Result<()> {
 
     // Sync an extra that doesn't exist.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     error: Extra `foo` is not defined in any project's `optional-dependencies` table
@@ -10290,10 +9320,7 @@ fn sync_all_extras() -> Result<()> {
 
     // Sync all extras excluding an extra that doesn't exist.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--all-extras").arg("--no-extra").arg("foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     error: Extra `foo` is not defined in any project's `optional-dependencies` table
@@ -10324,10 +9351,7 @@ fn sync_extra_comma_separated() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("types,async"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -10413,10 +9437,7 @@ fn sync_all_extras_dynamic() -> Result<()> {
 
     // Sync an extra that exists in the parent.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("types"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -10428,10 +9449,7 @@ fn sync_all_extras_dynamic() -> Result<()> {
 
     // Sync a dynamic extra that exists in the child.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -10443,10 +9461,7 @@ fn sync_all_extras_dynamic() -> Result<()> {
 
     // Sync a dynamic extra that doesn't exist in the child.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     error: Extra `foo` is not defined in any project's `optional-dependencies` table
@@ -10518,10 +9533,7 @@ fn sync_all_groups() -> Result<()> {
 
     // Sync a group that exists in both the parent and child.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--group").arg("types"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -10534,10 +9546,7 @@ fn sync_all_groups() -> Result<()> {
 
     // Sync a group that only exists in the child.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--group").arg("testing"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -10549,10 +9558,7 @@ fn sync_all_groups() -> Result<()> {
 
     // Sync a group that doesn't exist.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--group").arg("foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     error: Group `foo` is not defined in any project's `dependency-groups` table
@@ -10560,10 +9566,7 @@ fn sync_all_groups() -> Result<()> {
 
     // Sync an empty group.
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("empty"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -10621,10 +9624,7 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cu124"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -10663,10 +9663,7 @@ fn sync_derivation_chain() -> Result<()> {
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.sync(), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to build `wsgiref==0.1.2`
@@ -10727,10 +9724,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.sync().arg("--extra").arg("wsgi"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to build `wsgiref==0.1.2`
@@ -10793,10 +9787,7 @@ fn sync_derivation_chain_group() -> Result<()> {
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.sync().arg("--group").arg("wsgi"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to build `wsgiref==0.1.2`
@@ -10850,10 +9841,7 @@ fn sync_stale_egg_info() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -10919,10 +9907,7 @@ fn sync_stale_egg_info() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -10957,10 +9942,7 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -11014,10 +9996,7 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11051,10 +10030,7 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
@@ -11130,10 +10106,7 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -11169,10 +10142,7 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -11226,10 +10196,7 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11262,10 +10229,7 @@ fn sync_git_path_archive() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     "###);
@@ -11318,10 +10282,7 @@ fn sync_git_path_archive() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.sync(), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11391,10 +10352,7 @@ fn sync_git_path_archive_missing_lfs() -> Result<()> {
             .arg("--frozen")
             .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1"),
         @r###"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true`
       ├─▶ The wheel `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true` is missing Git LFS artifacts.
@@ -11428,10 +10386,7 @@ fn mismatched_name_self_editable() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to build `foo @ file://[TEMP_DIR]/`
@@ -11461,10 +10416,7 @@ fn mismatched_name_cached_wheel() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -11483,10 +10435,7 @@ fn mismatched_name_cached_wheel() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `foo @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       ╰─▶ Package metadata name `iniconfig` does not match given name `foo`
@@ -11518,10 +10467,7 @@ fn sync_git_path_dependency() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -11571,10 +10517,7 @@ fn sync_git_path_dependency() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11676,10 +10619,7 @@ fn lock_git_poetry_path_dependency() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -11811,10 +10751,7 @@ fn lock_git_metadata_archive_dependency() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -11913,10 +10850,7 @@ fn sync_build_tag() -> Result<()> {
         })?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
@@ -11961,20 +10895,14 @@ fn sync_build_tag() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -11983,12 +10911,9 @@ fn sync_build_tag() -> Result<()> {
 
     // Ensure that we choose the highest build tag (5).
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("python").arg("-c").arg("import build_tag; build_tag.main()"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     5
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -12040,10 +10965,7 @@ fn url_hash_mismatch() -> Result<()> {
 
     // Running `uv sync` should fail.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to download and build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
@@ -12114,10 +11036,7 @@ fn path_hash_mismatch() -> Result<()> {
 
     // Running `uv sync` should fail.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to build `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
@@ -12167,10 +11086,7 @@ fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
 
     // Run `uv sync --offline` from subdir. We expect it to find the local wheel in ../packages/.
     uv_snapshot!(context.filters(), context.sync().current_dir(&subdir).arg("--offline"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -12198,10 +11114,7 @@ fn sync_dry_run() -> Result<()> {
 
     // Perform a `--dry-run`.
     uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Would create project environment at: .venv
@@ -12214,10 +11127,7 @@ fn sync_dry_run() -> Result<()> {
 
     // Perform a full sync.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -12239,10 +11149,7 @@ fn sync_dry_run() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Would use project environment at: .venv
     Resolved 2 packages in [TIME]
@@ -12266,10 +11173,7 @@ fn sync_dry_run() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Would replace project environment at: .venv
@@ -12282,10 +11186,7 @@ fn sync_dry_run() -> Result<()> {
 
     // Perform a full sync.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Removed virtual environment at: .venv
@@ -12307,10 +11208,7 @@ fn sync_dry_run() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Would use project environment at: .venv
     Resolved 2 packages in [TIME]
@@ -12355,10 +11253,7 @@ fn sync_dry_run_and_locked() -> Result<()> {
 
     // Running with `--locked` and `--dry-run` should error.
     uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--dry-run"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Would use project environment at: .venv
     Resolved 2 packages in [TIME]
@@ -12409,10 +11304,7 @@ fn sync_dry_run_and_frozen() -> Result<()> {
 
     // Running with `--frozen` with `--dry-run` should preview dependencies to be installed.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--dry-run"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Would use project environment at: .venv
     Would download 3 packages
@@ -12443,10 +11335,7 @@ fn sync_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 3 packages in [TIME]
@@ -12475,10 +11364,7 @@ fn sync_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 4 packages in [TIME]
@@ -12501,10 +11387,7 @@ fn sync_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 3 packages in [TIME]
@@ -12526,10 +11409,7 @@ fn sync_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Updating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 5 packages in [TIME]
@@ -12544,20 +11424,14 @@ fn sync_script() -> Result<()> {
 
     // `--locked` and `--frozen` should fail with helpful error messages.
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     error: `uv sync --locked` requires a script lockfile; run `uv lock --script script.py` to lock the script
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--frozen"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     error: `uv sync --frozen` requires a script lockfile; run `uv lock --script script.py` to lock the script
@@ -12585,10 +11459,7 @@ fn sync_locked_script() -> Result<()> {
 
     // Lock the script.
     uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -12645,10 +11516,7 @@ fn sync_locked_script() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 3 packages in [TIME]
@@ -12675,10 +11543,7 @@ fn sync_locked_script() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 4 packages in [TIME]
@@ -12688,10 +11553,7 @@ fn sync_locked_script() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 4 packages in [TIME]
@@ -12779,10 +11641,7 @@ fn sync_locked_script() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Updating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
@@ -12793,10 +11652,7 @@ fn sync_locked_script() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
@@ -12838,10 +11694,7 @@ fn sync_script_with_compatible_build_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 6 packages in [TIME]
@@ -12882,10 +11735,7 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
       × Failed to download and build `requests==1.2.0`
@@ -12916,10 +11766,7 @@ fn unsupported_git_scheme() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -12966,20 +11813,14 @@ fn multiple_group_conflicts() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("baz"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -12988,20 +11829,14 @@ fn multiple_group_conflicts() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo").arg("--group").arg("baz"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked 1 package in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar").arg("--group").arg("baz"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -13012,10 +11847,7 @@ fn multiple_group_conflicts() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo").arg("--group").arg("bar"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: Groups `bar` and `foo` are incompatible with the conflicts: {`project:bar`, `project:foo`}
@@ -13056,28 +11888,19 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -13088,40 +11911,28 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked 3 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked 3 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("test").arg("--group").arg("magic"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: Groups `magic` and `test` are incompatible with the conflicts: {`example:magic`, `example:test`}
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: Groups `dev` and `magic` are incompatible with the conflicts: {`example:dev`, `example:magic`}
@@ -13170,10 +11981,7 @@ fn transitive_group_conflicts_deep() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -13185,40 +11993,28 @@ fn transitive_group_conflicts_deep() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Checked 4 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Checked 4 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     error: Groups `dev` and `magic` are incompatible with the conflicts: {`example:dev`, `example:magic`}
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-dev").arg("--group").arg("intermediate").arg("--group").arg("magic"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     error: Groups `intermediate` and `magic` are incompatible with the conflicts: {`example:intermediate`, `example:magic`}
@@ -13261,10 +12057,7 @@ fn transitive_group_conflicts_siblings() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -13275,20 +12068,14 @@ fn transitive_group_conflicts_siblings() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked 3 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-dev").arg("--group").arg("dev2"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -13299,20 +12086,14 @@ fn transitive_group_conflicts_siblings() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev2"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: Groups `dev` (enabled by default) and `dev2` are incompatible with the conflicts: {`example:dev`, `example:dev2`}
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("dev2"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: Groups `dev` and `dev2` are incompatible with the conflicts: {`example:dev`, `example:dev2`}
@@ -13356,50 +12137,35 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("test").arg("--group").arg("magic"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
@@ -13429,10 +12195,7 @@ fn prune_cache_url_subdirectory() -> Result<()> {
 
     // Lock the project.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
@@ -13442,10 +12205,7 @@ fn prune_cache_url_subdirectory() -> Result<()> {
 
     // Install the project.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -13478,10 +12238,7 @@ fn locked_version_coherence() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
@@ -13530,10 +12287,7 @@ fn locked_version_coherence() -> Result<()> {
 
     // An inconsistent lockfile should fail with `--locked`
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`
       Caused by: The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
@@ -13541,10 +12295,7 @@ fn locked_version_coherence() -> Result<()> {
 
     // Without `--locked`, we could fail or recreate the lockfile, currently, we fail.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`
       Caused by: The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
@@ -13577,10 +12328,7 @@ fn sync_build_constraints() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("json-merge-patch"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -13633,10 +12381,7 @@ fn sync_build_constraints() -> Result<()> {
 
     // We should also be able to read from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -13662,10 +12407,7 @@ fn sync_build_constraints() -> Result<()> {
 
     // This should fail, given that the build constraints have changed.
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -13675,10 +12417,7 @@ fn sync_build_constraints() -> Result<()> {
 
     // Changing the build constraints should lead to a re-resolve.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -13745,10 +12484,7 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
         .touch()?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--package").arg("child").arg("--no-binary-package").arg("a"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -13767,10 +12503,7 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--package").arg("child").arg("--locked").arg("--no-binary-package").arg("a"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -13830,10 +12563,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
 
     // We should also be able to read from the lockfile.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: .venv
@@ -13869,10 +12599,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
 
     // We should also be able to read from the lockfile.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: .venv
@@ -13909,10 +12636,7 @@ fn sync_upload_time() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -13971,10 +12695,7 @@ fn sync_upload_time() -> Result<()> {
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -13985,10 +12706,7 @@ fn sync_upload_time() -> Result<()> {
 
     // Re-install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 3 packages in [TIME]
     ");
@@ -14059,10 +12777,7 @@ fn repeated_dev_member_all_packages() -> Result<()> {
     init.touch()?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -14073,10 +12788,7 @@ fn repeated_dev_member_all_packages() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked 3 packages in [TIME]
@@ -14109,10 +12821,7 @@ fn direct_url_dependency_metadata() -> Result<()> {
     )?;
 
     uv_snapshot!(context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
@@ -14145,10 +12854,7 @@ fn sync_required_environment_hint() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
@@ -14164,10 +12870,7 @@ fn sync_required_environment_hint() -> Result<()> {
         ));
 
     uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it doesn't have a source distribution or wheel for the current platform
@@ -14193,10 +12896,7 @@ fn sync_url_with_query_parameters() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -14232,10 +12932,7 @@ dependencies = [
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
         .arg("2022-04-04T12:00:00Z"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -14258,10 +12955,7 @@ dependencies = [
         .arg("--exclude-newer-package")
         .arg("tqdm=2022-09-04T00:00:00Z")
         .arg("--upgrade"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
@@ -14302,10 +12996,7 @@ exclude-newer = "2022-04-04T12:00:00Z"
     uv_snapshot!(context.filters(), context
         .sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -14342,10 +13033,7 @@ exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
         .sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--upgrade"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
@@ -14379,10 +13067,7 @@ fn read_only() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -14399,10 +13084,7 @@ fn read_only() -> Result<()> {
     fs_err::set_permissions(&context.venv, std::fs::Permissions::from_mode(0o555))?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -14431,10 +13113,7 @@ fn sync_python_platform() -> Result<()> {
 
     // Sync with a specific platform should filter packages
     uv_snapshot!(context.filters(), context.sync().arg("--python-platform").arg("linux"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -14511,10 +13190,7 @@ fn conflicting_editable() -> Result<()> {
         .touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked in [TIME]
@@ -14571,10 +13247,7 @@ fn conflicting_editable() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -14583,19 +13256,13 @@ fn conflicting_editable() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [{"name":"child","version":"0.1.0","editable_project_location":"[TEMP_DIR]/child"}]
-
-    ----- stderr -----
     "#);
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -14605,12 +13272,9 @@ fn conflicting_editable() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [{"name":"child","version":"0.1.0"}]
-
-    ----- stderr -----
     "#);
 
     Ok(())
@@ -14677,10 +13341,7 @@ fn undeclared_editable() -> Result<()> {
         .touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked in [TIME]
@@ -14737,10 +13398,7 @@ fn undeclared_editable() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -14749,19 +13407,13 @@ fn undeclared_editable() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [{"name":"child","version":"0.1.0","editable_project_location":"[TEMP_DIR]/child"}]
-
-    ----- stderr -----
     "#);
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -14771,12 +13423,9 @@ fn undeclared_editable() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [{"name":"child","version":"0.1.0"}]
-
-    ----- stderr -----
     "#);
 
     Ok(())
@@ -14803,10 +13452,7 @@ fn sync_python_preference() -> Result<()> {
     // Mark 3.12 as a managed interpreter for the rest of the tests
     let context = context.with_versions_as_managed(&["3.12"]);
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
@@ -14814,10 +13460,7 @@ fn sync_python_preference() -> Result<()> {
 
     // We should invalidate the environment and switch to 3.11
     uv_snapshot!(context.filters(), context.sync().arg("--no-managed-python"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Removed virtual environment at: .venv
@@ -14828,10 +13471,7 @@ fn sync_python_preference() -> Result<()> {
 
     // We will use the environment if it exists
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
@@ -14839,10 +13479,7 @@ fn sync_python_preference() -> Result<()> {
 
     // Unless the user requests a Python preference that is incompatible
     uv_snapshot!(context.filters(), context.sync().arg("--managed-python"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X]
     Removed virtual environment at: .venv
@@ -14853,10 +13490,7 @@ fn sync_python_preference() -> Result<()> {
 
     // If a interpreter cannot be found, we'll fail
     uv_snapshot!(context.filters(), context.sync().arg("--managed-python").arg("-p").arg("3.11"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for Python 3.11 in managed installations
 
@@ -14879,10 +13513,7 @@ fn sync_python_preference() -> Result<()> {
 
     // We'll respect a `python-preference` in the `pyproject.toml` file
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Removed virtual environment at: .venv
@@ -14893,10 +13524,7 @@ fn sync_python_preference() -> Result<()> {
 
     // But it can be overridden via the CLI
     uv_snapshot!(context.filters(), context.sync().arg("--managed-python"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X]
     Removed virtual environment at: .venv
@@ -14907,8 +13535,7 @@ fn sync_python_preference() -> Result<()> {
 
     // `uv run` will invalidate the environment too
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.11.[X]
 
@@ -14941,10 +13568,7 @@ fn sync_python_missing_download_hint() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.100"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for Python 3.100 in [PYTHON SOURCES]
 
@@ -14996,10 +13620,7 @@ fn sync_config_settings_package() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -15035,10 +13656,7 @@ fn sync_config_settings_package() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -15076,10 +13694,7 @@ fn sync_config_settings_package() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -15129,10 +13744,7 @@ fn sync_does_not_remove_empty_virtual_environment_directory() -> Result<()> {
     // Note we do _not_ fail to create the virtual environment — we fail later when writing to the
     // project directory
     uv_snapshot!(context.filters(), context.sync().current_dir(&project_dir), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -15207,10 +13819,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     ");
@@ -15229,10 +13838,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // Ensure our build backend is checking the version correctly
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).env("EXPECTED_A_VERSION", "0.1"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -15264,10 +13870,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be built with a 0.2.
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).env("EXPECTED_A_VERSION", "0.2"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -15294,10 +13897,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     // The child should be rebuilt with a 0.1, without `--reinstall`.
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
         .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.2"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -15314,10 +13914,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
         .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -15359,10 +13956,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     // This should fail
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
         .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.2"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -15389,10 +13983,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Dependencies marked with `match-runtime = true` cannot include version specifiers, but found: `a>0.1`
@@ -15449,20 +14040,14 @@ fn sync_extra_build_variables() -> Result<()> {
     context.temp_dir.child("src/parent/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     ");
 
     // Ensure our build backend is checking the version correctly.
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `parent @ file://[TEMP_DIR]/`
@@ -15493,10 +14078,7 @@ fn sync_extra_build_variables() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `parent @ file://[TEMP_DIR]/`
@@ -15527,10 +14109,7 @@ fn sync_extra_build_variables() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -15560,10 +14139,7 @@ fn reject_unmatched_runtime() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `source-distribution==0.0.3`
       ╰─▶ Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
@@ -15596,10 +14172,7 @@ fn sync_git_lfs() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -15611,11 +14184,7 @@ fn sync_git_lfs() -> Result<()> {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     let lock = context.read("uv.lock");
@@ -15652,10 +14221,7 @@ fn sync_git_lfs() -> Result<()> {
 
     // `UV_GIT_LFS=false` should not override `lfs = true`
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_GIT_LFS, "false").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -15667,11 +14233,7 @@ fn sync_git_lfs() -> Result<()> {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     // Set `lfs = false` in the source
@@ -15689,10 +14251,7 @@ fn sync_git_lfs() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -15706,10 +14265,7 @@ fn sync_git_lfs() -> Result<()> {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
@@ -15722,10 +14278,7 @@ fn sync_git_lfs() -> Result<()> {
 
     // `UV_GIT_lfs=true` should not override `lfs = false`
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_GIT_LFS, "true").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -15737,10 +14290,7 @@ fn sync_git_lfs() -> Result<()> {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
@@ -15798,10 +14348,7 @@ fn sync_git_lfs() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_GIT_LFS, "true").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -15815,20 +14362,14 @@ fn sync_git_lfs() -> Result<()> {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module; print('LFS module imported via env var')"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     LFS module imported via env var
-
-    ----- stderr -----
     ");
 
     // Cache should be primed with non-LFS sources
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -15841,10 +14382,7 @@ fn sync_git_lfs() -> Result<()> {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
@@ -15857,10 +14395,7 @@ fn sync_git_lfs() -> Result<()> {
 
     // Cache should be primed with LFS sources
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_GIT_LFS, "true").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -15873,20 +14408,14 @@ fn sync_git_lfs() -> Result<()> {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module; print('LFS module imported via env var')"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     LFS module imported via env var
-
-    ----- stderr -----
     ");
 
     // Cache should hit non-LFS sources
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -15899,10 +14428,7 @@ fn sync_git_lfs() -> Result<()> {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
@@ -15947,10 +14473,7 @@ fn sync_git_lfs() -> Result<()> {
 
     // Cache should hit LFS sources
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_GIT_LFS, "true").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -15963,12 +14486,9 @@ fn sync_git_lfs() -> Result<()> {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import test_lfs_repo.lfs_module; print('LFS module imported via env var')"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     LFS module imported via env var
-
-    ----- stderr -----
     ");
 
     let lock = context.read("uv.lock");
@@ -16031,10 +14551,7 @@ fn match_runtime_optional() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked in [TIME]
@@ -16083,10 +14600,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 
     // Running `uv sync` should build the child package.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -16096,10 +14610,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 
     // Running `uv sync` again should be a no-op.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -16122,10 +14633,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 
     // Running `uv sync` should rebuild the child package with the new build dependency.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -16136,10 +14644,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 
     // Running `uv sync` again should be a no-op.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -16161,10 +14666,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -16188,10 +14690,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     // Running `uv sync` should reinstall the child package, but not rebuild it (since it's already
     // cached).
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -16216,10 +14715,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 
     // Running `uv sync` should rebuild the child package with the new build dependency.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -16230,10 +14726,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 
     // Running `uv sync` again should be a no-op.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -16344,10 +14837,7 @@ async fn sync_zstd_wheel() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -16402,10 +14892,7 @@ fn toggle_workspace_editable() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -16470,10 +14957,7 @@ fn toggle_workspace_editable() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-editable-package").arg("child"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -16485,10 +14969,7 @@ fn toggle_workspace_editable() -> Result<()> {
     assert!(!context.site_packages().join("_child.pth").exists());
 
     uv_snapshot!(context.filters(), context.sync().arg("--editable"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -16516,10 +14997,7 @@ fn toggle_workspace_editable() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -16587,10 +15065,7 @@ fn toggle_workspace_editable() -> Result<()> {
 
     // But `--editable` on the command line should override the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--editable"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -16672,10 +15147,7 @@ fn workspace_editable_conflict() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -16769,10 +15241,7 @@ fn workspace_editable_conflict() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -16869,10 +15338,7 @@ fn workspace_editable_conflict() -> Result<()> {
 
     // If the `editable` declarations are conflicting, raise an error.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Workspace member `child1` was requested as both `editable = true` and `editable = false`
     ");
@@ -16903,10 +15369,7 @@ fn only_group_and_extra_conflict() -> Result<()> {
 
     // Using --only-group and --extra together should error.
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("dev").arg("--extra").arg("test"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--extra <EXTRA>'
 
@@ -16917,10 +15380,7 @@ fn only_group_and_extra_conflict() -> Result<()> {
 
     // Using --only-group and --all-extras together should also error.
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("dev").arg("--all-extras"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--all-extras'
 
@@ -16982,10 +15442,7 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
 
     // Step 1: `uv sync --no-sources` should install `anyio` from PyPI.
     uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -16998,10 +15455,7 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
 
     // Step 2: `uv sync` should switch to an editable installation.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -17015,10 +15469,7 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
 
     // Step 3: `uv sync --no-sources` again should switch back to PyPI package.
     uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -17052,10 +15503,7 @@ fn sync_fails_ambiguous_url() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: Failed to parse `pyproject.toml` during settings discovery:
       TOML parse error at line 10, column 15
@@ -17121,19 +15569,13 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
 
     // Lock and sync (installs child v0.1.0).
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -17157,10 +15599,7 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
 
     // Lock again; lockfile should show v0.1.1.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Updated child v0.1.0 -> v0.1.1
@@ -17169,10 +15608,7 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
     // Sync should reinstall child with the new version. Before the fix for #17370,
     // this would incorrectly say "Checked 2 packages" and not reinstall the child package.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -17230,10 +15666,7 @@ async fn sync_malware_detected() {
         .arg("--preview-features").arg("malware-check")
         .env_remove(EnvVars::UV_MALWARE_CHECK)
         .env_remove(EnvVars::UV_MALWARE_CHECK_URL), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     warning: Malware detected in locked dependencies:
@@ -17275,10 +15708,7 @@ async fn sync_malware_check_clean() {
         .arg("--preview-features").arg("malware-check")
         .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -17360,10 +15790,7 @@ async fn sync_malware_check_keyring_auth() -> Result<()> {
             )
         )
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Keyring request for public@http://[LOCALHOST]/v1/querybatch
@@ -17427,10 +15854,7 @@ async fn sync_malware_check_skips_non_mal() {
         .arg("--preview-features").arg("malware-check")
         .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     warning: Malware detected in locked dependencies:
@@ -17475,10 +15899,7 @@ async fn sync_malware_check_disabled() {
         .arg("--preview-features").arg("malware-check")
         .env(EnvVars::UV_MALWARE_CHECK, "0")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -17520,10 +15941,7 @@ async fn sync_malware_check_network_error() {
         .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri())
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Malware check failed due to an error from OSV
@@ -17550,10 +15968,7 @@ async fn sync_malware_check_url_invalid() {
     uv_snapshot!(context.filters(), context
         .sync()
         .env(EnvVars::UV_MALWARE_CHECK_URL, "not-a-url"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse environment variable `UV_MALWARE_CHECK_URL` with invalid value `not-a-url`: relative URL without a base
     ");
@@ -17605,10 +16020,7 @@ async fn sync_malware_check_skips_inactive_extras_and_groups() {
         .arg("--preview-features").arg("malware-check")
         .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     warning: Malware detected in locked dependencies:
@@ -17660,10 +16072,7 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
 
     // `uv lock` reads the member's `[tool.uv.sources]` and resolves successfully.
     uv_snapshot!(&context.filters(), context.lock(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -17672,10 +16081,7 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
     // `[tool.uv.sources]` to `GIT_STORE`. Use `--reinstall --no-cache` so the
     // git fetch actually runs.
     uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]

@@ -60,8 +60,7 @@ fn upgrade_help() {
         context.filters(),
         context.upgrade().arg("--help"),
         @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Upgrade a dependency in the project
 
@@ -107,8 +106,6 @@ fn upgrade_help() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-
-    ----- stderr -----
     "#
     );
 }
@@ -137,10 +134,7 @@ fn upgrade_selects_normalized_production_dependency() -> Result<()> {
         context.filters(),
         context.upgrade().arg("anyio"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -181,10 +175,7 @@ fn upgrade_ignores_disjoint_fork_version_for_selected_requirement() -> Result<()
             .arg("bar")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -208,10 +199,7 @@ fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<(
             .arg("bar")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -237,10 +225,7 @@ fn upgrade_skips_inapplicable_marked_dependency() -> Result<()> {
         .child("pyproject.toml")
         .write_str(pyproject_toml)?;
     uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Skipping dependency `anyio` in `project.dependencies`: `anyio<3 ; python_full_version < '3.12'` (excluded by the project's environments or Python requirement)
     ");
@@ -266,10 +251,7 @@ fn upgrade_skips_undefined_extra() -> Result<()> {
         .child("pyproject.toml")
         .write_str(pyproject_toml)?;
     uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Skipping dependency `anyio` in `project.dependencies`: `anyio<3 ; extra == 'does-not-exist'` (references an extra that the project does not provide)
     ");
@@ -295,10 +277,7 @@ fn upgrade_warns_for_skipped_requirement_before_validation_error() -> Result<()>
         .child("pyproject.toml")
         .write_str(pyproject_toml)?;
     uv_snapshot!(context.filters(), context.upgrade().arg("bar"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: Skipping dependency `bar` in `project.dependencies`: `bar<2 ; python_full_version < '3.12'` (excluded by the project's environments or Python requirement)
     error: Dependency `bar` is a direct URL requirement and cannot be upgraded
@@ -354,10 +333,7 @@ fn upgrade_rejects_conflicting_extra_declarations() -> Result<()> {
             .arg("bar")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -381,10 +357,7 @@ fn upgrade_expands_constraint_for_multiple_fork_versions() -> Result<()> {
             .arg("bar")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -439,10 +412,7 @@ fn upgrade_expands_compatible_constraint_for_multiple_fork_versions() -> Result<
             .arg("a")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
@@ -483,10 +453,7 @@ fn upgrade_updates_requirement_without_updating_lockfile_or_environment() -> Res
         context.filters(),
         context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -509,10 +476,7 @@ fn upgrade_updates_requirement_without_updating_lockfile_or_environment() -> Res
             .arg("anyio")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolving despite existing lockfile due to change of exclude newer timestamp from `2021-01-01T00:00:00Z` to `2024-03-25T00:00:00Z`
     Resolved 4 packages in [TIME]
@@ -555,10 +519,7 @@ fn upgrade_reports_no_solution_without_mutation() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
@@ -588,10 +549,7 @@ fn upgrade_reports_no_version_change_without_mutation() -> Result<()> {
         .write_str(pyproject_toml)?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -601,10 +559,7 @@ fn upgrade_reports_no_version_change_without_mutation() -> Result<()> {
     let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
 
     uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -637,10 +592,7 @@ fn upgrade_rejects_dynamic_project_version() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `uv upgrade` does not support projects with dynamic versions yet
     ");
@@ -672,10 +624,7 @@ fn upgrade_requires_production_dependency() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `requests` was not found in `project.dependencies`
     "
@@ -685,10 +634,7 @@ fn upgrade_requires_production_dependency() -> Result<()> {
         context.filters(),
         context.upgrade().arg("httpx"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `httpx` was not found in `project.dependencies`
     "
@@ -738,10 +684,7 @@ fn upgrade_updates_multiple_marked_production_dependencies() -> Result<()> {
             .arg("bar")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -833,10 +776,7 @@ fn upgrade_ignores_unrelated_path_package_when_attributing_versions() -> Result<
             .arg("bar")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
@@ -894,10 +834,7 @@ fn upgrade_rejects_direct_url_requirement() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `requests` is a direct URL requirement and cannot be upgraded
     "
@@ -921,10 +858,7 @@ fn upgrade_rejects_self_dependency() -> Result<()> {
         .write_str(pyproject_toml)?;
 
     uv_snapshot!(context.filters(), context.upgrade().arg("project"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `project` refers to the current project and cannot be upgraded
     ");
@@ -953,10 +887,7 @@ fn upgrade_rejects_git_revision() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `requests` is pinned to a Git revision and cannot be upgraded commit-to-commit
     "
@@ -996,10 +927,7 @@ fn upgrade_rejects_non_registry_sources() -> Result<()> {
                 context.filters(),
                 context.upgrade().arg("requests"),
                 @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `requests` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
     "
@@ -1035,10 +963,7 @@ fn upgrade_skips_non_registry_source_for_undefined_extra() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Skipping dependency `requests` in `project.dependencies`: `requests>=2 ; extra == 'gpu'` (references an extra that the project does not provide)
     "
@@ -1090,10 +1015,7 @@ fn upgrade_allows_registry_source() -> Result<()> {
         context.filters(),
         context.upgrade().arg("idna"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
@@ -1138,10 +1060,7 @@ fn upgrade_ignores_inapplicable_non_registry_source() -> Result<()> {
         context.filters(),
         context.upgrade().arg("anyio"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -1202,10 +1121,7 @@ fn upgrade_skips_excluded_declarations_and_updates_applicable_requirement() -> R
             .arg("bar")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Skipping dependency `bar` in `project.dependencies`: `bar @ https://user:****@example.com/bar-1.0.0-py3-none-any.whl ; python_full_version < '3.12' or sys_platform == 'win32'` (excluded by the project's environments or Python requirement)
     warning: Skipping dependency `bar` in `project.dependencies`: `bar<2 ; extra == 'does-not-exist'` (references an extra that the project does not provide)
@@ -1259,10 +1175,7 @@ fn upgrade_rejects_workspace_root_non_registry_source() -> Result<()> {
             .current_dir(&project)
             .arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `requests` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
     "
@@ -1315,10 +1228,7 @@ fn upgrade_updates_nested_workspace_member_only() -> Result<()> {
         context.filters(),
         context.upgrade().current_dir(&project).arg("anyio"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -1350,10 +1260,7 @@ fn upgrade_requires_current_project() {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `uv upgrade` requires a project with a `[project]` table
     "
@@ -1379,10 +1286,7 @@ fn upgrade_rejects_virtual_workspace_root() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `uv upgrade` requires a project with a `[project]` table
     "
@@ -1424,10 +1328,7 @@ fn upgrade_rejects_multi_member_workspace() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `uv upgrade` does not support workspaces with multiple members yet
     "
