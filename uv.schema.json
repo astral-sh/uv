@@ -1803,7 +1803,8 @@
             "tool-install-locks",
             "workspace-list-scripts",
             "no-distutils-patch",
-            "index-hash-algorithm"
+            "index-hash-algorithm",
+            "no-lock-virtual"
           ]
         },
         {

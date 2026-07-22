@@ -73,6 +73,10 @@ The following preview features are available:
 - `centralized-project-envs`: Stores
   [project virtual environments](./projects/layout.md#centralized-project-environments) in the uv
   cache.
+- `no-lock-virtual`: Omits virtual workspace-member sources from lockfile requirement and
+  dependency-group metadata when they can be inferred from the locked workspace members. Compact
+  lockfiles use revision 4 and may be considered outdated by older uv versions; run `uv lock`
+  without this preview feature to restore the standard format.
 - `no-distutils-patch`: Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils
   configuration monkeypatch in virtual environments for Python 3.10 and later.
 - `json-output`: Allows `--output-format json` for various uv commands.
