@@ -123,6 +123,10 @@ pub(crate) enum UvError {
     #[error(transparent)]
     User(anyhow::Error),
 
+    /// An error caused by invalid command-line arguments.
+    #[error(transparent)]
+    Argument(anyhow::Error),
+
     /// An unexpected internal or environmental error.
     #[error(transparent)]
     Unexpected(anyhow::Error),
@@ -132,6 +136,11 @@ impl UvError {
     /// Create a user-facing error.
     fn user(error: impl Into<anyhow::Error>) -> Self {
         Self::User(error.into())
+    }
+
+    /// Create an argument error.
+    pub(crate) fn argument(error: anyhow::Error) -> Self {
+        Self::Argument(error)
     }
 
     /// Create an unexpected error.

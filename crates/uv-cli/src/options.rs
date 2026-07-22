@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fmt;
 
 use anyhow::bail;
@@ -14,6 +15,18 @@ use crate::{
     ResolverInstallerArgs,
 };
 
+/// An error caused by an invalid combination of command-line arguments.
+#[derive(Debug)]
+pub struct ArgumentError(String);
+
+impl fmt::Display for ArgumentError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+impl Error for ArgumentError {}
+
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
 pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
     match (yes, no) {
@@ -21,13 +34,13 @@ pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
         (false, true) => Ok(Some(false)),
         (false, false) => Ok(None),
         (..) => {
-            bail!(
+            bail!(ArgumentError(format!(
                 "`{}` and `{}` cannot be used together. \
                 Boolean flags on different levels are currently not supported \
                 (https://github.com/clap-rs/clap/issues/6049)",
                 format!("--{name}").green(),
                 format!("--no-{name}").green(),
-            );
+            )));
         }
     }
 }
@@ -191,11 +204,11 @@ pub fn check_conflicts(flag_a: Flag, flag_b: Flag) -> anyhow::Result<()> {
             FlagSource::Env(env) => format!("`{env}` (environment variable)"),
             FlagSource::Config => format!("`{name_b}` (workspace configuration)"),
         };
-        bail!(
+        bail!(ArgumentError(format!(
             "the argument {} cannot be used with {}",
             display_a.green(),
             display_b.green()
-        );
+        )));
     }
     Ok(())
 }
@@ -267,10 +280,10 @@ impl TryFrom<ResolverArgs> for PipOptions {
         } = args;
 
         if !upgrade_group.is_empty() {
-            bail!(
+            bail!(ArgumentError(format!(
                 "`{}` is not supported in `uv pip` commands",
                 "--upgrade-group".green()
-            );
+            )));
         }
 
         Ok(Self {
@@ -394,10 +407,10 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
         } = args;
 
         if !upgrade_group.is_empty() {
-            bail!(
+            bail!(ArgumentError(format!(
                 "`{}` is not supported in `uv pip` commands",
                 "--upgrade-group".green()
-            );
+            )));
         }
 
         Ok(Self {

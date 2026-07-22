@@ -14753,6 +14753,29 @@ fn offline_refresh_conflict_color() -> Result<()> {
     Ok(())
 }
 
+/// Test that conflicting arguments do not emit an internal error chain or backtrace.
+#[test]
+fn offline_refresh_conflict_verbose() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--offline")
+        .arg("--refresh")
+        .arg("--verbose")
+        .env(EnvVars::RUST_LOG, "uv=trace")
+        .env(EnvVars::RUST_BACKTRACE, "1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    error: the argument `--offline` cannot be used with `--refresh`
+    ");
+}
+
 /// Test that shebang arguments are stripped when installing scripts
 #[test]
 #[cfg(unix)]

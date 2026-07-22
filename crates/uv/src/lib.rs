@@ -30,7 +30,7 @@ use uv_cli::{
     AuthCommand, AuthHelperCommand, AuthNamespace, BuildBackendCommand, CacheCommand,
     CacheNamespace, Cli, Commands, PipCommand, PipNamespace, ProjectCommand, PythonCommand,
     PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
-    WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
+    WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
@@ -3075,6 +3075,7 @@ where
         Err(err) => {
             let error = match err.downcast::<UvError>() {
                 Ok(error) => error,
+                Err(err) if err.is::<ArgumentError>() => UvError::argument(err),
                 Err(err) => UvError::unexpected(err),
             };
             match error {
@@ -3082,6 +3083,11 @@ where
                     commands::diagnostics::write_error_chain(&err, printer)
                         .expect("writing to stderr should not fail");
                     ExitStatus::Failure.into()
+                }
+                UvError::Argument(err) => {
+                    commands::diagnostics::write_error_chain(&err, printer)
+                        .expect("writing to stderr should not fail");
+                    ExitStatus::Error.into()
                 }
                 UvError::Unexpected(err) => {
                     trace!(
