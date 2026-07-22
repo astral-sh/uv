@@ -298,28 +298,31 @@ pub(crate) async fn upgrade(
 
     let mut updated_requirements = Vec::new();
     for selected in &requirements {
-        let proposed_requirement =
-            propose_requirement(&selected.requirement, &selected.resolved_versions)?;
-        if proposed_requirement != selected.requirement {
-            let existing =
-                into_verbatim_requirement(selected.requirement.clone(), &selected.package)?;
-            let replacement = into_verbatim_requirement(proposed_requirement, &selected.package)?;
-            if !updated_requirements
-                .iter()
-                .any(|update: &RequirementUpdate| {
-                    update.dependency_type == selected.dependency_type
-                        && update.existing == existing
-                        && update.replacement == replacement
-                })
-            {
-                updated_requirements.push(RequirementUpdate {
-                    package: selected.package.clone(),
-                    dependency_type: selected.dependency_type.clone(),
-                    original_text: selected.original_text.clone(),
-                    existing,
-                    replacement,
-                });
-            }
+        let Some(specifiers) =
+            propose_specifiers(&selected.requirement, &selected.resolved_versions)?
+        else {
+            continue;
+        };
+
+        let existing = into_verbatim_requirement(selected.requirement.clone(), &selected.package)?;
+        let mut proposed_requirement = selected.requirement.clone();
+        proposed_requirement.version_or_url = Some(VersionOrUrl::VersionSpecifier(specifiers));
+        let replacement = into_verbatim_requirement(proposed_requirement, &selected.package)?;
+        if !updated_requirements
+            .iter()
+            .any(|update: &RequirementUpdate| {
+                update.dependency_type == selected.dependency_type
+                    && update.existing == existing
+                    && update.replacement == replacement
+            })
+        {
+            updated_requirements.push(RequirementUpdate {
+                package: selected.package.clone(),
+                dependency_type: selected.dependency_type.clone(),
+                original_text: selected.original_text.clone(),
+                existing,
+                replacement,
+            });
         }
     }
 
@@ -637,32 +640,32 @@ fn into_verbatim_requirement(
     })
 }
 
-/// Return a requirement that admits every applicable resolved version.
+/// Propose version specifiers that admit every resolved version.
 ///
-/// For example, `foo>=1,<2` resolving to `2.4` becomes `foo>=1,<3`. Preserve
-/// [`VersionSpecifier`]s that already admit the resolution, and rewrite only the specifiers that
-/// exclude it. If a requirement resolves to multiple versions, rewrite each specifier using the
-/// appropriate version boundary for its operator, then verify that the result admits every
-/// resolved version.
-fn propose_requirement(
+/// Return `None` if no update is needed. Otherwise, rewrite only blocking specifiers and return
+/// them in `Some`. When multiple versions are resolved, choose bounds that admit all of them, or
+/// return an error if that is impossible.
+///
+/// For example, resolving `foo>=1,<2` to `2.4` produces `>=1, <3`.
+fn propose_specifiers(
     requirement: &Requirement<VerbatimParsedUrl>,
     resolved_versions: &BTreeSet<Version>,
-) -> Result<Requirement<VerbatimParsedUrl>> {
+) -> Result<Option<VersionSpecifiers>> {
     if resolved_versions.is_empty() {
-        return Ok(requirement.clone());
+        return Ok(None);
     }
 
     let Some(VersionOrUrl::VersionSpecifier(specifiers)) = &requirement.version_or_url else {
-        return Ok(requirement.clone());
+        return Ok(None);
     };
     if resolved_versions
         .iter()
         .all(|version| specifiers.contains(version))
     {
-        return Ok(requirement.clone());
+        return Ok(None);
     }
     let Some(highest_resolved_version) = resolved_versions.last() else {
-        return Ok(requirement.clone());
+        return Ok(None);
     };
 
     let specifiers = specifiers
@@ -696,9 +699,7 @@ fn propose_requirement(
             requirement.name
         );
     }
-    let mut proposed = requirement.clone();
-    proposed.version_or_url = Some(VersionOrUrl::VersionSpecifier(specifiers));
-    Ok(proposed)
+    Ok(Some(specifiers))
 }
 
 /// Attempt to rewrite a [`VersionSpecifier`] to admit all resolved versions while preserving its
@@ -828,7 +829,7 @@ mod tests {
     use uv_pep508::Requirement;
     use uv_pypi_types::VerbatimParsedUrl;
 
-    use super::{increment_version_at_precision, propose_requirement, relax_requirement};
+    use super::{increment_version_at_precision, propose_specifiers, relax_requirement};
 
     fn resolved_versions(versions: &[&str]) -> BTreeSet<Version> {
         versions
@@ -838,96 +839,112 @@ mod tests {
     }
 
     #[test]
-    fn propose_requirement_preserves_satisfied_constraints() {
+    fn propose_specifiers_preserves_satisfied_constraints() {
         for requirement in ["requests", "requests>=1.2", "requests!=2.3"] {
             let requirement =
                 Requirement::<VerbatimParsedUrl>::from_str(requirement).expect("valid requirement");
 
-            let proposed = propose_requirement(&requirement, &resolved_versions(&["2.4.0"]))
-                .expect("requirement can be proposed");
+            let proposed = propose_specifiers(&requirement, &resolved_versions(&["2.4.0"]))
+                .expect("specifiers can be proposed");
 
-            assert_eq!(proposed, requirement);
+            assert!(proposed.is_none());
         }
     }
 
     #[test]
-    fn propose_requirement_expands_exclusive_upper_bounds_at_existing_precision() {
+    fn propose_specifiers_returns_none_without_resolved_versions() {
+        let requirement =
+            Requirement::<VerbatimParsedUrl>::from_str("requests<2").expect("valid requirement");
+
+        let proposed =
+            propose_specifiers(&requirement, &BTreeSet::new()).expect("specifiers can be proposed");
+
+        assert!(proposed.is_none());
+    }
+
+    #[test]
+    fn propose_specifiers_expands_exclusive_upper_bounds_at_existing_precision() {
         for (requirement, version, expected) in [
-            ("requests>=1.2,<2", "2.4.0", "requests>=1.2,<3"),
-            ("requests>=1.2,<1.3", "1.4.2", "requests>=1.2,<1.5"),
+            ("requests>=1.2,<2", "2.4.0", ">=1.2, <3"),
+            ("requests>=1.2,<1.3", "1.4.2", ">=1.2, <1.5"),
         ] {
             let requirement =
                 Requirement::<VerbatimParsedUrl>::from_str(requirement).expect("valid requirement");
 
-            let proposed = propose_requirement(&requirement, &resolved_versions(&[version]))
-                .expect("requirement can be proposed");
+            let proposed = propose_specifiers(&requirement, &resolved_versions(&[version]))
+                .expect("specifiers can be proposed")
+                .expect("specifiers need an update");
 
             assert_eq!(proposed.to_string(), expected);
         }
     }
 
     #[test]
-    fn propose_requirement_only_rewrites_blocking_specifiers() {
+    fn propose_specifiers_only_rewrites_blocking_specifiers() {
         let requirement = Requirement::<VerbatimParsedUrl>::from_str("requests>=1,<2,<4")
             .expect("valid requirement");
 
-        let proposed = propose_requirement(&requirement, &resolved_versions(&["2.4.0"]))
-            .expect("requirement can be proposed");
+        let proposed = propose_specifiers(&requirement, &resolved_versions(&["2.4.0"]))
+            .expect("specifiers can be proposed")
+            .expect("specifiers need an update");
 
-        assert_eq!(proposed.to_string(), "requests>=1,<3,<4");
+        assert_eq!(proposed.to_string(), ">=1, <3, <4");
     }
 
     #[test]
-    fn propose_requirement_preserves_operator_style() {
+    fn propose_specifiers_preserves_operator_style() {
         for (requirement, version, expected) in [
-            ("requests==1.2.3", "2.4.5", "requests==2.4.5"),
-            ("requests===1.2.3", "2.4.5", "requests===2.4.5"),
-            ("requests==1.2.*", "2.4.5", "requests==2.4.*"),
-            ("requests~=1.2", "2.4.5", "requests~=2.4"),
-            ("requests~=1.2.3", "2.4.5", "requests~=2.4.5"),
-            ("requests<=1.2.3", "2.4.5", "requests<=2.4.5"),
+            ("requests==1.2.3", "2.4.5", "==2.4.5"),
+            ("requests===1.2.3", "2.4.5", "===2.4.5"),
+            ("requests==1.2.*", "2.4.5", "==2.4.*"),
+            ("requests~=1.2", "2.4.5", "~=2.4"),
+            ("requests~=1.2.3", "2.4.5", "~=2.4.5"),
+            ("requests<=1.2.3", "2.4.5", "<=2.4.5"),
         ] {
             let requirement =
                 Requirement::<VerbatimParsedUrl>::from_str(requirement).expect("valid requirement");
 
-            let proposed = propose_requirement(&requirement, &resolved_versions(&[version]))
-                .expect("requirement can be proposed");
+            let proposed = propose_specifiers(&requirement, &resolved_versions(&[version]))
+                .expect("specifiers can be proposed")
+                .expect("specifiers need an update");
 
             assert_eq!(proposed.to_string(), expected);
         }
     }
 
     #[test]
-    fn propose_requirement_preserves_compatible_release_suffixes() {
+    fn propose_specifiers_preserves_compatible_release_suffixes() {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str("requests~=1.2").expect("valid requirement");
 
-        let proposed = propose_requirement(
+        let proposed = propose_specifiers(
             &requirement,
             &resolved_versions(&["1!2.4rc1.post2.dev3+local"]),
         )
-        .expect("requirement can be proposed");
+        .expect("specifiers can be proposed")
+        .expect("specifiers need an update");
 
-        assert_eq!(proposed.to_string(), "requests~=1!2.4rc1.post2.dev3");
+        assert_eq!(proposed.to_string(), "~=1!2.4rc1.post2.dev3");
     }
 
     #[test]
-    fn propose_requirement_strips_local_version_from_inclusive_upper_bound() {
+    fn propose_specifiers_strips_local_version_from_inclusive_upper_bound() {
         let requirement = Requirement::<VerbatimParsedUrl>::from_str("requests<=1.2.3")
             .expect("valid requirement");
 
-        let proposed = propose_requirement(&requirement, &resolved_versions(&["2.4.5+local"]))
-            .expect("requirement can be proposed");
+        let proposed = propose_specifiers(&requirement, &resolved_versions(&["2.4.5+local"]))
+            .expect("specifiers can be proposed")
+            .expect("specifiers need an update");
 
-        assert_eq!(proposed.to_string(), "requests<=2.4.5");
+        assert_eq!(proposed.to_string(), "<=2.4.5");
     }
 
     #[test]
-    fn propose_requirement_rejects_constraint_that_still_excludes_resolved_version() {
+    fn propose_specifiers_rejects_constraint_that_still_excludes_resolved_version() {
         let requirement = Requirement::<VerbatimParsedUrl>::from_str("requests!=2.4,<2")
             .expect("valid requirement");
 
-        let error = propose_requirement(&requirement, &resolved_versions(&["2.4"]))
+        let error = propose_specifiers(&requirement, &resolved_versions(&["2.4"]))
             .expect_err("rewritten requirement must admit the resolved version");
 
         assert_eq!(
@@ -937,49 +954,49 @@ mod tests {
     }
 
     #[test]
-    fn propose_requirement_preserves_metadata_lower_bounds_and_exclusions() {
+    fn propose_specifiers_preserves_lower_bounds_and_exclusions() {
         let requirement = Requirement::<VerbatimParsedUrl>::from_str(
             "Requests_Plus[security,tests]>=1.2,!=2.3,<2 ; python_version >= '3.12'",
         )
         .expect("valid requirement");
 
-        let proposed = propose_requirement(&requirement, &resolved_versions(&["2.4.0"]))
-            .expect("requirement can be proposed");
+        let proposed = propose_specifiers(&requirement, &resolved_versions(&["2.4.0"]))
+            .expect("specifiers can be proposed")
+            .expect("specifiers need an update");
 
-        assert_eq!(
-            proposed.to_string(),
-            "requests-plus[security,tests]>=1.2,!=2.3,<3 ; python_full_version >= '3.12'"
-        );
+        assert_eq!(proposed.to_string(), ">=1.2, !=2.3, <3");
     }
 
     #[test]
-    fn propose_requirement_expands_upper_bound_for_multiple_versions() {
+    fn propose_specifiers_expands_upper_bound_for_multiple_versions() {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str("requests<2").expect("valid requirement");
 
-        let proposed = propose_requirement(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
-            .expect("upper bound can admit both versions");
+        let proposed = propose_specifiers(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
+            .expect("upper bound can admit both versions")
+            .expect("specifiers need an update");
 
-        assert_eq!(proposed.to_string(), "requests<3");
+        assert_eq!(proposed.to_string(), "<3");
     }
 
     #[test]
-    fn propose_requirement_uses_lowest_compatible_version_for_multiple_versions() {
+    fn propose_specifiers_uses_lowest_compatible_version_for_multiple_versions() {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str("requests~=1.2").expect("valid requirement");
 
-        let proposed = propose_requirement(&requirement, &resolved_versions(&["2.4", "2.5"]))
-            .expect("compatible release can admit both versions");
+        let proposed = propose_specifiers(&requirement, &resolved_versions(&["2.4", "2.5"]))
+            .expect("compatible release can admit both versions")
+            .expect("specifiers need an update");
 
-        assert_eq!(proposed.to_string(), "requests~=2.4");
+        assert_eq!(proposed.to_string(), "~=2.4");
     }
 
     #[test]
-    fn propose_requirement_rejects_unrepresentable_multiple_versions() {
+    fn propose_specifiers_rejects_unrepresentable_multiple_versions() {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str("requests==1.*").expect("valid requirement");
 
-        let error = propose_requirement(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
+        let error = propose_specifiers(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
             .expect_err("wildcard cannot admit versions from different major lines");
 
         assert_eq!(
