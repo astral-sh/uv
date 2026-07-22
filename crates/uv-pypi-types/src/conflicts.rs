@@ -1,8 +1,9 @@
+use indexmap::IndexSet;
 use petgraph::{
     algo::toposort,
     graph::{DiGraph, NodeIndex},
 };
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 #[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::fmt;
@@ -87,6 +88,22 @@ impl Conflicts {
         package: &PackageName,
         groups: &DependencyGroups,
     ) {
+        // Nothing to infer without a conflicting group and at least one
+        // group include.
+        if !self.0.iter().any(|set| {
+            set.iter()
+                .any(|item| matches!(item.kind(), ConflictKind::Group(_)))
+        }) {
+            return;
+        }
+        if !groups.iter().any(|(_, specifiers)| {
+            specifiers
+                .iter()
+                .any(|specifier| matches!(specifier, DependencyGroupSpecifier::IncludeGroup { .. }))
+        }) {
+            return;
+        }
+
         let mut graph = DiGraph::new();
         let mut group_node_idxs: FxHashMap<&GroupName, NodeIndex> = FxHashMap::default();
         let mut node_conflict_items: FxHashMap<NodeIndex, Rc<ConflictItem>> = FxHashMap::default();
@@ -97,7 +114,7 @@ impl Conflicts {
             FxHashMap::default();
 
         // Track all existing conflict sets to avoid duplicates.
-        let mut conflict_sets: FxHashSet<ConflictSet> = FxHashSet::default();
+        let mut conflict_sets: IndexSet<ConflictSet, FxBuildHasher> = IndexSet::default();
 
         // Add groups in directly defined conflict sets to the graph.
         let mut seen: FxHashSet<&GroupName> = FxHashSet::default();
@@ -120,6 +137,7 @@ impl Conflicts {
                 node_conflict_items.insert(node_id, item.clone());
             }
         }
+        let seeded = conflict_sets.len();
 
         // Create conflict items for remaining groups and add them to the graph.
         for group in groups.keys() {
@@ -199,11 +217,8 @@ impl Conflicts {
             conflict_sets.extend(new_conflict_sets);
         }
 
-        // Add all newly discovered conflict sets (excluding the originals already in self.0)
-        for set in &self.0 {
-            conflict_sets.remove(set);
-        }
-        self.0.extend(conflict_sets);
+        // Everything past the seeded originals is newly inferred.
+        self.0.extend(conflict_sets.into_iter().skip(seeded));
     }
 }
 
