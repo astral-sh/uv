@@ -5097,7 +5097,7 @@ fn tool_install_settings() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install the lowest `flask>=3` version and the latest compatible dependencies.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask>=3")
         .arg("--resolution=lowest-direct")
