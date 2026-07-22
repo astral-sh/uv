@@ -2881,6 +2881,8 @@ async fn run_project(
                 args.frozen,
                 args.no_sync,
                 args.isolated,
+                args.all_packages,
+                args.package,
                 args.extras,
                 args.groups,
                 args.python,

@@ -8,6 +8,17 @@ use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
 use uv_test::{diff_snapshot, uv_snapshot};
 
+fn write_workspace_member(context: &uv_test::TestContext, name: &str, source: &str) -> Result<()> {
+    let member = context.temp_dir.child("packages").child(name);
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(&format!(
+        "[project]\nname = \"{name}\"\nversion = \"0.1.0\"\nrequires-python = \">=3.12\"\ndependencies = []\n"
+    ))?;
+    member.child("main.py").write_str(source)?;
+
+    Ok(())
+}
+
 #[test]
 fn check_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35,6 +46,512 @@ fn check_project() -> Result<()> {
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     ");
+
+    Ok(())
+}
+
+#[test]
+fn check_workspace_member_selection() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(&context, "member-a", "value: int = 1\n")?;
+    write_workspace_member(&context, "member-b", "value: int = 'wrong'\n")?;
+
+    let member_a = context.temp_dir.child("packages").child("member-a");
+    uv_snapshot!(context.filters(), context.check().current_dir(&member_a), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    uv_snapshot!(context.filters(), context.check().arg("--package").arg("member-a"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_virtual_workspace_checks_all_members_by_default() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(&context, "member-a", "value: int = 1\n")?;
+    write_workspace_member(&context, "member-b", "value: int = 'wrong'\n")?;
+
+    uv_snapshot!(context.filters(), context.check(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    error[invalid-assignment]: Object of type `Literal["wrong"]` is not assignable to `int`
+     --> packages/member-b/main.py:1:8
+      |
+    1 | value: int = 'wrong'
+      |        ---   ^^^^^^^ Incompatible value of type `Literal["wrong"]`
+      |        |
+      |        Declared type
+      |
+    info: rule `invalid-assignment` is enabled by default
+
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn check_virtual_workspace_only_checks_declared_members() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    context
+        .temp_dir
+        .child("unowned.py")
+        .write_str("value: int = 'wrong'\n")?;
+    write_workspace_member(&context, "member", "value: int = 1\n")?;
+
+    uv_snapshot!(context.filters(), context.check(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    uv_snapshot!(context.filters(), context.check().arg("--all-packages"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_workspace_all_packages_includes_external_members() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let workspace = context.temp_dir.child("workspace");
+    workspace.create_dir_all()?;
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["../external-package"]
+    "#})?;
+
+    let external = context.temp_dir.child("external-package");
+    external.create_dir_all()?;
+    external.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "external-package"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    external
+        .child("main.py")
+        .write_str("value: int = 'wrong'\n")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.check().current_dir(&workspace).arg("--all-packages"),
+        @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    error[invalid-assignment]: Object of type `Literal["wrong"]` is not assignable to `int`
+     --> [TEMP_DIR]/external-package/main.py:1:8
+      |
+    1 | value: int = 'wrong'
+      |        ---   ^^^^^^^ Incompatible value of type `Literal["wrong"]`
+      |        |
+      |        Declared type
+      |
+    info: rule `invalid-assignment` is enabled by default
+
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_external_workspace_member_inherits_workspace_configuration() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let workspace = context.temp_dir.child("workspace");
+    workspace.create_dir_all()?;
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["../external-package"]
+
+        [tool.ty.rules]
+        invalid-assignment = "ignore"
+    "#})?;
+
+    let external = context.temp_dir.child("external-package");
+    external.create_dir_all()?;
+    external.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "external-package"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    external
+        .child("main.py")
+        .write_str("value: int = 'wrong'\n")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .current_dir(&workspace)
+            .arg("--package")
+            .arg("external-package"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_virtual_workspace_member_excludes_nested_members() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/parent", "packages/parent/child"]
+        "#})?;
+    write_workspace_member(&context, "parent", "value: int = 1\n")?;
+
+    let child = context.temp_dir.child("packages/parent/child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    child.child("main.py").write_str("value: int = 'wrong'\n")?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--package").arg("parent"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    uv_snapshot!(context.filters(), context.check().arg("--all-packages"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    error[invalid-assignment]: Object of type `Literal["wrong"]` is not assignable to `int`
+     --> packages/parent/child/main.py:1:8
+      |
+    1 | value: int = 'wrong'
+      |        ---   ^^^^^^^ Incompatible value of type `Literal["wrong"]`
+      |        |
+      |        Declared type
+      |
+    info: rule `invalid-assignment` is enabled by default
+
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn check_virtual_workspace_member_resolves_excluded_nested_dependency() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/parent", "packages/parent/child"]
+        "#})?;
+
+    let parent = context.temp_dir.child("packages/parent");
+    parent.create_dir_all()?;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+    "#})?;
+    parent.child("main.py").write_str(indoc! {r"
+        from child import exported
+
+        value: str = exported
+    "})?;
+
+    let child = parent.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let child_package = child.child("src/child");
+    child_package.create_dir_all()?;
+    child_package.child("__init__.py").write_str(indoc! {r#"
+        exported: str = "hello"
+        internal_broken: int = "wrong"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--package").arg("parent"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_workspace_member_inherits_workspace_configuration() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+
+            [tool.ty.rules]
+            invalid-assignment = "ignore"
+        "#})?;
+    write_workspace_member(&context, "member", "value: int = 'wrong'\n")?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--package").arg("member"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_workspace_missing_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(&context, "member", "value: int = 1\n")?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--package").arg("missing"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: The workspace does not have a member missing: [TEMP_DIR]/
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_workspace_root_excludes_nested_members() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("value: int = 1\n")?;
+    write_workspace_member(&context, "member", "value: int = 'wrong'\n")?;
+
+    uv_snapshot!(context.filters(), context.check(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    uv_snapshot!(context.filters(), context.check().arg("--all-packages"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    error[invalid-assignment]: Object of type `Literal["wrong"]` is not assignable to `int`
+     --> packages/member/main.py:1:8
+      |
+    1 | value: int = 'wrong'
+      |        ---   ^^^^^^^ Incompatible value of type `Literal["wrong"]`
+      |        |
+      |        Declared type
+      |
+    info: rule `invalid-assignment` is enabled by default
+
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn check_workspace_multiple_packages() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(&context, "member-a", "value: int = 1\n")?;
+    write_workspace_member(&context, "member-b", "value: int = 2\n")?;
+    write_workspace_member(&context, "member-c", "value: int = 'wrong'\n")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--package")
+            .arg("member-a")
+            .arg("--package")
+            .arg("member-b"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.check().arg("--all-packages"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    error[invalid-assignment]: Object of type `Literal["wrong"]` is not assignable to `int`
+     --> packages/member-c/main.py:1:8
+      |
+    1 | value: int = 'wrong'
+      |        ---   ^^^^^^^ Incompatible value of type `Literal["wrong"]`
+      |        |
+      |        Declared type
+      |
+    info: rule `invalid-assignment` is enabled by default
+
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "###);
 
     Ok(())
 }

@@ -2990,6 +2990,8 @@ pub(crate) struct CheckSettings {
     pub(crate) ty_path: Option<PathBuf>,
     #[expect(dead_code)]
     script: Option<PathBuf>,
+    pub(crate) all_packages: bool,
+    pub(crate) package: Vec<PackageName>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
     pub(crate) lock_check: LockCheck,
@@ -3014,6 +3016,8 @@ impl CheckSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let CheckArgs {
+            all_packages,
+            package,
             script,
             extra,
             all_extras,
@@ -3068,6 +3072,8 @@ impl CheckSettings {
         Ok(Self {
             ty_path: environment.ty_path,
             script,
+            all_packages,
+            package,
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,
