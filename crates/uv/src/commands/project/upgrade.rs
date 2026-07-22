@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
@@ -14,12 +14,12 @@ use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement, VerbatimUrl, VersionOrUrl};
 use uv_preview::Preview;
-use uv_pypi_types::{PyProjectToml, ResolutionMetadata, VerbatimParsedUrl};
+use uv_pypi_types::{PyProjectToml, ResolutionMetadata, SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::MetadataResponse;
+use uv_resolver::{MetadataResponse, implicit_constraints_marker};
 use uv_settings::PythonInstallMirrors;
-use uv_workspace::pyproject::Source;
+use uv_workspace::pyproject::{DependencyType, Source};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{
     DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceErrorKind,
@@ -32,6 +32,45 @@ use crate::commands::project::{ProjectError, ProjectInterpreter, UniversalState,
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
+
+/// A dependency requirement selected for upgrading.
+struct UpgradableRequirement {
+    package: PackageName,
+    dependency_type: DependencyType,
+    original_text: String,
+    requirement: Requirement<VerbatimParsedUrl>,
+    effective_marker: MarkerTree,
+    resolved_versions: BTreeSet<Version>,
+}
+
+/// A selected requirement that cannot apply to the project.
+struct SkippedRequirement {
+    package: PackageName,
+    dependency_type: DependencyType,
+    original_text: String,
+    display_text: String,
+    reason: SkippedReason,
+}
+
+enum SkippedReason {
+    EnvironmentOrPythonRequirement,
+    UndefinedExtra,
+}
+
+/// The requirements selected for upgrade and those that cannot apply.
+struct RequirementSelection {
+    to_upgrade: Vec<UpgradableRequirement>,
+    skipped: Vec<SkippedRequirement>,
+}
+
+/// An existing requirement and its proposed replacement.
+struct RequirementUpdate {
+    package: PackageName,
+    dependency_type: DependencyType,
+    original_text: String,
+    existing: Requirement<VerbatimUrl>,
+    replacement: Requirement<VerbatimUrl>,
+}
 
 pub(crate) async fn upgrade(
     project_dir: &Path,
@@ -70,21 +109,65 @@ pub(crate) async fn upgrade(
         }
         Err(err) => return Err(err.into()),
     };
-    let (requirement_text, requirement) = select_requirement(&project, &package)?;
+    let RequirementSelection {
+        to_upgrade: mut requirements,
+        skipped,
+    } = select_requirements(&project, &package)?;
+    render_skipped_requirements(&skipped, printer)?;
+    if requirements.is_empty() {
+        return Ok(ExitStatus::Success);
+    }
+    validate_requirements(&project, &package, &requirements)?;
 
-    let relaxed_requirement =
-        into_verbatim_requirement(relax_requirement(requirement.clone()), &package)?;
+    // Relax the selected requirements in a temporary manifest so the resolver can select newer
+    // versions without changing the user's manifest.
+    let relaxed_requirements = requirements
+        .iter()
+        .map(|selected| {
+            Ok(RequirementUpdate {
+                package: selected.package.clone(),
+                dependency_type: selected.dependency_type.clone(),
+                original_text: selected.original_text.clone(),
+                existing: into_verbatim_requirement(
+                    selected.requirement.clone(),
+                    &selected.package,
+                )?,
+                replacement: into_verbatim_requirement(
+                    relax_requirement(selected.requirement.clone()),
+                    &selected.package,
+                )?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     let mut pyproject = PyProjectTomlMut::from_toml(
         &project.current_project().pyproject_toml().raw,
         DependencyTarget::PyProjectToml,
     )?;
-    if pyproject
-        .replace_dependency(&relaxed_requirement, false)?
-        .is_none()
-    {
-        bail!("Dependency `{package}` was not found in `project.dependencies`");
+    // Remove unreachable requirements from the temporary manifest, since URL requirements can be
+    // fetched during metadata preparation even when their markers cannot apply.
+    for (index, requirement) in skipped.iter().enumerate() {
+        if skipped[..index].iter().any(|removed| {
+            removed.dependency_type == requirement.dependency_type
+                && removed.original_text == requirement.original_text
+        }) {
+            continue;
+        }
+        if pyproject
+            .remove_dependency_declaration_text(
+                &requirement.dependency_type,
+                &requirement.original_text,
+            )?
+            .is_empty()
+        {
+            bail!(
+                "Dependency `{}` was not found in {}",
+                requirement.package,
+                requirement.dependency_type.toml_table_name()
+            );
+        }
     }
+    apply_requirement_replacements(&mut pyproject, relaxed_requirements.iter())?;
     let pyproject = pyproject.to_string();
     let pyproject = PyProjectToml::from_toml(
         &pyproject,
@@ -174,40 +257,81 @@ pub(crate) async fn upgrade(
         Err(err) => return Err(err.into()),
     };
 
-    let mut resolved_versions = BTreeSet::new();
-    for resolved_package in result.lock().packages() {
-        // A universal lock can contain versions from disjoint forks, so only collect versions
-        // from forks where the selected requirement applies.
-        if resolved_package.name() == &package
-            && resolved_package
-                .index(project.workspace().install_path())?
-                .is_some()
-            && resolved_package.is_included_by_marker(requirement.marker)
-            && let Some(version) = resolved_package.version()
+    let lock = result.lock();
+    for selected in &requirements {
+        if let Some(extra) = selected.requirement.marker.top_level_extra_name()
+            && lock
+                .conflicts()
+                .contains(project.project_name(), extra.as_ref())
         {
-            resolved_versions.insert(version.clone());
+            let package = &selected.package;
+            bail!(
+                "Dependency `{package}` is declared under conflicting extra `{extra}` and cannot be upgraded yet"
+            );
         }
     }
-    let proposed_requirement = propose_requirement(&requirement, &resolved_versions)?;
-    let updated_requirement = if proposed_requirement == requirement {
-        None
-    } else {
-        let proposed_requirement = into_verbatim_requirement(proposed_requirement, &package)?;
-        let proposed_text = proposed_requirement.to_string();
+
+    for resolved_package in lock.packages() {
+        if !requirements
+            .iter()
+            .any(|selected| resolved_package.name() == &selected.package)
+        {
+            continue;
+        }
+        if resolved_package
+            .index(project.workspace().install_path())?
+            .is_some()
+            && let Some(version) = resolved_package.version()
+        {
+            // A universal lock can contain versions from disjoint forks, so collect each version
+            // only for the declarations that apply to its fork.
+            for selected in &mut requirements {
+                if resolved_package.name() != &selected.package {
+                    continue;
+                }
+                if resolved_package.is_included_by_marker(selected.effective_marker) {
+                    selected.resolved_versions.insert(version.clone());
+                }
+            }
+        }
+    }
+
+    let mut updated_requirements = BTreeMap::new();
+    for selected in &requirements {
+        let Some(specifiers) =
+            propose_specifiers(&selected.requirement, &selected.resolved_versions)?
+        else {
+            continue;
+        };
+
+        let existing = into_verbatim_requirement(selected.requirement.clone(), &selected.package)?;
+        let mut proposed_requirement = selected.requirement.clone();
+        proposed_requirement.version_or_url = Some(VersionOrUrl::VersionSpecifier(specifiers));
+        let replacement = into_verbatim_requirement(proposed_requirement, &selected.package)?;
+        updated_requirements
+            .entry((
+                selected.dependency_type.toml_table_name().into_owned(),
+                existing.clone(),
+                replacement.clone(),
+            ))
+            .or_insert_with(|| RequirementUpdate {
+                package: selected.package.clone(),
+                dependency_type: selected.dependency_type.clone(),
+                original_text: selected.original_text.clone(),
+                existing,
+                replacement,
+            });
+    }
+
+    if !updated_requirements.is_empty() {
         let mut pyproject = PyProjectTomlMut::from_toml(
             &project.current_project().pyproject_toml().raw,
             DependencyTarget::PyProjectToml,
         )?;
-        if pyproject
-            .replace_dependency(&proposed_requirement, false)?
-            .is_none()
-        {
-            bail!("Dependency `{package}` was not found in `project.dependencies`");
-        }
+        apply_requirement_replacements(&mut pyproject, updated_requirements.values())?;
         let pyproject_path = project.project_root().join("pyproject.toml");
         fs_err::write(pyproject_path, pyproject.to_string())?;
-        Some(proposed_text)
-    };
+    }
 
     let event = match &result {
         LockResult::Changed(previous, lock) => {
@@ -221,25 +345,28 @@ pub(crate) async fn upgrade(
     } else {
         writeln!(printer.stderr(), "No version change for {package}")?;
     }
-    if let Some(proposed_text) = updated_requirement {
+    for update in updated_requirements.into_values() {
         writeln!(
             printer.stderr(),
-            "Updated requirement: `{requirement_text}` -> `{proposed_text}`"
+            "Updated requirement: `{}` -> `{}`",
+            update.original_text,
+            update.replacement
         )?;
     }
 
     Ok(ExitStatus::Success)
 }
 
-/// Select the single production dependency declaration targeted by `uv upgrade`.
-fn select_requirement(
+/// Select the dependency requirements targeted by `uv upgrade`.
+fn select_requirements(
     project: &ProjectWorkspace,
     package: &PackageName,
-) -> Result<(String, Requirement<VerbatimParsedUrl>)> {
+) -> Result<RequirementSelection> {
     if project.workspace().packages().len() != 1 {
         bail!("`uv upgrade` does not support workspaces with multiple members yet");
     }
 
+    let resolution_marker = project_resolution_marker(project)?;
     let dependencies = project
         .current_project()
         .project()
@@ -247,7 +374,14 @@ fn select_requirement(
         .as_deref()
         .unwrap_or_default();
     let pyproject_path = project.project_root().join("pyproject.toml");
-    let mut matching = Vec::new();
+    let optional_dependencies = project
+        .current_project()
+        .project()
+        .optional_dependencies
+        .as_ref();
+    let mut to_upgrade = Vec::new();
+    let mut skipped = Vec::new();
+    let mut found_matching_name = false;
     for dependency in dependencies {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str(dependency).with_context(|| {
@@ -257,21 +391,71 @@ fn select_requirement(
                 )
             })?;
         if requirement.name == *package {
-            matching.push((dependency.clone(), requirement));
+            found_matching_name = true;
+            let mut effective_marker = requirement.marker;
+            effective_marker.and(resolution_marker);
+            if effective_marker.is_false() {
+                skipped.push(SkippedRequirement {
+                    package: package.clone(),
+                    dependency_type: DependencyType::Production,
+                    original_text: dependency.clone(),
+                    display_text: display_requirement(&requirement),
+                    reason: SkippedReason::EnvironmentOrPythonRequirement,
+                });
+                continue;
+            }
+
+            effective_marker = effective_marker.simplify_not_extras_with(|extra| {
+                optional_dependencies
+                    .is_none_or(|optional_dependencies| !optional_dependencies.contains_key(extra))
+            });
+            if effective_marker.is_false() {
+                skipped.push(SkippedRequirement {
+                    package: package.clone(),
+                    dependency_type: DependencyType::Production,
+                    original_text: dependency.clone(),
+                    display_text: display_requirement(&requirement),
+                    reason: SkippedReason::UndefinedExtra,
+                });
+                continue;
+            }
+
+            to_upgrade.push(UpgradableRequirement {
+                package: package.clone(),
+                dependency_type: DependencyType::Production,
+                original_text: dependency.clone(),
+                requirement,
+                effective_marker,
+                resolved_versions: BTreeSet::new(),
+            });
         }
     }
 
-    let (requirement_text, requirement) = match matching.as_slice() {
-        [] => bail!("Dependency `{package}` was not found in `project.dependencies`"),
-        [(requirement_text, requirement)] => (requirement_text.clone(), requirement.clone()),
-        _ => bail!("Dependency `{package}` is declared multiple times in `project.dependencies`"),
-    };
+    if !found_matching_name {
+        bail!("Dependency `{package}` was not found in `project.dependencies`");
+    }
 
-    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+    Ok(RequirementSelection {
+        to_upgrade,
+        skipped,
+    })
+}
+
+fn validate_requirements(
+    project: &ProjectWorkspace,
+    package: &PackageName,
+    requirements: &[UpgradableRequirement],
+) -> Result<()> {
+    if requirements.iter().any(|selected| {
+        matches!(
+            selected.requirement.version_or_url,
+            Some(VersionOrUrl::Url(_))
+        )
+    }) {
         bail!("Dependency `{package}` is a direct URL requirement and cannot be upgraded");
     }
 
-    if requirement.name == *project.project_name() {
+    if package == project.project_name() {
         bail!("Dependency `{package}` refers to the current project and cannot be upgraded");
     }
 
@@ -284,9 +468,14 @@ fn select_requirement(
         .and_then(|uv| uv.sources.as_ref())
         .and_then(|sources| sources.inner().get(package))
         .or_else(|| project.workspace().sources().get(package));
+    let applies_to_selected_requirement = |source| {
+        requirements.iter().any(|selected| {
+            source_is_applicable(source, &selected.dependency_type, selected.effective_marker)
+        })
+    };
     if sources.is_some_and(|sources| {
         sources.iter().any(|source| {
-            source_is_applicable(source, requirement.marker)
+            applies_to_selected_requirement(source)
                 && matches!(source, Source::Git { rev: Some(_), .. })
         })
     }) {
@@ -296,8 +485,7 @@ fn select_requirement(
     }
     if sources.is_some_and(|sources| {
         sources.iter().any(|source| {
-            source_is_applicable(source, requirement.marker)
-                && !matches!(source, Source::Registry { .. })
+            applies_to_selected_requirement(source) && !matches!(source, Source::Registry { .. })
         })
     }) {
         bail!(
@@ -305,17 +493,118 @@ fn select_requirement(
         );
     }
 
-    Ok((requirement_text, requirement))
+    Ok(())
+}
+
+/// Return a requirement suitable for diagnostics without exposing URL query parameters.
+fn display_requirement(requirement: &Requirement<VerbatimParsedUrl>) -> String {
+    let mut requirement = requirement.clone();
+    if let Some(VersionOrUrl::Url(url)) = &mut requirement.version_or_url {
+        let mut display_url = url.verbatim.to_url();
+        display_url.set_query(None);
+        url.verbatim = VerbatimUrl::from_url(display_url);
+    }
+    requirement.to_string()
+}
+
+fn render_skipped_requirements(skipped: &[SkippedRequirement], printer: Printer) -> Result<()> {
+    for requirement in skipped {
+        let reason = match requirement.reason {
+            SkippedReason::EnvironmentOrPythonRequirement => {
+                "excluded by the project's environments or Python requirement"
+            }
+            SkippedReason::UndefinedExtra => {
+                "references an extra that the project does not provide"
+            }
+        };
+        writeln!(
+            printer.stderr(),
+            "warning: Skipping dependency `{}` in {}: `{}` ({reason})",
+            requirement.package,
+            requirement.dependency_type.toml_table_name(),
+            requirement.display_text
+        )?;
+    }
+    Ok(())
+}
+
+/// Return the marker domain that the project will resolve for dependency declarations.
+fn project_resolution_marker(project: &ProjectWorkspace) -> Result<MarkerTree> {
+    let target = LockTarget::from(project.workspace());
+    let requires_python = target
+        .requires_python()?
+        .map_or(MarkerTree::TRUE, |requires_python| {
+            requires_python.to_marker_tree()
+        });
+    let environments = target
+        .environments()
+        .map(SupportedEnvironments::as_markers)
+        .unwrap_or_default();
+    Ok(implicit_constraints_marker(requires_python, environments))
+}
+
+/// Apply exact requirement replacements, coalescing repeated identical declarations.
+fn apply_requirement_replacements<'a>(
+    pyproject: &mut PyProjectTomlMut,
+    replacements: impl IntoIterator<Item = &'a RequirementUpdate>,
+) -> Result<()> {
+    let mut applied = Vec::new();
+    for RequirementUpdate {
+        package,
+        dependency_type,
+        existing,
+        replacement,
+        ..
+    } in replacements
+    {
+        if let Some((_, _, applied_replacement)) =
+            applied
+                .iter()
+                .find(|(applied_dependency_type, applied_existing, _)| {
+                    *applied_dependency_type == dependency_type && *applied_existing == existing
+                })
+        {
+            if *applied_replacement != replacement {
+                bail!("Dependency `{package}` has conflicting requirement updates");
+            }
+            continue;
+        }
+
+        if pyproject
+            .replace_dependency_declaration(dependency_type, existing, replacement)?
+            .is_empty()
+        {
+            bail!(
+                "Dependency `{package}` was not found in {}",
+                dependency_type.toml_table_name()
+            );
+        }
+        applied.push((dependency_type, existing, replacement));
+    }
+    Ok(())
 }
 
 /// Return whether a source applies to the selected requirement declaration.
-fn source_is_applicable(source: &Source, requirement_marker: MarkerTree) -> bool {
-    let extra = requirement_marker.top_level_extra_name();
-    source
-        .extra()
-        .is_none_or(|target| extra.as_deref() == Some(target))
-        && source.group().is_none()
-        && !source.marker().is_disjoint(requirement_marker)
+fn source_is_applicable(
+    source: &Source,
+    dependency_type: &DependencyType,
+    requirement_marker: MarkerTree,
+) -> bool {
+    let source_origin_applies = match dependency_type {
+        DependencyType::Production => {
+            let extra = requirement_marker.top_level_extra_name();
+            source
+                .extra()
+                .is_none_or(|target| extra.as_deref() == Some(target))
+                && source.group().is_none()
+        }
+        DependencyType::Dev => source.extra().is_none() && source.group().is_none(),
+        DependencyType::Optional(extra) => {
+            source.extra() == Some(extra) && source.group().is_none()
+        }
+        DependencyType::Group(group) => source.extra().is_none() && source.group() == Some(group),
+    };
+    source_origin_applies && !source.marker().is_disjoint(requirement_marker)
 }
 
 /// Convert a parsed requirement into the representation used by the mutable manifest.
@@ -348,32 +637,32 @@ fn into_verbatim_requirement(
     })
 }
 
-/// Return a requirement that admits every applicable resolved version.
+/// Propose version specifiers that admit every resolved version.
 ///
-/// For example, `foo>=1,<2` resolving to `2.4` becomes `foo>=1,<3`. Preserve
-/// [`VersionSpecifier`]s that already admit the resolution, and rewrite only the specifiers that
-/// exclude it. If a requirement resolves to multiple versions, rewrite each specifier using the
-/// appropriate version boundary for its operator, then verify that the result admits every
-/// resolved version.
-fn propose_requirement(
+/// Return `None` if no update is needed. Otherwise, rewrite only blocking specifiers and return
+/// them in `Some`. When multiple versions are resolved, choose bounds that admit all of them, or
+/// return an error if that is impossible.
+///
+/// For example, resolving `foo>=1,<2` to `2.4` produces `>=1, <3`.
+fn propose_specifiers(
     requirement: &Requirement<VerbatimParsedUrl>,
     resolved_versions: &BTreeSet<Version>,
-) -> Result<Requirement<VerbatimParsedUrl>> {
+) -> Result<Option<VersionSpecifiers>> {
     if resolved_versions.is_empty() {
-        return Ok(requirement.clone());
+        return Ok(None);
     }
 
     let Some(VersionOrUrl::VersionSpecifier(specifiers)) = &requirement.version_or_url else {
-        return Ok(requirement.clone());
+        return Ok(None);
     };
     if resolved_versions
         .iter()
         .all(|version| specifiers.contains(version))
     {
-        return Ok(requirement.clone());
+        return Ok(None);
     }
     let Some(highest_resolved_version) = resolved_versions.last() else {
-        return Ok(requirement.clone());
+        return Ok(None);
     };
 
     let specifiers = specifiers
@@ -407,9 +696,7 @@ fn propose_requirement(
             requirement.name
         );
     }
-    let mut proposed = requirement.clone();
-    proposed.version_or_url = Some(VersionOrUrl::VersionSpecifier(specifiers));
-    Ok(proposed)
+    Ok(Some(specifiers))
 }
 
 /// Attempt to rewrite a [`VersionSpecifier`] to admit all resolved versions while preserving its
@@ -539,7 +826,7 @@ mod tests {
     use uv_pep508::Requirement;
     use uv_pypi_types::VerbatimParsedUrl;
 
-    use super::{increment_version_at_precision, propose_requirement, relax_requirement};
+    use super::{increment_version_at_precision, propose_specifiers, relax_requirement};
 
     fn resolved_versions(versions: &[&str]) -> BTreeSet<Version> {
         versions
@@ -549,96 +836,112 @@ mod tests {
     }
 
     #[test]
-    fn propose_requirement_preserves_satisfied_constraints() {
+    fn propose_specifiers_preserves_satisfied_constraints() {
         for requirement in ["requests", "requests>=1.2", "requests!=2.3"] {
             let requirement =
                 Requirement::<VerbatimParsedUrl>::from_str(requirement).expect("valid requirement");
 
-            let proposed = propose_requirement(&requirement, &resolved_versions(&["2.4.0"]))
-                .expect("requirement can be proposed");
+            let proposed = propose_specifiers(&requirement, &resolved_versions(&["2.4.0"]))
+                .expect("specifiers can be proposed");
 
-            assert_eq!(proposed, requirement);
+            assert!(proposed.is_none());
         }
     }
 
     #[test]
-    fn propose_requirement_expands_exclusive_upper_bounds_at_existing_precision() {
+    fn propose_specifiers_returns_none_without_resolved_versions() {
+        let requirement =
+            Requirement::<VerbatimParsedUrl>::from_str("requests<2").expect("valid requirement");
+
+        let proposed =
+            propose_specifiers(&requirement, &BTreeSet::new()).expect("specifiers can be proposed");
+
+        assert!(proposed.is_none());
+    }
+
+    #[test]
+    fn propose_specifiers_expands_exclusive_upper_bounds_at_existing_precision() {
         for (requirement, version, expected) in [
-            ("requests>=1.2,<2", "2.4.0", "requests>=1.2,<3"),
-            ("requests>=1.2,<1.3", "1.4.2", "requests>=1.2,<1.5"),
+            ("requests>=1.2,<2", "2.4.0", ">=1.2, <3"),
+            ("requests>=1.2,<1.3", "1.4.2", ">=1.2, <1.5"),
         ] {
             let requirement =
                 Requirement::<VerbatimParsedUrl>::from_str(requirement).expect("valid requirement");
 
-            let proposed = propose_requirement(&requirement, &resolved_versions(&[version]))
-                .expect("requirement can be proposed");
+            let proposed = propose_specifiers(&requirement, &resolved_versions(&[version]))
+                .expect("specifiers can be proposed")
+                .expect("specifiers need an update");
 
             assert_eq!(proposed.to_string(), expected);
         }
     }
 
     #[test]
-    fn propose_requirement_only_rewrites_blocking_specifiers() {
+    fn propose_specifiers_only_rewrites_blocking_specifiers() {
         let requirement = Requirement::<VerbatimParsedUrl>::from_str("requests>=1,<2,<4")
             .expect("valid requirement");
 
-        let proposed = propose_requirement(&requirement, &resolved_versions(&["2.4.0"]))
-            .expect("requirement can be proposed");
+        let proposed = propose_specifiers(&requirement, &resolved_versions(&["2.4.0"]))
+            .expect("specifiers can be proposed")
+            .expect("specifiers need an update");
 
-        assert_eq!(proposed.to_string(), "requests>=1,<3,<4");
+        assert_eq!(proposed.to_string(), ">=1, <3, <4");
     }
 
     #[test]
-    fn propose_requirement_preserves_operator_style() {
+    fn propose_specifiers_preserves_operator_style() {
         for (requirement, version, expected) in [
-            ("requests==1.2.3", "2.4.5", "requests==2.4.5"),
-            ("requests===1.2.3", "2.4.5", "requests===2.4.5"),
-            ("requests==1.2.*", "2.4.5", "requests==2.4.*"),
-            ("requests~=1.2", "2.4.5", "requests~=2.4"),
-            ("requests~=1.2.3", "2.4.5", "requests~=2.4.5"),
-            ("requests<=1.2.3", "2.4.5", "requests<=2.4.5"),
+            ("requests==1.2.3", "2.4.5", "==2.4.5"),
+            ("requests===1.2.3", "2.4.5", "===2.4.5"),
+            ("requests==1.2.*", "2.4.5", "==2.4.*"),
+            ("requests~=1.2", "2.4.5", "~=2.4"),
+            ("requests~=1.2.3", "2.4.5", "~=2.4.5"),
+            ("requests<=1.2.3", "2.4.5", "<=2.4.5"),
         ] {
             let requirement =
                 Requirement::<VerbatimParsedUrl>::from_str(requirement).expect("valid requirement");
 
-            let proposed = propose_requirement(&requirement, &resolved_versions(&[version]))
-                .expect("requirement can be proposed");
+            let proposed = propose_specifiers(&requirement, &resolved_versions(&[version]))
+                .expect("specifiers can be proposed")
+                .expect("specifiers need an update");
 
             assert_eq!(proposed.to_string(), expected);
         }
     }
 
     #[test]
-    fn propose_requirement_preserves_compatible_release_suffixes() {
+    fn propose_specifiers_preserves_compatible_release_suffixes() {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str("requests~=1.2").expect("valid requirement");
 
-        let proposed = propose_requirement(
+        let proposed = propose_specifiers(
             &requirement,
             &resolved_versions(&["1!2.4rc1.post2.dev3+local"]),
         )
-        .expect("requirement can be proposed");
+        .expect("specifiers can be proposed")
+        .expect("specifiers need an update");
 
-        assert_eq!(proposed.to_string(), "requests~=1!2.4rc1.post2.dev3");
+        assert_eq!(proposed.to_string(), "~=1!2.4rc1.post2.dev3");
     }
 
     #[test]
-    fn propose_requirement_strips_local_version_from_inclusive_upper_bound() {
+    fn propose_specifiers_strips_local_version_from_inclusive_upper_bound() {
         let requirement = Requirement::<VerbatimParsedUrl>::from_str("requests<=1.2.3")
             .expect("valid requirement");
 
-        let proposed = propose_requirement(&requirement, &resolved_versions(&["2.4.5+local"]))
-            .expect("requirement can be proposed");
+        let proposed = propose_specifiers(&requirement, &resolved_versions(&["2.4.5+local"]))
+            .expect("specifiers can be proposed")
+            .expect("specifiers need an update");
 
-        assert_eq!(proposed.to_string(), "requests<=2.4.5");
+        assert_eq!(proposed.to_string(), "<=2.4.5");
     }
 
     #[test]
-    fn propose_requirement_rejects_constraint_that_still_excludes_resolved_version() {
+    fn propose_specifiers_rejects_constraint_that_still_excludes_resolved_version() {
         let requirement = Requirement::<VerbatimParsedUrl>::from_str("requests!=2.4,<2")
             .expect("valid requirement");
 
-        let error = propose_requirement(&requirement, &resolved_versions(&["2.4"]))
+        let error = propose_specifiers(&requirement, &resolved_versions(&["2.4"]))
             .expect_err("rewritten requirement must admit the resolved version");
 
         assert_eq!(
@@ -648,49 +951,49 @@ mod tests {
     }
 
     #[test]
-    fn propose_requirement_preserves_metadata_lower_bounds_and_exclusions() {
+    fn propose_specifiers_preserves_lower_bounds_and_exclusions() {
         let requirement = Requirement::<VerbatimParsedUrl>::from_str(
             "Requests_Plus[security,tests]>=1.2,!=2.3,<2 ; python_version >= '3.12'",
         )
         .expect("valid requirement");
 
-        let proposed = propose_requirement(&requirement, &resolved_versions(&["2.4.0"]))
-            .expect("requirement can be proposed");
+        let proposed = propose_specifiers(&requirement, &resolved_versions(&["2.4.0"]))
+            .expect("specifiers can be proposed")
+            .expect("specifiers need an update");
 
-        assert_eq!(
-            proposed.to_string(),
-            "requests-plus[security,tests]>=1.2,!=2.3,<3 ; python_full_version >= '3.12'"
-        );
+        assert_eq!(proposed.to_string(), ">=1.2, !=2.3, <3");
     }
 
     #[test]
-    fn propose_requirement_expands_upper_bound_for_multiple_versions() {
+    fn propose_specifiers_expands_upper_bound_for_multiple_versions() {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str("requests<2").expect("valid requirement");
 
-        let proposed = propose_requirement(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
-            .expect("upper bound can admit both versions");
+        let proposed = propose_specifiers(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
+            .expect("upper bound can admit both versions")
+            .expect("specifiers need an update");
 
-        assert_eq!(proposed.to_string(), "requests<3");
+        assert_eq!(proposed.to_string(), "<3");
     }
 
     #[test]
-    fn propose_requirement_uses_lowest_compatible_version_for_multiple_versions() {
+    fn propose_specifiers_uses_lowest_compatible_version_for_multiple_versions() {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str("requests~=1.2").expect("valid requirement");
 
-        let proposed = propose_requirement(&requirement, &resolved_versions(&["2.4", "2.5"]))
-            .expect("compatible release can admit both versions");
+        let proposed = propose_specifiers(&requirement, &resolved_versions(&["2.4", "2.5"]))
+            .expect("compatible release can admit both versions")
+            .expect("specifiers need an update");
 
-        assert_eq!(proposed.to_string(), "requests~=2.4");
+        assert_eq!(proposed.to_string(), "~=2.4");
     }
 
     #[test]
-    fn propose_requirement_rejects_unrepresentable_multiple_versions() {
+    fn propose_specifiers_rejects_unrepresentable_multiple_versions() {
         let requirement =
             Requirement::<VerbatimParsedUrl>::from_str("requests==1.*").expect("valid requirement");
 
-        let error = propose_requirement(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
+        let error = propose_specifiers(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
             .expect_err("wildcard cannot admit versions from different major lines");
 
         assert_eq!(
