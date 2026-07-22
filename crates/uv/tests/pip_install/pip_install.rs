@@ -14692,6 +14692,28 @@ fn conflicting_flags_clap_bug() {
     );
 }
 
+/// Test that conflicting global arguments retain their color styling.
+#[test]
+fn conflicting_flags_clap_bug_color() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let output = context
+        .command()
+        .arg("pip")
+        .arg("--offline")
+        .arg("install")
+        .arg("--no-offline")
+        .arg("tqdm")
+        .arg("--color")
+        .arg("always")
+        .output()?;
+
+    assert_eq!(output.status.code(), Some(2));
+    insta::assert_snapshot!(format!("{:?}", String::from_utf8_lossy(&output.stderr)), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m `\u{1b}[32m--offline\u{1b}[39m` and `\u{1b}[32m--no-offline\u{1b}[39m` cannot be used together. Boolean flags on different levels are currently not supported (https://github.com/clap-rs/clap/issues/6049)\n""#);
+
+    Ok(())
+}
+
 /// Test that `--offline` and `--refresh` conflict.
 #[test]
 fn offline_refresh_conflict() {
@@ -14709,6 +14731,26 @@ fn offline_refresh_conflict() {
     error: the argument `--offline` cannot be used with `--refresh`
     "
     );
+}
+
+/// Test that conflicting arguments retain their color styling.
+#[test]
+fn offline_refresh_conflict_color() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let output = context
+        .pip_install()
+        .arg("tqdm")
+        .arg("--offline")
+        .arg("--refresh")
+        .arg("--color")
+        .arg("always")
+        .output()?;
+
+    assert_eq!(output.status.code(), Some(2));
+    insta::assert_snapshot!(format!("{:?}", String::from_utf8_lossy(&output.stderr)), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m the argument \u{1b}[32m`--offline`\u{1b}[39m cannot be used with \u{1b}[32m`--refresh`\u{1b}[39m\n""#);
+
+    Ok(())
 }
 
 /// Test that shebang arguments are stripped when installing scripts

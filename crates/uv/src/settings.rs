@@ -81,7 +81,6 @@ pub(crate) struct GlobalSettings {
     pub(crate) required_version: Option<RequiredVersion>,
     pub(crate) quiet: u8,
     pub(crate) verbose: u8,
-    pub(crate) color: ColorChoice,
     pub(crate) network_settings: NetworkSettings,
     pub(crate) concurrency: Concurrency,
     pub(crate) show_settings: bool,
@@ -101,13 +100,11 @@ impl GlobalSettings {
     ) -> anyhow::Result<Self> {
         let network_settings = NetworkSettings::resolve(args, workspace, environment)?;
         let python_preference = resolve_python_preference(args, workspace, environment)?;
-        let color = resolve_color(args);
         Ok(Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
             quiet: args.quiet,
             verbose: args.verbose,
-            color,
             network_settings,
             concurrency: Concurrency::new(
                 environment

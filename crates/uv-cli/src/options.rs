@@ -7,6 +7,7 @@ use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
 use uv_distribution_types::{ConfigSettings, Index, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, ResolverOptions};
+use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
     BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
@@ -21,9 +22,11 @@ pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
         (false, false) => Ok(None),
         (..) => {
             bail!(
-                "`--{name}` and `--no-{name}` cannot be used together. \
+                "`{}` and `{}` cannot be used together. \
                 Boolean flags on different levels are currently not supported \
-                (https://github.com/clap-rs/clap/issues/6049)"
+                (https://github.com/clap-rs/clap/issues/6049)",
+                format!("--{name}").green(),
+                format!("--no-{name}").green(),
             );
         }
     }
@@ -188,7 +191,11 @@ pub fn check_conflicts(flag_a: Flag, flag_b: Flag) -> anyhow::Result<()> {
             FlagSource::Env(env) => format!("`{env}` (environment variable)"),
             FlagSource::Config => format!("`{name_b}` (workspace configuration)"),
         };
-        bail!("the argument {display_a} cannot be used with {display_b}");
+        bail!(
+            "the argument {} cannot be used with {}",
+            display_a.green(),
+            display_b.green()
+        );
     }
     Ok(())
 }
@@ -260,7 +267,10 @@ impl TryFrom<ResolverArgs> for PipOptions {
         } = args;
 
         if !upgrade_group.is_empty() {
-            bail!("`--upgrade-group` is not supported in `uv pip` commands");
+            bail!(
+                "`{}` is not supported in `uv pip` commands",
+                "--upgrade-group".green()
+            );
         }
 
         Ok(Self {
@@ -384,7 +394,10 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
         } = args;
 
         if !upgrade_group.is_empty() {
-            bail!("`--upgrade-group` is not supported in `uv pip` commands");
+            bail!(
+                "`{}` is not supported in `uv pip` commands",
+                "--upgrade-group".green()
+            );
         }
 
         Ok(Self {
