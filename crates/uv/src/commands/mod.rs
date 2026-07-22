@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::io::stdout;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -67,7 +68,7 @@ use uv_cache::Cache;
 use uv_configuration::Concurrency;
 pub(crate) use uv_console::human_readable_bytes;
 use uv_fs::{CWD, Simplified};
-use uv_installer::{compile_files, compile_tree};
+use uv_installer::{compile_files, compile_tree_excluding};
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
@@ -279,10 +280,12 @@ pub(super) async fn compile_bytecode(
     venv: &PythonEnvironment,
     concurrency: &Concurrency,
     cache: &Cache,
+    excluded: &HashSet<PathBuf>,
+    precompiled: usize,
     printer: Printer,
 ) -> anyhow::Result<()> {
     let start = std::time::Instant::now();
-    let mut files = 0;
+    let mut files = precompiled;
     for site_packages in venv.site_packages() {
         let site_packages = CWD.join(site_packages);
         if !site_packages.exists() {
@@ -292,8 +295,9 @@ pub(super) async fn compile_bytecode(
             );
             continue;
         }
-        files += compile_tree(
+        files += compile_tree_excluding(
             &site_packages,
+            excluded,
             venv.python_executable(),
             concurrency,
             cache.root(),

@@ -9,6 +9,7 @@ which contains some vendored Python 2 code which fails to compile.
 """
 
 import compileall
+import json
 import os
 import py_compile
 import sys
@@ -51,17 +52,37 @@ with warnings.catch_warnings():
         # based and has a matching mtime (unless force=True).
         force = True
 
-    # In rust, we provide one line per file to compile.
-    for path in sys.stdin:
+    # In Rust, we provide one JSON object per file to compile.
+    for line in sys.stdin:
         # Remove trailing newlines.
-        path = path.strip()
-        if not path:
+        line = line.strip()
+        if not line:
             continue
+        task = json.loads(line)
+        path = task["source"]
+        output_file = task["output"]
+        display_file = task["display"]
         # Unlike pip, we set quiet=2, so we don't have to capture stdout.
         # We'd like to show those errors, but given that pip thinks that's totally fine,
         # we can't really change that.
-        success = compileall.compile_file(
-            path, invalidation_mode=invalidation_mode, force=force, quiet=2
-        )
+        if output_file is None:
+            success = compileall.compile_file(
+                path, invalidation_mode=invalidation_mode, force=force, quiet=2
+            )
+        else:
+            # Keep cached bytecode independent of its eventual environment: a wheel-relative
+            # filename avoids embedding the cache path in tracebacks, and checked hashes remain
+            # valid when installation changes the source mtime.
+            try:
+                py_compile.compile(
+                    path,
+                    cfile=output_file,
+                    dfile=display_file,
+                    doraise=True,
+                    optimize=0,
+                    invalidation_mode=py_compile.PycInvalidationMode.CHECKED_HASH,
+                )
+            except py_compile.PyCompileError:
+                pass
         # We're ready for the next file.
-        print(path)
+        print(line)

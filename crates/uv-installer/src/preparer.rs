@@ -1,12 +1,11 @@
 use std::cmp::Reverse;
-use std::path::Path;
 use std::sync::Arc;
 
 use futures::{FutureExt, Stream, TryFutureExt, TryStreamExt, stream::FuturesUnordered};
 use tracing::{debug, instrument};
 
 use uv_cache::Cache;
-use uv_configuration::{BuildOptions, Concurrency};
+use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_distribution_types::{
     BuildableSource, CachedDist, DerivationChain, Dist, DistErrorKind, Hashed, Identifier, Name,
@@ -27,7 +26,7 @@ pub struct Preparer<'a, Context: BuildContext> {
     build_options: &'a BuildOptions,
     database: DistributionDatabase<'a, Context>,
     reporter: Option<Arc<dyn Reporter>>,
-    bytecode_compilation: Option<(&'a Path, &'a Concurrency)>,
+    bytecode_compiler: Option<&'a crate::BytecodeCompiler>,
 }
 
 impl<'a, Context: BuildContext> Preparer<'a, Context> {
@@ -45,7 +44,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
             build_options,
             database,
             reporter: None,
-            bytecode_compilation: None,
+            bytecode_compiler: None,
         }
     }
 
@@ -61,19 +60,15 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .database
                 .with_reporter(reporter.clone().into_distribution_reporter()),
             reporter: Some(reporter),
-            bytecode_compilation: self.bytecode_compilation,
+            bytecode_compiler: self.bytecode_compiler,
         }
     }
 
     /// Bytecode-compile each unpacked wheel before the next installation phase.
     #[must_use]
-    pub fn with_bytecode_compilation(
-        self,
-        python_executable: &'a Path,
-        concurrency: &'a Concurrency,
-    ) -> Self {
+    pub fn with_bytecode_compiler(self, compiler: &'a crate::BytecodeCompiler) -> Self {
         Self {
-            bytecode_compilation: Some((python_executable, concurrency)),
+            bytecode_compiler: Some(compiler),
             ..self
         }
     }
@@ -84,7 +79,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         distributions: Vec<Arc<Dist>>,
         in_flight: &'stream InFlight,
         resolution: &'stream Resolution,
-        compiler: Option<&'stream crate::compile::WheelCompiler>,
+        compiler: Option<&'stream crate::BytecodeCompiler>,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         distributions
             .into_iter()
@@ -116,27 +111,10 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         distributions
             .sort_unstable_by_key(|distribution| Reverse(distribution.size().unwrap_or(u64::MAX)));
 
-        let compiler = self
-            .bytecode_compilation
-            .map(|(python_executable, concurrency)| {
-                crate::compile::WheelCompiler::new(
-                    python_executable,
-                    concurrency,
-                    self.cache.root(),
-                )
-            })
-            .transpose()?;
         let wheels = self
-            .prepare_stream(distributions, in_flight, resolution, compiler.as_ref())
+            .prepare_stream(distributions, in_flight, resolution, self.bytecode_compiler)
             .try_collect()
-            .await;
-        let compilation = if let Some(compiler) = compiler {
-            compiler.finish().await
-        } else {
-            Ok(())
-        };
-        let wheels = wheels?;
-        compilation?;
+            .await?;
 
         if let Some(reporter) = self.reporter.as_ref() {
             reporter.on_complete();

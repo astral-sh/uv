@@ -363,6 +363,8 @@ mod tests {
                         "python_version": "{VERSION}",
                         "sys_platform": "linux"
                     },
+                    "bytecode_cache_tag": "cpython-{CACHE_VERSION}",
+                    "bytecode_magic_number": "cb0d0d0a",
                     "sys_base_exec_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
                     "sys_base_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
                     "sys_prefix": "{PREFIX}",
@@ -412,6 +414,10 @@ mod tests {
                     "{VERSION}",
                     &format!("{}.{}", version.major(), version.minor()),
                 )
+                .replace(
+                    "{CACHE_VERSION}",
+                    &format!("{}{}", version.major(), version.minor()),
+                )
                 .replace("{FREE_THREADED}", &free_threaded.to_string())
                 .replace("{IMPLEMENTATION}", implementation.long_name());
 
@@ -456,6 +462,8 @@ mod tests {
                         "python_version": "{VERSION}",
                         "sys_platform": "emscripten"
                     },
+                    "bytecode_cache_tag": "cpython-{CACHE_VERSION}",
+                    "bytecode_magic_number": "cb0d0d0a",
                     "sys_base_exec_prefix": "/",
                     "sys_base_prefix": "/",
                     "sys_prefix": "/",
@@ -501,6 +509,10 @@ mod tests {
                 .replace(
                     "{VERSION}",
                     &format!("{}.{}", version.major(), version.minor()),
+                )
+                .replace(
+                    "{CACHE_VERSION}",
+                    &format!("{}{}", version.major(), version.minor()),
                 );
 
             fs_err::create_dir_all(path.parent().unwrap())?;

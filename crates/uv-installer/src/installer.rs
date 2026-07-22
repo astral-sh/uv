@@ -13,10 +13,13 @@ use uv_install_wheel::{Layout, LinkMode};
 use uv_preview::Preview;
 use uv_python::PythonEnvironment;
 
+use crate::BytecodeCache;
+
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
     link_mode: LinkMode,
     cache: Option<&'a Cache>,
+    bytecode_cache: Option<BytecodeCache>,
     reporter: Option<Arc<dyn Reporter>>,
     /// The name of the [`Installer`].
     name: Option<String>,
@@ -33,6 +36,7 @@ impl<'a> Installer<'a> {
             venv,
             link_mode: LinkMode::default(),
             cache: None,
+            bytecode_cache: None,
             reporter: None,
             name: Some("uv".to_string()),
             metadata: true,
@@ -51,6 +55,15 @@ impl<'a> Installer<'a> {
     pub fn with_cache(self, cache: &'a Cache) -> Self {
         Self {
             cache: Some(cache),
+            ..self
+        }
+    }
+
+    /// Install bytecode from the persistent cache after each wheel.
+    #[must_use]
+    pub fn with_bytecode_cache(self, bytecode_cache: BytecodeCache) -> Self {
+        Self {
+            bytecode_cache: Some(bytecode_cache),
             ..self
         }
     }
@@ -88,6 +101,7 @@ impl<'a> Installer<'a> {
         let Self {
             venv,
             cache,
+            bytecode_cache,
             link_mode,
             reporter,
             name: installer_name,
@@ -113,6 +127,7 @@ impl<'a> Installer<'a> {
             let result = install(
                 wheels,
                 &layout,
+                bytecode_cache.as_ref(),
                 installer_name.as_deref(),
                 link_mode,
                 reporter.as_ref(),
@@ -144,6 +159,7 @@ impl<'a> Installer<'a> {
         install(
             wheels,
             &self.venv.interpreter().layout(),
+            self.bytecode_cache.as_ref(),
             self.name.as_deref(),
             self.link_mode,
             self.reporter.as_ref(),
@@ -159,6 +175,7 @@ impl<'a> Installer<'a> {
 fn install(
     wheels: Vec<CachedDist>,
     layout: &Layout,
+    bytecode_cache: Option<&BytecodeCache>,
     installer_name: Option<&str>,
     link_mode: LinkMode,
     reporter: Option<&Arc<dyn Reporter>>,
@@ -170,6 +187,11 @@ fn install(
     initialize_rayon_once();
     let state = uv_install_wheel::InstallState::new(preview);
     wheels.par_iter().try_for_each(|wheel| {
+        let bytecode = bytecode_cache
+            .map(|cache| cache.get(wheel.path()))
+            .transpose()
+            .with_context(|| format!("Failed to locate cached bytecode for: {wheel}"))?
+            .flatten();
         uv_install_wheel::install_wheel(
             layout,
             relocatable,
@@ -191,6 +213,15 @@ fn install(
             &state,
         )
         .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;
+        if let Some(bytecode) = bytecode {
+            uv_install_wheel::install_bytecode(layout, wheel.path(), bytecode, link_mode, &state)
+                .with_context(|| {
+                format!(
+                    "Failed to install cached bytecode: {} ({wheel})",
+                    wheel.filename()
+                )
+            })?;
+        }
 
         if let Some(reporter) = reporter.as_ref() {
             reporter.on_install_progress(wheel);

@@ -808,10 +808,11 @@ impl InstallationPlan {
 
         let mut installs = vec![];
         let mut uninstalls = vec![];
+        let mut precompiled = 0;
 
         // Execute the isolated-build phase.
         if has_isolated_phase {
-            let (isolated_installs, isolated_uninstalls) = execute_plan(
+            let (isolated_installs, isolated_uninstalls, isolated_precompiled) = execute_plan(
                 isolated_phase,
                 None,
                 resolution,
@@ -834,10 +835,11 @@ impl InstallationPlan {
             .await?;
             installs.extend(isolated_installs);
             uninstalls.extend(isolated_uninstalls);
+            precompiled += isolated_precompiled;
         }
 
         if has_shared_phase {
-            let (shared_installs, shared_uninstalls) = execute_plan(
+            let (shared_installs, shared_uninstalls, shared_precompiled) = execute_plan(
                 shared_phase,
                 if has_isolated_phase {
                     Some(InstallPhase::Shared)
@@ -864,12 +866,15 @@ impl InstallationPlan {
             .await?;
             installs.extend(shared_installs);
             uninstalls.extend(shared_uninstalls);
+            precompiled += shared_precompiled;
         }
 
         if let Some(compile) = compile {
             match compile {
                 BytecodeCompilation::All => {
-                    compile_bytecode(venv, concurrency, cache, printer).await?;
+                    let excluded = precompiled_source_files(venv, &installs)?;
+                    compile_bytecode(venv, concurrency, cache, &excluded, precompiled, printer)
+                        .await?;
                 }
                 BytecodeCompilation::Installed => {
                     let files = python_source_files_for_installs(venv, &installs);
@@ -889,6 +894,36 @@ impl InstallationPlan {
 }
 
 type PythonSourceFileIterator = Box<dyn Iterator<Item = anyhow::Result<PathBuf>>>;
+
+/// Return the installed source paths represented by persistent bytecode sidecars.
+fn precompiled_source_files(
+    venv: &PythonEnvironment,
+    installs: &[CachedDist],
+) -> anyhow::Result<HashSet<PathBuf>> {
+    let layout = venv.interpreter().layout();
+    let mut sources = HashSet::new();
+    for install in installs {
+        let dist_info = installed_dist_info_path(&layout, install.path()).with_context(|| {
+            format!("Failed to locate installed distribution for bytecode cache: `{install}`")
+        })?;
+        let site_packages = dist_info.parent().ok_or_else(|| {
+            anyhow!("Installed distribution has no site-packages parent: `{install}`")
+        })?;
+        for source in uv_installer::wheel_python_source_files(install.path()) {
+            let source = source.with_context(|| {
+                format!("Failed to list Python source files for bytecode cache: `{install}`")
+            })?;
+            let relative = source.strip_prefix(install.path()).with_context(|| {
+                format!(
+                    "Python source is outside its cached wheel: `{}`",
+                    source.user_display()
+                )
+            })?;
+            sources.insert(CWD.join(site_packages.join(relative)));
+        }
+    }
+    Ok(sources)
+}
 
 /// Return the Python source files owned by the distributions installed by this operation.
 fn python_source_files_for_installs<'a>(
@@ -1031,7 +1066,7 @@ async fn execute_plan(
     installer_metadata: bool,
     printer: Printer,
     preview: Preview,
-) -> Result<(Vec<CachedDist>, Vec<InstalledDist>), Error> {
+) -> Result<(Vec<CachedDist>, Vec<InstalledDist>, usize), Error> {
     let Plan {
         cached,
         remote,
@@ -1039,12 +1074,37 @@ async fn execute_plan(
         extraneous,
     } = plan;
 
-    // Download, build, and unzip any missing distributions.
-    let wheels = if remote.is_empty() {
-        vec![]
-    } else {
-        let start = std::time::Instant::now();
+    let compiler = compile_bytecode
+        .then(|| {
+            uv_installer::BytecodeCompiler::new(
+                venv.python_executable(),
+                venv.interpreter(),
+                concurrency,
+                cache,
+            )
+        })
+        .transpose()
+        .map_err(anyhow::Error::new)?;
 
+    let cached_compilation = async {
+        if let Some(compiler) = compiler.as_ref() {
+            for wheel in &cached {
+                compiler
+                    .compile_wheel(wheel.path())
+                    .await
+                    .map_err(anyhow::Error::new)?;
+            }
+        }
+        Ok::<(), Error>(())
+    };
+
+    // Download, build, and unzip any missing distributions.
+    let preparation = async {
+        if remote.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let start = std::time::Instant::now();
         let preparer = Preparer::new(
             cache,
             tags,
@@ -1059,12 +1119,11 @@ async fn execute_plan(
         .with_reporter(Arc::new(
             PrepareReporter::from(printer).with_length(remote.len() as u64),
         ));
-        let preparer = if compile_bytecode {
-            preparer.with_bytecode_compilation(venv.python_executable(), concurrency)
+        let preparer = if let Some(compiler) = compiler.as_ref() {
+            preparer.with_bytecode_compiler(compiler)
         } else {
             preparer
         };
-
         let wheels = preparer
             .prepare(remote.clone(), in_flight, resolution)
             .await?;
@@ -1077,8 +1136,20 @@ async fn execute_plan(
             DryRun::Disabled,
         )?;
 
-        wheels
+        Ok::<Vec<CachedDist>, Error>(wheels)
     };
+    let preparation = tokio::try_join!(cached_compilation, preparation);
+    let compilation = if let Some(compiler) = compiler {
+        compiler
+            .finish()
+            .await
+            .map(|(cache, source_files)| (Some(cache), source_files))
+            .map_err(anyhow::Error::new)
+    } else {
+        Ok((None, 0))
+    };
+    let ((), wheels) = preparation?;
+    let (bytecode_cache, precompiled) = compilation?;
 
     // Remove any upgraded or extraneous installations.
     let uninstalls = extraneous.into_iter().chain(reinstalls).collect::<Vec<_>>();
@@ -1125,13 +1196,19 @@ async fn execute_plan(
     let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !installs.is_empty() {
         let start = std::time::Instant::now();
-        installs = uv_installer::Installer::new(venv, preview)
+        let installer = uv_installer::Installer::new(venv, preview)
             .with_link_mode(link_mode)
             .with_cache(cache)
             .with_installer_metadata(installer_metadata)
             .with_reporter(Arc::new(
                 InstallReporter::from(printer).with_length(installs.len() as u64),
-            ))
+            ));
+        let installer = if let Some(bytecode_cache) = bytecode_cache {
+            installer.with_bytecode_cache(bytecode_cache)
+        } else {
+            installer
+        };
+        installs = installer
             // This technically can block the runtime, but we are on the main thread and
             // have no other running tasks at this point, so this lets us avoid spawning a blocking
             // task.
@@ -1140,7 +1217,7 @@ async fn execute_plan(
         logger.on_install(installs.len(), start, printer, DryRun::Disabled)?;
     }
 
-    Ok((installs, uninstalls))
+    Ok((installs, uninstalls, precompiled))
 }
 
 /// Display a message about the interpreter that was selected for the operation.

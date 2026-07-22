@@ -259,6 +259,84 @@ fn sync_reuses_pip_install_wheel_cache() -> Result<()> {
     Ok(())
 }
 
+/// Reuse interpreter-specific bytecode without modifying the cached wheel archive.
+#[test]
+fn sync_reuses_persistent_bytecode_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    context.sync().arg("--compile-bytecode").assert().success();
+
+    let cache = uv_cache::Cache::from_path(context.cache_dir.path());
+    let bytecode_root = context.cache_dir.join("bytecode-v0");
+    let bytecode_entries = || -> Result<Vec<_>> {
+        WalkDir::new(&bytecode_root)
+            .min_depth(2)
+            .max_depth(2)
+            .into_iter()
+            .filter_map(|entry| match entry {
+                Ok(entry)
+                    if entry
+                        .path()
+                        .extension()
+                        .is_none_or(|extension| extension != "lock") =>
+                {
+                    Some(
+                        cache
+                            .resolve_link(entry.path())
+                            .map(|target| (entry.path().to_path_buf(), target))
+                            .map_err(anyhow::Error::from),
+                    )
+                }
+                Ok(_) => None,
+                Err(err) => Some(Err(err.into())),
+            })
+            .collect()
+    };
+
+    let entries = bytecode_entries()?;
+    assert_eq!(entries.len(), 1);
+    let source_archive = context.cache_dir.join("archive-v0").join(
+        entries[0]
+            .0
+            .parent()
+            .expect("entry has an archive ID")
+            .file_name()
+            .expect("bytecode entry parent should be a wheel archive ID"),
+    );
+    assert!(
+        !WalkDir::new(source_archive)
+            .into_iter()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "pyc")),
+        "the source wheel archive should remain immutable"
+    );
+
+    fs_err::remove_dir_all(&context.venv)?;
+    context
+        .sync()
+        .arg("--offline")
+        .arg("--compile-bytecode")
+        .assert()
+        .success();
+
+    let reused_entries = bytecode_entries()?;
+    assert_eq!(reused_entries, entries);
+
+    Ok(())
+}
+
 /// Ensure that `uv sync` reuses remote source distributions cached by `uv pip install`.
 #[test]
 fn sync_reuses_pip_install_sdist_cache() -> Result<()> {
