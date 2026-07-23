@@ -3201,17 +3201,19 @@ impl ForkState {
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
                 for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
-                    self.fork_urls.insert(name, url, &self.env)?;
+                    self.fork_urls.insert(name.clone(), url, &self.env)?;
                     has_url = true;
                 }
 
                 if let Some(index) = source.explicit_index() {
-                    self.fork_indexes.insert(name, index, &self.env)?;
+                    self.fork_indexes
+                        .insert(name.clone(), index.clone(), &self.env)?;
                 }
 
                 // If the package is pinned to an exact index, add it to the fork.
                 for index in indexes.get(name, &self.env) {
-                    self.fork_indexes.insert(name, index, &self.env)?;
+                    self.fork_indexes
+                        .insert(name.clone(), index.clone(), &self.env)?;
                 }
             }
 
