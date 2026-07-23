@@ -325,7 +325,7 @@ impl WheelFile {
         // mkl_fft-1.3.6-58-cp310-cp310-manylinux2014_x86_64.whl has multiple Wheel-Version entries, we have to ignore that
         // like pip
         let wheel_version = data
-            .get("Wheel-Version")
+            .get("wheel-version")
             .and_then(|wheel_versions| wheel_versions.first());
         let wheel_version = wheel_version
             .and_then(|wheel_version| wheel_version.split_once('.'))
@@ -363,7 +363,7 @@ impl WheelFile {
         // If it is, the wheel is pure, and should be installed into purelib.
         let root_is_purelib = self
             .0
-            .get("Root-Is-Purelib")
+            .get("root-is-purelib")
             .and_then(|root_is_purelib| root_is_purelib.first())
             .is_some_and(|root_is_purelib| root_is_purelib == "true");
         if root_is_purelib {
@@ -375,7 +375,7 @@ impl WheelFile {
 
     /// Return the list of wheel tags.
     pub fn tags(&self) -> Option<&[String]> {
-        self.0.get("Tag").map(Vec::as_slice)
+        self.0.get("tag").map(Vec::as_slice)
     }
 }
 
@@ -987,7 +987,7 @@ fn parse_email_message_file(
         .0;
 
     for header in headers {
-        let name = header.get_key(); // Will not be trimmed because if it contains space, mailparse will skip the header
+        let name = header.get_key().to_ascii_lowercase(); // Will not be trimmed because if it contains space, mailparse will skip the header
         let mut value = header.get_value();
 
         // Trim the value only if needed
@@ -1155,7 +1155,7 @@ mod test {
         "};
 
         let wheel = parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
-        let tags = &wheel["Tag"];
+        let tags = &wheel["tag"];
         let tag = tags
             .first()
             .expect("Expected one tag inside the WHEEL file");
@@ -1172,7 +1172,7 @@ mod test {
         "};
 
         let wheel = parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
-        assert!(!wheel.contains_key("Tag"));
+        assert!(!wheel.contains_key("tag"));
         assert_eq!(3, wheel.keys().len());
     }
 
@@ -1205,6 +1205,25 @@ mod test {
         }
         WheelFile::parse(&wheel_with_version("1.0")).unwrap();
         WheelFile::parse(&wheel_with_version("2.0")).unwrap_err();
+    }
+
+    #[test]
+    fn test_parse_case_insensitive_wheel_headers() {
+        let wheel = indoc! {"
+            wheel-version: 1.0
+            generator: bdist_wheel (0.37.0)
+            root-is-purelib: true
+            tag: py2-none-any
+            TaG: py3-none-any
+        "};
+
+        let wheel = WheelFile::parse(wheel).unwrap();
+
+        assert_eq!(wheel.lib_kind(), super::LibKind::Pure);
+        assert_eq!(
+            wheel.tags(),
+            Some(["py2-none-any".to_string(), "py3-none-any".to_string()].as_slice())
+        );
     }
 
     #[test]
@@ -1360,11 +1379,11 @@ mod test {
         let reader = Cursor::new(wheel.to_string().into_bytes());
         let wheel_file = parse_email_message_file(reader, "WHEEL")?;
         assert_eq!(
-            wheel_file.get("Wheel-Version"),
+            wheel_file.get("wheel-version"),
             Some(&["1.0".to_string()].to_vec())
         );
         assert_eq!(
-            wheel_file.get("Tag"),
+            wheel_file.get("tag"),
             Some(
                 &[
                     String::new(),
