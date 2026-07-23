@@ -6249,28 +6249,8 @@ pub struct ToolUpgradeArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// Reinstall all packages, regardless of whether they're already installed. Implies
-    /// `--refresh`.
-    #[arg(
-        long,
-        alias = "force-reinstall",
-        overrides_with("no_reinstall"),
-        help_heading = "Installer options"
-    )]
-    pub reinstall: bool,
-
-    #[arg(
-        long,
-        overrides_with("reinstall"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_reinstall: bool,
-
-    /// Reinstall a specific package, regardless of whether it's already installed. Implies
-    /// `--refresh-package`.
-    #[arg(long, help_heading = "Installer options", value_hint = ValueHint::Other)]
-    pub reinstall_package: Vec<PackageName>,
+    #[command(flatten)]
+    pub reinstall: ReinstallArgs,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///
@@ -7368,12 +7348,9 @@ pub struct BuildOptionsArgs {
     no_binary_package: Vec<PackageName>,
 }
 
-/// Arguments that are used by commands that need to install (but not resolve) packages.
 #[derive(Args)]
-pub struct InstallerArgs {
-    #[command(flatten)]
-    index_args: IndexArgs,
-
+#[group(skip)]
+pub struct ReinstallArgs {
     /// Reinstall all packages, regardless of whether they're already installed. Implies
     /// `--refresh`.
     #[arg(
@@ -7382,7 +7359,7 @@ pub struct InstallerArgs {
         overrides_with("no_reinstall"),
         help_heading = "Installer options"
     )]
-    reinstall: bool,
+    pub reinstall: bool,
 
     #[arg(
         long,
@@ -7390,12 +7367,22 @@ pub struct InstallerArgs {
         hide = true,
         help_heading = "Installer options"
     )]
-    no_reinstall: bool,
+    pub no_reinstall: bool,
 
     /// Reinstall a specific package, regardless of whether it's already installed. Implies
     /// `--refresh-package`.
     #[arg(long, help_heading = "Installer options", value_hint = ValueHint::Other)]
-    reinstall_package: Vec<PackageName>,
+    pub reinstall_package: Vec<PackageName>,
+}
+
+/// Arguments that are used by commands that need to install (but not resolve) packages.
+#[derive(Args)]
+pub struct InstallerArgs {
+    #[command(flatten)]
+    index_args: IndexArgs,
+
+    #[command(flatten)]
+    reinstall: ReinstallArgs,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///
@@ -7817,28 +7804,8 @@ pub struct ResolverInstallerArgs {
     #[arg(long, help_heading = "Resolver options")]
     pub upgrade_group: Vec<GroupName>,
 
-    /// Reinstall all packages, regardless of whether they're already installed. Implies
-    /// `--refresh`.
-    #[arg(
-        long,
-        alias = "force-reinstall",
-        overrides_with("no_reinstall"),
-        help_heading = "Installer options"
-    )]
-    pub reinstall: bool,
-
-    #[arg(
-        long,
-        overrides_with("reinstall"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_reinstall: bool,
-
-    /// Reinstall a specific package, regardless of whether it's already installed. Implies
-    /// `--refresh-package`.
-    #[arg(long, help_heading = "Installer options", value_hint = ValueHint::Other)]
-    pub reinstall_package: Vec<PackageName>,
+    #[command(flatten)]
+    pub reinstall: ReinstallArgs,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///

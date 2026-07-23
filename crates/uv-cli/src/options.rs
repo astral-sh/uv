@@ -10,8 +10,8 @@ use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, Resolv
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
-    BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
-    ResolverInstallerArgs,
+    BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ReinstallArgs,
+    ResolverArgs, ResolverInstallerArgs,
 };
 
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
@@ -320,9 +320,12 @@ impl From<InstallerArgs> for PipOptions {
     fn from(args: InstallerArgs) -> Self {
         let InstallerArgs {
             index_args,
-            reinstall,
-            no_reinstall,
-            reinstall_package,
+            reinstall:
+                ReinstallArgs {
+                    reinstall,
+                    no_reinstall,
+                    reinstall_package,
+                },
             index_strategy,
             keyring_provider,
             config_setting,
@@ -374,9 +377,12 @@ impl From<ResolverInstallerArgs> for PipOptions {
             no_upgrade,
             upgrade_package,
             upgrade_group,
-            reinstall,
-            no_reinstall,
-            reinstall_package,
+            reinstall:
+                ReinstallArgs {
+                    reinstall,
+                    no_reinstall,
+                    reinstall_package,
+                },
             index_strategy,
             keyring_provider,
             resolution,
@@ -633,9 +639,12 @@ pub fn resolver_installer_options_with_indexes(
         no_upgrade,
         upgrade_package,
         upgrade_group,
-        reinstall,
-        no_reinstall,
-        reinstall_package,
+        reinstall:
+            ReinstallArgs {
+                reinstall,
+                no_reinstall,
+                reinstall_package,
+            },
         index_strategy,
         keyring_provider,
         resolution,

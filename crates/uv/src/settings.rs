@@ -935,7 +935,7 @@ impl ToolRunSettings {
         }
 
         // If `--reinstall` was passed explicitly, warn.
-        if installer.reinstall || !installer.reinstall_package.is_empty() {
+        if installer.reinstall.reinstall || !installer.reinstall.reinstall_package.is_empty() {
             if with.is_empty() && with_requirements.is_empty() {
                 warn_user_once!(
                     "Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `uv cache prune` to clear any cached tool environments."
@@ -1172,8 +1172,6 @@ impl ToolUpgradeSettings {
             index_args,
             all,
             reinstall,
-            no_reinstall,
-            reinstall_package,
             index_strategy,
             keyring_provider,
             resolution,
@@ -1210,8 +1208,6 @@ impl ToolUpgradeSettings {
             upgrade_package,
             upgrade_group,
             reinstall,
-            no_reinstall,
-            reinstall_package,
             index_strategy,
             keyring_provider,
             resolution,
