@@ -15553,12 +15553,16 @@ fn check_unformatted_lock() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` has non-canonical formatting at line 13, but `--check` was provided.
+
+    hint: To restore the lockfile's formatting, run `uv lock --refresh`.
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--offline").arg("--preview-features").arg("lockfile-format-check"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` has non-canonical formatting at line 13, but `--locked` was provided.
+
+    hint: To restore the lockfile's formatting, run `uv lock --refresh`.
     ");
 
     assert_eq!(context.read("uv.lock"), unformatted);
@@ -34838,6 +34842,8 @@ fn lock_refresh_deindents_lockfile() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` has non-canonical formatting at line 13, but `--check` was provided.
+
+    hint: To restore the lockfile's formatting, run `uv lock --refresh`.
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--refresh").arg("--dry-run"), @"
