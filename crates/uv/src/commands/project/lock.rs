@@ -47,7 +47,7 @@ use uv_workspace::{
 };
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
-use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
     MissingLockfileSource, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
     WorkspacePython, init_script_python_requirement, script_extra_build_requires,
@@ -271,7 +271,9 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Success)
         }
         // Lock mismatches from `--check`/`--locked` are expected validation failures.
-        Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
+        Err(err @ (ProjectError::LockMismatch(..) | ProjectError::LockFormat(..))) => {
+            Err(UvError::user(err).into())
+        }
         Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
@@ -381,10 +383,18 @@ impl<'env> LockOperation<'env> {
             LockMode::Locked(interpreter, lock_source) => {
                 // Read the existing lockfile.
                 let lock_filename = target.lock_filename();
-                let existing = target.read().await?.ok_or(ProjectError::MissingLockfile(
-                    lock_source.into(),
-                    lock_filename,
-                ))?;
+                let Some((existing, contents)) = target.read_with_contents().await? else {
+                    return Err(ProjectError::MissingLockfile(
+                        lock_source.into(),
+                        lock_filename,
+                    ));
+                };
+
+                if self.preview.is_enabled(PreviewFeature::LockfileFormat)
+                    && let Some(line) = find_lock_format_error(&contents)
+                {
+                    return Err(ProjectError::LockFormat(lock_filename, line, lock_source));
+                }
 
                 // Perform the lock operation, but don't write the lockfile to disk.
                 let result = Box::pin(do_lock(

@@ -15515,6 +15515,57 @@ fn check_outdated_lock() -> Result<()> {
     Ok(())
 }
 
+/// Checks that formatting-only changes are rejected when lockfile-format preview is enabled.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_unformatted_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sniffio==1.3.1"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let formatted = context.read("uv.lock");
+    let unformatted = formatted.replacen("\n    {", "\n{", 1);
+    assert_ne!(formatted, unformatted);
+    context.temp_dir.child("uv.lock").write_str(&unformatted)?;
+
+    // Formatting is not part of the stable lockfile contract.
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--preview-features").arg("lockfile-format"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` is not canonically formatted at line 13, but `--check` was provided.
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--offline").arg("--preview-features").arg("lockfile-format"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` is not canonically formatted at line 13, but `--locked` was provided.
+    ");
+
+    assert_eq!(context.read("uv.lock"), unformatted);
+
+    Ok(())
+}
+
 /// This checks that markers that normalize to 'false', which are serialized
 /// to the lockfile as `python_full_version < '0'`, get read back as false.
 /// Otherwise `uv lock --check` will always fail.

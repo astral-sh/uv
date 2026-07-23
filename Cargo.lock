@@ -5829,6 +5829,7 @@ dependencies = [
  "tokio-util",
  "toml",
  "toml_edit",
+ "toml_parser",
  "tracing",
  "tracing-durations-export",
  "tracing-subscriber",
