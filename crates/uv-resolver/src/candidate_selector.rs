@@ -686,17 +686,16 @@ where
                     return !is_after(version, end);
                 }
             }
-        } else {
-            loop {
-                let (start, end) = self.current;
-                if is_after(version, end) {
-                    let Some(current) = self.segments.next() else {
-                        return false;
-                    };
-                    self.current = current;
-                } else {
-                    return !is_before(version, start);
-                }
+        }
+        loop {
+            let (start, end) = self.current;
+            if is_after(version, end) {
+                let Some(current) = self.segments.next() else {
+                    return false;
+                };
+                self.current = current;
+            } else {
+                return !is_before(version, start);
             }
         }
     }

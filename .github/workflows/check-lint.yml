@@ -116,18 +116,22 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install nightly-2026-07-13 --profile minimal --component clippy
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
         with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Check uv_build dependencies"
         uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2.0.20
         with:
           command: check bans
           manifest-path: crates/uv-build/Cargo.toml
-      - name: "Install Rust toolchain"
-        run: rustup component add clippy
       - name: "Clippy"
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        run: cargo +nightly-2026-07-13 clippy --workspace --all-targets --all-features --locked -Z checksum-freshness -- -D warnings
 
   clippy-windows:
     name: "clippy on windows"
@@ -147,17 +151,21 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          workspaces: ${{ env.UV_WORKSPACE }}
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
-
       - name: "Install Rust toolchain"
-        run: rustup component add clippy
+        run: rustup toolchain install nightly-2026-07-13 --profile minimal --component clippy
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        env:
+          RUSTUP_TOOLCHAIN: nightly-2026-07-13
+        with:
+          prefix-key: v1-rust-workspace
+          workspaces: ${{ env.UV_WORKSPACE }}
+          cache-workspace-crates: "true"
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        run: cargo +nightly-2026-07-13 clippy --workspace --all-targets --all-features --locked -Z checksum-freshness -- -D warnings
 
   hawk:
     timeout-minutes: 15
