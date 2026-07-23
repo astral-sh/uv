@@ -81,6 +81,51 @@ fn lock_canonical_reader_preserves_noncanonical_lock() -> Result<()> {
 
 #[cfg(feature = "test-universal")]
 #[test]
+fn lock_canonical_reader_rejects_invalid_toml() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let invalid_lock = context
+        .read("uv.lock")
+        .replace("version = 1\n", "version = 01\n");
+    context.temp_dir.child("uv.lock").write_str(&invalid_lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      Caused by: TOML parse error at line 1, column 11
+          |
+        1 | version = 01
+          |           ^
+        unexpected leading zero, expected nothing
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
 fn lock_wheel_registry() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
