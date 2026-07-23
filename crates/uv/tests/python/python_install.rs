@@ -1642,8 +1642,7 @@ fn python_install_debug_freethreaded() {
     error: No interpreter found for Python 3.13 in virtual environments, managed installations, or search path
     ");
 
-    // We should allow selection with `+freethread+debug`
-    // TODO(zanieb): We don't support this yet
+    // A `+freethreaded+debug` request should select the combined build.
     uv_snapshot!(context.filters(), context.python_find().arg("3.13+freethreaded+debug"), @"
     success: true
     exit_code: 0

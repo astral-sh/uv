@@ -419,7 +419,7 @@ fn run_pep723_script() -> Result<()> {
        "#
     })?;
 
-    // Running the script should install the requirements.
+    // Running the script should succeed without installing any requirements.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
@@ -768,7 +768,7 @@ fn run_pep723_script_metadata() -> Result<()> {
        "#
     })?;
 
-    // Running the script should fail without network access.
+    // Running the script should honor its inline resolution setting.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0

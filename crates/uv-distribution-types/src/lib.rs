@@ -3,21 +3,23 @@
 //! When we receive the requirements from `pip sync`, we check which requirements already fulfilled
 //! in the users environment ([`InstalledDist`]), whether the matching package is in our wheel cache
 //! ([`CachedDist`]) or whether we need to download, (potentially build) and install it ([`Dist`]).
-//! These three variants make up [`BuiltDist`].
 //!
 //! ## `Dist`
 //! A [`Dist`] is either a built distribution (a wheel), or a source distribution that exists at
 //! some location. We translate every PEP 508 requirement e.g. from `requirements.txt` or from
 //! `pyproject.toml`'s `[project] dependencies` into a [`Dist`] by checking each index.
-//! * [`BuiltDist`]: A wheel, with its three possible origins:
+//! * [`BuiltDist`]: A wheel, with its four possible origins:
 //!   * [`RegistryBuiltDist`]
 //!   * [`DirectUrlBuiltDist`]
 //!   * [`PathBuiltDist`]
-//! * [`SourceDist`]: A source distribution, with its four possible origins:
+//!   * [`GitPathBuiltDist`]
+//! * [`SourceDist`]: A source distribution, with its six possible origins:
 //!   * [`RegistrySourceDist`]
 //!   * [`DirectUrlSourceDist`]
+//!   * [`GitDirectorySourceDist`]
 //!   * [`GitPathSourceDist`]
 //!   * [`PathSourceDist`]
+//!   * [`DirectorySourceDist`]
 //!
 //! ## `CachedDist`
 //! A [`CachedDist`] is a built distribution (wheel) that exists in the local cache, with the two
@@ -26,12 +28,17 @@
 //! * [`CachedDirectUrlDist`]
 //!
 //! ## `InstalledDist`
-//! An [`InstalledDist`] is built distribution (wheel) that is installed in a virtual environment,
-//! with the two possible origins we currently track:
+//! An [`InstalledDist`] is a distribution installed in a Python environment, with the five kinds
+//! we currently track:
 //! * [`InstalledRegistryDist`]
 //! * [`InstalledDirectUrlDist`]
+//! * [`InstalledEggInfoFile`]
+//! * [`InstalledEggInfoDirectory`]
+//! * [`InstalledLegacyEditable`]
 //!
-//! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
+//! Direct URL information for an [`InstalledDirectUrlDist`] comes from
+//! [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/)
+//! and may not match the original [`Dist`] exactly.
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fmt::Display;
@@ -174,9 +181,9 @@ impl std::fmt::Display for InstalledVersion<'_> {
     }
 }
 
-/// Either a built distribution, a wheel, or a source distribution that exists at some location.
+/// Either a built distribution (a wheel) or a source distribution that exists at some location.
 ///
-/// The location can be an index, URL or path (wheel), or index, URL, path or Git repository (source distribution).
+/// The location can be an index, URL, path, or Git repository (wheel or source distribution).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Dist {
     Built(BuiltDist),
@@ -199,7 +206,7 @@ impl Display for DistRef<'_> {
     }
 }
 
-/// A wheel, with its three possible origins (index, url, path)
+/// A wheel, with its four possible origins (index, URL, path, or Git path)
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum BuiltDist {
     Registry(RegistryBuiltDist),
@@ -208,7 +215,8 @@ pub enum BuiltDist {
     GitPath(GitPathBuiltDist),
 }
 
-/// A source distribution, with its possible origins (index, url, path, git)
+/// A source distribution, with its six possible origins (index, URL, Git directory, Git path,
+/// path, or directory).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum SourceDist {
     Registry(RegistrySourceDist),
@@ -279,7 +287,7 @@ pub struct PathBuiltDist {
     pub url: VerbatimUrl,
 }
 
-/// A source distribution that exists in a Git repository.
+/// A built distribution (wheel) that exists in a Git repository.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct GitPathBuiltDist {
     pub filename: WheelFilename,
