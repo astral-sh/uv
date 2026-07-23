@@ -125,7 +125,20 @@ jobs:
               jq \
                 --arg base_ref "$BASE_REF" \
                 --arg head_ref "astral-sh:$HEAD_REF" \
-                '{title: .title, body: (.body // ""), base: $base_ref, head: $head_ref, head_repo: "astral-sh/uv-dev"}' \
+                --arg source_repository "$GITHUB_REPOSITORY" \
+                '{
+                  title: .title,
+                  body: (
+                    (.body // "")
+                    | gsub(
+                      "(?<![[:alnum:]_/])#(?<number>[0-9]+)(?![[:alnum:]_])";
+                      "\($source_repository)#\(.number)"
+                    )
+                  ),
+                  base: $base_ref,
+                  head: $head_ref,
+                  head_repo: "astral-sh/uv-dev"
+                }' \
                 "$RUNNER_TEMP/pull-request.json" |
                 gh api \
                   --method POST \
