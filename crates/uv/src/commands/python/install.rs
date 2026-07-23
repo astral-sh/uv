@@ -487,10 +487,8 @@ async fn perform_install(
             for installation in matching_installations {
                 changelog.existing.insert(installation.key().clone());
 
-                if matches!(
-                    upgrade,
-                    PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
-                ) && !matches!(&request.request, &PythonRequest::Any)
+                if matches!(upgrade, PythonUpgrade::Enabled(_))
+                    && !matches!(&request.request, &PythonRequest::Any)
                 {
                     // An upgrade must reinstall the latest patch, not every matching patch.
                     debug!("Will reinstall the latest patch for `{}`", request);
