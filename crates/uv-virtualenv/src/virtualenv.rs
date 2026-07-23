@@ -20,7 +20,7 @@ use uv_platform_tags::Os;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_python::managed::{
-    ManagedPythonInstallation, PythonMinorVersionLink, replace_link_to_executable,
+    LauncherTarget, ManagedPythonInstallation, PythonMinorVersionLink, replace_link_to_executable,
 };
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
@@ -315,18 +315,30 @@ pub(crate) fn create(
     if cfg!(windows) {
         if using_minor_version_link {
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
-            replace_link_to_executable(target.as_path(), &executable_target)
-                .map_err(Error::Python)?;
+            replace_link_to_executable(
+                target.as_path(),
+                &LauncherTarget::console(executable_target.clone()),
+            )
+            .map_err(Error::Python)?;
             let targetw = scripts.join(WindowsExecutable::Pythonw.exe(interpreter));
-            replace_link_to_executable(targetw.as_path(), &executable_target)
-                .map_err(Error::Python)?;
+            replace_link_to_executable(
+                targetw.as_path(),
+                &LauncherTarget::windowed(executable_target.clone()),
+            )
+            .map_err(Error::Python)?;
             if interpreter.gil_disabled() {
                 let targett = scripts.join(WindowsExecutable::PythonMajorMinort.exe(interpreter));
-                replace_link_to_executable(targett.as_path(), &executable_target)
-                    .map_err(Error::Python)?;
+                replace_link_to_executable(
+                    targett.as_path(),
+                    &LauncherTarget::console(executable_target.clone()),
+                )
+                .map_err(Error::Python)?;
                 let targetwt = scripts.join(WindowsExecutable::PythonwMajorMinort.exe(interpreter));
-                replace_link_to_executable(targetwt.as_path(), &executable_target)
-                    .map_err(Error::Python)?;
+                replace_link_to_executable(
+                    targetwt.as_path(),
+                    &LauncherTarget::windowed(executable_target.clone()),
+                )
+                .map_err(Error::Python)?;
             }
         } else if matches!(
             interpreter.platform().os(),
@@ -335,8 +347,11 @@ pub(crate) fn create(
             // For PyEmscripten, link only `python.exe`.
             // This should not be copied as `python.exe` is a wrapper that launches Pyodide.
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
-            replace_link_to_executable(target.as_path(), &executable_target)
-                .map_err(Error::Python)?;
+            replace_link_to_executable(
+                target.as_path(),
+                &LauncherTarget::console(executable_target.clone()),
+            )
+            .map_err(Error::Python)?;
         } else {
             // Always copy `python.exe`.
             copy_launcher_windows(
