@@ -1185,7 +1185,6 @@ impl ToolUpgradeSettings {
             exclude_newer,
             link_mode,
             compile_bytecode,
-            no_compile_bytecode,
             no_sources,
             no_sources_package,
             exclude_newer_package,
@@ -1221,7 +1220,6 @@ impl ToolUpgradeSettings {
             exclude_newer_package,
             link_mode,
             compile_bytecode,
-            no_compile_bytecode,
             no_sources,
             no_sources_package,
         };

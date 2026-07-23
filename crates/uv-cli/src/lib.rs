@@ -6382,35 +6382,8 @@ pub struct ToolUpgradeArgs {
     )]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Compile Python files to bytecode after installation.
-    ///
-    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
-    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
-    /// in which start time is critical, such as CLI applications and Docker containers, this option
-    /// can be enabled to trade longer installation times for faster start times.
-    ///
-    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
-    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
-    /// run`) will process the entire site-packages directory including packages that are not being
-    /// modified.
-    #[arg(
-        long,
-        alias = "compile",
-        overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options",
-        env = EnvVars::UV_COMPILE_BYTECODE,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub compile_bytecode: bool,
-
-    #[arg(
-        long,
-        alias = "no-compile",
-        overrides_with("compile_bytecode"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_compile_bytecode: bool,
+    #[command(flatten)]
+    pub compile_bytecode: CompileBytecodeArgs,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
@@ -7368,6 +7341,40 @@ pub struct ReinstallArgs {
     pub reinstall_package: Vec<PackageName>,
 }
 
+#[derive(Args)]
+#[group(skip)]
+pub struct CompileBytecodeArgs {
+    /// Compile Python files to bytecode after installation.
+    ///
+    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
+    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
+    /// in which start time is critical, such as CLI applications and Docker containers, this option
+    /// can be enabled to trade longer installation times for faster start times.
+    ///
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
+    #[arg(
+        long,
+        alias = "compile",
+        overrides_with("no_compile_bytecode"),
+        help_heading = "Installer options",
+        env = EnvVars::UV_COMPILE_BYTECODE,
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    compile_bytecode: bool,
+
+    #[arg(
+        long,
+        alias = "no-compile",
+        overrides_with("compile_bytecode"),
+        hide = true,
+        help_heading = "Installer options"
+    )]
+    no_compile_bytecode: bool,
+}
+
 /// Arguments that are used by commands that need to install (but not resolve) packages.
 #[derive(Args)]
 pub struct InstallerArgs {
@@ -7470,35 +7477,8 @@ pub struct InstallerArgs {
     )]
     link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Compile Python files to bytecode after installation.
-    ///
-    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
-    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
-    /// in which start time is critical, such as CLI applications and Docker containers, this option
-    /// can be enabled to trade longer installation times for faster start times.
-    ///
-    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
-    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
-    /// run`) will process the entire site-packages directory including packages that are not being
-    /// modified.
-    #[arg(
-        long,
-        alias = "compile",
-        overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options",
-        env = EnvVars::UV_COMPILE_BYTECODE,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    compile_bytecode: bool,
-
-    #[arg(
-        long,
-        alias = "no-compile",
-        overrides_with("compile_bytecode"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    no_compile_bytecode: bool,
+    #[command(flatten)]
+    compile_bytecode: CompileBytecodeArgs,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
@@ -7902,35 +7882,8 @@ pub struct ResolverInstallerArgs {
     )]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Compile Python files to bytecode after installation.
-    ///
-    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
-    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
-    /// in which start time is critical, such as CLI applications and Docker containers, this option
-    /// can be enabled to trade longer installation times for faster start times.
-    ///
-    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
-    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
-    /// run`) will process the entire site-packages directory including packages that are not being
-    /// modified.
-    #[arg(
-        long,
-        alias = "compile",
-        overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options",
-        env = EnvVars::UV_COMPILE_BYTECODE,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub compile_bytecode: bool,
-
-    #[arg(
-        long,
-        alias = "no-compile",
-        overrides_with("compile_bytecode"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_compile_bytecode: bool,
+    #[command(flatten)]
+    pub compile_bytecode: CompileBytecodeArgs,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,

@@ -10,8 +10,8 @@ use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, Resolv
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
-    BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, RegistryClientArgs,
-    ReinstallArgs, ResolverArgs, ResolverInstallerArgs,
+    BuildOptionsArgs, CompileBytecodeArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs,
+    RegistryClientArgs, ReinstallArgs, ResolverArgs, ResolverInstallerArgs,
 };
 
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
@@ -340,8 +340,11 @@ impl From<InstallerArgs> for PipOptions {
             build_isolation,
             exclude_newer,
             link_mode,
-            compile_bytecode,
-            no_compile_bytecode,
+            compile_bytecode:
+                CompileBytecodeArgs {
+                    compile_bytecode,
+                    no_compile_bytecode,
+                },
             no_sources,
             no_sources_package,
             exclude_newer_package,
@@ -405,8 +408,11 @@ impl From<ResolverInstallerArgs> for PipOptions {
             build_isolation,
             exclude_newer,
             link_mode,
-            compile_bytecode,
-            no_compile_bytecode,
+            compile_bytecode:
+                CompileBytecodeArgs {
+                    compile_bytecode,
+                    no_compile_bytecode,
+                },
             no_sources,
             no_sources_package,
             exclude_newer_package,
@@ -677,8 +683,11 @@ pub fn resolver_installer_options_with_indexes(
         exclude_newer,
         exclude_newer_package,
         link_mode,
-        compile_bytecode,
-        no_compile_bytecode,
+        compile_bytecode:
+            CompileBytecodeArgs {
+                compile_bytecode,
+                no_compile_bytecode,
+            },
         no_sources,
         no_sources_package,
     } = resolver_installer_args;
