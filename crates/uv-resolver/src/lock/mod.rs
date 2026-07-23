@@ -1539,22 +1539,20 @@ impl Lock {
     ) -> Result<SatisfiesResult<'lock>, LockError> {
         let missing_metadata = self.supports_missing_package_metadata()
             && package.metadata == PackageMetadata::default();
-        // Dynamic metadata and graph validation need expanded self-referential extras. Avoid
-        // that work for metadata-backed locks in optimized builds, where metadata alone already
-        // provides the exact declaration comparison and the consistency assertion is disabled.
-        let expected_flattened =
-            if missing_metadata || package.is_dynamic() || cfg!(debug_assertions) {
-                Some(
-                    FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
-                        .into_iter()
-                        .map(|requirement| {
-                            normalize_requirement(requirement, root, &self.requires_python)
-                        })
-                        .collect::<Result<BTreeSet<_>, _>>()?,
-                )
-            } else {
-                None
-            };
+        // Dynamic metadata and metadata-free graph validation need expanded self-referential
+        // extras. Metadata-backed static packages already have exact declaration snapshots.
+        let expected_flattened = if missing_metadata || package.is_dynamic() {
+            Some(
+                FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
+                    .into_iter()
+                    .map(|requirement| {
+                        normalize_requirement(requirement, root, &self.requires_python)
+                    })
+                    .collect::<Result<BTreeSet<_>, _>>()?,
+            )
+        } else {
+            None
+        };
 
         // Development groups retain self-dependencies, unlike production requirements and extras.
         let expected_groups: BTreeMap<GroupName, BTreeSet<Requirement>> = dependency_groups
