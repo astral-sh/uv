@@ -7,29 +7,21 @@
 
 Released on 2026-07-23.
 
-### Enhancements
-
-- Regenerate the `uv.lock` TOML with `uv lock --refresh` ([#20634](https://github.com/astral-sh/uv/pull/20634))
-
 ### Preview features
 
-- Add `--package` and `--all-packages` to `uv check` ([#20628](https://github.com/astral-sh/uv/pull/20628))
-- Allow `uv upgrade` to update multiple declarations of the same package ([#20335](https://github.com/astral-sh/uv/pull/20335))
-- Include best-effort `environment` info by default in `uv workspace metadata` ([#20643](https://github.com/astral-sh/uv/pull/20643))
-- Reject unformatted lockfiles in `uv lock --check` (and `--locked`) ([#20646](https://github.com/astral-sh/uv/pull/20646))
+- Add `--package` and `--all-packages` selection to `uv check` ([#20628](https://github.com/astral-sh/uv/pull/20628))
+- Allow `uv upgrade` to update multiple marker-specific declarations of the same package ([#20335](https://github.com/astral-sh/uv/pull/20335))
+- Reject non-canonically formatted lockfiles in `uv lock --check` and commands using `--locked` ([#20646](https://github.com/astral-sh/uv/pull/20646))
+- Regenerate non-canonically formatted lockfiles with `uv lock --refresh` ([#20634](https://github.com/astral-sh/uv/pull/20634))
+- Include best-effort information about the active environment in `uv workspace metadata` by default ([#20643](https://github.com/astral-sh/uv/pull/20643))
 
 ### Performance
 
-- Skip conflict expansion when there is nothing to infer ([#20611](https://github.com/astral-sh/uv/pull/20611))
+- Skip dependency-group conflict expansion when no additional conflicts can be inferred ([#20611](https://github.com/astral-sh/uv/pull/20611))
 
 ### Bug fixes
 
-- Fork on late Requires-Python metadata ([#20586](https://github.com/astral-sh/uv/pull/20586))
-
-### Other changes
-
-- Use canonical issue references in Codex prompts ([#20645](https://github.com/astral-sh/uv/pull/20645))
-- make references explicit when promoting PRs from uv-dev ([#20644](https://github.com/astral-sh/uv/pull/20644))
+- Fork universal resolutions when `Requires-Python` is discovered only from distribution metadata ([#20586](https://github.com/astral-sh/uv/pull/20586))
 
 ## 0.11.31
 
