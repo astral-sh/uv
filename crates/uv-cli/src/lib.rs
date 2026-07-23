@@ -1186,6 +1186,9 @@ pub enum ProjectCommand {
     /// At present, `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output
     /// formats are supported.
     ///
+    /// By default, the exported requirements include the project's default dependency groups
+    /// (such as the standard dependencies and the `dev` group).
+    ///
     /// The project is re-locked before exporting unless the `--locked` or `--frozen` flag is
     /// provided.
     ///
