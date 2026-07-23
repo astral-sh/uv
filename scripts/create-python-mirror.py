@@ -13,6 +13,8 @@ Example usage:
 # ]
 # ///
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import hashlib
@@ -20,7 +22,6 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import unquote
 
 import httpx
@@ -62,7 +63,7 @@ def sha256_checksum(file_path: Path) -> str:
     return hasher.hexdigest()
 
 
-def collect_metadata_from_git_history() -> List[Dict]:
+def collect_metadata_from_git_history() -> list[dict]:
     """Collect all metadata entries from the history of the VERSIONS_FILE."""
     metadata = []
     try:
@@ -84,8 +85,8 @@ def collect_metadata_from_git_history() -> List[Dict]:
 
     except GitCommandError as e:
         logger.error(f"Git command error: {e}")
-    except Exception as e:
-        logger.exception(f"Unexpected error while collecting metadata: {e}")
+    except Exception:
+        logger.exception("Unexpected error while collecting metadata")
 
     return metadata
 
@@ -108,12 +109,12 @@ def match_version(entry, pattern):
 
 
 def filter_metadata(
-    metadata: List[Dict],
-    name: Optional[str],
-    arch: Optional[str],
-    os: Optional[str],
-    version: Optional[re.Pattern],
-) -> List[Dict]:
+    metadata: list[dict],
+    name: str | None,
+    arch: str | None,
+    os: str | None,
+    version: re.Pattern | None,
+) -> list[dict]:
     """Filter the metadata based on name, architecture, and OS, ensuring unique URLs."""
     filtered = [
         entry
@@ -137,7 +138,7 @@ async def download_file(
     client: httpx.AsyncClient,
     url: str,
     dest: Path,
-    expected_sha256: Optional[str],
+    expected_sha256: str | None,
     progress_bar,
     errors,
 ):
@@ -168,9 +169,10 @@ async def download_file(
     try:
         async with client.stream("GET", url) as response:
             response.raise_for_status()
-            with open(dest, "wb") as f:
+            loop = asyncio.get_running_loop()
+            with await loop.run_in_executor(None, dest.open, "wb") as f:
                 async for chunk in response.aiter_bytes():
-                    f.write(chunk)
+                    await loop.run_in_executor(None, f.write, chunk)
 
         if expected_sha256 and sha256_checksum(dest) != expected_sha256:
             error_msg = f"SHA-256 mismatch for {dest}. Deleting corrupted file."
@@ -180,8 +182,8 @@ async def download_file(
             progress_bar.update(1)
             return False
 
-    except Exception as e:
-        error_msg = f"Failed to download {url}: {str(e)}"
+    except (httpx.HTTPError, OSError, ValueError) as e:
+        error_msg = f"Failed to download {url}: {e!s}"
         logger.error(error_msg)
         errors.append((url, str(e)))
         progress_bar.update(1)
@@ -192,13 +194,13 @@ async def download_file(
 
 
 async def download_files(
-    urls: Set[Tuple[str, Optional[str]]], target: Path, max_concurrent: int
+    urls: set[tuple[str, str | None]], target: Path, max_concurrent: int
 ):
     """Download files with a limit on concurrent downloads using httpx."""
     async with httpx.AsyncClient(follow_redirects=True) as client:
         progress_bar = tqdm(total=len(urls), desc="Downloading", unit="file")
         sem = asyncio.Semaphore(max_concurrent)
-        errors: List[Tuple[str, str]] = []  # To collect errors
+        errors: list[tuple[str, str]] = []  # To collect errors
         success_count = 0  # Track number of successful downloads
 
         async def sem_download(url, sha256):
@@ -284,7 +286,7 @@ def main():
         print(
             f"Example usage: `UV_PYTHON_INSTALL_MIRROR='file://{target.absolute()}' uv python install 3.13`"
         )
-    except Exception as e:
+    except (httpx.HTTPError, OSError, ValueError) as e:
         logger.error(f"Error during download: {e}")
 
 

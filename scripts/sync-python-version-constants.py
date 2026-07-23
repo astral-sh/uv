@@ -65,11 +65,11 @@ def main() -> None:
 
     # Use stable if available, otherwise prerelease
     latest_versions: dict[str, str] = {}
-    for minor in stable_versions:
-        latest_versions[minor] = stable_versions[minor]
-    for minor in prerelease_versions:
+    for minor, version in stable_versions.items():
+        latest_versions[minor] = version
+    for minor, version in prerelease_versions.items():
         if minor not in latest_versions:
-            latest_versions[minor] = prerelease_versions[minor]
+            latest_versions[minor] = version
 
     # Update the constants in uv-test/src/lib.rs
     lib_path = ROOT / "crates" / "uv-test" / "src" / "lib.rs"
