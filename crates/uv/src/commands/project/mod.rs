@@ -146,7 +146,7 @@ pub(crate) enum ProjectError {
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 
     #[error(
-        "The lockfile at `{0}` is not canonically formatted at line {1}, but `{2}` was provided."
+        "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."
     )]
     LockFormat(PathBuf, usize, LockCheckSource),
 
