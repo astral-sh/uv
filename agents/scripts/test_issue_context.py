@@ -139,7 +139,7 @@ class IssueContextTests(unittest.TestCase):
         for line in lines[run_index + 1 :]:
             if line.startswith("        ") and not line.startswith("          "):
                 break
-            script.append(line[10:] if line.startswith("          ") else line)
+            script.append(line.removeprefix("          "))
 
         return subprocess.run(
             ["bash", "-e", "-o", "pipefail", "-c", "".join(script)],
