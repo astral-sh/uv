@@ -169,7 +169,8 @@ async def download_file(
     try:
         async with client.stream("GET", url) as response:
             response.raise_for_status()
-            with open(dest, "wb") as f:  # noqa: ASYNC230
+            # ruff: ignore[ASYNC230]
+            with open(dest, "wb") as f:
                 async for chunk in response.aiter_bytes():
                     f.write(chunk)
 
