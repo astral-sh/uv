@@ -217,6 +217,12 @@ $ uv add flask
 $ uv run -- flask run -p 3000
 ```
 
+!!! note
+
+    This example assumes a Flask application is defined in the project (for example, an `app.py`).
+    See the [`uv-flask-example`](https://github.com/astral-sh/uv-flask-example) repository for a
+    complete example.
+
 Or, to run a script:
 
 ```python title="example.py"
