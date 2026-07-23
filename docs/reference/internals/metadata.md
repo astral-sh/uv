@@ -168,7 +168,7 @@ Here is a human-readable annotated example:
   },
   // The directory the uv.lock can be found in
   "workspace_root": "/workspace",
-  // Information about the environment, currently only available with `--sync`
+  // Information about the environment, available when an environment exists or `--sync` is used
   "environment": {
     // The absolute path to the environment root
     "root": "/workspace/.venv",

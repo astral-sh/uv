@@ -785,6 +785,23 @@ impl ScriptInterpreter {
         cache_env
     }
 
+    /// Discover an existing script environment without selecting or downloading an interpreter.
+    pub(crate) fn discover_existing(
+        script: Pep723ItemRef<'_>,
+        active: Option<bool>,
+        cache: &Cache,
+    ) -> Option<PythonEnvironment> {
+        let root = Self::root(script, active, cache);
+        match PythonEnvironment::from_root(&root, cache) {
+            Ok(environment) => Some(environment),
+            Err(uv_python::Error::MissingEnvironment(_)) => None,
+            Err(err) => {
+                warn!("Ignoring existing script environment: {err}");
+                None
+            }
+        }
+    }
+
     /// Discover the interpreter to use for the current [`Pep723Item`].
     pub(crate) async fn discover(
         script: Pep723ItemRef<'_>,
@@ -808,34 +825,29 @@ impl ScriptInterpreter {
             requires_python,
         } = ScriptPython::from_request(python_request, workspace, script, config_discovery).await?;
 
-        let root = Self::root(script, active, cache);
-        match PythonEnvironment::from_root(&root, cache) {
-            Ok(venv) => {
-                match check_environment_compatibility(
-                    &venv,
-                    EnvironmentKind::Script,
-                    python_request.as_ref(),
-                    python_preference,
-                    requires_python
-                        .as_ref()
-                        .map(|(requires_python, _)| requires_python),
-                    cache,
-                ) {
-                    Ok(()) => return Ok(Self::Environment(venv)),
-                    Err(err) if keep_incompatible => {
-                        warn_user!(
-                            "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
-                            root.user_display().cyan(),
-                        );
-                        return Ok(Self::Environment(venv));
-                    }
-                    Err(err) => {
-                        debug!("{err}");
-                    }
+        if let Some(environment) = Self::discover_existing(script, active, cache) {
+            match check_environment_compatibility(
+                &environment,
+                EnvironmentKind::Script,
+                python_request.as_ref(),
+                python_preference,
+                requires_python
+                    .as_ref()
+                    .map(|(requires_python, _)| requires_python),
+                cache,
+            ) {
+                Ok(()) => return Ok(Self::Environment(environment)),
+                Err(err) if keep_incompatible => {
+                    warn_user!(
+                        "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
+                        environment.root().user_display().cyan(),
+                    );
+                    return Ok(Self::Environment(environment));
+                }
+                Err(err) => {
+                    debug!("{err}");
                 }
             }
-            Err(uv_python::Error::MissingEnvironment(_)) => {}
-            Err(err) => warn!("Ignoring existing script environment: {err}"),
         }
 
         let reporter = PythonDownloadReporter::single(printer);
@@ -1006,13 +1018,9 @@ fn check_environment_compatibility(
     Ok(())
 }
 
-/// Discover a compatible project environment at `root`.
-fn discover_project_environment(
+/// Discover an existing project environment at `root` without validating its compatibility.
+fn existing_project_environment(
     root: &Path,
-    python_request: Option<&PythonRequest>,
-    python_preference: PythonPreference,
-    requires_python: Option<&RequiresPython>,
-    keep_incompatible: bool,
     centralized: bool,
     cache: &Cache,
 ) -> Result<Option<PythonEnvironment>, ProjectError> {
@@ -1068,6 +1076,23 @@ fn discover_project_environment(
             return Ok(None);
         }
         Err(err) => return Err(err.into()),
+    };
+
+    Ok(Some(environment))
+}
+
+/// Discover a compatible project environment at `root`.
+fn discover_project_environment(
+    root: &Path,
+    python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
+    requires_python: Option<&RequiresPython>,
+    keep_incompatible: bool,
+    centralized: bool,
+    cache: &Cache,
+) -> Result<Option<PythonEnvironment>, ProjectError> {
+    let Some(environment) = existing_project_environment(root, centralized, cache)? else {
+        return Ok(None);
     };
 
     match check_environment_compatibility(
@@ -1313,6 +1338,28 @@ pub(crate) enum ProjectInterpreter {
 }
 
 impl ProjectInterpreter {
+    /// Discover an existing project environment without selecting or downloading an interpreter.
+    pub(crate) fn discover_existing(
+        workspace: &Workspace,
+        active: Option<bool>,
+        cache: &Cache,
+    ) -> Result<Option<PythonEnvironment>, ProjectError> {
+        let selection = workspace.environment_selection(active);
+        let root = selection
+            .explicit_path()
+            .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf);
+        let root = read_environment_path_file(&root).unwrap_or(root);
+        let centralized = centralized_environments_enabled(&selection, cache)
+            || is_centralized_environment_reference(&root, cache);
+        let root = if centralized {
+            fs_err::canonicalize(&root).unwrap_or(root)
+        } else {
+            root
+        };
+
+        existing_project_environment(&root, centralized, cache)
+    }
+
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
         workspace: &Workspace,
