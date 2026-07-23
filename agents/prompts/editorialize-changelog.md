@@ -6,10 +6,11 @@ and do not use the network. Compare the new section with several preceding relea
 established section names, ordering, tone, and Markdown style. Inspect the included local changes
 when a generated title is not enough to classify or describe an entry accurately.
 
-In any GitHub-facing output, write issue and pull request references as bare, fully qualified URLs,
-such as https://github.com/astral-sh/uv/issues/123 or https://github.com/astral-sh/uv/pull/123. Do
-not use repository shorthand, Markdown link syntax, or backticks around references; GitHub renders
-the URLs as links. Preserve the established formatting of references in `CHANGELOG.md`.
+In any GitHub-facing output, write issue and pull request references in the canonical
+owner/repository#number form, such as astral-sh/uv#123 or astral-sh/uv-dev#123. This preserves
+cross-repository closing keywords and lets GitHub render the references as links. Do not use bare
+numbers, repository-name shorthand, Markdown link syntax, or backticks around references. Preserve
+the established formatting of references in `CHANGELOG.md`.
 
 Apply these rules:
 
