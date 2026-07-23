@@ -3264,23 +3264,8 @@ pub struct VenvArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-index`). This prevents
-    /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
-    /// same name to an alternate index.
-    #[arg(long, value_enum, env = EnvVars::UV_INDEX_STRATEGY)]
-    pub index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
-    pub keyring_provider: Option<KeyringProviderType>,
+    #[command(flatten)]
+    pub registry_client: RegistryClientArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -6252,33 +6237,8 @@ pub struct ToolUpgradeArgs {
     #[command(flatten)]
     pub reinstall: ReinstallArgs,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    pub index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    pub keyring_provider: Option<KeyringProviderType>,
+    #[command(flatten)]
+    pub registry_client: RegistryClientArgs,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -7265,6 +7225,39 @@ pub struct IndexArgs {
     pub no_index: bool,
 }
 
+/// Arguments that configure the package registry client.
+#[derive(Args)]
+#[group(skip)]
+pub struct RegistryClientArgs {
+    /// The strategy to use when resolving against multiple index URLs.
+    ///
+    /// By default, uv will stop at the first index on which a given package is available, and limit
+    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
+    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
+    /// to an alternate index.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_INDEX_STRATEGY,
+        help_heading = "Index options"
+    )]
+    pub index_strategy: Option<IndexStrategy>,
+
+    /// Attempt to use `keyring` for authentication for index URLs.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
+    /// the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+        help_heading = "Index options"
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
 #[derive(Args)]
 pub struct RefreshArgs {
     /// Refresh all cached data.
@@ -7384,33 +7377,8 @@ pub struct InstallerArgs {
     #[command(flatten)]
     reinstall: ReinstallArgs,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    keyring_provider: Option<KeyringProviderType>,
+    #[command(flatten)]
+    registry_client: RegistryClientArgs,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -7582,33 +7550,8 @@ pub struct ResolverArgs {
     #[arg(long, help_heading = "Resolver options")]
     upgrade_group: Vec<GroupName>,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    keyring_provider: Option<KeyringProviderType>,
+    #[command(flatten)]
+    registry_client: RegistryClientArgs,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -7807,33 +7750,8 @@ pub struct ResolverInstallerArgs {
     #[command(flatten)]
     pub reinstall: ReinstallArgs,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    pub index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    pub keyring_provider: Option<KeyringProviderType>,
+    #[command(flatten)]
+    pub registry_client: RegistryClientArgs,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -8036,33 +7954,8 @@ pub struct FetchArgs {
     #[command(flatten)]
     index_args: IndexArgs,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    keyring_provider: Option<KeyringProviderType>,
+    #[command(flatten)]
+    registry_client: RegistryClientArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///

@@ -10,8 +10,8 @@ use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, Resolv
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
-    BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ReinstallArgs,
-    ResolverArgs, ResolverInstallerArgs,
+    BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, RegistryClientArgs,
+    ReinstallArgs, ResolverArgs, ResolverInstallerArgs,
 };
 
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
@@ -253,8 +253,11 @@ impl From<ResolverArgs> for PipOptions {
             no_upgrade,
             upgrade_package,
             upgrade_group,
-            index_strategy,
-            keyring_provider,
+            registry_client:
+                RegistryClientArgs {
+                    index_strategy,
+                    keyring_provider,
+                },
             resolution,
             prerelease,
             pre,
@@ -326,8 +329,11 @@ impl From<InstallerArgs> for PipOptions {
                     no_reinstall,
                     reinstall_package,
                 },
-            index_strategy,
-            keyring_provider,
+            registry_client:
+                RegistryClientArgs {
+                    index_strategy,
+                    keyring_provider,
+                },
             config_setting,
             config_settings_package,
             no_build_isolation,
@@ -383,8 +389,11 @@ impl From<ResolverInstallerArgs> for PipOptions {
                     no_reinstall,
                     reinstall_package,
                 },
-            index_strategy,
-            keyring_provider,
+            registry_client:
+                RegistryClientArgs {
+                    index_strategy,
+                    keyring_provider,
+                },
             resolution,
             prerelease,
             pre,
@@ -455,8 +464,11 @@ impl From<FetchArgs> for PipOptions {
     fn from(args: FetchArgs) -> Self {
         let FetchArgs {
             index_args,
-            index_strategy,
-            keyring_provider,
+            registry_client:
+                RegistryClientArgs {
+                    index_strategy,
+                    keyring_provider,
+                },
             exclude_newer,
         } = args;
 
@@ -512,8 +524,11 @@ pub fn resolver_options(
         no_upgrade,
         upgrade_package,
         upgrade_group,
-        index_strategy,
-        keyring_provider,
+        registry_client:
+            RegistryClientArgs {
+                index_strategy,
+                keyring_provider,
+            },
         resolution,
         prerelease,
         pre,
@@ -645,8 +660,11 @@ pub fn resolver_installer_options_with_indexes(
                 no_reinstall,
                 reinstall_package,
             },
-        index_strategy,
-        keyring_provider,
+        registry_client:
+            RegistryClientArgs {
+                index_strategy,
+                keyring_provider,
+            },
         resolution,
         prerelease,
         pre,

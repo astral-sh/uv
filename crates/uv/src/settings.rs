@@ -25,7 +25,7 @@ use uv_cli::{
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, CheckArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
-    ResolverInstallerArgs, ToolUpgradeArgs,
+    RegistryClientArgs, ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
         Flag, FlagSource, check_conflicts, flag, indexes_from_args, resolve_flag,
         resolve_flag_pair, resolver_installer_options, resolver_installer_options_with_indexes,
@@ -1172,8 +1172,7 @@ impl ToolUpgradeSettings {
             index_args,
             all,
             reinstall,
-            index_strategy,
-            keyring_provider,
+            registry_client,
             resolution,
             prerelease,
             pre,
@@ -1208,8 +1207,7 @@ impl ToolUpgradeSettings {
             upgrade_package,
             upgrade_group,
             reinstall,
-            index_strategy,
-            keyring_provider,
+            registry_client,
             resolution,
             prerelease,
             pre,
@@ -4193,8 +4191,11 @@ impl VenvSettings {
             relocatable,
             no_relocatable,
             index_args,
-            index_strategy,
-            keyring_provider,
+            registry_client:
+                RegistryClientArgs {
+                    index_strategy,
+                    keyring_provider,
+                },
             exclude_newer,
             no_project,
             link_mode,
