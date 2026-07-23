@@ -323,54 +323,6 @@ pub enum PreviewFeature {
     LockfileFormatCheck = 1 << 40,
 }
 
-impl PreviewFeature {
-    /// Returns the string representation of a single preview feature flag.
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::PythonInstallDefault => "python-install-default",
-            Self::JsonOutput => "json-output",
-            Self::Pylock => "pylock",
-            Self::AddBounds => "add-bounds",
-            Self::PackageConflicts => "package-conflicts",
-            Self::ExtraBuildDependencies => "extra-build-dependencies",
-            Self::DetectModuleConflicts => "detect-module-conflicts",
-            Self::FormatCommand => "format-command",
-            Self::NativeAuth => "native-auth",
-            Self::S3Endpoint => "s3-endpoint",
-            Self::CacheSize => "cache-size",
-            Self::InitProjectFlag => "init-project-flag",
-            Self::WorkspaceMetadata => "workspace-metadata",
-            Self::WorkspaceDir => "workspace-dir",
-            Self::WorkspaceList => "workspace-list",
-            Self::SbomExport => "sbom-export",
-            Self::AuthHelper => "auth-helper",
-            Self::DirectPublish => "direct-publish",
-            Self::TargetWorkspaceDiscovery => "target-workspace-discovery",
-            Self::MetadataJson => "metadata-json",
-            Self::GcsEndpoint => "gcs-endpoint",
-            Self::AdjustUlimit => "adjust-ulimit",
-            Self::SpecialCondaEnvNames => "special-conda-env-names",
-            Self::RelocatableEnvsDefault => "relocatable-envs-default",
-            Self::PublishRequireNormalized => "publish-require-normalized",
-            Self::AuditCommand => "audit-command",
-            Self::ProjectDirectoryMustExist => "project-directory-must-exist",
-            Self::IndexExcludeNewer => "index-exclude-newer",
-            Self::AzureEndpoint => "azure-endpoint",
-            Self::TomlBackwardsCompatibility => "toml-backwards-compatibility",
-            Self::MalwareCheck => "malware-check",
-            Self::VenvSafeClear => "venv-safe-clear",
-            Self::CheckCommand => "check-command",
-            Self::PackagedInit => "packaged-init",
-            Self::CentralizedProjectEnvs => "centralized-project-envs",
-            Self::ToolInstallLocks => "tool-install-locks",
-            Self::WorkspaceListScripts => "workspace-list-scripts",
-            Self::NoDistutilsPatch => "no-distutils-patch",
-            Self::IndexHashAlgorithm => "index-hash-algorithm",
-            Self::LockfileFormatCheck => "lockfile-format-check",
-        }
-    }
-}
-
 impl Display for PreviewFeature {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
