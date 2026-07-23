@@ -504,18 +504,13 @@ mod tests {
 
     #[test]
     fn test_preview_feature_from_str() {
-        assert_eq!(
-            PreviewFeature::from_str("python-install-default").unwrap(),
-            PreviewFeature::PythonInstallDefault
-        );
-        assert_eq!(
-            PreviewFeature::from_str("format").unwrap(),
-            PreviewFeature::FormatCommand
-        );
-        assert_eq!(
-            PreviewFeature::from_str("format-command").unwrap(),
-            PreviewFeature::FormatCommand
-        );
+        for &(feature, _, aliases) in PreviewFeature::metadata() {
+            assert_eq!(PreviewFeature::from_str(feature.as_str()).unwrap(), feature);
+
+            for &alias in aliases {
+                assert_eq!(PreviewFeature::from_str(alias).unwrap(), feature);
+            }
+        }
     }
 
     #[test]
@@ -568,106 +563,6 @@ mod tests {
         // Test multiple features
         let preview = Preview::new(&[PreviewFeature::JsonOutput, PreviewFeature::Pylock]);
         assert_eq!(preview.to_string(), "json-output,pylock");
-    }
-
-    #[test]
-    fn test_preview_feature_as_str() {
-        assert_eq!(
-            PreviewFeature::PythonInstallDefault.as_str(),
-            "python-install-default"
-        );
-        assert_eq!(PreviewFeature::JsonOutput.as_str(), "json-output");
-        assert_eq!(PreviewFeature::Pylock.as_str(), "pylock");
-        assert_eq!(
-            PreviewFeature::ToolInstallLocks.as_str(),
-            "tool-install-locks"
-        );
-        assert_eq!(PreviewFeature::AddBounds.as_str(), "add-bounds");
-        assert_eq!(
-            PreviewFeature::PackageConflicts.as_str(),
-            "package-conflicts"
-        );
-        assert_eq!(
-            PreviewFeature::ExtraBuildDependencies.as_str(),
-            "extra-build-dependencies"
-        );
-        assert_eq!(
-            PreviewFeature::DetectModuleConflicts.as_str(),
-            "detect-module-conflicts"
-        );
-        assert_eq!(PreviewFeature::FormatCommand.as_str(), "format-command");
-        assert_eq!(PreviewFeature::NativeAuth.as_str(), "native-auth");
-        assert_eq!(PreviewFeature::S3Endpoint.as_str(), "s3-endpoint");
-        assert_eq!(PreviewFeature::CacheSize.as_str(), "cache-size");
-        assert_eq!(
-            PreviewFeature::InitProjectFlag.as_str(),
-            "init-project-flag"
-        );
-        assert_eq!(
-            PreviewFeature::WorkspaceMetadata.as_str(),
-            "workspace-metadata"
-        );
-        assert_eq!(PreviewFeature::WorkspaceDir.as_str(), "workspace-dir");
-        assert_eq!(PreviewFeature::WorkspaceList.as_str(), "workspace-list");
-        assert_eq!(PreviewFeature::SbomExport.as_str(), "sbom-export");
-        assert_eq!(PreviewFeature::AuthHelper.as_str(), "auth-helper");
-        assert_eq!(PreviewFeature::DirectPublish.as_str(), "direct-publish");
-        assert_eq!(
-            PreviewFeature::TargetWorkspaceDiscovery.as_str(),
-            "target-workspace-discovery"
-        );
-        assert_eq!(PreviewFeature::MetadataJson.as_str(), "metadata-json");
-        assert_eq!(PreviewFeature::GcsEndpoint.as_str(), "gcs-endpoint");
-        assert_eq!(PreviewFeature::AdjustUlimit.as_str(), "adjust-ulimit");
-        assert_eq!(
-            PreviewFeature::SpecialCondaEnvNames.as_str(),
-            "special-conda-env-names"
-        );
-        assert_eq!(
-            PreviewFeature::RelocatableEnvsDefault.as_str(),
-            "relocatable-envs-default"
-        );
-        assert_eq!(
-            PreviewFeature::PublishRequireNormalized.as_str(),
-            "publish-require-normalized"
-        );
-        assert_eq!(
-            PreviewFeature::ProjectDirectoryMustExist.as_str(),
-            "project-directory-must-exist"
-        );
-        assert_eq!(
-            PreviewFeature::IndexExcludeNewer.as_str(),
-            "index-exclude-newer"
-        );
-        assert_eq!(PreviewFeature::AzureEndpoint.as_str(), "azure-endpoint");
-        assert_eq!(
-            PreviewFeature::TomlBackwardsCompatibility.as_str(),
-            "toml-backwards-compatibility"
-        );
-        assert_eq!(PreviewFeature::MalwareCheck.as_str(), "malware-check");
-        assert_eq!(PreviewFeature::VenvSafeClear.as_str(), "venv-safe-clear");
-        assert_eq!(PreviewFeature::AuditCommand.as_str(), "audit-command");
-        assert_eq!(PreviewFeature::CheckCommand.as_str(), "check-command");
-        assert_eq!(
-            PreviewFeature::CentralizedProjectEnvs.as_str(),
-            "centralized-project-envs"
-        );
-        assert_eq!(
-            PreviewFeature::WorkspaceListScripts.as_str(),
-            "workspace-list-scripts"
-        );
-        assert_eq!(
-            PreviewFeature::NoDistutilsPatch.as_str(),
-            "no-distutils-patch"
-        );
-        assert_eq!(
-            PreviewFeature::IndexHashAlgorithm.as_str(),
-            "index-hash-algorithm"
-        );
-        assert_eq!(
-            PreviewFeature::LockfileFormatCheck.as_str(),
-            "lockfile-format-check"
-        );
     }
 
     #[test]
