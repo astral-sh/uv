@@ -31567,9 +31567,55 @@ fn lock_script() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+    error: The lockfile at `script.py.lock` needs to be updated, but `--locked` was provided.
 
-    hint: To update the lockfile, run `uv lock`.
+    hint: To update the lockfile, run `uv lock --script script.py`.
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_script_locked_hint_with_spaces() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let scripts = context.temp_dir.child("scripts");
+    scripts.create_dir_all()?;
+    let script = scripts.child("script with spaces.py");
+    script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+       "#
+    })?;
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("scripts/script with spaces.py")
+        .assert()
+        .success();
+
+    script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        # ///
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("scripts/script with spaces.py").arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved in [TIME]
+    error: The lockfile at `script with spaces.py.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock --script 'scripts/script with spaces.py'`.
     ");
 
     Ok(())
