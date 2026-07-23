@@ -1027,19 +1027,7 @@ fn discover_project_environment(
                         inner.kind.to_string(),
                     ));
                 }
-                InvalidEnvironmentKind::MissingExecutable(_) => {
-                    if !centralized
-                        && fs_err::read_dir(root).is_ok_and(|mut dir| dir.next().is_some())
-                    {
-                        if !root.join("pyvenv.cfg").try_exists().unwrap_or_default() {
-                            return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                root.to_path_buf(),
-                                "it is not a valid Python environment (no Python executable was found)"
-                                    .to_string(),
-                            ));
-                        }
-                    }
-                }
+                InvalidEnvironmentKind::MissingExecutable(_) => {}
                 InvalidEnvironmentKind::Empty => {}
             }
             return Ok(None);
