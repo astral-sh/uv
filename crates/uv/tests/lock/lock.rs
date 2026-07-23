@@ -34818,10 +34818,7 @@ fn lock_refresh_deindents_lockfile() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
@@ -34837,11 +34834,14 @@ fn lock_refresh_deindents_lockfile() -> Result<()> {
         .child("uv.lock")
         .write_str(&dedented_lock)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--refresh").arg("--dry-run"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--preview-features").arg("lockfile-format-check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` has non-canonical formatting at line 13, but `--check` was provided.
+    ");
 
+    uv_snapshot!(context.filters(), context.lock().arg("--refresh").arg("--dry-run"), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Lockfile changes detected
@@ -34849,10 +34849,7 @@ fn lock_refresh_deindents_lockfile() -> Result<()> {
     assert_eq!(context.read("uv.lock"), dedented_lock);
 
     uv_snapshot!(context.filters(), context.lock().arg("--refresh"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
@@ -34885,11 +34882,14 @@ fn lock_refresh_deindents_lockfile() -> Result<()> {
     ]
     "#);
 
-    uv_snapshot!(context.filters(), context.lock().arg("--refresh").arg("--dry-run"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--preview-features").arg("lockfile-format-check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
 
+    uv_snapshot!(context.filters(), context.lock().arg("--refresh").arg("--dry-run"), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     No lockfile changes detected

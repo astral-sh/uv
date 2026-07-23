@@ -406,13 +406,19 @@ impl<'env> LockOperation<'env> {
                 {
                     return Err(ProjectError::LockFormat(lock_filename, line, lock_source));
                 }
+
+                let check_lockfile_contents = if self.check_lockfile_contents {
+                    Some(existing_contents)
+                } else {
+                    None
+                };
+
                 // Perform the lock operation, but don't write the lockfile to disk.
                 let result = Box::pin(do_lock(
                     target,
                     interpreter,
                     Some(existing),
-                    Some(existing_contents),
-                    self.check_lockfile_contents,
+                    check_lockfile_contents,
                     self.constraints,
                     self.refresh,
                     self.settings,
@@ -454,13 +460,18 @@ impl<'env> LockOperation<'env> {
                     Err(err) => return Err(err),
                 };
 
+                let check_lockfile_contents = if self.check_lockfile_contents {
+                    existing_contents
+                } else {
+                    None
+                };
+
                 // Perform the lock operation.
                 let result = Box::pin(do_lock(
                     target,
                     interpreter,
                     existing,
-                    existing_contents,
-                    self.check_lockfile_contents,
+                    check_lockfile_contents,
                     self.constraints,
                     self.refresh,
                     self.settings,
@@ -493,8 +504,7 @@ async fn do_lock(
     target: LockTarget<'_>,
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
-    existing_lock_contents: Option<String>,
-    check_lockfile_contents: bool,
+    check_lockfile_contents: Option<String>,
     external: Vec<NameRequirementSpecification>,
     refresh: Option<&Refresh>,
     settings: &ResolverSettings,
@@ -1095,9 +1105,8 @@ async fn do_lock(
             .with_conflicts(conflicts)
             .with_required_environments(lock_required_environments.into_markers());
 
-            let unchanged = if check_lockfile_contents {
-                previous.is_some()
-                    && existing_lock_contents.as_deref() == Some(lock.to_toml()?.as_str())
+            let unchanged = if let Some(check_lockfile_contents) = check_lockfile_contents {
+                previous.is_some() && check_lockfile_contents == lock.to_toml()?.as_str()
             } else {
                 previous.as_ref().is_some_and(|previous| *previous == lock)
             };
