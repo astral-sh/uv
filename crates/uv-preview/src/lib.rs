@@ -241,6 +241,7 @@ pub enum PreviewFeature {
     /// environment.
     DetectModuleConflicts = 1 << 7,
     /// Allows using `uv format`.
+    #[preview(alias = "format")]
     Format = 1 << 8,
     /// Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
     NativeAuth = 1 << 9,
@@ -280,6 +281,7 @@ pub enum PreviewFeature {
     /// not normalized.
     PublishRequireNormalized = 1 << 25,
     /// Allows using `uv audit`.
+    #[preview(alias = "audit")]
     Audit = 1 << 26,
     /// Rejects an invalid `--project` path instead of warning and continuing. Except for `uv init`,
     /// the path must already exist as a directory or point to a `pyproject.toml` file. This feature
@@ -299,6 +301,7 @@ pub enum PreviewFeature {
     /// unless `--force` is provided.
     VenvSafeClear = 1 << 32,
     /// Allows using `uv check`.
+    #[preview(alias = "check")]
     Check = 1 << 33,
     /// Makes `uv init` create a packaged application with a `src/` layout, build system, and script
     /// entry point by default.
@@ -382,49 +385,11 @@ impl FromStr for PreviewFeature {
     type Err = PreviewFeatureParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "python-install-default" => Self::PythonInstallDefault,
-            "json-output" => Self::JsonOutput,
-            "pylock" => Self::Pylock,
-            "add-bounds" => Self::AddBounds,
-            "package-conflicts" => Self::PackageConflicts,
-            "extra-build-dependencies" => Self::ExtraBuildDependencies,
-            "detect-module-conflicts" => Self::DetectModuleConflicts,
-            "format" | "format-command" => Self::Format,
-            "native-auth" => Self::NativeAuth,
-            "s3-endpoint" => Self::S3Endpoint,
-            "gcs-endpoint" => Self::GcsEndpoint,
-            "cache-size" => Self::CacheSize,
-            "init-project-flag" => Self::InitProjectFlag,
-            "workspace-metadata" => Self::WorkspaceMetadata,
-            "workspace-dir" => Self::WorkspaceDir,
-            "workspace-list" => Self::WorkspaceList,
-            "sbom-export" => Self::SbomExport,
-            "auth-helper" => Self::AuthHelper,
-            "direct-publish" => Self::DirectPublish,
-            "target-workspace-discovery" => Self::TargetWorkspaceDiscovery,
-            "metadata-json" => Self::MetadataJson,
-            "adjust-ulimit" => Self::AdjustUlimit,
-            "special-conda-env-names" => Self::SpecialCondaEnvNames,
-            "relocatable-envs-default" => Self::RelocatableEnvsDefault,
-            "publish-require-normalized" => Self::PublishRequireNormalized,
-            "audit" | "audit-command" => Self::Audit,
-            "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
-            "index-exclude-newer" => Self::IndexExcludeNewer,
-            "azure-endpoint" => Self::AzureEndpoint,
-            "toml-backwards-compatibility" => Self::TomlBackwardsCompatibility,
-            "malware-check" => Self::MalwareCheck,
-            "venv-safe-clear" => Self::VenvSafeClear,
-            "check" | "check-command" => Self::Check,
-            "packaged-init" => Self::PackagedInit,
-            "centralized-project-envs" => Self::CentralizedProjectEnvs,
-            "tool-install-locks" => Self::ToolInstallLocks,
-            "workspace-list-scripts" => Self::WorkspaceListScripts,
-            "no-distutils-patch" => Self::NoDistutilsPatch,
-            "index-hash-algorithm" => Self::IndexHashAlgorithm,
-            "lockfile-format-check" => Self::LockfileFormatCheck,
-            _ => return Err(PreviewFeatureParseError),
-        })
+        Self::metadata()
+            .iter()
+            .find(|(feature, _, aliases)| feature.as_str() == s || aliases.contains(&s))
+            .map(|(feature, _, _)| *feature)
+            .ok_or(PreviewFeatureParseError)
     }
 }
 
@@ -587,8 +552,18 @@ mod tests {
 
     #[test]
     fn test_preview_feature_from_str() {
-        let features = PreviewFeature::from_str("python-install-default").unwrap();
-        assert_eq!(features, PreviewFeature::PythonInstallDefault);
+        assert_eq!(
+            PreviewFeature::from_str("python-install-default").unwrap(),
+            PreviewFeature::PythonInstallDefault
+        );
+        assert_eq!(
+            PreviewFeature::from_str("format").unwrap(),
+            PreviewFeature::Format
+        );
+        assert_eq!(
+            PreviewFeature::from_str("format-command").unwrap(),
+            PreviewFeature::Format
+        );
     }
 
     #[test]
