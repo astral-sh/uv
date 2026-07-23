@@ -14,6 +14,10 @@ on:
 
 permissions: {}
 
+env:
+  UV_REPOSITORY_ID: "699532645"
+  UV_DEV_REPOSITORY_ID: "1302176231"
+
 concurrency:
   group: promote-pull-request-${{ inputs.pull_request }}
   cancel-in-progress: false
@@ -84,7 +88,8 @@ jobs:
           if ! jq --exit-status \
             --arg base_ref "$BASE_REF" \
             --arg head_ref "$HEAD_REF" \
-            '.state == "open" and (.draft | not) and .base.ref == $base_ref and .head.ref == $head_ref and .base.repo.id == 1302176231 and .head.repo.id == 1302176231' \
+            --argjson repository_id "$UV_DEV_REPOSITORY_ID" \
+            '.state == "open" and (.draft | not) and .base.ref == $base_ref and .head.ref == $head_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
             <<< "$source_pull_request" > /dev/null; then
             echo "The uv-dev pull request is no longer ready on the expected branch; refusing to promote it." >&2
             exit 1
@@ -103,7 +108,9 @@ jobs:
               repos/astral-sh/uv/pulls \
               --raw-field state=all \
               --raw-field head="astral-sh:$HEAD_REF" |
-              jq --compact-output '[.[] | select(.head.repo.id == 699532645)]'
+              jq --compact-output \
+                --argjson repository_id "$UV_REPOSITORY_ID" \
+                '[.[] | select(.head.repo.id == $repository_id)]'
           )
           existing_count=$(jq 'length' <<< "$existing_pull_requests")
           if (( existing_count > 1 )); then
@@ -116,7 +123,8 @@ jobs:
               --arg base_ref "$BASE_REF" \
               --arg head_ref "$HEAD_REF" \
               --arg head_sha "$source_head" \
-              '.[0].state == "open" and .[0].base.ref == $base_ref and .[0].head.ref == $head_ref and .[0].head.sha == $head_sha and .[0].base.repo.id == 699532645 and .[0].head.repo.id == 699532645' \
+              --argjson repository_id "$UV_REPOSITORY_ID" \
+              '.[0].state == "open" and .[0].base.ref == $base_ref and .[0].head.ref == $head_ref and .[0].head.sha == $head_sha and .[0].base.repo.id == $repository_id and .[0].head.repo.id == $repository_id' \
               <<< "$existing_pull_requests" > /dev/null; then
               echo "An upstream pull request already exists with a different state, base, or head; refusing to promote." >&2
               exit 1
