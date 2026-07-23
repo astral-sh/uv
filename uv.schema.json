@@ -1687,7 +1687,7 @@
           "type": ["boolean", "null"]
         },
         "system": {
-          "description": "Install packages into the system Python environment.\n\nBy default, uv installs into the virtual environment in the current working directory or\nany parent directory. The `--system` option instructs uv to instead use the first Python\nfound in the system `PATH`.\n\nWARNING: `--system` is intended for use in continuous integration (CI) environments and\nshould be used with caution, as it can modify the system Python installation.",
+          "description": "Install packages into the system Python environment.\n\nBy default, uv installs into the virtual environment in the current working directory or\nany parent directory. The `--system` option instructs uv to instead use the first Python\nfound in the system `PATH`.\n\nThis option only applies to the `uv pip` interface. For other commands (like `uv sync`\nor `uv run`), see the `UV_PROJECT_ENVIRONMENT` environment variable.\n\nWARNING: `--system` is intended for use in continuous integration (CI) environments and\nshould be used with caution, as it can modify the system Python installation.",
           "type": ["boolean", "null"]
         },
         "target": {
