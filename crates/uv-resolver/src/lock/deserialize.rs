@@ -10,6 +10,7 @@ use std::fmt;
 use serde::Deserialize;
 use serde::de::{self, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor};
 use serde::forward_to_deserialize_any;
+use smallvec::SmallVec;
 
 use super::Lock;
 
@@ -56,11 +57,16 @@ impl de::Error for Error {
 struct Cursor<'de> {
     input: &'de str,
     offset: usize,
+    container_depth: u8,
 }
 
 impl<'de> Cursor<'de> {
     fn new(input: &'de str) -> Self {
-        Self { input, offset: 0 }
+        Self {
+            input,
+            offset: 0,
+            container_depth: 0,
+        }
     }
 
     fn peek(&self) -> Option<u8> {
@@ -75,8 +81,14 @@ impl<'de> Cursor<'de> {
     }
 
     fn skip_whitespace(&mut self) {
-        while matches!(self.peek(), Some(b' ' | b'\t' | b'\r' | b'\n')) {
-            self.offset += 1;
+        loop {
+            match self.peek() {
+                Some(b' ' | b'\t' | b'\n') => self.offset += 1,
+                Some(b'\r') if self.input.as_bytes().get(self.offset + 1) == Some(&b'\n') => {
+                    self.offset += 2;
+                }
+                _ => break,
+            }
         }
     }
 
@@ -109,15 +121,19 @@ impl<'de> Cursor<'de> {
             return Err(self.unsupported("unknown or noncanonical table header"));
         }
         self.offset += expected.len();
-        if self.peek() == Some(b'\r') {
-            self.offset += 1;
+
+        match self.peek() {
+            Some(b'\r') => {
+                self.offset += 1;
+                self.consume(b'\n')
+            }
+            Some(b'\n') => {
+                self.offset += 1;
+                Ok(())
+            }
+            None => Ok(()),
+            _ => Err(self.unsupported("expected the end of a table header")),
         }
-        if self.peek() == Some(b'\n') {
-            self.offset += 1;
-        } else if self.peek().is_some() {
-            return Err(self.unsupported("expected the end of a table header"));
-        }
-        Ok(())
     }
 
     fn assignment_key(&mut self) -> Result<&'de str, Error> {
@@ -140,6 +156,19 @@ impl<'de> Cursor<'de> {
 
     fn finish_assignment(&mut self) -> Result<(), Error> {
         self.skip_horizontal_whitespace();
+
+        if self.peek() == Some(b'#') {
+            self.offset += 1;
+
+            while let Some(byte) = self.peek() {
+                match byte {
+                    b'\n' | b'\r' => break,
+                    b'\t' | b' '..=b'~' | 0x80..=0xff => self.offset += 1,
+                    _ => return Err(self.unsupported("invalid character in a TOML comment")),
+                }
+            }
+        }
+
         match self.peek() {
             Some(b'\r') => {
                 self.offset += 1;
@@ -179,18 +208,47 @@ impl<'de> Cursor<'de> {
                 Some(b'\\') => {
                     escaped = true;
                     self.offset += 1;
-                    if self.peek().is_none() {
-                        return Err(self.unsupported("unterminated string escape"));
+                    match self.peek() {
+                        Some(b'"' | b'\\' | b'b' | b'f' | b'n' | b'r' | b't') => {
+                            self.offset += 1;
+                        }
+                        Some(b'u') => {
+                            self.offset += 1;
+                            self.unicode_escape()?;
+                        }
+                        Some(_) => {
+                            return Err(self.unsupported("string uses an unsupported TOML escape"));
+                        }
+                        None => return Err(self.unsupported("unterminated string escape")),
                     }
-                    self.offset += 1;
                 }
-                Some(0..=0x1f) => {
+                Some(0..=0x1f | 0x7f) => {
                     return Err(self.unsupported("control character in a basic string"));
                 }
                 Some(_) => self.offset += 1,
                 None => return Err(self.unsupported("unterminated basic string")),
             }
         }
+    }
+
+    fn unicode_escape(&mut self) -> Result<(), Error> {
+        let Some(digits) = self
+            .input
+            .get(self.offset..)
+            .and_then(|remaining| remaining.get(..4))
+        else {
+            return Err(self.unsupported("invalid Unicode escape"));
+        };
+
+        let Ok(code_point) = u32::from_str_radix(digits, 16) else {
+            return Err(self.unsupported("invalid Unicode escape"));
+        };
+        if char::from_u32(code_point).is_none() {
+            return Err(self.unsupported("invalid Unicode escape"));
+        }
+
+        self.offset += digits.len();
+        Ok(())
     }
 
     fn number(&mut self) -> Result<&'de str, Error> {
@@ -204,7 +262,54 @@ impl<'de> Cursor<'de> {
         if self.offset == start {
             return Err(self.unsupported("expected a canonical number"));
         }
-        Ok(&self.input[start..self.offset])
+
+        let number = &self.input[start..self.offset];
+        let mut digits = number.bytes().peekable();
+
+        if digits.peek().copied() == Some(b'-') {
+            digits.next();
+        }
+
+        match digits.next() {
+            Some(b'0') if matches!(digits.peek().copied(), Some(b'0'..=b'9')) => {
+                return Err(self.unsupported("decimal number has a leading zero"));
+            }
+            Some(b'0'..=b'9') => {}
+            _ => return Err(self.unsupported("expected a canonical number")),
+        }
+
+        while matches!(digits.peek().copied(), Some(b'0'..=b'9')) {
+            digits.next();
+        }
+
+        if digits.peek().copied() == Some(b'.') {
+            digits.next();
+            if !matches!(digits.peek().copied(), Some(b'0'..=b'9')) {
+                return Err(self.unsupported("expected a digit after the decimal point"));
+            }
+            while matches!(digits.peek().copied(), Some(b'0'..=b'9')) {
+                digits.next();
+            }
+        }
+
+        if matches!(digits.peek().copied(), Some(b'e' | b'E')) {
+            digits.next();
+            if matches!(digits.peek().copied(), Some(b'+' | b'-')) {
+                digits.next();
+            }
+            if !matches!(digits.peek().copied(), Some(b'0'..=b'9')) {
+                return Err(self.unsupported("expected a digit in the exponent"));
+            }
+            while matches!(digits.peek().copied(), Some(b'0'..=b'9')) {
+                digits.next();
+            }
+        }
+
+        if digits.next().is_some() {
+            return Err(self.unsupported("invalid canonical number"));
+        }
+
+        Ok(number)
     }
 
     fn literal(&mut self, literal: &'static str) -> Result<(), Error> {
@@ -214,6 +319,20 @@ impl<'de> Cursor<'de> {
         } else {
             Err(self.unsupported("expected a canonical boolean"))
         }
+    }
+
+    fn with_container<T>(
+        &mut self,
+        deserialize: impl FnOnce(&mut Self) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        if self.container_depth == 80 {
+            return Err(self.unsupported("maximum TOML nesting depth exceeded"));
+        }
+
+        self.container_depth += 1;
+        let result = deserialize(self);
+        self.container_depth -= 1;
+        result
     }
 }
 
@@ -229,6 +348,7 @@ impl<'de> de::Deserializer<'de> for DocumentDeserializer<'_, 'de> {
             cursor: self.cursor,
             kind: MapKind::Root,
             pending: None,
+            seen_keys: SmallVec::new(),
         })
     }
 
@@ -271,6 +391,7 @@ struct DocumentMapAccess<'a, 'de> {
     cursor: &'a mut Cursor<'de>,
     kind: MapKind,
     pending: Option<Pending>,
+    seen_keys: SmallVec<[&'de str; 8]>,
 }
 
 impl<'de> MapAccess<'de> for DocumentMapAccess<'_, 'de> {
@@ -289,6 +410,7 @@ impl<'de> MapAccess<'de> for DocumentMapAccess<'_, 'de> {
                 .unsupported("comments require the TOML fallback")),
             Some(_) => {
                 let key = self.cursor.assignment_key()?;
+                self.track_key(key)?;
                 self.pending = Some(Pending::Value);
                 seed.deserialize(de::value::BorrowedStrDeserializer::new(key))
                     .map(Some)
@@ -322,6 +444,14 @@ impl<'de> MapAccess<'de> for DocumentMapAccess<'_, 'de> {
 }
 
 impl<'de> DocumentMapAccess<'_, 'de> {
+    fn track_key(&mut self, key: &'de str) -> Result<(), Error> {
+        if self.seen_keys.contains(&key) {
+            return Err(self.cursor.unsupported("duplicate TOML key"));
+        }
+        self.seen_keys.push(key);
+        Ok(())
+    }
+
     fn section_key<K: DeserializeSeed<'de>>(&mut self, seed: K) -> Result<Option<K::Value>, Error> {
         let header = self.cursor.header()?;
         let child = match (self.kind, header) {
@@ -382,6 +512,7 @@ impl<'de> DocumentMapAccess<'_, 'de> {
         let Some((key, pending, expected)) = child else {
             return Ok(None);
         };
+        self.track_key(key)?;
         self.cursor.consume_header(expected)?;
         self.pending = Some(pending);
         seed.deserialize(de::value::BorrowedStrDeserializer::new(key))
@@ -402,6 +533,7 @@ impl<'de> de::Deserializer<'de> for SectionDeserializer<'_, 'de> {
             cursor: self.cursor,
             kind: self.kind,
             pending: None,
+            seen_keys: SmallVec::new(),
         })
     }
 
@@ -490,20 +622,21 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer<'_, 'de> {
                 Cow::Borrowed(value) => visitor.visit_borrowed_str(value),
                 Cow::Owned(value) => visitor.visit_string(value),
             },
-            Some(b'{') => {
-                self.cursor.consume(b'{')?;
+            Some(b'{') => self.cursor.with_container(|cursor| {
+                cursor.consume(b'{')?;
                 visitor.visit_map(InlineMapAccess {
-                    cursor: self.cursor,
+                    cursor,
                     started: false,
+                    seen_keys: SmallVec::new(),
                 })
-            }
-            Some(b'[') => {
-                self.cursor.consume(b'[')?;
+            }),
+            Some(b'[') => self.cursor.with_container(|cursor| {
+                cursor.consume(b'[')?;
                 visitor.visit_seq(InlineSequenceAccess {
-                    cursor: self.cursor,
+                    cursor,
                     started: false,
                 })
-            }
+            }),
             Some(b't') => {
                 self.cursor.literal("true")?;
                 visitor.visit_bool(true)
@@ -560,12 +693,10 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer<'_, 'de> {
                 }
                 Cow::Owned(value) => visitor.visit_enum(de::value::StringDeserializer::new(value)),
             },
-            Some(b'{') => {
-                self.cursor.consume(b'{')?;
-                visitor.visit_enum(InlineEnumAccess {
-                    cursor: self.cursor,
-                })
-            }
+            Some(b'{') => self.cursor.with_container(|cursor| {
+                cursor.consume(b'{')?;
+                visitor.visit_enum(InlineEnumAccess { cursor })
+            }),
             _ => Err(self.cursor.unsupported("expected a canonical enum value")),
         }
     }
@@ -579,6 +710,7 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer<'_, 'de> {
 struct InlineMapAccess<'a, 'de> {
     cursor: &'a mut Cursor<'de>,
     started: bool,
+    seen_keys: SmallVec<[&'de str; 8]>,
 }
 
 impl<'de> MapAccess<'de> for InlineMapAccess<'_, 'de> {
@@ -602,6 +734,10 @@ impl<'de> MapAccess<'de> for InlineMapAccess<'_, 'de> {
         }
 
         let key = self.cursor.assignment_key()?;
+        if self.seen_keys.contains(&key) {
+            return Err(self.cursor.unsupported("duplicate TOML key"));
+        }
+        self.seen_keys.push(key);
         self.started = true;
         seed.deserialize(de::value::BorrowedStrDeserializer::new(key))
             .map(Some)
@@ -728,6 +864,9 @@ impl<'de> VariantAccess<'de> for InlineVariantAccess<'_, 'de> {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
+    use fs_err as fs;
     use serde::Deserialize;
 
     use super::{Cursor, Lock, ValueDeserializer, from_str};
@@ -765,6 +904,116 @@ dependencies = [
         let actual = from_str(input).expect("valid canonical repository lock");
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn ecosystem_locks_match_toml() {
+        macro_rules! ecosystem_lock {
+            ($project:literal) => {
+                (
+                    $project,
+                    include_str!(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/../uv/tests/it/snapshots/it__ecosystem__",
+                        $project,
+                        "-lock-file.snap"
+                    )),
+                )
+            };
+        }
+
+        for (project, snapshot) in [
+            ecosystem_lock!("black"),
+            ecosystem_lock!("github-wikidata-bot"),
+            ecosystem_lock!("home-assistant-core"),
+            ecosystem_lock!("jupyterlab"),
+            ecosystem_lock!("packse"),
+            ecosystem_lock!("pandas"),
+            ecosystem_lock!("poetry"),
+            ecosystem_lock!("pyx-external"),
+            ecosystem_lock!("saleor"),
+            ecosystem_lock!("semantic-kernel"),
+            ecosystem_lock!("transformers"),
+            ecosystem_lock!("warehouse"),
+        ] {
+            let (_, input) = snapshot
+                .split_once("\n---\n")
+                .expect("ecosystem lock snapshot has an insta header");
+            let input = input.replace("[X]", "0");
+            let expected = toml::from_str::<Lock>(&input);
+            assert!(
+                expected.is_ok(),
+                "the normalized {project} ecosystem lock is valid TOML"
+            );
+            let expected = expected.expect("validated ecosystem lock");
+
+            let actual = from_str(&input);
+            assert!(
+                actual.is_ok(),
+                "the canonical {project} ecosystem lock uses the fast path"
+            );
+            let actual = actual.expect("validated canonical ecosystem lock");
+
+            assert_eq!(
+                actual, expected,
+                "the direct lock parser changed the {project} ecosystem lock"
+            );
+        }
+
+        let Some(corpus) = env::var_os("UV_LOCK_ECOSYSTEM_CORPUS") else {
+            return;
+        };
+
+        let mut direct = 0;
+        let mut fallback = 0;
+
+        for entry in fs::read_dir(corpus).expect("ecosystem lock corpus exists") {
+            let entry = entry.expect("ecosystem corpus entry is readable");
+            let path = entry.path().join("uv.lock");
+            if !path.is_file() {
+                continue;
+            }
+
+            let project = entry.file_name();
+            let project = project.to_string_lossy();
+            let input = fs::read_to_string(path).expect("ecosystem lock is readable");
+            let expected = toml::from_str::<Lock>(&input);
+            assert!(
+                expected.is_ok(),
+                "the {project} ecosystem lock is valid TOML"
+            );
+            let expected = expected.expect("validated ecosystem lock");
+
+            if let Ok(actual) = from_str(&input) {
+                assert_eq!(
+                    actual, expected,
+                    "the direct lock parser changed the {project} ecosystem lock"
+                );
+                direct += 1;
+            } else {
+                let actual =
+                    Lock::from_toml(&input).expect("ecosystem lock uses the TOML fallback");
+                assert_eq!(
+                    actual, expected,
+                    "the TOML fallback changed the {project} ecosystem lock"
+                );
+                fallback += 1;
+            }
+        }
+
+        assert_ne!(
+            direct + fallback,
+            0,
+            "the ecosystem corpus contains no lockfiles"
+        );
+
+        if let Some(summary) = env::var_os("UV_LOCK_ECOSYSTEM_SUMMARY") {
+            fs::write(
+                summary,
+                format!("direct={direct}\nfallback={fallback}\nmismatches=0\n"),
+            )
+            .expect("ecosystem summary is writable");
+        }
     }
 
     #[test]
@@ -867,6 +1116,292 @@ dev = [{ name = "dependency", specifier = ">=1" }]
         let actual = Lock::from_toml(&input).expect_err("duplicate source remains invalid");
 
         assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn leading_zero_integers_preserve_toml_error() {
+        for (valid, invalid) in [
+            ("version = 1", "version = 01"),
+            ("revision = 3", "revision = 03"),
+        ] {
+            let input = CANONICAL_LOCK.replace(valid, invalid);
+            let expected = toml::from_str::<Lock>(&input)
+                .expect_err("TOML rejects decimal integers with leading zeros");
+
+            assert!(
+                from_str(&input).is_err(),
+                "the direct parser must reject `{invalid}`"
+            );
+
+            let actual = Lock::from_toml(&input)
+                .expect_err("the lock reader rejects decimal integers with leading zeros");
+
+            assert_eq!(actual.to_string(), expected.to_string());
+        }
+    }
+
+    #[test]
+    fn invalid_numeric_syntax_preserves_toml_error() {
+        for number in ["-01", "00.1", "1.", "1.e2", "1e", "1e+"] {
+            let input = CANONICAL_LOCK.replace(
+                "requires-python = \">=3.12\"",
+                &format!("requires-python = \">=3.12\"\nunknown-number = {number}"),
+            );
+            let expected = toml::from_str::<Lock>(&input)
+                .expect_err("TOML rejects invalid decimal number syntax");
+
+            assert!(
+                from_str(&input).is_err(),
+                "the direct parser must reject `{number}`"
+            );
+
+            let actual = Lock::from_toml(&input)
+                .expect_err("the lock reader rejects invalid decimal number syntax");
+
+            assert_eq!(actual.to_string(), expected.to_string());
+        }
+    }
+
+    #[test]
+    fn json_only_string_escapes_preserve_toml_error() {
+        for source in [
+            r"https:\/\/example.com\/simple",
+            r"https://example.com/\uD83D\uDE00",
+        ] {
+            let input = CANONICAL_LOCK.replace("https://example.com/simple", source);
+            let expected =
+                toml::from_str::<Lock>(&input).expect_err("TOML rejects JSON-only string escapes");
+
+            assert!(
+                from_str(&input).is_err(),
+                "the direct parser must reject JSON-only escapes in `{source}`"
+            );
+
+            let actual = Lock::from_toml(&input)
+                .expect_err("the lock reader rejects JSON-only string escapes");
+
+            assert_eq!(actual.to_string(), expected.to_string());
+        }
+    }
+
+    #[test]
+    fn unicode_escapes_match_toml() {
+        let input = CANONICAL_LOCK.replace(
+            "https://example.com/simple",
+            r"https://example.com/\u0073imple",
+        );
+        let expected: Lock = toml::from_str(&input).expect("valid TOML Unicode escape");
+        let actual = from_str(&input).expect("valid canonical Unicode escape");
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn toml_only_string_escapes_fall_back() {
+        for source in [
+            r"https://example.com/simpl\x65",
+            r"https://example.com/simpl\U00000065",
+        ] {
+            let input = CANONICAL_LOCK.replace("https://example.com/simple", source);
+            let expected: Lock = toml::from_str(&input).expect("valid TOML-only string escape");
+
+            assert!(
+                from_str(&input).is_err(),
+                "TOML-only escapes in `{source}` must use the fallback"
+            );
+            assert_eq!(
+                Lock::from_toml(&input).expect("valid TOML-only string escape falls back"),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_relative_exclude_newer_uses_fast_path() {
+        let input = CANONICAL_LOCK.replace(
+            "requires-python = \">=3.12\"\n",
+            concat!(
+                "requires-python = \">=3.12\"\n\n",
+                "[options]\n",
+                "exclude-newer = \"0001-01-01T00:00:00Z\" ",
+                "# This has no effect and is included for backwards compatibility ",
+                "when using relative exclude-newer values.\n",
+                "exclude-newer-span = \"P3W\"\n",
+            ),
+        );
+        let expected: Lock =
+            toml::from_str(&input).expect("canonical relative exclude-newer lock is valid TOML");
+        let actual =
+            from_str(&input).expect("canonical relative exclude-newer lock uses the direct parser");
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn inline_comments_match_toml() {
+        let input = CANONICAL_LOCK
+            .replace("version = 1\n", "version = 1 # root comment\n")
+            .replace(
+                "source = { virtual = \".\" }\n",
+                "source = { virtual = \".\" } # package comment\n",
+            );
+        let expected: Lock = toml::from_str(&input).expect("inline comments are valid TOML");
+        let actual = from_str(&input).expect("inline comments use the direct parser");
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn invalid_comment_characters_preserve_toml_error() {
+        for character in ['\u{0}', '\u{7}', '\u{b}', '\u{7f}'] {
+            let input = CANONICAL_LOCK.replace(
+                "version = 1\n",
+                &format!("version = 1 # invalid{character}comment\n"),
+            );
+            let expected = toml::from_str::<Lock>(&input)
+                .expect_err("TOML rejects control characters in comments");
+
+            assert!(
+                from_str(&input).is_err(),
+                "the direct parser must reject U+{:04X} in a comment",
+                u32::from(character)
+            );
+
+            let actual = Lock::from_toml(&input)
+                .expect_err("the lock reader rejects control characters in comments");
+
+            assert_eq!(actual.to_string(), expected.to_string());
+        }
+    }
+
+    #[test]
+    fn bare_carriage_returns_preserve_toml_error() {
+        for input in [
+            format!("\r{CANONICAL_LOCK}"),
+            format!("{CANONICAL_LOCK}\r"),
+            CANONICAL_LOCK.replace("revision = 3\n", "revision = 3\n\r"),
+            CANONICAL_LOCK.replace("dependencies = [\n", "dependencies = [\r"),
+            format!("{CANONICAL_LOCK}[options]\r"),
+        ] {
+            let expected = toml::from_str::<Lock>(&input)
+                .expect_err("TOML rejects standalone carriage returns");
+
+            assert!(
+                from_str(&input).is_err(),
+                "the direct parser must reject standalone carriage returns"
+            );
+
+            let actual = Lock::from_toml(&input)
+                .expect_err("the lock reader rejects standalone carriage returns");
+
+            assert_eq!(actual.to_string(), expected.to_string());
+        }
+    }
+
+    #[test]
+    fn unescaped_delete_preserves_toml_error() {
+        let input = CANONICAL_LOCK.replace(
+            "requires-python = \">=3.12\"\n",
+            "requires-python = \">=3.12\"\nunknown = \"invalid\u{7f}string\"\n",
+        );
+        let expected =
+            toml::from_str::<Lock>(&input).expect_err("TOML rejects unescaped ASCII DELETE");
+
+        assert!(
+            from_str(&input).is_err(),
+            "the direct parser must reject unescaped ASCII DELETE"
+        );
+
+        let actual =
+            Lock::from_toml(&input).expect_err("the lock reader rejects unescaped ASCII DELETE");
+
+        assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn duplicate_keys_preserve_toml_error() {
+        for (kind, input) in [
+            (
+                "unknown root keys",
+                CANONICAL_LOCK.replace(
+                    "requires-python = \">=3.12\"\n",
+                    "requires-python = \">=3.12\"\nunknown = 1\nunknown = 2\n",
+                ),
+            ),
+            (
+                "unknown inline-table keys",
+                CANONICAL_LOCK.replace(
+                    "requires-python = \">=3.12\"\n",
+                    "requires-python = \">=3.12\"\nunknown = { nested = 1, nested = 2 }\n",
+                ),
+            ),
+            (
+                "dependency-group keys",
+                format!("{CANONICAL_LOCK}\n[package.dev-dependencies]\ndev = []\ndev = []\n"),
+            ),
+            (
+                "section headers",
+                format!(
+                    "{CANONICAL_LOCK}\n[package.metadata]\nunknown = 1\n\n[package.metadata]\nunknown = 2\n"
+                ),
+            ),
+        ] {
+            let expected = toml::from_str::<Lock>(&input).expect_err("TOML rejects duplicate keys");
+
+            assert!(
+                from_str(&input).is_err(),
+                "the direct parser must reject duplicate {kind}"
+            );
+
+            let actual =
+                Lock::from_toml(&input).expect_err("the lock reader rejects duplicate keys");
+
+            assert_eq!(actual.to_string(), expected.to_string());
+        }
+    }
+
+    #[test]
+    fn excessive_container_depth_preserves_toml_error() {
+        for nested in [
+            format!("{}0{}", "[".repeat(81), "]".repeat(81)),
+            (0..81).fold(String::from("0"), |nested, index| {
+                if index % 2 == 0 {
+                    format!("[{nested}]")
+                } else {
+                    format!("{{ nested = {nested} }}")
+                }
+            }),
+        ] {
+            let input = CANONICAL_LOCK.replace(
+                "requires-python = \">=3.12\"\n",
+                &format!("requires-python = \">=3.12\"\nunknown = {nested}\n"),
+            );
+            let expected =
+                toml::from_str::<Lock>(&input).expect_err("TOML rejects excessive nesting");
+
+            assert!(
+                from_str(&input).is_err(),
+                "the direct parser must reject excessive inline-container nesting"
+            );
+
+            let actual = Lock::from_toml(&input)
+                .expect_err("the lock reader rejects excessive inline-container nesting");
+
+            assert_eq!(actual.to_string(), expected.to_string());
+        }
+    }
+
+    #[test]
+    fn supported_container_depth_matches_toml() {
+        let nested = format!("{}0{}", "[".repeat(80), "]".repeat(80));
+        let input = CANONICAL_LOCK.replace(
+            "requires-python = \">=3.12\"\n",
+            &format!("requires-python = \">=3.12\"\nunknown = {nested}\n"),
+        );
+        let expected: Lock = toml::from_str(&input).expect("TOML supports 80 nested containers");
+        let actual = from_str(&input).expect("the direct parser supports 80 nested containers");
+
+        assert_eq!(actual, expected);
     }
 
     #[test]
