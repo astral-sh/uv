@@ -146,6 +146,11 @@ pub(crate) enum ProjectError {
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 
     #[error(
+        "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."
+    )]
+    LockFormat(PathBuf, usize, LockCheckSource),
+
+    #[error(
         "Unable to find lockfile at `{1}`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
     )]
     MissingLockfile(MissingLockfileSource, PathBuf),

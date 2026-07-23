@@ -1,6 +1,8 @@
 use itertools::Either;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use toml_parser::Source;
+use toml_parser::lexer::TokenKind;
 use tracing::info_span;
 
 use uv_auth::CredentialsCache;
@@ -294,6 +296,16 @@ impl<'lock> LockTarget<'lock> {
     ///
     /// Returns `Ok(None)` if the lockfile does not exist.
     pub(crate) async fn read(self) -> Result<Option<Lock>, ProjectError> {
+        Ok(self
+            .read_with_contents()
+            .await?
+            .map(|(lock, _contents)| lock))
+    }
+
+    /// Read the lockfile and return the exact contents that were parsed.
+    ///
+    /// Returns `Ok(None)` if the lockfile does not exist.
+    pub(crate) async fn read_with_contents(self) -> Result<Option<(Lock, String)>, ProjectError> {
         let lock_path = self.lock_path();
         match fs_err::tokio::read_to_string(&lock_path).await {
             Ok(encoded) => {
@@ -308,7 +320,7 @@ impl<'lock> LockTarget<'lock> {
                                 lock.version(),
                             ));
                         }
-                        Ok(Some(lock))
+                        Ok(Some((lock, encoded)))
                     }
                     Err(err) => {
                         // If we failed to parse the lockfile, determine whether it's a supported
@@ -444,5 +456,188 @@ impl<'lock> LockTarget<'lock> {
                 Ok(lowered)
             }
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Bracket {
+    Header,
+    Array { multiline: bool },
+}
+
+/// Return the first line that does not match the whitespace emitted by the lock writer.
+///
+/// This only checks the serialization shape. TOML validity and lockfile semantics are checked by
+/// the regular lockfile deserializer.
+pub(crate) fn find_lock_format_error(source: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut brackets = Vec::with_capacity(4);
+    let mut previous = None;
+    let mut line_start = true;
+    let mut indented = false;
+    let mut line = 1;
+
+    for token in Source::new(source).lex() {
+        let kind = token.kind();
+        let start = token.span().start();
+        let end = token.span().end();
+
+        if kind == TokenKind::Eof {
+            return (!source.ends_with('\n')).then_some(line);
+        }
+
+        if kind == TokenKind::Whitespace {
+            if line_start {
+                if &bytes[start..end] != b"    " {
+                    return Some(line);
+                }
+                indented = true;
+            } else if &bytes[start..end] != b" " {
+                return Some(line);
+            }
+            previous = Some(kind);
+            continue;
+        }
+
+        if kind == TokenKind::Newline {
+            if end - start != 1 || start > 0 && matches!(bytes[start - 1], b' ' | b'\t') {
+                return Some(line);
+            }
+            line_start = true;
+            indented = false;
+            previous = Some(kind);
+            line += 1;
+            continue;
+        }
+
+        let at_line_start = line_start;
+        if line_start {
+            let multiline_array = brackets
+                .iter()
+                .any(|bracket| matches!(bracket, Bracket::Array { multiline: true }));
+            if multiline_array && kind != TokenKind::RightSquareBracket && !indented
+                || (!multiline_array || kind == TokenKind::RightSquareBracket) && indented
+            {
+                return Some(line);
+            }
+            line_start = false;
+        }
+
+        match kind {
+            TokenKind::Equals => {
+                if start == 0
+                    || end >= bytes.len()
+                    || bytes[start - 1] != b' '
+                    || bytes[end] != b' '
+                {
+                    return Some(line);
+                }
+            }
+            TokenKind::Comma => {
+                if start > 0 && matches!(bytes[start - 1], b' ' | b'\t')
+                    || end < bytes.len() && !matches!(bytes[end], b' ' | b'\n')
+                {
+                    return Some(line);
+                }
+            }
+            TokenKind::LeftCurlyBracket => {
+                if end < bytes.len() && !matches!(bytes[end], b' ' | b'}') {
+                    return Some(line);
+                }
+            }
+            TokenKind::RightCurlyBracket => {
+                if start > 0 && !matches!(bytes[start - 1], b' ' | b'{') {
+                    return Some(line);
+                }
+            }
+            TokenKind::LeftSquareBracket => {
+                if end < bytes.len() && matches!(bytes[end], b' ' | b'\t') {
+                    return Some(line);
+                }
+                let header = at_line_start
+                    || previous == Some(TokenKind::LeftSquareBracket)
+                        && brackets.last() == Some(&Bracket::Header);
+                brackets.push(if header {
+                    Bracket::Header
+                } else {
+                    Bracket::Array {
+                        multiline: bytes.get(end) == Some(&b'\n'),
+                    }
+                });
+            }
+            TokenKind::RightSquareBracket => {
+                if start > 0 && matches!(bytes[start - 1], b' ' | b'\t') || brackets.pop().is_none()
+                {
+                    return Some(line);
+                }
+            }
+            TokenKind::LiteralString | TokenKind::MlLiteralString | TokenKind::MlBasicString => {
+                return Some(line);
+            }
+            _ => {}
+        }
+
+        previous = Some(kind);
+    }
+
+    Some(line)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_lock_format_error;
+
+    const FORMATTED: &str = r#"version = 1
+revision = 3
+requires-python = ">=3.12"
+resolution-markers = [
+    "sys_platform == 'darwin'",
+    "sys_platform != 'darwin'",
+]
+conflicts = [[
+    { package = "project", extra = "cpu" },
+    { package = "project", extra = "gpu" },
+], [
+    { package = "project", group = "test" },
+    { package = "project", group = "lint" },
+]]
+
+[options]
+exclude-newer = "2024-03-25T00:00:00Z" # Generated comment
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "sniffio", marker = "python_full_version < '3.13'" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "sniffio" }]
+"#;
+
+    #[test]
+    fn accepts_lock_format() {
+        assert_eq!(find_lock_format_error(FORMATTED), None);
+    }
+
+    #[test]
+    fn rejects_lock_format_changes() {
+        for unformatted in [
+            FORMATTED.replacen("\n    {", "\n{", 1),
+            FORMATTED.replacen("\n    \"", "\n\"", 1),
+            FORMATTED.replacen(" = ", "  = ", 1),
+            FORMATTED.replacen(" = ", "=", 1),
+            FORMATTED.replacen(", ", ",  ", 1),
+            FORMATTED.replacen("{ ", "{", 1),
+            FORMATTED.replacen(" }", "}", 1),
+            FORMATTED.replacen('\n', "\r\n", 1),
+            FORMATTED.replacen('\n', " \n", 1),
+        ] {
+            assert!(find_lock_format_error(&unformatted).is_some());
+        }
+
+        assert!(find_lock_format_error(FORMATTED.trim_end_matches('\n')).is_some());
     }
 }
