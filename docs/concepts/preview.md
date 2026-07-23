@@ -68,38 +68,7 @@ displayed that the feature is in preview. The preview feature can be enabled to 
 
 The following preview features are available:
 
-- `add-bounds`: Allows configuring the
-  [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
-- `centralized-project-envs`: Stores
-  [project virtual environments](./projects/layout.md#centralized-project-environments) in the uv
-  cache.
-- `no-distutils-patch`: Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils
-  configuration monkeypatch in virtual environments for Python 3.10 and later.
-- `json-output`: Allows `--output-format json` for various uv commands.
-- `package-conflicts`: Allows defining workspace conflicts at the package level.
-- `pylock`: Allows installing from `pylock.toml` files.
-- `python-install-default`: Allows
-  [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
-- `format`: Allows using `uv format`.
-- `index-exclude-newer`: Allows setting `exclude-newer` on configured package indexes.
-- `index-hash-algorithm`: Allows requiring a hash algorithm for configured package indexes.
-- `lockfile-format-check`: Rejects non-canonical lockfile formatting when using `--locked` or
-  `--check`.
-- `azure-endpoint`: Allows signing requests to Azure Blob Storage endpoints with Azure credentials.
-- `native-auth`: Enables storage of credentials in a
-  [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
-- `auth-helper`: Allows using `uv auth helper` as a credential helper for external tools.
-- `workspace-metadata`: Allows using `uv workspace metadata`.
-- `workspace-dir`: Allows using `uv workspace dir`.
-- `workspace-list`: Allows using `uv workspace list`.
-- `target-workspace-discovery`: Uses the directory containing a local `uv run` target, rather than
-  the current working directory, as the starting point for project and workspace discovery. This
-  feature takes effect before configuration is loaded.
-- `project-directory-must-exist`: Rejects an invalid `--project` path instead of warning and
-  continuing. Except for `uv init`, the path must already exist as a directory or point to a
-  `pyproject.toml` file. This feature takes effect before configuration is loaded.
-- `malware-check`: Allows `uv sync` and other commands to check for malware using
-  [OSV](https://osv.dev) before installing packages.
+--8<-- "docs/reference/.preview-features.md"
 
 ## Disabling preview features
 

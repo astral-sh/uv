@@ -9,6 +9,7 @@ use std::{
 
 use enumflags2::{BitFlags, bitflags};
 use thiserror::Error;
+use uv_macros::PreviewMetadata;
 use uv_warnings::warn_user_once;
 
 /// Indicates if the preview state has been finalized yet or not.
@@ -222,47 +223,100 @@ pub mod test {
 
 #[bitflags]
 #[repr(u64)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PreviewMetadata)]
 pub enum PreviewFeature {
+    /// Allows [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
     PythonInstallDefault = 1 << 0,
+    /// Allows `--output-format json` for various uv commands.
     JsonOutput = 1 << 2,
+    /// Allows installing from `pylock.toml` files.
     Pylock = 1 << 3,
+    /// Allows configuring the [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
     AddBounds = 1 << 4,
+    /// Allows defining workspace conflicts at the package level.
     PackageConflicts = 1 << 5,
+    /// Allows specifying additional dependencies for package builds.
     ExtraBuildDependencies = 1 << 6,
+    /// Warns when multiple packages would install conflicting Python modules into the same
+    /// environment.
     DetectModuleConflicts = 1 << 7,
+    /// Allows using `uv format`.
     Format = 1 << 8,
+    /// Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
     NativeAuth = 1 << 9,
+    /// Allows signing requests to configured S3-compatible endpoints.
     S3Endpoint = 1 << 10,
+    /// Allows using `uv cache size`.
     CacheSize = 1 << 11,
+    /// Rejects the deprecated `--project` option in `uv init`.
     InitProjectFlag = 1 << 12,
+    /// Allows using `uv workspace metadata`.
     WorkspaceMetadata = 1 << 13,
+    /// Allows using `uv workspace dir`.
     WorkspaceDir = 1 << 14,
+    /// Allows using `uv workspace list`.
     WorkspaceList = 1 << 15,
+    /// Allows using `uv export --format=cyclonedx1.5`.
     SbomExport = 1 << 16,
+    /// Allows using `uv auth helper` as a credential helper for external tools.
     AuthHelper = 1 << 17,
+    /// Allows publishing directly to a package index.
     DirectPublish = 1 << 18,
+    /// Uses the directory containing a local `uv run` target, rather than the current working
+    /// directory, as the starting point for project and workspace discovery. This feature takes
+    /// effect before configuration is loaded.
     TargetWorkspaceDiscovery = 1 << 19,
+    /// Includes JSON metadata files in built wheels.
     MetadataJson = 1 << 20,
+    /// Allows signing requests to configured Google Cloud Storage endpoints.
     GcsEndpoint = 1 << 21,
+    /// On Unix, raises the process's soft open-file limit at startup, up to the hard limit.
     AdjustUlimit = 1 << 22,
+    /// Stops treating Conda environments named `base` or `root` as special.
     SpecialCondaEnvNames = 1 << 23,
+    /// Creates relocatable virtual environments by default.
     RelocatableEnvsDefault = 1 << 24,
+    /// Requires normalized distribution filenames when publishing, skipping files whose names are
+    /// not normalized.
     PublishRequireNormalized = 1 << 25,
+    /// Allows using `uv audit`.
     Audit = 1 << 26,
+    /// Rejects an invalid `--project` path instead of warning and continuing. Except for `uv init`,
+    /// the path must already exist as a directory or point to a `pyproject.toml` file. This feature
+    /// takes effect before configuration is loaded.
     ProjectDirectoryMustExist = 1 << 27,
+    /// Allows setting `exclude-newer` on configured package indexes.
     IndexExcludeNewer = 1 << 28,
+    /// Allows signing requests to Azure Blob Storage endpoints with Azure credentials.
     AzureEndpoint = 1 << 29,
+    /// Rewrites `pyproject.toml` as TOML 1.0 when building source distributions, preserving the
+    /// original as `pyproject.toml.orig` to ensure compatibility with older build tools.
     TomlBackwardsCompatibility = 1 << 30,
+    /// Allows `uv sync` and other commands to check for malware using [OSV](https://osv.dev) before
+    /// installing packages.
     MalwareCheck = 1 << 31,
+    /// Prevents `uv venv --clear` from clearing a directory that does not contain a `pyvenv.cfg` file
+    /// unless `--force` is provided.
     VenvSafeClear = 1 << 32,
+    /// Allows using `uv check`.
     Check = 1 << 33,
+    /// Makes `uv init` create a packaged application with a `src/` layout, build system, and script
+    /// entry point by default.
     PackagedInit = 1 << 34,
+    /// Stores [project virtual environments](./projects/layout.md#centralized-project-environments)
+    /// in the uv cache.
     CentralizedProjectEnvs = 1 << 35,
+    /// Stores a `uv.lock` alongside each installed tool and reuses it for reproducible installations
+    /// and upgrades.
     ToolInstallLocks = 1 << 36,
+    /// Allows using `uv workspace list --scripts`.
     WorkspaceListScripts = 1 << 37,
+    /// Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils configuration monkeypatch
+    /// in virtual environments for Python 3.10 and later.
     NoDistutilsPatch = 1 << 38,
+    /// Allows requiring a hash algorithm for configured package indexes.
     IndexHashAlgorithm = 1 << 39,
+    /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
     LockfileFormatCheck = 1 << 40,
 }
 
