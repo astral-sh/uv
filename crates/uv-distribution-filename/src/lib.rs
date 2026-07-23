@@ -16,12 +16,42 @@ mod build_tag;
 mod egg;
 mod expanded_tags;
 mod extension;
+#[cfg(any(
+    all(target_arch = "aarch64", target_endian = "little"),
+    target_arch = "x86",
+    target_arch = "x86_64"
+))]
+mod normalized_package_name_simd;
 mod source_dist;
 mod splitter;
 mod wheel;
 mod wheel_tag;
 
 fn normalized_package_name_matches(actual: &str, expected: &PackageName) -> bool {
+    let expected: &str = expected.as_ref();
+    if actual.len() != expected.len() {
+        return false;
+    }
+
+    #[cfg(any(
+        all(target_arch = "aarch64", target_endian = "little"),
+        target_arch = "x86_64"
+    ))]
+    if actual.len() >= normalized_package_name_simd::MIN_LEN {
+        return normalized_package_name_simd::matches(actual.as_bytes(), expected.as_bytes());
+    }
+
+    #[cfg(target_arch = "x86")]
+    if actual.len() >= normalized_package_name_simd::MIN_LEN
+        && std::arch::is_x86_feature_detected!("sse2")
+    {
+        return normalized_package_name_simd::matches(actual.as_bytes(), expected.as_bytes());
+    }
+
+    normalized_package_name_matches_scalar(actual, expected)
+}
+
+fn normalized_package_name_matches_scalar(actual: &str, expected: &str) -> bool {
     actual
         .bytes()
         .map(|byte| match byte {
@@ -29,7 +59,7 @@ fn normalized_package_name_matches(actual: &str, expected: &PackageName) -> bool
             b'_' | b'.' => b'-',
             _ => byte,
         })
-        .eq(expected.as_ref().bytes())
+        .eq(expected.bytes())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -146,7 +176,10 @@ mod tests {
 
     use uv_normalize::PackageName;
 
-    use crate::{DistFilename, DistFilenameError, WheelFilename};
+    use crate::{
+        DistFilename, DistFilenameError, WheelFilename, normalized_package_name_matches,
+        normalized_package_name_matches_scalar,
+    };
 
     #[test]
     fn wheel_filename_size() {
@@ -200,5 +233,44 @@ mod tests {
         let name = PackageName::from_str("my-package").unwrap();
         let parsed = DistFilename::try_from_filename("my_package-0.1.0-py3-none-any.whl", &name);
         assert!(parsed.is_some(), "expected wheel to parse successfully");
+    }
+
+    #[test]
+    fn normalized_package_name_matches_all_lengths() {
+        for length in 1..=64 {
+            let expected = "a".repeat(length);
+            let package_name = PackageName::from_str(&expected).unwrap();
+            let mut actual = vec![b'a'; length];
+
+            for index in 0..length {
+                for byte in 0..=127 {
+                    actual[index] = byte;
+                    let actual = std::str::from_utf8(&actual).expect("ASCII input should be UTF-8");
+                    assert_eq!(
+                        normalized_package_name_matches(actual, &package_name),
+                        normalized_package_name_matches_scalar(actual, &expected),
+                        "{actual:?}",
+                    );
+                }
+                actual[index] = b'a';
+            }
+        }
+
+        for length in 4..=64 {
+            let mut expected = vec![b'a'; length];
+            let mut actual = vec![b'A'; length];
+            for (offset, index) in (2..length.saturating_sub(1)).step_by(4).enumerate() {
+                expected[index] = b'-';
+                actual[index] = if offset.is_multiple_of(2) { b'_' } else { b'.' };
+            }
+            let expected = std::str::from_utf8(&expected).expect("ASCII input should be UTF-8");
+            let actual = std::str::from_utf8(&actual).expect("ASCII input should be UTF-8");
+            let package_name = PackageName::from_str(expected).unwrap();
+            assert!(normalized_package_name_matches(actual, &package_name));
+        }
+
+        let package_name = PackageName::from_str("a-b").unwrap();
+        assert!(!normalized_package_name_matches("a__b", &package_name));
+        assert!(!normalized_package_name_matches("a-α", &package_name));
     }
 }
