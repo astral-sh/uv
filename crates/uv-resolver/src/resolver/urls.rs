@@ -43,11 +43,22 @@ impl Urls {
         let mut overrides = ForkMap::default();
 
         // Add all direct regular requirements and constraints URL.
-        for requirement in manifest.requirements_no_overrides(env, dependencies) {
+        // Default metadata paths to relative, then let project and workspace sources win.
+        for (requirement, force_relative) in manifest
+            .requirements_no_overrides(env, dependencies)
+            .map(|requirement| (requirement, true))
+            .chain(
+                manifest
+                    .authored_requirements_no_overrides(env, dependencies)
+                    .map(|requirement| (requirement, false)),
+            )
+        {
             let Some(url) = requirement.source.to_verbatim_parsed_url() else {
                 // Registry requirement
                 continue;
             };
+            let prefer_relative = force_relative || url.prefer_relative();
+            let url = url.with_prefer_relative(prefer_relative);
 
             let package_urls = regular.entry(requirement.name.clone()).or_default();
             if let Some(package_url) = package_urls
@@ -60,7 +71,7 @@ impl Urls {
                 if previous_editable {
                     if let VerbatimParsedUrl {
                         parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl { editable, .. }),
-                        verbatim: _,
+                        ..
                     } = package_url
                     {
                         if editable.is_none() {

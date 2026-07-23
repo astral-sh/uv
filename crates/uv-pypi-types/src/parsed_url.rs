@@ -1,4 +1,6 @@
+use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
@@ -40,10 +42,41 @@ pub enum ParsedUrlError {
     MissingExtensionPath(PathBuf, ExtensionError),
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, Eq)]
 pub struct VerbatimParsedUrl {
     pub parsed_url: ParsedUrl,
     pub verbatim: VerbatimUrl,
+    /// Whether to prefer a relative local path when one can be constructed.
+    prefer_relative: bool,
+}
+
+// Path formatting is not part of URL identity. Equivalent local URLs must
+// continue to deduplicate even when they have different output preferences.
+impl PartialEq for VerbatimParsedUrl {
+    fn eq(&self, other: &Self) -> bool {
+        self.parsed_url == other.parsed_url && self.verbatim == other.verbatim
+    }
+}
+
+impl Hash for VerbatimParsedUrl {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.parsed_url.hash(state);
+        self.verbatim.hash(state);
+    }
+}
+
+impl Ord for VerbatimParsedUrl {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.parsed_url
+            .cmp(&other.parsed_url)
+            .then_with(|| self.verbatim.cmp(&other.verbatim))
+    }
+}
+
+impl PartialOrd for VerbatimParsedUrl {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl CacheKey for VerbatimParsedUrl {
@@ -63,9 +96,23 @@ impl VerbatimParsedUrl {
     #[must_use]
     pub fn from_parts(parsed_url: ParsedUrl, verbatim: VerbatimUrl) -> Self {
         Self {
+            prefer_relative: !verbatim.was_given_absolute(),
             parsed_url,
             verbatim,
         }
+    }
+
+    /// Set whether a local path should be made relative when possible.
+    #[must_use]
+    pub fn with_prefer_relative(mut self, prefer_relative: bool) -> Self {
+        self.prefer_relative = prefer_relative;
+        self
+    }
+
+    /// Return whether a local path should be made relative when possible.
+    #[must_use]
+    pub fn prefer_relative(&self) -> bool {
+        self.prefer_relative
     }
 
     /// Returns `true` if the URL is editable.
@@ -155,10 +202,7 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
     }
 
     fn with_given(self, given: impl AsRef<str>) -> Self {
-        Self {
-            verbatim: self.verbatim.with_given(given),
-            ..self
-        }
+        Self::from_parts(self.parsed_url, self.verbatim.with_given(given))
     }
 
     fn given(&self) -> Option<&str> {
@@ -656,10 +700,33 @@ impl From<ParsedGitDirectoryUrl> for DisplaySafeUrl {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
+    use std::cmp::Ordering;
+    use std::collections::HashSet;
 
-    use crate::{DirectUrl, parsed_url::ParsedUrl};
+    use anyhow::Result;
+    use uv_pep508::VerbatimUrl;
+
+    use crate::{DirectUrl, VerbatimParsedUrl, parsed_url::ParsedUrl};
     use uv_redacted::DisplaySafeUrl;
+
+    #[test]
+    fn path_preference_does_not_change_url_identity() -> Result<()> {
+        let install_path = std::env::temp_dir().join("uv-local-source.whl");
+        let verbatim = VerbatimUrl::from_absolute_path(&install_path)?
+            .with_given(install_path.to_string_lossy());
+        let parsed = ParsedUrl::try_from(verbatim.to_url())?;
+        let absolute = VerbatimParsedUrl::from_parts(parsed, verbatim);
+        let relative = absolute.clone().with_prefer_relative(true);
+
+        assert!(!absolute.prefer_relative());
+        assert!(relative.prefer_relative());
+        assert_eq!(absolute, relative);
+        assert_eq!(absolute.cmp(&relative), Ordering::Equal);
+        assert_ne!(format!("{absolute:?}"), format!("{relative:?}"));
+        assert_eq!(HashSet::from([absolute, relative]).len(), 1);
+
+        Ok(())
+    }
 
     #[test]
     fn direct_url_from_url() -> Result<()> {

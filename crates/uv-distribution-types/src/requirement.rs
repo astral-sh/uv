@@ -265,28 +265,38 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
                     url,
                 ))),
                 RequirementSource::Path { source, ext } => {
-                    Some(VersionOrUrl::Url(VerbatimParsedUrl::from_parts(
-                        ParsedUrl::Path(ParsedPathUrl {
-                            url: source.url.to_url(),
-                            install_path: source.install_path,
-                            ext,
-                        }),
-                        source.url,
-                    )))
+                    let prefer_relative = source.prefer_relative();
+                    Some(VersionOrUrl::Url(
+                        VerbatimParsedUrl::from_parts(
+                            ParsedUrl::Path(ParsedPathUrl {
+                                url: source.url.to_url(),
+                                install_path: source.install_path,
+                                ext,
+                            }),
+                            source.url,
+                        )
+                        .with_prefer_relative(prefer_relative),
+                    ))
                 }
                 RequirementSource::Directory {
                     source,
                     editable,
                     r#virtual,
-                } => Some(VersionOrUrl::Url(VerbatimParsedUrl::from_parts(
-                    ParsedUrl::Directory(ParsedDirectoryUrl {
-                        url: source.url.to_url(),
-                        install_path: source.install_path,
-                        editable,
-                        r#virtual,
-                    }),
-                    source.url,
-                ))),
+                } => {
+                    let prefer_relative = source.prefer_relative();
+                    Some(VersionOrUrl::Url(
+                        VerbatimParsedUrl::from_parts(
+                            ParsedUrl::Directory(ParsedDirectoryUrl {
+                                url: source.url.to_url(),
+                                install_path: source.install_path,
+                                editable,
+                                r#virtual,
+                            }),
+                            source.url,
+                        )
+                        .with_prefer_relative(prefer_relative),
+                    ))
+                }
             },
         }
     }
@@ -590,20 +600,27 @@ pub enum RequirementSource {
 }
 
 impl RequirementSource {
-    /// Construct a [`RequirementSource`] from a parsed URL and its original spelling.
+    /// Construct a [`RequirementSource`] while preserving a parsed URL's path policy.
     pub(crate) fn from_parsed_url(url: VerbatimParsedUrl) -> Self {
+        let prefer_relative = url.prefer_relative();
         match url.parsed_url {
             ParsedUrl::Path(local_file) => {
-                let source =
-                    LocalSourcePath::new_preserving_absolute(local_file.install_path, url.verbatim);
+                let source = if prefer_relative {
+                    LocalSourcePath::new_preferring_relative(local_file.install_path, url.verbatim)
+                } else {
+                    LocalSourcePath::new_preserving_absolute(local_file.install_path, url.verbatim)
+                };
                 Self::Path {
                     source,
                     ext: local_file.ext,
                 }
             }
             ParsedUrl::Directory(directory) => {
-                let source =
-                    LocalSourcePath::new_preserving_absolute(directory.install_path, url.verbatim);
+                let source = if prefer_relative {
+                    LocalSourcePath::new_preferring_relative(directory.install_path, url.verbatim)
+                } else {
+                    LocalSourcePath::new_preserving_absolute(directory.install_path, url.verbatim)
+                };
                 Self::Directory {
                     source,
                     editable: directory.editable,
@@ -647,27 +664,33 @@ impl RequirementSource {
                 )),
                 url.clone(),
             )),
-            Self::Path { source, ext } => Some(VerbatimParsedUrl::from_parts(
-                ParsedUrl::Path(ParsedPathUrl::from_source(
-                    source.install_path.clone(),
-                    *ext,
-                    source.url.to_url(),
-                )),
-                source.url.clone(),
-            )),
+            Self::Path { source, ext } => Some(
+                VerbatimParsedUrl::from_parts(
+                    ParsedUrl::Path(ParsedPathUrl::from_source(
+                        source.install_path.clone(),
+                        *ext,
+                        source.url.to_url(),
+                    )),
+                    source.url.clone(),
+                )
+                .with_prefer_relative(source.prefer_relative()),
+            ),
             Self::Directory {
                 source,
                 editable,
                 r#virtual,
-            } => Some(VerbatimParsedUrl::from_parts(
-                ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
-                    source.install_path.clone(),
-                    *editable,
-                    *r#virtual,
-                    source.url.to_url(),
-                )),
-                source.url.clone(),
-            )),
+            } => Some(
+                VerbatimParsedUrl::from_parts(
+                    ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
+                        source.install_path.clone(),
+                        *editable,
+                        *r#virtual,
+                        source.url.to_url(),
+                    )),
+                    source.url.clone(),
+                )
+                .with_prefer_relative(source.prefer_relative()),
+            ),
             Self::GitDirectory {
                 git,
                 subdirectory,

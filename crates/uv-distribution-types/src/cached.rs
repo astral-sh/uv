@@ -67,7 +67,11 @@ impl CachedDist {
             }),
             Dist::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.source.url),
+                url: {
+                    let prefer_relative = dist.source.prefer_relative();
+                    VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.source.url)
+                        .with_prefer_relative(prefer_relative)
+                },
                 hashes,
                 cache_info,
                 build_info,
@@ -114,7 +118,11 @@ impl CachedDist {
             }),
             Dist::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.source.url),
+                url: {
+                    let prefer_relative = dist.source.prefer_relative();
+                    VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.source.url)
+                        .with_prefer_relative(prefer_relative)
+                },
                 hashes,
                 cache_info,
                 build_info,
@@ -122,7 +130,11 @@ impl CachedDist {
             }),
             Dist::Source(SourceDist::Directory(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.source.url),
+                url: {
+                    let prefer_relative = dist.source.prefer_relative();
+                    VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.source.url)
+                        .with_prefer_relative(prefer_relative)
+                },
                 hashes,
                 cache_info,
                 build_info,

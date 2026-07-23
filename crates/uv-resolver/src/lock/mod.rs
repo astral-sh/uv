@@ -13,6 +13,7 @@ use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use same_file::is_same_file;
 use tracing::{debug, instrument, trace};
 use url::Url;
 
@@ -31,7 +32,7 @@ use uv_distribution_types::{
     IndexLocations, IndexMetadata, IndexUrl, LocalSourcePath, Name, PYPI_URL, PathBuiltDist,
     PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
     Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString,
+    SourceDist as DistributionSourceDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{
     PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
@@ -426,6 +427,60 @@ impl<'lock> DependencySelection<'lock> {
     }
 }
 
+/// Resolved local sources used to give package metadata the same path as its distribution.
+#[derive(Debug, Default)]
+struct SelectedLocalSources<'a>(FxHashMap<&'a PackageName, Vec<&'a LocalSourcePath>>);
+
+impl<'a> SelectedLocalSources<'a> {
+    fn from_resolution(resolution: &'a ResolverOutput) -> Self {
+        let mut sources = Self::default();
+
+        for (_, annotated_dist) in resolution.base_dists() {
+            let ResolvedDist::Installable { dist, .. } = &annotated_dist.dist else {
+                continue;
+            };
+            let source = match dist.as_ref() {
+                Dist::Built(BuiltDist::Path(dist)) => &dist.source,
+                Dist::Source(DistributionSourceDist::Path(dist)) => &dist.source,
+                Dist::Source(DistributionSourceDist::Directory(dist)) => &dist.source,
+                _ => continue,
+            };
+
+            sources
+                .0
+                .entry(&annotated_dist.name)
+                .or_default()
+                .push(source);
+        }
+
+        sources
+    }
+
+    fn normalize_requirement(
+        &self,
+        mut requirement: Requirement,
+        root: &Path,
+    ) -> Result<Requirement, LockError> {
+        if let RequirementSource::Path { source, .. } | RequirementSource::Directory { source, .. } =
+            &mut requirement.source
+            && let Some(selected) = self.0.get(&requirement.name).and_then(|sources| {
+                sources.iter().find(|selected| {
+                    selected.install_path == source.install_path
+                        || is_same_file(&selected.install_path, &source.install_path)
+                            .unwrap_or(false)
+                })
+            })
+        {
+            *source = (*selected).clone();
+        }
+
+        requirement
+            .relative_to(root)
+            .map_err(LockErrorKind::RequirementRelativePath)
+            .map_err(LockError::from)
+    }
+}
+
 impl Lock {
     /// Initialize a [`Lock`] from a [`ResolverOutput`], applying any index-specific hash
     /// requirements to registry artifacts.
@@ -438,6 +493,7 @@ impl Lock {
         index_locations: &IndexLocations,
     ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
+        let selected_local_sources = SelectedLocalSources::from_resolution(resolution);
         let requires_python = resolution.requires_python.clone();
         let supported_environments = supported_environments
             .into_iter()
@@ -485,8 +541,13 @@ impl Lock {
                 vec![]
             };
 
-            let mut package =
-                Package::from_annotated_dist(dist, fork_markers, root, index_locations)?;
+            let mut package = Package::from_annotated_dist(
+                dist,
+                fork_markers,
+                root,
+                index_locations,
+                &selected_local_sources,
+            )?;
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
                 wheel_marker.and(supported_environments_marker);
@@ -562,7 +623,7 @@ impl Lock {
             }
         }
 
-        let packages = packages.into_values().collect();
+        let packages = packages.into_values().collect::<Vec<_>>();
 
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
@@ -2787,6 +2848,7 @@ impl Package {
         fork_markers: Vec<UniversalMarker>,
         root: &Path,
         index_locations: &IndexLocations,
+        selected_local_sources: &SelectedLocalSources<'_>,
     ) -> Result<Self, LockError> {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist, index_locations)?;
@@ -2801,9 +2863,8 @@ impl Package {
                 .requires_dist
                 .iter()
                 .cloned()
-                .map(|requirement| requirement.relative_to(root))
-                .collect::<Result<_, _>>()
-                .map_err(LockErrorKind::RequirementRelativePath)?
+                .map(|requirement| selected_local_sources.normalize_requirement(requirement, root))
+                .collect::<Result<_, _>>()?
         };
         let provides_extra = if id.source.is_immutable() {
             Box::default()
@@ -2828,9 +2889,10 @@ impl Package {
                     let requirements = requirements
                         .iter()
                         .cloned()
-                        .map(|requirement| requirement.relative_to(root))
-                        .collect::<Result<_, _>>()
-                        .map_err(LockErrorKind::RequirementRelativePath)?;
+                        .map(|requirement| {
+                            selected_local_sources.normalize_requirement(requirement, root)
+                        })
+                        .collect::<Result<_, _>>()?;
                     Ok::<_, LockError>((group.clone(), requirements))
                 })
                 .collect::<Result<_, _>>()?

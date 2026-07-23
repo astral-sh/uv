@@ -517,7 +517,8 @@ impl<'a> Planner<'a> {
                                             url: VerbatimParsedUrl::from_parts(
                                                 wheel.to_parsed_url(),
                                                 wheel.source.url.clone(),
-                                            ),
+                                            )
+                                            .with_prefer_relative(wheel.source.prefer_relative()),
                                             hashes: archive.hashes,
                                             cache_info,
                                             build_info,
@@ -685,11 +686,13 @@ impl<'a> Planner<'a> {
                     match built_index.path(sdist) {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
-                                let cached_dist =
-                                    wheel.into_url_dist(VerbatimParsedUrl::from_parts(
+                                let cached_dist = wheel.into_url_dist(
+                                    VerbatimParsedUrl::from_parts(
                                         sdist.to_parsed_url(),
                                         sdist.source.url.clone(),
-                                    ));
+                                    )
+                                    .with_prefer_relative(sdist.source.prefer_relative()),
+                                );
                                 debug!("Path source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
@@ -720,11 +723,13 @@ impl<'a> Planner<'a> {
                     match built_index.directory(sdist) {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
-                                let cached_dist =
-                                    wheel.into_url_dist(VerbatimParsedUrl::from_parts(
+                                let cached_dist = wheel.into_url_dist(
+                                    VerbatimParsedUrl::from_parts(
                                         sdist.to_parsed_url(),
                                         sdist.source.url.clone(),
-                                    ));
+                                    )
+                                    .with_prefer_relative(sdist.source.prefer_relative()),
+                                );
                                 debug!(
                                     "Directory source requirement already cached: {cached_dist}"
                                 );

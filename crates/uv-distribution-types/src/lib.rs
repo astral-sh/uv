@@ -575,6 +575,7 @@ impl Dist {
 
     /// Create a [`Dist`] for a URL-based distribution.
     pub fn from_url(name: PackageName, url: VerbatimParsedUrl) -> Result<Self, Error> {
+        let prefer_relative = url.prefer_relative();
         match url.parsed_url {
             ParsedUrl::Archive(archive) => Self::from_http_url(
                 name,
@@ -584,13 +585,19 @@ impl Dist {
                 archive.ext,
             ),
             ParsedUrl::Path(file) => {
-                let source =
-                    LocalSourcePath::new_preserving_absolute(file.install_path, url.verbatim);
+                let source = if prefer_relative {
+                    LocalSourcePath::new_preferring_relative(file.install_path, url.verbatim)
+                } else {
+                    LocalSourcePath::new_preserving_absolute(file.install_path, url.verbatim)
+                };
                 Self::from_file_url(name, source, file.ext)
             }
             ParsedUrl::Directory(directory) => {
-                let source =
-                    LocalSourcePath::new_preserving_absolute(directory.install_path, url.verbatim);
+                let source = if prefer_relative {
+                    LocalSourcePath::new_preferring_relative(directory.install_path, url.verbatim)
+                } else {
+                    LocalSourcePath::new_preserving_absolute(directory.install_path, url.verbatim)
+                };
                 Self::from_directory_url(name, source, directory.editable, directory.r#virtual)
             }
             ParsedUrl::GitDirectory(git) => {

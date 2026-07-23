@@ -47,6 +47,7 @@ RequirementsTxt {
                             ),
                             expanded: false,
                         },
+                        prefer_relative: true,
                     },
                     extras: [
                         ExtraName(
@@ -107,6 +108,7 @@ RequirementsTxt {
                             ),
                             expanded: false,
                         },
+                        prefer_relative: true,
                     },
                     extras: [
                         ExtraName(
@@ -167,6 +169,7 @@ RequirementsTxt {
                             ),
                             expanded: false,
                         },
+                        prefer_relative: true,
                     },
                     extras: [
                         ExtraName(
@@ -227,6 +230,7 @@ RequirementsTxt {
                             ),
                             expanded: false,
                         },
+                        prefer_relative: true,
                     },
                     extras: [
                         ExtraName(
@@ -287,6 +291,7 @@ RequirementsTxt {
                             ),
                             expanded: false,
                         },
+                        prefer_relative: true,
                     },
                     extras: [],
                     marker: python_full_version >= '3.9' and os_name == 'posix',
@@ -340,6 +345,7 @@ RequirementsTxt {
                             ),
                             expanded: false,
                         },
+                        prefer_relative: true,
                     },
                     extras: [],
                     marker: true,
@@ -393,6 +399,7 @@ RequirementsTxt {
                             ),
                             expanded: false,
                         },
+                        prefer_relative: true,
                     },
                     extras: [],
                     marker: true,
@@ -446,6 +453,7 @@ RequirementsTxt {
                             ),
                             expanded: false,
                         },
+                        prefer_relative: true,
                     },
                     extras: [],
                     marker: true,
