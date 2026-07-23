@@ -242,7 +242,7 @@ pub enum PreviewFeature {
     DetectModuleConflicts = 1 << 7,
     /// Allows using `uv format`.
     #[preview(alias = "format")]
-    Format = 1 << 8,
+    FormatCommand = 1 << 8,
     /// Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
     NativeAuth = 1 << 9,
     /// Allows signing requests to configured S3-compatible endpoints.
@@ -282,7 +282,7 @@ pub enum PreviewFeature {
     PublishRequireNormalized = 1 << 25,
     /// Allows using `uv audit`.
     #[preview(alias = "audit")]
-    Audit = 1 << 26,
+    AuditCommand = 1 << 26,
     /// Rejects an invalid `--project` path instead of warning and continuing. Except for `uv init`,
     /// the path must already exist as a directory or point to a `pyproject.toml` file. This feature
     /// takes effect before configuration is loaded.
@@ -302,7 +302,7 @@ pub enum PreviewFeature {
     VenvSafeClear = 1 << 32,
     /// Allows using `uv check`.
     #[preview(alias = "check")]
-    Check = 1 << 33,
+    CheckCommand = 1 << 33,
     /// Makes `uv init` create a packaged application with a `src/` layout, build system, and script
     /// entry point by default.
     PackagedInit = 1 << 34,
@@ -334,7 +334,7 @@ impl PreviewFeature {
             Self::PackageConflicts => "package-conflicts",
             Self::ExtraBuildDependencies => "extra-build-dependencies",
             Self::DetectModuleConflicts => "detect-module-conflicts",
-            Self::Format => "format-command",
+            Self::FormatCommand => "format-command",
             Self::NativeAuth => "native-auth",
             Self::S3Endpoint => "s3-endpoint",
             Self::CacheSize => "cache-size",
@@ -352,14 +352,14 @@ impl PreviewFeature {
             Self::SpecialCondaEnvNames => "special-conda-env-names",
             Self::RelocatableEnvsDefault => "relocatable-envs-default",
             Self::PublishRequireNormalized => "publish-require-normalized",
-            Self::Audit => "audit-command",
+            Self::AuditCommand => "audit-command",
             Self::ProjectDirectoryMustExist => "project-directory-must-exist",
             Self::IndexExcludeNewer => "index-exclude-newer",
             Self::AzureEndpoint => "azure-endpoint",
             Self::TomlBackwardsCompatibility => "toml-backwards-compatibility",
             Self::MalwareCheck => "malware-check",
             Self::VenvSafeClear => "venv-safe-clear",
-            Self::Check => "check-command",
+            Self::CheckCommand => "check-command",
             Self::PackagedInit => "packaged-init",
             Self::CentralizedProjectEnvs => "centralized-project-envs",
             Self::ToolInstallLocks => "tool-install-locks",
@@ -558,11 +558,11 @@ mod tests {
         );
         assert_eq!(
             PreviewFeature::from_str("format").unwrap(),
-            PreviewFeature::Format
+            PreviewFeature::FormatCommand
         );
         assert_eq!(
             PreviewFeature::from_str("format-command").unwrap(),
-            PreviewFeature::Format
+            PreviewFeature::FormatCommand
         );
     }
 
@@ -643,7 +643,7 @@ mod tests {
             PreviewFeature::DetectModuleConflicts.as_str(),
             "detect-module-conflicts"
         );
-        assert_eq!(PreviewFeature::Format.as_str(), "format-command");
+        assert_eq!(PreviewFeature::FormatCommand.as_str(), "format-command");
         assert_eq!(PreviewFeature::NativeAuth.as_str(), "native-auth");
         assert_eq!(PreviewFeature::S3Endpoint.as_str(), "s3-endpoint");
         assert_eq!(PreviewFeature::CacheSize.as_str(), "cache-size");
@@ -694,8 +694,8 @@ mod tests {
         );
         assert_eq!(PreviewFeature::MalwareCheck.as_str(), "malware-check");
         assert_eq!(PreviewFeature::VenvSafeClear.as_str(), "venv-safe-clear");
-        assert_eq!(PreviewFeature::Audit.as_str(), "audit-command");
-        assert_eq!(PreviewFeature::Check.as_str(), "check-command");
+        assert_eq!(PreviewFeature::AuditCommand.as_str(), "audit-command");
+        assert_eq!(PreviewFeature::CheckCommand.as_str(), "check-command");
         assert_eq!(
             PreviewFeature::CentralizedProjectEnvs.as_str(),
             "centralized-project-envs"

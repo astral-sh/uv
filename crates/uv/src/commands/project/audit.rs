@@ -69,10 +69,10 @@ pub(crate) async fn audit(
     ignore_until_fixed: Vec<VulnerabilityID>,
 ) -> Result<ExitStatus> {
     // Check if the audit feature is in preview
-    if !preview.is_enabled(PreviewFeature::Audit) {
+    if !preview.is_enabled(PreviewFeature::AuditCommand) {
         warn_user!(
             "`uv audit` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::Audit
+            PreviewFeature::AuditCommand
         );
     }
     if matches!(output_format, AuditOutputFormat::Json)

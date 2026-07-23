@@ -72,10 +72,10 @@ pub(crate) async fn check(
     config_discovery: ConfigDiscovery,
     malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeature::Check) {
+    if !preview.is_enabled(PreviewFeature::CheckCommand) {
         warn_user!(
             "`uv check` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::Check
+            PreviewFeature::CheckCommand
         );
     }
 
