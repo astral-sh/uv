@@ -624,6 +624,8 @@ pub struct ToolUv {
     /// macOS (and ignoring Linux and Windows). On the other hand, `required-environments = ["sys_platform == 'darwin'"]`
     /// would _require_ that any package without a source distribution include a wheel for macOS in
     /// order to be installable.
+    ///
+    /// Note that `required-environments` is limited to platforms for which uv can map markers to compatibility tags (currently macOS, Linux, and Windows). Other platforms (like FreeBSD) are not currently supported.
     #[cfg_attr(
         feature = "schemars",
         schemars(
