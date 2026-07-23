@@ -22,7 +22,7 @@ on:
         value: ${{ jobs.create-integration-test.outputs.result }}
       pull-request:
         description: "The draft integration-test pull request URL"
-        value: ${{ jobs.create-integration-test.outputs.pull-request }}
+        value: ${{ jobs.publish-integration-test.outputs.pull-request }}
   workflow_dispatch:
     inputs:
       issue:
@@ -121,11 +121,14 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      id-token: write # for the uv-dev credential broker
       issues: read
     outputs:
       result: ${{ steps.create-test.outputs.final-message }}
-      pull-request: ${{ steps.open-pr.outputs.url }}
+      artifact-id: ${{ steps.upload-test.outputs.artifact-id }}
+      artifact-digest: ${{ steps.upload-test.outputs.artifact-digest }}
+      base-sha: ${{ steps.commit-test.outputs.base-sha }}
+      head-sha: ${{ steps.commit-test.outputs.head-sha }}
+      issue-number: ${{ steps.commit-test.outputs.issue-number }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -157,9 +160,8 @@ jobs:
 
       - name: "Create integration test"
         id: create-test
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        uses: ./.github/actions/codex-cgroup
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INSTA_UPDATE: "no"
           TMPDIR: ${{ runner.temp }}
           UV_CACHE_DIR: ${{ runner.temp }}/uv-create-test-cache
@@ -204,21 +206,136 @@ jobs:
 
           git diff --cached --check
           issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
+          case "$issue_number" in
+            ''|*[!0-9]*|0)
+              echo "The issue number must be a positive integer." >&2
+              exit 1
+              ;;
+          esac
+
+          base_sha="$(git rev-parse 'HEAD^{commit}')"
           git \
             -c core.hooksPath=/dev/null \
             -c user.name="github-actions[bot]" \
             -c user.email="github-actions[bot]@users.noreply.github.com" \
             commit --message "Add regression test for uv#${issue_number}"
 
-          git_dir="$(git rev-parse --absolute-git-dir)"
-          mv "$git_dir/config" "$RUNNER_TEMP/untrusted-git-config"
-          echo "created=true" >> "$GITHUB_OUTPUT"
+          git -c core.hooksPath=/dev/null bundle create \
+            "$RUNNER_TEMP/integration-test.bundle" HEAD^..HEAD
+
+          {
+            echo "created=true"
+            echo "base-sha=$base_sha"
+            echo "head-sha=$(git rev-parse 'HEAD^{commit}')"
+            echo "issue-number=$issue_number"
+          } >> "$GITHUB_OUTPUT"
         env:
           CREATE_TEST_OUTCOME: ${{ fromJSON(steps.create-test.outputs.final-message).outcome }}
           CREATE_TEST_SUMMARY: ${{ fromJSON(steps.create-test.outputs.final-message).summary }}
 
-      - name: "Get uv-dev token"
+      - name: "Upload integration test"
         if: steps.commit-test.outputs.created == 'true'
+        id: upload-test
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: integration-test-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/integration-test.bundle
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  publish-integration-test:
+    needs: create-integration-test
+    if: needs.create-integration-test.outputs.artifact-id != ''
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      pull-request: ${{ steps.open-pr.outputs.url }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: "Download integration test"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.create-integration-test.outputs.artifact-id }}
+          path: ${{ runner.temp }}/integration-test
+          digest-mismatch: error
+
+      - name: "Verify integration test"
+        id: verify-test
+        env:
+          EXPECTED_BASE_SHA: ${{ needs.create-integration-test.outputs.base-sha }}
+          EXPECTED_HEAD_SHA: ${{ needs.create-integration-test.outputs.head-sha }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          LC_ALL: C
+        run: |
+          bundle="$RUNNER_TEMP/integration-test/integration-test.bundle"
+          trusted_base="$(git rev-parse 'HEAD^{commit}')"
+
+          if [ "$trusted_base" != "$GITHUB_SHA" ] || [ "$trusted_base" != "$EXPECTED_BASE_SHA" ]; then
+            echo "The integration test was not based on the trusted workflow revision." >&2
+            exit 1
+          fi
+
+          git bundle verify "$bundle"
+          git -c core.hooksPath=/dev/null -c fetch.fsckObjects=true \
+            fetch --no-tags "$bundle" HEAD
+          candidate="$(git rev-parse 'FETCH_HEAD^{commit}')"
+
+          if [ "$candidate" != "$EXPECTED_HEAD_SHA" ]; then
+            echo "The integration test bundle does not contain the expected commit." >&2
+            exit 1
+          fi
+          if [ "$(git rev-parse "$candidate^")" != "$trusted_base" ]; then
+            echo "The integration test commit does not have the trusted revision as its parent." >&2
+            exit 1
+          fi
+          if git rev-parse --quiet --verify "$candidate^2" > /dev/null; then
+            echo "The integration test bundle must contain exactly one non-merge commit." >&2
+            exit 1
+          fi
+
+          changed_files=0
+          while IFS= read -r -d '' change && IFS= read -r -d '' file; do
+            read -r old_mode new_mode _old_object _new_object status <<< "$change"
+            case "$old_mode:$new_mode:$status" in
+              :000000:100644:A|:100644:100644:M) ;;
+              *)
+                echo "Integration tests must only add or modify regular non-executable files." >&2
+                exit 1
+                ;;
+            esac
+
+            case "$file" in
+              crates/uv/tests/it/*.rs|crates/uv/tests/it/*.snap|\
+              crates/uv-client/tests/it/*.rs|crates/uv-client/tests/it/*.snap) ;;
+              *)
+                echo "The integration test changes a disallowed path." >&2
+                exit 1
+                ;;
+            esac
+
+            changed_files=$((changed_files + 1))
+          done < <(git diff-tree --no-commit-id --no-renames -r --raw -z \
+            "$trusted_base" "$candidate")
+
+          if [ "$changed_files" -eq 0 ]; then
+            echo "The integration test bundle does not contain any test changes." >&2
+            exit 1
+          fi
+
+          git diff-tree --check "$trusted_base" "$candidate"
+          echo "head-sha=$candidate" >> "$GITHUB_OUTPUT"
+
+      - name: "Get uv-dev token"
         id: token
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
         with:
@@ -230,22 +347,28 @@ jobs:
             pull_requests: write
 
       - name: "Open draft pull request"
-        if: steps.commit-test.outputs.created == 'true'
         id: open-pr
         run: |
-          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
-          branch="zb/reproduce-bug/${issue_number}"
-          git -c core.hooksPath=/dev/null push \
-            "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
-            HEAD:"$branch"
+          case "$ISSUE_NUMBER" in
+            ''|*[!0-9]*|0)
+              echo "The issue number must be a positive integer." >&2
+              exit 1
+              ;;
+          esac
+          branch="zb/reproduce-bug/${ISSUE_NUMBER}"
+          git -c core.hooksPath=/dev/null \
+            -c credential.helper= \
+            -c 'credential.helper=!gh auth git-credential' \
+            push https://github.com/astral-sh/uv-dev.git \
+            "$HEAD_SHA:refs/heads/$branch"
           pull_request="$(
             gh pr create \
               --repo astral-sh/uv-dev \
               --base main \
               --head "$branch" \
               --draft \
-              --title "Add regression test for uv#${issue_number}" \
-              --body "Add a minimal integration test that reproduces astral-sh/uv#${issue_number}."
+              --title "Add regression test for uv#${ISSUE_NUMBER}" \
+              --body "Add a minimal integration test that reproduces astral-sh/uv#${ISSUE_NUMBER}."
           )"
           echo "url=$pull_request" >> "$GITHUB_OUTPUT"
           {
@@ -257,4 +380,6 @@ jobs:
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          CREATE_TEST_SUMMARY: ${{ fromJSON(steps.create-test.outputs.final-message).summary }}
+          HEAD_SHA: ${{ steps.verify-test.outputs.head-sha }}
+          ISSUE_NUMBER: ${{ needs.create-integration-test.outputs.issue-number }}
+          CREATE_TEST_SUMMARY: ${{ fromJSON(needs.create-integration-test.outputs.result).summary }}
