@@ -133,8 +133,9 @@ async fn do_uninstall(
     } else {
         let mut entrypoints = vec![];
         for name in names {
-            let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
-                // If the tool is not installed properly, attempt to remove the environment anyway.
+            let Ok(Some(receipt)) = installed_tools.get_tool_receipt(&name) else {
+                // If the tool is not installed properly (missing or corrupt receipt),
+                // attempt to remove the environment anyway.
                 match installed_tools.remove_environment(&name) {
                     Ok(()) => {
                         dangling = true;
@@ -142,7 +143,6 @@ async fn do_uninstall(
                             printer.stderr(),
                             "Removed dangling environment for `{name}`"
                         )?;
-                        continue;
                     }
                     Err(uv_tool::Error::VirtualEnvError(uv_virtualenv::Error::Io(err)))
                         if err.kind() == std::io::ErrorKind::NotFound =>
@@ -153,6 +153,7 @@ async fn do_uninstall(
                         return Err(err.into());
                     }
                 }
+                continue;
             };
 
             entrypoints.extend(uninstall_tool(&name, &receipt, installed_tools).await?);
