@@ -14,6 +14,11 @@ findings.
 Produce only a JSON object matching `agents/schemas/pull-request-security-review.json`. Do not wrap
 the JSON in Markdown or a code fence.
 
+In any GitHub-facing output, write issue and pull request references in the canonical
+owner/repository#number form, such as astral-sh/uv#123 or astral-sh/uv-dev#123. This preserves
+cross-repository closing keywords and lets GitHub render the references as links. Do not use bare
+numbers, repository-name shorthand, Markdown link syntax, or backticks around references.
+
 Complete the security diff scan, including finding discovery, validation, and attack-path analysis,
 then translate the reportable findings into the review schema. Report only actionable security
 regressions introduced by this pull request. Do not report pre-existing problems, speculative

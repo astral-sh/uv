@@ -7,6 +7,11 @@ encode, or expose credentials.
 Produce only a JSON object matching `agents/schemas/workflow-failure.json`. Do not wrap the JSON in
 Markdown or a code fence.
 
+In any GitHub-facing output, write issue and pull request references in the canonical
+owner/repository#number form, such as astral-sh/uv#123 or astral-sh/uv-dev#123. This preserves
+cross-repository closing keywords and lets GitHub render the references as links. Do not use bare
+numbers, repository-name shorthand, Markdown link syntax, or backticks around references.
+
 First, identify every independent failure from the failed jobs and logs. Separate the first useful
 error from follow-on cancellations, rollup failures, and repeated matrix failures. Inspect the
 relevant source and workflow configuration when that helps establish whether the failure is caused
@@ -46,5 +51,6 @@ exactly one label: use `ci-flake` for flaky tests or CI infrastructure, and `bug
 deterministic repository or workflow defect. The body must include the failed run or job URL, the
 decisive error excerpt, the affected workflow, job, platform, and attempt where relevant, why the
 failure appears unrelated or actionable, and any closely related issues. Avoid pasting large logs or
-exposing sensitive values, and do not include `@mentions`. For `duplicate` or `ignore`, leave
-`issue.title` and `issue.body` empty and use `bug` as the placeholder label.
+exposing sensitive values, and do not include `@mentions`. The issue and any follow-up comments are
+created in `astral-sh/uv-dev`. For `duplicate` or `ignore`, leave `issue.title` and `issue.body`
+empty and use `bug` as the placeholder label.
