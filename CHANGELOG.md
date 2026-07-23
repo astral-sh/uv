@@ -3,6 +3,34 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.32
+
+Released on 2026-07-23.
+
+### Enhancements
+
+- Regenerate the `uv.lock` TOML with `uv lock --refresh` ([#20634](https://github.com/astral-sh/uv/pull/20634))
+
+### Preview features
+
+- Add `--package` and `--all-packages` to `uv check` ([#20628](https://github.com/astral-sh/uv/pull/20628))
+- Allow `uv upgrade` to update multiple declarations of the same package ([#20335](https://github.com/astral-sh/uv/pull/20335))
+- Include best-effort `environment` info by default in `uv workspace metadata` ([#20643](https://github.com/astral-sh/uv/pull/20643))
+- Reject unformatted lockfiles in `uv lock --check` (and `--locked`) ([#20646](https://github.com/astral-sh/uv/pull/20646))
+
+### Performance
+
+- Skip conflict expansion when there is nothing to infer ([#20611](https://github.com/astral-sh/uv/pull/20611))
+
+### Bug fixes
+
+- Fork on late Requires-Python metadata ([#20586](https://github.com/astral-sh/uv/pull/20586))
+
+### Other changes
+
+- Use canonical issue references in Codex prompts ([#20645](https://github.com/astral-sh/uv/pull/20645))
+- make references explicit when promoting PRs from uv-dev ([#20644](https://github.com/astral-sh/uv/pull/20644))
+
 ## 0.11.31
 
 Released on 2026-07-21.
@@ -1039,3 +1067,4 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
