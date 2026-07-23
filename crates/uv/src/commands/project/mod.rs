@@ -412,9 +412,9 @@ impl uv_errors::Hint for ProjectError {
             Self::LockMismatch(..) | Self::LockWorkspaceMismatch(..) => {
                 uv_errors::Hints::from("To update the lockfile, run `uv lock`.")
             }
-            Self::LockFormat(..) => uv_errors::Hints::from(
-                "To restore the lockfile's formatting, run `uv lock --refresh`.",
-            ),
+            Self::LockFormat(..) => {
+                uv_errors::Hints::from("To regenerate the lockfile, run `uv lock --refresh`.")
+            }
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }

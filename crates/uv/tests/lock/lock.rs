@@ -15554,7 +15554,7 @@ fn check_unformatted_lock() -> Result<()> {
     ----- stderr -----
     error: The lockfile at `uv.lock` has non-canonical formatting at line 13, but `--check` was provided.
 
-    hint: To restore the lockfile's formatting, run `uv lock --refresh`.
+    hint: To regenerate the lockfile, run `uv lock --refresh`.
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--offline").arg("--preview-features").arg("lockfile-format-check"), @"
@@ -15562,7 +15562,7 @@ fn check_unformatted_lock() -> Result<()> {
     ----- stderr -----
     error: The lockfile at `uv.lock` has non-canonical formatting at line 13, but `--locked` was provided.
 
-    hint: To restore the lockfile's formatting, run `uv lock --refresh`.
+    hint: To regenerate the lockfile, run `uv lock --refresh`.
     ");
 
     assert_eq!(context.read("uv.lock"), unformatted);
@@ -34838,12 +34838,12 @@ fn lock_refresh_deindents_lockfile() -> Result<()> {
         .child("uv.lock")
         .write_str(&dedented_lock)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--preview-features").arg("lockfile-format-check"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--preview-features").arg("lockfile-format-check"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` has non-canonical formatting at line 13, but `--check` was provided.
 
-    hint: To restore the lockfile's formatting, run `uv lock --refresh`.
+    hint: To regenerate the lockfile, run `uv lock --refresh`.
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--refresh").arg("--dry-run"), @"
@@ -34888,7 +34888,7 @@ fn lock_refresh_deindents_lockfile() -> Result<()> {
     ]
     "#);
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--preview-features").arg("lockfile-format-check"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--preview-features").arg("lockfile-format-check"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
