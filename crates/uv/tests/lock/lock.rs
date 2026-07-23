@@ -15515,7 +15515,7 @@ fn check_outdated_lock() -> Result<()> {
     Ok(())
 }
 
-/// Checks that formatting-only changes are rejected when lockfile-format preview is enabled.
+/// Checks that formatting-only changes are rejected when lockfile-format-check preview is enabled.
 #[cfg(feature = "test-universal")]
 #[test]
 fn check_unformatted_lock() -> Result<()> {
@@ -15549,13 +15549,13 @@ fn check_unformatted_lock() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--preview-features").arg("lockfile-format"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--preview-features").arg("lockfile-format-check"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` is not canonically formatted at line 13, but `--check` was provided.
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--offline").arg("--preview-features").arg("lockfile-format"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--offline").arg("--preview-features").arg("lockfile-format-check"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` is not canonically formatted at line 13, but `--locked` was provided.

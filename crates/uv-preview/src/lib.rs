@@ -264,7 +264,7 @@ pub enum PreviewFeature {
     WorkspaceListScripts = 1 << 37,
     NoDistutilsPatch = 1 << 38,
     IndexHashAlgorithm = 1 << 39,
-    LockfileFormat = 1 << 40,
+    LockfileFormatCheck = 1 << 40,
 }
 
 impl PreviewFeature {
@@ -311,7 +311,7 @@ impl PreviewFeature {
             Self::WorkspaceListScripts => "workspace-list-scripts",
             Self::NoDistutilsPatch => "no-distutils-patch",
             Self::IndexHashAlgorithm => "index-hash-algorithm",
-            Self::LockfileFormat => "lockfile-format",
+            Self::LockfileFormatCheck => "lockfile-format-check",
         }
     }
 }
@@ -371,7 +371,7 @@ impl FromStr for PreviewFeature {
             "workspace-list-scripts" => Self::WorkspaceListScripts,
             "no-distutils-patch" => Self::NoDistutilsPatch,
             "index-hash-algorithm" => Self::IndexHashAlgorithm,
-            "lockfile-format" => Self::LockfileFormat,
+            "lockfile-format-check" => Self::LockfileFormatCheck,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -687,7 +687,10 @@ mod tests {
             PreviewFeature::IndexHashAlgorithm.as_str(),
             "index-hash-algorithm"
         );
-        assert_eq!(PreviewFeature::LockfileFormat.as_str(), "lockfile-format");
+        assert_eq!(
+            PreviewFeature::LockfileFormatCheck.as_str(),
+            "lockfile-format-check"
+        );
     }
 
     #[test]

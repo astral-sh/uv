@@ -390,7 +390,7 @@ impl<'env> LockOperation<'env> {
                     ));
                 };
 
-                if self.preview.is_enabled(PreviewFeature::LockfileFormat)
+                if self.preview.is_enabled(PreviewFeature::LockfileFormatCheck)
                     && let Some(line) = find_lock_format_error(&contents)
                 {
                     return Err(ProjectError::LockFormat(lock_filename, line, lock_source));
