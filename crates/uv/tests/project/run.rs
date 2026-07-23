@@ -6859,33 +6859,18 @@ fn setup_target_workspace_discovery_context() -> Result<TestContext> {
     Ok(context)
 }
 
-/// Test that `--preview-features target-workspace-discovery` discovers the workspace
-/// from the target's directory rather than the current working directory.
+/// Test that `uv run` discovers the workspace from the target's directory rather than the current
+/// working directory.
 #[test]
 fn run_target_workspace_discovery() -> Result<()> {
     let context = setup_target_workspace_discovery_context()?;
 
-    // Without the preview feature, running from the parent directory fails to find the workspace,
-    // so the dependency is not installed.
-    uv_snapshot!(context.filters(), context.run().arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-    Traceback (most recent call last):
-      File "[TEMP_DIR]/project/script.py", line 1, in <module>
-        import iniconfig
-    ModuleNotFoundError: No module named 'iniconfig'
-    "#);
-
     // Write invalid configuration files to the cwd to verify that the
-    // target-workspace-discovery feature skips parsing them.
+    // target workspace discovery skips parsing them.
     context.temp_dir.child("uv.toml").write_str("bad")?;
     context.temp_dir.child("pyproject.toml").write_str("bad")?;
 
-    // With the preview feature, the workspace is discovered from the target's directory.
-    uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("target-workspace-discovery").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
+    uv_snapshot!(context.filters(), context.run().arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6904,9 +6889,8 @@ fn run_target_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
-/// Test that `--preview-features target-workspace-discovery` works with a bare script
-/// filename (no directory component), which would otherwise cause `Path::parent()` to
-/// return an empty path.
+/// Test target workspace discovery with a bare script filename (no directory component), which
+/// would otherwise cause `Path::parent()` to return an empty path.
 #[test]
 fn run_target_workspace_discovery_bare_script() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -6916,10 +6900,7 @@ fn run_target_workspace_discovery_bare_script() -> Result<()> {
         .child("script.py")
         .write_str(r"print('success')")?;
 
-    // With the preview feature and a bare filename, the script should run without error.
     uv_snapshot!(context.filters(), context.run()
-        .arg("--preview-features")
-        .arg("target-workspace-discovery")
         .arg("script.py"), @"
     success: true
     exit_code: 0
@@ -6939,9 +6920,6 @@ fn run_project_precedes_target_workspace_discovery() -> Result<()> {
     let missing_project = context.temp_dir.child("missing-project");
 
     uv_snapshot!(context.filters(), context.run()
-        .env("UV_PREVIEW", "1")
-        .arg("--preview-features")
-        .arg("target-workspace-discovery")
         .arg("--project")
         .arg(missing_project.path())
         .arg("project/script.py")
@@ -6957,43 +6935,12 @@ fn run_project_precedes_target_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
-/// Using `--project` with a non-existent directory should warn.
+/// Using `--project` with a non-existent directory should error.
 #[test]
 fn run_project_not_found() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    hello
-
-    ----- stderr -----
-    warning: Project directory `/tmp/does-not-exist-uv-test` does not exist. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    ");
-}
-
-/// Using `--project` with a non-existent directory should error with the preview flag.
-#[test]
-fn run_project_not_found_preview() {
-    let context = uv_test::test_context!("3.12");
-
-    uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("project-directory-must-exist").arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Project directory `/tmp/does-not-exist-uv-test` does not exist
-    ");
-}
-
-/// Using `--project` with a non-existent directory should error with `UV_PREVIEW=1`.
-#[test]
-fn run_project_not_found_uv_preview_env() {
-    let context = uv_test::test_context!("3.12");
-
-    uv_snapshot!(context.filters(), context.run().env("UV_PREVIEW", "1").arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -7047,7 +6994,7 @@ fn run_project_pyproject_toml_file() -> Result<()> {
     Ok(())
 }
 
-/// Using `--project` with a non-`pyproject.toml` file should warn.
+/// Using `--project` with a non-`pyproject.toml` file should error.
 #[test]
 fn run_project_non_pyproject_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -7075,24 +7022,18 @@ fn run_project_non_pyproject_file() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    Python 3.12.[X]
 
     ----- stderr -----
-    warning: Project path `project/README.md` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 1 package in [TIME]
-    Checked in [TIME]
+    error: Project path `project/README.md` is not a directory
     ");
 
     Ok(())
 }
 
-/// Using `--project` with a nested non-`pyproject.toml` file should warn. Workspace discovery
-/// walks ancestors to find the `pyproject.toml`.
+/// Using `--project` with a nested non-`pyproject.toml` file should error.
 #[test]
 fn run_project_nested_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -7122,23 +7063,18 @@ fn run_project_nested_file() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    Python 3.12.[X]
 
     ----- stderr -----
-    warning: Project path `project/subdir/somefile` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 1 package in [TIME]
-    Checked in [TIME]
+    error: Project path `project/subdir/somefile` is not a directory
     ");
 
     Ok(())
 }
 
-/// Using `--project` with a file that has no ancestor project should warn, then fail downstream.
+/// Using `--project` with a file that has no ancestor project should error.
 #[test]
 #[cfg(unix)]
 fn run_project_file_no_ancestor_project() -> Result<()> {
@@ -7160,8 +7096,7 @@ fn run_project_file_no_ancestor_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Project path `isolated/somefile` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    error: failed to open file `[TEMP_DIR]/isolated/somefile/uv.toml`: Not a directory (os error 20)
+    error: Project path `isolated/somefile` is not a directory
     ");
 
     Ok(())

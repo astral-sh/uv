@@ -195,11 +195,10 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             path
         }
     } else if let Some(run_command) = &parsed_run_command
-        && early_preview.is_enabled(PreviewFeature::TargetWorkspaceDiscovery)
         && let Some(dir) = run_command.script_dir()
     {
-        // When running a target with the preview flag enabled, discover the workspace starting
-        // from the target's directory rather than the current working directory.
+        // When running a target, discover the workspace starting from the target's directory
+        // rather than the current working directory.
         Cow::Owned(std::path::absolute(dir)?)
     } else {
         Cow::Borrowed(&*CWD)
@@ -215,31 +214,15 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     if !skip_project_validation {
         if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
             if !project_dir.exists() {
-                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-                    bail!(
-                        "Project directory `{}` does not exist",
-                        project_path.user_display()
-                    );
-                }
-                warn_user_once!(
-                    "Project directory `{}` does not exist. \
-                    This will become an error in a future release. \
-                    Use `--preview-features project-directory-must-exist` to error on this now.",
+                bail!(
+                    "Project directory `{}` does not exist",
                     project_path.user_display()
                 );
             } else if !project_dir.is_dir() {
                 // `--project path/to/pyproject.toml` is resolved to its parent above,
                 // so this only triggers for other file types (see #18508).
-                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-                    bail!(
-                        "Project path `{}` is not a directory",
-                        project_path.user_display()
-                    );
-                }
-                warn_user_once!(
-                    "Project path `{}` is not a directory. \
-                    This will become an error in a future release. \
-                    Use `--preview-features project-directory-must-exist` to error on this now.",
+                bail!(
+                    "Project path `{}` is not a directory",
                     project_path.user_display()
                 );
             }
@@ -504,16 +487,12 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         );
     }
 
-    // Adjust open file limits on Unix if the preview feature is enabled.
+    // Adjust open file limits on Unix.
     #[cfg(unix)]
-    if global_initialization.needs_initialization()
-        && globals.preview.is_enabled(PreviewFeature::AdjustUlimit)
-    {
+    if global_initialization.needs_initialization() {
         match uv_unix::adjust_open_file_limit() {
             Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
-            // TODO(zanieb): When moving out of preview, consider changing this to a log instead of
-            // a warning because it's okay if we fail here.
-            Err(err) => warn_user!("{err}"),
+            Err(err) => debug!("{err}"),
         }
     }
 
@@ -1390,10 +1369,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.no_clear,
                 if args.force {
                     uv_virtualenv::ClearNonVirtualenv::Allow
-                } else if globals.preview.is_enabled(PreviewFeature::VenvSafeClear) {
-                    uv_virtualenv::ClearNonVirtualenv::Error
                 } else {
-                    uv_virtualenv::ClearNonVirtualenv::Warn
+                    uv_virtualenv::ClearNonVirtualenv::Error
                 },
             );
 
@@ -1855,7 +1832,6 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.compile_bytecode,
                 &globals.concurrency,
                 &cache,
-                globals.preview,
                 printer,
             )
             .await
@@ -1890,7 +1866,6 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.compile_bytecode,
                 &globals.concurrency,
                 &cache,
-                globals.preview,
                 printer,
             )
             .await
@@ -2231,27 +2206,16 @@ async fn run_project(
                 settings::InitSettings::resolve(args, filesystem, environment, globals.preview)?;
             show_settings!(args);
 
-            // The `--project` arg is being deprecated for `init` with a warning now and an error in preview.
+            // The `--project` argument is not supported for `init`.
             if explicit_project {
-                if globals.preview.is_enabled(PreviewFeature::InitProjectFlag) {
-                    bail!(
-                        "The `--project` option cannot be used in `uv init`. {}",
-                        if args.path.is_some() {
-                            "Use `--directory` instead."
-                        } else {
-                            "Use `--directory` or a positional path instead."
-                        }
-                    )
-                }
-
-                warn_user!(
-                    "Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. {}",
+                bail!(
+                    "The `--project` option cannot be used in `uv init`. {}",
                     if args.path.is_some() {
-                        "Since a positional path was provided, the `--project` option has no effect. Consider using `--directory` instead."
+                        "Use `--directory` instead."
                     } else {
-                        "Consider using `uv init <PATH>` instead."
+                        "Use `--directory` or a positional path instead."
                     }
-                );
+                )
             }
 
             // Initialize the cache.

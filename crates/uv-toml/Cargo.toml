@@ -17,5 +17,3 @@ workspace = true
 
 [dependencies]
 serde = { workspace = true }
-toml_datetime = { workspace = true }
-toml_parser = { workspace = true }
