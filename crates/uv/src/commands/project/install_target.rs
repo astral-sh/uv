@@ -350,7 +350,7 @@ impl<'lock> InstallTarget<'lock> {
                 // Collect all known extras from the member packages.
                 let known_extras = member_packages
                     .iter()
-                    .flat_map(|package| package.provides_extras().iter())
+                    .flat_map(|package| package.provides_extras())
                     .collect::<FxHashSet<_>>();
 
                 for extra in extras.explicit_names() {
@@ -404,7 +404,7 @@ impl<'lock> InstallTarget<'lock> {
                 // Extract the dependency groups that are exclusive to the workspace root.
                 let known_groups = member_packages
                     .iter()
-                    .flat_map(|package| package.dependency_groups().keys().map(Cow::Borrowed))
+                    .flat_map(|package| package.dependency_groups().map(Cow::Borrowed))
                     .chain(
                         workspace
                             .workspace_dependency_groups()
@@ -433,7 +433,7 @@ impl<'lock> InstallTarget<'lock> {
                 // Extract the dependency groups defined in the relevant member(s).
                 let known_groups = member_packages
                     .iter()
-                    .flat_map(|package| package.dependency_groups().keys())
+                    .flat_map(|package| package.dependency_groups())
                     .collect::<FxHashSet<_>>();
 
                 for group in groups.explicit_names() {

@@ -18665,6 +18665,768 @@ fn lock_dependency_context_edges_merge() -> Result<()> {
     Ok(())
 }
 
+/// Validate workspace dependency edges when the next lockfile revision omits package metadata.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_missing_metadata_next_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg0"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "tqdm<10 ; sys_platform == 'win32'",
+            "tqdm>1 ; sys_platform != 'win32'",
+            "pkg1",
+            "pkg2",
+            "urllib3 ; extra == 'e1'",
+            "pandas ; extra == 'e1' and extra == 'e2'",
+            "httpx ; sys_platform == 'a'",
+            "httpx ; sys_platform == 'a'",
+            "httpx ; sys_platform == 'b'",
+            "six ; sys_platform == 'win32' or extra == 'e2'",
+        ]
+
+        [project.optional-dependencies]
+        e1 = ["anyio"]
+        e2 = [
+            "packaging==26.0 ; sys_platform == 'win32'",
+            "packaging==26.1 ; sys_platform != 'win32'",
+            "packaging>=25 ; python_version >= '3.12'",
+        ]
+        e3 = ["pkg0[e1]"]
+        e4 = ["httpx[http2]"]
+
+        [dependency-groups]
+        g1 = ["anyio ; os_name != 'posix'"]
+        g2 = [{ include-group = "g1" }]
+        g3 = ["pkg0[e1]"]
+        g4 = ["httpx[http2] ; extra == 'e4'"]
+
+        [tool.uv.workspace]
+        members = ["a", "b"]
+
+        [tool.uv.sources]
+        pkg1 = { workspace = true }
+        pkg2 = { workspace = true }
+        "#,
+    )?;
+
+    let member_a = context.temp_dir.child("a");
+    member_a.create_dir_all()?;
+    member_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==4.4.0 ; sys_platform == 'win32'"]
+        "#,
+    )?;
+
+    let member_b = context.temp_dir.child("b");
+    member_b.create_dir_all()?;
+    member_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg2"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["anyio==4.3.0 ; sys_platform != 'win32'"]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    // Remove the declaration snapshot from every workspace package, leaving only resolved
+    // production, optional, and development dependency edges for freshness validation.
+    for package in packages.iter_mut() {
+        package.remove("metadata");
+    }
+
+    let lockfile = context.temp_dir.child("uv.lock");
+    lockfile.write_str(&lock.to_string())?;
+
+    // Missing metadata is not supported by the current revision.
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .failure();
+
+    lock["revision"] = toml_edit::value(4);
+    lockfile.write_str(&lock.to_string())?;
+
+    // The next revision can validate the same workspace directly from its resolved edges.
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    // Frozen consumers must still discover non-empty extras and groups from resolved sections.
+    context
+        .export()
+        .arg("--frozen")
+        .arg("--extra")
+        .arg("e1")
+        .arg("--group")
+        .arg("g1")
+        .assert()
+        .success();
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--extra")
+        .arg("e1")
+        .arg("--group")
+        .arg("g1")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    // Later revisions retain support for metadata-free lockfiles as well.
+    lock["revision"] = toml_edit::value(5);
+    lockfile.write_str(&lock.to_string())?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    // Declaration-only changes are inherently invisible once their metadata snapshot is gone:
+    // the locked tqdm version satisfies both constraints, empty extras/groups have no edges, and
+    // the impossible Python marker cannot add an edge within the supported Python range.
+    let original_pyproject = fs_err::read_to_string(pyproject_toml.path())?;
+    let declaration_only_changes = original_pyproject
+        .replace("\"tqdm>1 ;", "\"tqdm>0 ;")
+        .replace(
+            "\"pkg2\",",
+            "\"pkg2\", \"sniffio ; python_version < '3.0'\",",
+        )
+        .replace(
+            "[project.optional-dependencies]\n",
+            "[project.optional-dependencies]\nempty = []\n",
+        )
+        .replace("[dependency-groups]\n", "[dependency-groups]\nempty = []\n");
+    pyproject_toml.write_str(&declaration_only_changes)?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    pyproject_toml.write_str(&original_pyproject)?;
+
+    let metadata_free_lock = fs_err::read_to_string(lockfile.path())?;
+
+    // A plain production requirement must not silently activate its target package's extra.
+    let mut extra_lock = metadata_free_lock.parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = extra_lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    let Some(project) = packages
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("pkg0"))
+    else {
+        anyhow::bail!("lockfile did not contain the root package");
+    };
+    let Some(dependencies) = project["dependencies"].as_array_mut() else {
+        anyhow::bail!("root package did not contain a dependency array");
+    };
+    let Some(dependency) = dependencies.iter_mut().find(|dependency| {
+        dependency
+            .as_inline_table()
+            .and_then(|dependency| dependency.get("name"))
+            .and_then(toml_edit::Value::as_str)
+            == Some("httpx")
+    }) else {
+        anyhow::bail!("root package did not depend on httpx");
+    };
+    let Some(dependency) = dependency.as_inline_table_mut() else {
+        anyhow::bail!("httpx dependency was not an inline table");
+    };
+    let mut extras = toml_edit::Array::new();
+    extras.push("http2");
+    dependency.insert("extra", toml_edit::Value::Array(extras));
+    lockfile.write_str(&extra_lock.to_string())?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .failure();
+
+    // Removing a redundant broad requirement does not change the resolved graph, but adding the
+    // other fork's package version to its platform must still invalidate that metadata-free graph.
+    pyproject_toml.write_str(
+        &original_pyproject.replace("\"packaging>=25 ; python_version >= '3.12'\",\n", ""),
+    )?;
+    lockfile.write_str(&metadata_free_lock)?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    let mut version_lock = metadata_free_lock.parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = version_lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    let Some(project) = packages
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("pkg0"))
+    else {
+        anyhow::bail!("lockfile did not contain the root package");
+    };
+    let Some(dependencies) = project["optional-dependencies"]["e2"].as_array_mut() else {
+        anyhow::bail!("root package did not contain extra e2");
+    };
+    let Some(mut wrong_version) = dependencies
+        .iter()
+        .find(|dependency| {
+            dependency
+                .as_inline_table()
+                .and_then(|dependency| dependency.get("name"))
+                .and_then(toml_edit::Value::as_str)
+                == Some("packaging")
+                && dependency
+                    .as_inline_table()
+                    .and_then(|dependency| dependency.get("version"))
+                    .and_then(toml_edit::Value::as_str)
+                    == Some("26.1")
+        })
+        .cloned()
+    else {
+        anyhow::bail!("extra e2 did not depend on packaging version 26.1");
+    };
+    let Some(wrong_version_table) = wrong_version.as_inline_table_mut() else {
+        anyhow::bail!("packaging dependency was not an inline table");
+    };
+    wrong_version_table.insert("marker", toml_edit::Value::from("sys_platform == 'win32'"));
+    dependencies.push(wrong_version);
+    lockfile.write_str(&version_lock.to_string())?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .failure();
+
+    pyproject_toml.write_str(&original_pyproject)?;
+    lockfile.write_str(&metadata_free_lock)?;
+
+    // A broad plain base edge cannot provide a requested extra outside the narrower sibling
+    // edge that actually activates it: macOS must not inherit a Linux-only `httpx[http2]` edge.
+    let marker_specific_extras = original_pyproject.replace(
+        "\"httpx ; sys_platform == 'a'\",\n            \"httpx ; sys_platform == 'a'\",\n            \"httpx ; sys_platform == 'b'\",",
+        "\"httpx[http2] ; sys_platform != 'win32'\",\n            \"httpx ; sys_platform == 'win32'\",",
+    );
+    pyproject_toml.write_str(&marker_specific_extras)?;
+    let mut uncovered_extra_lock = extra_lock;
+    let Some(packages) = uncovered_extra_lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    let Some(project) = packages
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("pkg0"))
+    else {
+        anyhow::bail!("lockfile did not contain the root package");
+    };
+    let Some(dependencies) = project["dependencies"].as_array_mut() else {
+        anyhow::bail!("root package did not contain a dependency array");
+    };
+    let Some(dependency) = dependencies.iter_mut().find(|dependency| {
+        dependency
+            .as_inline_table()
+            .and_then(|dependency| dependency.get("name"))
+            .and_then(toml_edit::Value::as_str)
+            == Some("httpx")
+    }) else {
+        anyhow::bail!("root package did not contain an httpx[http2] dependency");
+    };
+    let Some(dependency) = dependency.as_inline_table_mut() else {
+        anyhow::bail!("httpx[http2] dependency was not an inline table");
+    };
+    let mut plain_dependency = dependency.clone();
+    plain_dependency.remove("extra");
+    plain_dependency.remove("marker");
+    dependency.insert("marker", toml_edit::Value::from("sys_platform == 'linux'"));
+    dependencies.push(toml_edit::Value::InlineTable(plain_dependency));
+    lockfile.write_str(&uncovered_extra_lock.to_string())?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .failure();
+
+    pyproject_toml.write_str(&original_pyproject)?;
+    lockfile.write_str(&metadata_free_lock)?;
+
+    // A genuinely new dependency still invalidates the metadata-free lockfile.
+    pyproject_toml.write_str(&original_pyproject.replace("\"pkg2\",", "\"pkg2\", \"sniffio\","))?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .failure();
+
+    Ok(())
+}
+
+/// Validate overridden workspace dependencies from their resolved edges when metadata is absent.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_missing_metadata_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx>=2 ; sys_platform == 'win32' or extra == 'test'"]
+
+        [project.optional-dependencies]
+        test = []
+
+        [tool.uv]
+        override-dependencies = ["httpx==1.0.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    for package in packages.iter_mut() {
+        package.remove("metadata");
+    }
+    lock["revision"] = toml_edit::value(4);
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Validate scoped additions before specializing workspace extras when metadata is absent.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_missing_metadata_scoped_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        test = []
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "project", version = "0.1.0" }, dependencies = ["httpx==1.0.0"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    for package in packages.iter_mut() {
+        package.remove("metadata");
+    }
+    lock["revision"] = toml_edit::value(4);
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Validate excluded workspace dependencies from their resolved edges when metadata is absent.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_missing_metadata_exclude() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx"]
+
+        [tool.uv]
+        exclude-dependencies = ["httpx"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    for package in packages.iter_mut() {
+        package.remove("metadata");
+    }
+    lock["revision"] = toml_edit::value(4);
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Reject metadata-free lockfiles when a workspace dependency stops requesting an extra.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_missing_metadata_dependency_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx[http2]"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    for package in packages.iter_mut() {
+        package.remove("metadata");
+    }
+    lock["revision"] = toml_edit::value(4);
+    let lockfile = context.temp_dir.child("uv.lock");
+    lockfile.write_str(&lock.to_string())?;
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Preserve metadata-free locks for workspace dependencies whose requested extras were pruned.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_missing_metadata_pruned_dependency_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep[missing]"]
+
+        [tool.uv.workspace]
+        members = ["dep"]
+
+        [tool.uv.sources]
+        dep = { workspace = true }
+        "#,
+    )?;
+    let dependency = context.temp_dir.child("dep");
+    dependency.create_dir_all()?;
+    dependency.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    for package in packages.iter_mut() {
+        package.remove("metadata");
+    }
+    lock["revision"] = toml_edit::value(4);
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Validate an unchanged metadata-free lock without expanding independent conflict sets.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_missing_metadata_many_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let extra_declarations = (1..=12)
+        .map(|conflict_number| format!("a{conflict_number} = []\nb{conflict_number} = []"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let project_conflicts = (1..=12)
+        .map(|conflict_number| {
+            format!(
+                "  [{{ extra = \"a{conflict_number}\" }}, {{ extra = \"b{conflict_number}\" }}],"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let lock_conflicts = (1..=12)
+        .map(|conflict_number| {
+            format!(
+                "[{{ package = \"project\", extra = \"a{conflict_number}\" }}, {{ package = \"project\", extra = \"b{conflict_number}\" }}]"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [project.optional-dependencies]
+        {extra_declarations}
+
+        [tool.uv]
+        conflicts = [
+        {project_conflicts}
+        ]
+
+        [tool.uv.workspace]
+        members = ["dep"]
+
+        [tool.uv.sources]
+        dep = {{ workspace = true }}
+        "#,
+        ))?;
+    let dependency = context.temp_dir.child("dep");
+    dependency.create_dir_all()?;
+    dependency.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+    context.temp_dir.child("uv.lock").write_str(&format!(
+        r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+        conflicts = [
+        {lock_conflicts}
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = ["dep", "project"]
+
+        [[package]]
+        name = "dep"
+        version = "1.0.0"
+        source = {{ editable = "dep" }}
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [{{ name = "dep" }}]
+        "#,
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test backwards compatibility for `[package.metadata]`.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -36238,6 +37000,110 @@ async fn lock_path_dependency_explicit_index() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
     ");
+
+    let mut lock =
+        fs_err::read_to_string(pkg_b.join("uv.lock"))?.parse::<toml_edit::DocumentMut>()?;
+    lock["revision"] = toml_edit::value(4);
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    for package in packages.iter_mut() {
+        package.remove("metadata");
+    }
+    fs_err::write(pkg_b.join("uv.lock"), lock.to_string())?;
+
+    // The explicit index is declared only by the transitive path dependency; its stale locked
+    // edges are insufficient evidence, but freshly validated declarations make it available.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--locked")
+        .arg("--default-index")
+        .arg("https://example.invalid/simple")
+        .current_dir(&pkg_b), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Metadata-free workspace groups must rediscover explicit flat indexes from live declarations.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_path_dependency_explicit_flat_index_group_missing_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.workspace_root.join("test/links");
+
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        checks = ["tqdm==1000.0.0"]
+
+        [tool.uv.sources]
+        tqdm = {{ index = "inner-flat" }}
+
+        [[tool.uv.index]]
+        name = "inner-flat"
+        url = "{}"
+        format = "flat"
+        explicit = true
+        "#,
+        links.user_display()
+    })?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        "#,
+    )?;
+
+    context.lock().arg("--offline").assert().success();
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    lock["revision"] = toml_edit::value(4);
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    for package in packages.iter_mut() {
+        package.remove("metadata");
+    }
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--default-index")
+        .arg("https://example.invalid/simple")
+        .assert()
+        .success();
 
     Ok(())
 }

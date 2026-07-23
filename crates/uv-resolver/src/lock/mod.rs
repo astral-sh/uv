@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
+use std::iter;
 use std::path::{Path, PathBuf};
+use std::slice;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
@@ -18,8 +20,9 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
-    ExtrasSpecificationWithDefaults, InstallTarget, Override, PackageOverride,
+    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, Excludes,
+    ExtrasSpecificationWithDefaults, InstallTarget, Override, Overrides, PackageOverride,
+    ScopedOverrideSourceError,
 };
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
@@ -39,7 +42,7 @@ use uv_fs::{
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
 };
@@ -48,8 +51,8 @@ use uv_platform_tags::{
 };
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
-    Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
-    ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ConflictItem, ConflictKindRef, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -764,6 +767,12 @@ impl Lock {
         (self.version(), self.revision()) >= (1, 1)
     }
 
+    /// Returns `true` if this [`Lock`] may omit a package's declaration metadata.
+    fn supports_missing_package_metadata(&self) -> bool {
+        // Metadata-free validation was added in Version 1 Revision 4.
+        (self.version(), self.revision()) >= (1, 4)
+    }
+
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
     fn includes_empty_groups(&self) -> bool {
         // Empty dependency groups are included as of https://github.com/astral-sh/uv/pull/8598,
@@ -1456,10 +1465,16 @@ impl Lock {
     /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
     fn satisfies_provides_extra<'lock>(
         &self,
-        provides_extra: Box<[ExtraName]>,
+        provides_extra: &[ExtraName],
         package: &'lock Package,
     ) -> SatisfiesResult<'lock> {
-        if !self.supports_provides_extra() {
+        // Deserialization maps both an absent metadata table and an empty one to the same
+        // default value. Revision 4 intentionally permits that ambiguity; later graph validation
+        // can still reject optional-dependency sections for extras the current project lacks.
+        if !self.supports_provides_extra()
+            || self.supports_missing_package_metadata()
+                && package.metadata == PackageMetadata::default()
+        {
             return SatisfiesResult::Satisfied;
         }
 
@@ -1467,7 +1482,7 @@ impl Lock {
         let actual: BTreeSet<_> = package.metadata.provides_extra.iter().collect();
 
         if expected != actual {
-            let expected = Box::into_iter(provides_extra).collect();
+            let expected = provides_extra.iter().cloned().collect();
             return SatisfiesResult::MismatchedPackageProvidesExtra(
                 &package.id.name,
                 package.id.version.as_ref(),
@@ -1483,86 +1498,689 @@ impl Lock {
     fn satisfies_requires_dist<'lock>(
         &self,
         requires_dist: Box<[Requirement]>,
+        provides_extra: &[ExtraName],
         dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
+        overrides: &Overrides,
+        excludes: &Excludes,
+        package_requires_python: Option<&VersionSpecifiers>,
         package: &'lock Package,
         root: &Path,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
-        // Special-case: if the version is dynamic, compare the flattened requirements.
-        let flattened = if package.is_dynamic() {
-            Some(
-                FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
-                    .into_iter()
-                    .map(|requirement| {
-                        normalize_requirement(requirement, root, &self.requires_python)
-                    })
-                    .collect::<Result<BTreeSet<_>, _>>()?,
-            )
-        } else {
-            None
-        };
-
-        // Validate the `requires-dist` metadata.
-        let expected: BTreeSet<_> = Box::into_iter(requires_dist)
-            .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
-            .collect::<Result<_, _>>()?;
-        let actual: BTreeSet<_> = package
-            .metadata
-            .requires_dist
-            .iter()
-            .cloned()
-            .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
-            .collect::<Result<_, _>>()?;
-
-        if expected != actual && flattened.is_none_or(|expected| expected != actual) {
-            return Ok(SatisfiesResult::MismatchedPackageRequirements(
-                &package.id.name,
-                package.id.version.as_ref(),
-                expected,
-                actual,
-            ));
-        }
-
-        // Validate the `dependency-groups` metadata.
-        let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = dependency_groups
-            .into_iter()
-            .filter(|(_, requirements)| self.includes_empty_groups() || !requirements.is_empty())
-            .map(|(group, requirements)| {
-                Ok::<_, LockError>((
-                    group,
-                    Box::into_iter(requirements)
+        let missing_metadata = self.supports_missing_package_metadata()
+            && package.metadata == PackageMetadata::default();
+        // Dynamic metadata and graph validation need expanded self-referential extras. Avoid
+        // that work for metadata-backed locks in optimized builds, where metadata alone already
+        // provides the exact declaration comparison and the consistency assertion is disabled.
+        let expected_flattened =
+            if missing_metadata || package.is_dynamic() || cfg!(debug_assertions) {
+                Some(
+                    FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
+                        .into_iter()
                         .map(|requirement| {
                             normalize_requirement(requirement, root, &self.requires_python)
                         })
-                        .collect::<Result<_, _>>()?,
-                ))
-            })
-            .collect::<Result<_, _>>()?;
-        let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
-            .metadata
-            .dependency_groups
-            .iter()
+                        .collect::<Result<BTreeSet<_>, _>>()?,
+                )
+            } else {
+                None
+            };
+
+        // Development groups retain self-dependencies, unlike production requirements and extras.
+        let expected_groups: BTreeMap<GroupName, BTreeSet<Requirement>> = dependency_groups
+            .into_iter()
             .filter(|(_, requirements)| self.includes_empty_groups() || !requirements.is_empty())
             .map(|(group, requirements)| {
-                Ok::<_, LockError>((
-                    group.clone(),
+                Box::into_iter(requirements)
+                    .map(|requirement| {
+                        normalize_requirement(requirement, root, &self.requires_python)
+                    })
+                    .collect::<Result<_, _>>()
+                    .map(|requirements| (group, requirements))
+            })
+            .collect::<Result<_, _>>()?;
+
+        // Revision 4 and later may omit the declaration snapshot entirely. Earlier locks must
+        // still validate their metadata, including genuinely empty metadata sections.
+        //
+        // Resolved edges cannot distinguish a relaxed version constraint when its existing locked
+        // version still satisfies both constraints, an added or removed empty extra or group, or
+        // a requirement whose marker is impossible under the lockfile's Python or platform range.
+        // Those declaration-only changes are necessarily invisible without package metadata.
+        if !missing_metadata {
+            // Preserve existing mismatch precedence and diagnostics before checking resolved
+            // edges. Only dynamic backend metadata may substitute flattened declarations.
+            let expected: BTreeSet<_> = Box::into_iter(requires_dist)
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeSet<_> = package
+                .metadata
+                .requires_dist
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .collect::<Result<_, _>>()?;
+
+            if expected != actual
+                && (!package.is_dynamic()
+                    || expected_flattened
+                        .as_ref()
+                        .is_none_or(|flattened| flattened != &actual))
+            {
+                return Ok(SatisfiesResult::MismatchedPackageRequirements(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    expected,
+                    actual,
+                ));
+            }
+
+            // Validate the `dependency-groups` metadata before their resolved edges as well.
+            let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
+                .metadata
+                .dependency_groups
+                .iter()
+                .filter(|(_, requirements)| {
+                    self.includes_empty_groups() || !requirements.is_empty()
+                })
+                .map(|(group, requirements)| {
                     requirements
                         .iter()
                         .cloned()
                         .map(|requirement| {
                             normalize_requirement(requirement, root, &self.requires_python)
                         })
-                        .collect::<Result<_, _>>()?,
-                ))
-            })
-            .collect::<Result<_, _>>()?;
+                        .collect::<Result<_, _>>()
+                        .map(|requirements| (group.clone(), requirements))
+                })
+                .collect::<Result<_, _>>()?;
 
-        if expected != actual {
-            return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
+            if expected_groups != actual {
+                return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    expected_groups,
+                    actual,
+                ));
+            }
+
+            // Metadata-backed locks retain exact declaration snapshots. Their resolved edges may
+            // legitimately reflect overrides or excludes, so graph validation is both redundant
+            // and unable to preserve the existing freshness semantics.
+            return Ok(SatisfiesResult::Satisfied);
+        }
+
+        let Some(expected_flattened) = expected_flattened else {
+            return Ok(SatisfiesResult::Satisfied);
+        };
+        self.satisfies_package_dependencies(
+            &expected_flattened,
+            provides_extra,
+            &expected_groups,
+            overrides,
+            excludes,
+            package_requires_python,
+            package,
+            root,
+        )
+    }
+
+    /// Return a mismatch if a package's resolved dependency edges are inconsistent.
+    ///
+    /// # Implementation notes
+    ///
+    /// We process each of prod deps, each extra and each group separately. Markers do not
+    /// necessarily fit correctly into one optional dependency group (either through strange input
+    /// or by construction), and there's some preexisting bogus extra processing we keep since it's
+    /// now part of users' lockfiles.
+    ///
+    /// Note that we expand self-referential extras and include-groups, but not self-referential extras in groups.
+    ///
+    /// We need to ensure that the markers match up, between expected in `pyproject.toml` and actual in `package` in `uv.lock`.
+    /// Markers may be in any relationship to their input markers:
+    ///
+    /// ```text
+    /// Wider marker:
+    /// ```text
+    ///     httpx ; sys_platform == 'a'
+    ///     httpx ; sys_platform == 'a'
+    ///     httpx ; sys_platform == 'b'
+    /// may become
+    ///     { name = "httpx", marker = "sys_platform == 'a' or sys_platform == 'b'" }
+    /// ```
+    /// Smaller markers:
+    /// ```text
+    ///     anyio
+    /// may become
+    ///     { name = "anyio", version = "4.3.0", marker = "sys_platform != 'windows'" },
+    ///     { name = "anyio", version = "4.4.0",  marker = "sys_platform == 'windows'" },
+    /// ```
+    /// Incomparable markers (a ⋂ b ≠ ∅, but a ⊈ b and b ⊈ a; The name is due to the comparison operators ⊆, ⊇, and = returning false):
+    /// ```text
+    ///     packaging==26.0; sys_platform == 'win32'
+    ///     packaging==26.1; sys_platform != 'win32'
+    ///     packaging>=25; python_version >= '3.12'
+    /// may become
+    ///     { name = "packaging", version = "26.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
+    ///     { name = "packaging", version = "26.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+    /// ```
+    fn satisfies_package_dependencies<'lock>(
+        &self,
+        expected_flattened: &BTreeSet<Requirement>,
+        provides_extra: &[ExtraName],
+        expected_groups: &BTreeMap<GroupName, BTreeSet<Requirement>>,
+        overrides: &Overrides,
+        excludes: &Excludes,
+        package_requires_python: Option<&VersionSpecifiers>,
+        package: &'lock Package,
+        root: &Path,
+    ) -> Result<SatisfiesResult<'lock>, LockError> {
+        // A dependency is relevant only where its package, resolution fork, and Python range can
+        // exist. Keep the conflict world intact until its active items have been specialized.
+        let mut resolution_marker = UniversalMarker::new(
+            self.fork_markers_union(),
+            ConflictMarker::from_conflicts(&self.conflicts),
+        )
+        .combined();
+        if !package.fork_markers.is_empty() {
+            let mut package_fork_marker = MarkerTree::FALSE;
+            for fork_marker in &package.fork_markers {
+                package_fork_marker.or(fork_marker.combined());
+            }
+            resolution_marker.and(package_fork_marker);
+        }
+        if let Some(requires_python) = package_requires_python {
+            resolution_marker
+                .and(RequiresPython::from_specifiers(requires_python.clone()).to_marker_tree());
+        }
+
+        // A locked optional-dependency section must belong to an extra the package provides.
+        if let Some((_, dependencies)) = package
+            .optional_dependencies
+            .iter()
+            .find(|(extra, _)| !provides_extra.contains(extra))
+        {
+            return Ok(SatisfiesResult::MismatchedPackageDependencies(
                 &package.id.name,
                 package.id.version.as_ref(),
-                expected,
-                actual,
+                expected_flattened.clone(),
+                dependencies,
             ));
+        }
+
+        // Encoded conflict markers are PEP 508 extras, whose negation is not Boolean when more
+        // than one extra is active. Specialize the selected item and its mutually exclusive peers
+        // before comparing marker coverage, rather than enumerating synthetic inference sets.
+        let specialize_conflicts =
+            |mut marker: UniversalMarker, active_conflicts: &BTreeSet<ConflictItem>| {
+                for active in active_conflicts {
+                    marker.assume_conflict_item(active);
+                    for conflicts in self.conflicts.iter() {
+                        if conflicts.iter().any(|candidate| candidate == active) {
+                            for conflict in
+                                conflicts.iter().filter(|candidate| *candidate != active)
+                            {
+                                marker.assume_not_conflict_item(conflict);
+                            }
+                        }
+                    }
+                }
+                marker.combined()
+            };
+        let markers_cover = |expected: MarkerTree, actual: MarkerTree| {
+            // Most markers already prove coverage without considering conflicts. Avoid expanding
+            // every unrelated conflict set into a Cartesian product in that common case.
+            if actual.negate().is_disjoint(expected) {
+                return true;
+            }
+
+            let mut branches = vec![(
+                UniversalMarker::from_combined(expected),
+                UniversalMarker::from_combined(actual),
+            )];
+            for conflicts in self.conflicts.iter() {
+                let mut next = Vec::new();
+                for (expected, actual) in branches {
+                    for selected in iter::once(None).chain(conflicts.iter().map(Some)) {
+                        let mut expected = expected;
+                        let mut actual = actual;
+                        for conflict in conflicts.iter() {
+                            if selected == Some(conflict) {
+                                expected.assume_conflict_item(conflict);
+                                actual.assume_conflict_item(conflict);
+                            } else {
+                                expected.assume_not_conflict_item(conflict);
+                                actual.assume_not_conflict_item(conflict);
+                            }
+                        }
+                        next.push((expected, actual));
+                    }
+                }
+                branches = next;
+            }
+            branches.into_iter().all(|(expected, actual)| {
+                actual.combined().negate().is_disjoint(expected.combined())
+            })
+        };
+
+        let dependency_satisfies_requirement =
+            |dependency: &Dependency, requirement: &Requirement| -> Result<bool, LockError> {
+                // Lockfile edges can omit versions, but their package IDs identify the target.
+                let dependency_package = self.find_by_id(&dependency.package_id);
+                let source_matches = dependency_package
+                    .id
+                    .source
+                    .satisfies_requirement(&requirement.source, root)?
+                    // Flattened self-dependencies can retain an unpinned registry declaration
+                    // even though their package ID points at this local workspace package.
+                    || dependency.package_id == package.id
+                        && matches!(
+                            requirement.source,
+                            RequirementSource::Registry { index: None, .. }
+                        );
+                let version_matches = requirement
+                    .source
+                    .version_specifiers()
+                    .zip(dependency_package.id.version.as_ref())
+                    // Dynamic local packages do not necessarily have a version in their ID.
+                    .is_none_or(|(specifiers, version)| specifiers.contains(version));
+                // Lock construction intentionally removes unavailable or dependency-free extras.
+                let extras_match = requirement.extras.iter().all(|extra| {
+                    !dependency_package.optional_dependencies.contains_key(extra)
+                        || dependency.extra.contains(extra)
+                });
+                Ok(source_matches && version_matches && extras_match)
+            };
+
+        let package_context = package
+            .id
+            .version
+            .as_ref()
+            .map(|version| (&package.id.name, version));
+        let expected_flattened = overrides
+            .apply_for_package(package_context, expected_flattened)
+            .filter(|requirement| {
+                !excludes.contains_for_package(package_context, &requirement.name)
+            })
+            .map(Cow::into_owned)
+            .collect::<BTreeSet<_>>();
+        let expected_groups = expected_groups
+            .iter()
+            .map(|(group, requirements)| {
+                let requirements = overrides
+                    .apply_for_package(None, requirements)
+                    .filter(|requirement| {
+                        !excludes.contains_for_package(package_context, &requirement.name)
+                    })
+                    .map(Cow::into_owned)
+                    .collect::<BTreeSet<_>>();
+                (group.clone(), requirements)
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        // Existing locks can hoist `six ; sys_platform == 'win32' or extra == 'e2'` into an
+        // unconditional production edge. Index the edge coverage by the entire requirement, not
+        // merely its name, so another source, version, or requested extra cannot justify hoisting.
+        let mut production_markers = BTreeMap::new();
+        for requirement in &expected_flattened {
+            let mut marker = MarkerTree::FALSE;
+            for dependency in &package.dependencies {
+                if dependency.package_id.name == requirement.name
+                    && dependency_satisfies_requirement(dependency, requirement)?
+                {
+                    marker.or(dependency.complexified_marker.combined());
+                }
+            }
+            if !marker.is_false() {
+                production_markers.insert(requirement, marker);
+            }
+        }
+
+        // Include locked-only groups so stale development dependency edges are rejected too.
+        let groups = expected_groups
+            .keys()
+            .chain(package.dependency_groups.keys())
+            .collect::<BTreeSet<_>>();
+        let empty_requirements = BTreeSet::new();
+        // A single-project lock has no explicit members, so its root must still receive the
+        // workspace behavior: every declared extra is locked, even when it was not requested.
+        let is_workspace_package = self.members().contains(&package.id.name)
+            || self.members().is_empty()
+                && self
+                    .root()
+                    .is_some_and(|workspace_root| workspace_root.id == package.id);
+        let sections = iter::once((None, None, package.dependencies.as_slice()))
+            // Registry/direct dependencies expose all their extras in distribution metadata but
+            // only contain lockfile edges for selected extras. Checking every advertised extra
+            // would incorrectly demand dependencies for unselected features.
+            .chain(
+                provides_extra
+                    .iter()
+                    .filter(|extra| {
+                        is_workspace_package || package.optional_dependencies.contains_key(*extra)
+                    })
+                    .map(|extra| {
+                        (
+                            Some(extra),
+                            None,
+                            package
+                                .optional_dependencies
+                                .get(extra)
+                                .map(Vec::as_slice)
+                                .unwrap_or_default(),
+                        )
+                    }),
+            )
+            .chain(groups.into_iter().map(|group| {
+                (
+                    None,
+                    Some(group),
+                    package
+                        .dependency_groups
+                        .get(group)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default(),
+                )
+            }));
+        let requires_python_marker = self.requires_python.to_marker_tree();
+
+        for (active_extra, active_group, actual_dependencies) in sections {
+            let declarations = active_group
+                .and_then(|group| expected_groups.get(group))
+                .unwrap_or(if active_group.is_some() {
+                    &empty_requirements
+                } else {
+                    &expected_flattened
+                });
+            let expected_requirements = declarations
+                .iter()
+                .filter_map(|requirement| {
+                    // Self-constraints affect resolution but do not create production or extra
+                    // edges. Development groups, however, retain explicit self-dependencies.
+                    if requirement.name == package.id.name && active_group.is_none() {
+                        return None;
+                    }
+
+                    let production_marker = requirement.marker.simplify_not_extras_with(|_| true);
+                    let extra_marker = |extra: &ExtraName| {
+                        requirement
+                            .marker
+                            .simplify_extras(slice::from_ref(extra))
+                            .simplify_not_extras_with(|candidate| candidate != extra)
+                    };
+                    let mut marker = if let Some(extra) = active_extra {
+                        let mut marker = extra_marker(extra);
+                        marker.and(production_marker.negate());
+                        if !production_marker.is_false()
+                            && let Some(locked_marker) = production_markers.get(requirement)
+                        {
+                            marker.and(locked_marker.negate());
+                        }
+                        marker
+                    } else if active_group.is_some() {
+                        production_marker
+                    } else {
+                        if production_marker.is_false() {
+                            return None;
+                        }
+                        let mut marker = production_marker;
+                        if let Some(locked_marker) = production_markers.get(requirement) {
+                            // Existing lockfiles can hoist an extra-only branch into production.
+                            for extra in provides_extra {
+                                let mut marker_for_extra = extra_marker(extra);
+                                marker_for_extra.and(*locked_marker);
+                                marker.or(marker_for_extra);
+                            }
+                        }
+                        marker
+                    };
+                    marker.and(requires_python_marker);
+                    (!marker.is_false()).then(|| Requirement {
+                        marker,
+                        ..requirement.clone()
+                    })
+                })
+                .collect::<BTreeSet<_>>();
+
+            // Extras activate both their production package and their own conflict; groups do
+            // not activate the package's production conflict.
+            let mut context_conflicts = BTreeSet::new();
+            if active_group.is_none()
+                && self
+                    .conflicts
+                    .contains(&package.id.name, ConflictKindRef::Project)
+            {
+                context_conflicts.insert(ConflictItem::from(package.id.name.clone()));
+            }
+            if let Some(extra) = active_extra
+                && self.conflicts.contains(&package.id.name, extra)
+            {
+                context_conflicts
+                    .insert(ConflictItem::from((package.id.name.clone(), extra.clone())));
+            }
+            if let Some(group) = active_group
+                && self.conflicts.contains(&package.id.name, group)
+            {
+                context_conflicts
+                    .insert(ConflictItem::from((package.id.name.clone(), group.clone())));
+            }
+            let context_marker = specialize_conflicts(
+                UniversalMarker::from_combined(resolution_marker),
+                &context_conflicts,
+            );
+
+            // Key coverage by the actual edge, not just its package name: different versions,
+            // sources, and requested extras may share a name while applying to different forks.
+            let mut expected_markers: BTreeMap<
+                &Dependency,
+                (MarkerTree, BTreeMap<&ExtraName, MarkerTree>),
+            > = BTreeMap::new();
+            'requirements: for expected_requirement in &expected_requirements {
+                let mut expected_marker = expected_requirement.marker;
+                expected_marker.and(context_marker);
+                let mut active_conflicts = context_conflicts.clone();
+                if let RequirementSource::Registry {
+                    conflict: Some(conflict),
+                    ..
+                } = &expected_requirement.source
+                {
+                    expected_marker = UniversalMarker::new(
+                        expected_marker,
+                        ConflictMarker::from_conflict_item(conflict),
+                    )
+                    .combined();
+                    active_conflicts.insert(conflict.clone());
+                }
+                for requested_extra in &expected_requirement.extras {
+                    if self
+                        .conflicts
+                        .contains(&expected_requirement.name, requested_extra)
+                    {
+                        let conflict = ConflictItem::from((
+                            expected_requirement.name.clone(),
+                            requested_extra.clone(),
+                        ));
+                        expected_marker = UniversalMarker::new(
+                            expected_marker,
+                            ConflictMarker::from_conflict_item(&conflict),
+                        )
+                        .combined();
+                        active_conflicts.insert(conflict);
+                    }
+                }
+                let expected_marker = specialize_conflicts(
+                    UniversalMarker::from_combined(expected_marker),
+                    &active_conflicts,
+                );
+                if expected_marker.is_false() {
+                    continue;
+                }
+
+                let mut covered_marker = MarkerTree::FALSE;
+                for dependency in actual_dependencies {
+                    let dependency_marker =
+                        specialize_conflicts(dependency.complexified_marker, &active_conflicts);
+                    if dependency.package_id.name != expected_requirement.name
+                        || dependency_marker.is_disjoint(expected_marker)
+                    {
+                        continue;
+                    }
+
+                    let directly_satisfies_requirement =
+                        dependency_satisfies_requirement(dependency, expected_requirement)?;
+                    if !directly_satisfies_requirement {
+                        // Historical locks can retain a broad plain base edge next to a narrower
+                        // edge that activates the requested extras. The plain edge is justified
+                        // only where a same-package sibling actually satisfies that requirement.
+                        let mut matching_extra_edge = false;
+                        if dependency.extra.is_empty() {
+                            for extra_dependency in actual_dependencies {
+                                if extra_dependency.package_id == dependency.package_id
+                                    && !extra_dependency.extra.is_empty()
+                                    && dependency_satisfies_requirement(
+                                        extra_dependency,
+                                        expected_requirement,
+                                    )?
+                                    && !specialize_conflicts(
+                                        extra_dependency.complexified_marker,
+                                        &active_conflicts,
+                                    )
+                                    .is_disjoint(expected_marker)
+                                {
+                                    matching_extra_edge = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if !matching_extra_edge {
+                            continue;
+                        }
+                    }
+
+                    let (requirement_marker, requested_extras) = expected_markers
+                        .entry(dependency)
+                        .or_insert_with(|| (MarkerTree::FALSE, BTreeMap::new()));
+                    requirement_marker.or(expected_marker);
+                    for extra in &expected_requirement.extras {
+                        if dependency.extra.contains(extra) {
+                            requested_extras
+                                .entry(extra)
+                                .and_modify(|marker| marker.or(expected_marker))
+                                .or_insert(expected_marker);
+                        }
+                    }
+                    // Historical plain edges can establish reverse ownership, but cannot
+                    // provide requested extras beyond their extra-activating sibling.
+                    if directly_satisfies_requirement {
+                        covered_marker.or(dependency_marker);
+                    }
+                }
+
+                // Different versions may split one requirement across multiple resolution forks.
+                if !markers_cover(expected_marker, covered_marker) {
+                    // An extra-specific source override can relocate a production declaration into
+                    // that extra's edges, leaving no fallback production dependency in old locks.
+                    if active_extra.is_none()
+                        && active_group.is_none()
+                        && !actual_dependencies.iter().any(|dependency| {
+                            dependency.package_id.name == expected_requirement.name
+                        })
+                    {
+                        for (extra, dependencies) in &package.optional_dependencies {
+                            let production_requirement =
+                                expected_flattened.iter().find(|candidate| {
+                                    candidate.name == expected_requirement.name
+                                        && candidate.source == expected_requirement.source
+                                        && candidate.extras == expected_requirement.extras
+                                });
+                            let Some(production_requirement) = production_requirement else {
+                                continue;
+                            };
+                            let production_marker = production_requirement
+                                .marker
+                                .simplify_extras(slice::from_ref(extra))
+                                .simplify_not_extras_with(|candidate| candidate != extra);
+                            if !production_marker.is_false() {
+                                continue;
+                            }
+
+                            for alternative in &expected_flattened {
+                                if alternative.name != expected_requirement.name
+                                    || alternative.source == expected_requirement.source
+                                {
+                                    continue;
+                                }
+                                let marker = alternative
+                                    .marker
+                                    .simplify_extras(slice::from_ref(extra))
+                                    .simplify_not_extras_with(|candidate| candidate != extra);
+                                if marker.is_false() {
+                                    continue;
+                                }
+                                for dependency in dependencies {
+                                    if dependency.package_id.name == alternative.name
+                                        && dependency_satisfies_requirement(
+                                            dependency,
+                                            alternative,
+                                        )?
+                                    {
+                                        continue 'requirements;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    return Ok(SatisfiesResult::MismatchedPackageDependencies(
+                        &package.id.name,
+                        package.id.version.as_ref(),
+                        expected_requirements.clone(),
+                        actual_dependencies,
+                    ));
+                }
+            }
+
+            // Every locked edge must itself be justified in every environment it covers. This
+            // converse also checks merged extras: a plain requirement cannot silently activate an
+            // extra unless a simultaneous matching requirement requested it in the same fork.
+            for dependency in actual_dependencies {
+                let mut active_conflicts = context_conflicts.clone();
+                let mut unexpected_marker = dependency.complexified_marker;
+                for requested_extra in &dependency.extra {
+                    if self
+                        .conflicts
+                        .contains(&dependency.package_id.name, requested_extra)
+                    {
+                        let conflict = ConflictItem::from((
+                            dependency.package_id.name.clone(),
+                            requested_extra.clone(),
+                        ));
+                        active_conflicts.insert(conflict);
+                    }
+                }
+                unexpected_marker.and(UniversalMarker::from_combined(context_marker));
+                let actual_marker = specialize_conflicts(unexpected_marker, &active_conflicts);
+                if actual_marker.is_false() {
+                    continue;
+                }
+
+                if let Some((expected_marker, requested_extras)) = expected_markers.get(dependency)
+                    && markers_cover(actual_marker, *expected_marker)
+                    && dependency.extra.iter().all(|extra| {
+                        requested_extras.get(extra).is_some_and(|expected_extra| {
+                            markers_cover(actual_marker, *expected_extra)
+                        })
+                    })
+                {
+                    continue;
+                }
+
+                return Ok(SatisfiesResult::MismatchedPackageDependencies(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    expected_requirements.clone(),
+                    actual_dependencies,
+                ));
+            }
         }
 
         Ok(SatisfiesResult::Satisfied)
@@ -1679,7 +2297,7 @@ impl Lock {
         }
 
         // Validate that the lockfile was generated with the same overrides.
-        {
+        let normalized_overrides = {
             let normalize = |entry: Override<Requirement>| -> Result<_, LockError> {
                 match entry {
                     Override::Requirement(requirement) => Ok(Override::Requirement(
@@ -1714,7 +2332,8 @@ impl Lock {
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
             }
-        }
+            expected
+        };
 
         // Validate that the lockfile was generated with the same excludes.
         {
@@ -1724,6 +2343,17 @@ impl Lock {
                 return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
             }
         }
+
+        let dependency_overrides = if self.supports_missing_package_metadata() {
+            Overrides::from_entries(normalized_overrides.into_iter().collect())?
+        } else {
+            Overrides::default()
+        };
+        let dependency_excludes = if self.supports_missing_package_metadata() {
+            Excludes::from_entries(excludes.iter().cloned())
+        } else {
+            Excludes::default()
+        };
 
         // Validate that the lockfile was generated with the same build constraints.
         {
@@ -1832,6 +2462,34 @@ impl Lock {
                 .collect::<BTreeSet<_>>()
         });
 
+        let record_index = |requirement: &Requirement,
+                            remotes: &mut Option<BTreeSet<UrlString>>,
+                            locals: &mut Option<BTreeSet<Box<Path>>>| {
+            let RequirementSource::Registry {
+                index: Some(index), ..
+            } = &requirement.source
+            else {
+                return;
+            };
+
+            match &index.url {
+                IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                    if let Some(remotes) = remotes.as_mut() {
+                        remotes.insert(UrlString::from(index.url().without_credentials().as_ref()));
+                    }
+                }
+                IndexUrl::Path(url) => {
+                    if let Some(locals) = locals.as_mut()
+                        && let Some(path) = url.to_file_path().ok().and_then(|path| {
+                            try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
+                        })
+                    {
+                        locals.insert(path.into_boxed_path());
+                    }
+                }
+            }
+        };
+
         // Add the workspace packages to the queue.
         for root_name in packages.keys() {
             let root = self
@@ -1856,29 +2514,7 @@ impl Lock {
             .collect::<Vec<_>>();
 
         for requirement in &root_requirements {
-            if let RequirementSource::Registry {
-                index: Some(index), ..
-            } = &requirement.source
-            {
-                match &index.url {
-                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        if let Some(remotes) = remotes.as_mut() {
-                            remotes.insert(UrlString::from(
-                                index.url().without_credentials().as_ref(),
-                            ));
-                        }
-                    }
-                    IndexUrl::Path(url) => {
-                        if let Some(locals) = locals.as_mut() {
-                            if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
-                            }) {
-                                locals.insert(path.into_boxed_path());
-                            }
-                        }
-                    }
-                }
-            }
+            record_index(requirement, &mut remotes, &mut locals);
         }
 
         if !root_requirements.is_empty() {
@@ -1964,6 +2600,20 @@ impl Lock {
                 continue;
             }
 
+            let missing_metadata = self.supports_missing_package_metadata()
+                && package.metadata == PackageMetadata::default();
+            let record_refreshed_indexes =
+                |requirements: &[Requirement],
+                 groups: &BTreeMap<GroupName, Box<[Requirement]>>,
+                 remotes: &mut Option<BTreeSet<UrlString>>,
+                 locals: &mut Option<BTreeSet<Box<Path>>>| {
+                    if missing_metadata {
+                        for requirement in requirements.iter().chain(groups.values().flatten()) {
+                            record_index(requirement, remotes, locals);
+                        }
+                    }
+                };
+
             // Validating a direct URL package requires retrieving metadata from the remote
             // artifact. In offline mode, preserve the metadata captured in the lockfile rather
             // than requiring that artifact to already be present in the cache.
@@ -1982,6 +2632,7 @@ impl Lock {
                     package.id.source.as_source_tree()
                     && let Some(SourceTreeRequiresDist {
                         version: static_version,
+                        requires_python,
                         metadata,
                     }) = Self::source_tree_requires_dist(source_tree, root, package, database)
                         .await?
@@ -2003,15 +2654,25 @@ impl Lock {
                         }
 
                         // Validate the static `provides-extras` metadata.
-                        match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                        match self.satisfies_provides_extra(&metadata.provides_extra, package) {
                             SatisfiesResult::Satisfied => {}
                             result => return Ok(result),
                         }
 
                         // Validate that the static requirements are unchanged.
+                        record_refreshed_indexes(
+                            &metadata.requires_dist,
+                            &metadata.dependency_groups,
+                            &mut remotes,
+                            &mut locals,
+                        );
                         match self.satisfies_requires_dist(
                             metadata.requires_dist,
+                            &metadata.provides_extra,
                             metadata.dependency_groups,
+                            &dependency_overrides,
+                            &dependency_excludes,
+                            requires_python.as_ref(),
                             package,
                             root,
                         )? {
@@ -2089,15 +2750,25 @@ impl Lock {
                     }
 
                     // Validate the `provides-extras` metadata.
-                    match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                    match self.satisfies_provides_extra(&metadata.provides_extra, package) {
                         SatisfiesResult::Satisfied => {}
                         result => return Ok(result),
                     }
 
                     // Validate that the requirements are unchanged.
+                    record_refreshed_indexes(
+                        &metadata.requires_dist,
+                        &metadata.dependency_groups,
+                        &mut remotes,
+                        &mut locals,
+                    );
                     match self.satisfies_requires_dist(
                         metadata.requires_dist,
+                        &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &dependency_overrides,
+                        &dependency_excludes,
+                        metadata.requires_python.as_ref(),
                         package,
                         root,
                     )? {
@@ -2116,11 +2787,13 @@ impl Lock {
                 // performing a build, unlike in the database where we typically construct a "complete"
                 // metadata object.
                 let metadata =
-                    Self::source_tree_requires_dist(source_tree, root, package, database)
-                        .await?
-                        .map(|metadata| metadata.metadata);
+                    Self::source_tree_requires_dist(source_tree, root, package, database).await?;
 
-                let satisfied = metadata.is_some_and(|metadata| {
+                let satisfied = metadata.is_some_and(|SourceTreeRequiresDist {
+                    requires_python,
+                    metadata,
+                    ..
+                }| {
                     // Validate that the package is still dynamic.
                     if !metadata.dynamic {
                         debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
@@ -2128,7 +2801,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extra, package, ) {
+                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(&metadata.provides_extra, package, ) {
                         debug!("Static `provides-extra` for `{}` is up-to-date", package.id);
                     } else {
                         debug!("Static `provides-extra` for `{}` is out-of-date; falling back to distribution database", package.id);
@@ -2136,7 +2809,22 @@ impl Lock {
                     }
 
                     // Validate that the requirements are unchanged.
-                    match self.satisfies_requires_dist(metadata.requires_dist, metadata.dependency_groups, package, root) {
+                    record_refreshed_indexes(
+                        &metadata.requires_dist,
+                        &metadata.dependency_groups,
+                        &mut remotes,
+                        &mut locals,
+                    );
+                    match self.satisfies_requires_dist(
+                        metadata.requires_dist,
+                        &metadata.provides_extra,
+                        metadata.dependency_groups,
+                        &dependency_overrides,
+                        &dependency_excludes,
+                        requires_python.as_ref(),
+                        package,
+                        root,
+                    ) {
                         Ok(SatisfiesResult::Satisfied) => {
                             debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
                         },
@@ -2210,15 +2898,25 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                    match self.satisfies_provides_extra(&metadata.provides_extra, package) {
                         SatisfiesResult::Satisfied => {}
                         result => return Ok(result),
                     }
 
                     // Validate that the requirements are unchanged.
+                    record_refreshed_indexes(
+                        &metadata.requires_dist,
+                        &metadata.dependency_groups,
+                        &mut remotes,
+                        &mut locals,
+                    );
                     match self.satisfies_requires_dist(
                         metadata.requires_dist,
+                        &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &dependency_overrides,
+                        &dependency_excludes,
+                        metadata.requires_python.as_ref(),
                         package,
                         root,
                     )? {
@@ -2230,39 +2928,16 @@ impl Lock {
                 return Ok(SatisfiesResult::MissingVersion(&package.id.name));
             }
 
-            // Add any explicit indexes to the list of known locals or remotes. These indexes may
-            // not be available as top-level configuration (i.e., if they're defined within a
-            // workspace member), but we already validated that the dependencies are up-to-date, so
-            // we can consider them "available".
+            // Explicit indexes on transitive source trees are not necessarily present in root
+            // configuration. Trust only freshly validated declarations: metadata-free lockfile
+            // edges remember index URLs but cannot establish that their sources are still valid.
             for requirement in package
                 .metadata
                 .requires_dist
                 .iter()
                 .chain(package.metadata.dependency_groups.values().flatten())
             {
-                if let RequirementSource::Registry {
-                    index: Some(index), ..
-                } = &requirement.source
-                {
-                    match &index.url {
-                        IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                            if let Some(remotes) = remotes.as_mut() {
-                                remotes.insert(UrlString::from(
-                                    index.url().without_credentials().as_ref(),
-                                ));
-                            }
-                        }
-                        IndexUrl::Path(url) => {
-                            if let Some(locals) = locals.as_mut() {
-                                if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                    try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
-                                }) {
-                                    locals.insert(path.into_boxed_path());
-                                }
-                            }
-                        }
-                    }
-                }
+                record_index(requirement, &mut remotes, &mut locals);
             }
 
             // Recurse.
@@ -2296,6 +2971,20 @@ impl Lock {
                     .project
                     .as_ref()
                     .and_then(|project| project.version.clone());
+                let requires_python = match pyproject_toml.requires_python() {
+                    Ok(requires_python) => requires_python,
+                    Err(
+                        uv_pypi_types::MetadataError::FieldNotFound("project")
+                        | uv_pypi_types::MetadataError::DynamicField("requires-python"),
+                    ) => None,
+                    Err(err) => {
+                        return Err(LockErrorKind::InvalidPyprojectToml {
+                            path: path.clone(),
+                            err,
+                        }
+                        .into());
+                    }
+                };
                 let metadata = database
                     .requires_dist(&parent, &pyproject_toml)
                     .await
@@ -2303,7 +2992,11 @@ impl Lock {
                         id: package.id.clone(),
                         err,
                     })?;
-                Ok(metadata.map(|metadata| SourceTreeRequiresDist { version, metadata }))
+                Ok(metadata.map(|metadata| SourceTreeRequiresDist {
+                    version,
+                    requires_python,
+                    metadata,
+                }))
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into()),
@@ -2326,6 +3019,7 @@ pub struct Auditable<'lock> {
 
 struct SourceTreeRequiresDist {
     version: Option<Version>,
+    requires_python: Option<VersionSpecifiers>,
     metadata: RequiresDist,
 }
 
@@ -2429,6 +3123,13 @@ pub enum SatisfiesResult<'lock> {
         Option<&'lock Version>,
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
+    ),
+    /// A package's resolved dependency edges do not satisfy its declared requirements.
+    MismatchedPackageDependencies(
+        &'lock PackageName,
+        Option<&'lock Version>,
+        BTreeSet<Requirement>,
+        &'lock [Dependency],
     ),
     /// A package in the lockfile contains different `provides-extra` metadata than expected.
     MismatchedPackageProvidesExtra(
@@ -3565,13 +4266,25 @@ impl Package {
     }
 
     /// Returns the extras the package provides, if any.
-    pub fn provides_extras(&self) -> &[ExtraName] {
-        &self.metadata.provides_extra
+    ///
+    /// Metadata-free lockfiles can recover non-empty extras from their resolved sections, but an
+    /// empty extra has no section and cannot be distinguished from an undeclared extra.
+    pub fn provides_extras(&self) -> impl Iterator<Item = &ExtraName> {
+        self.metadata
+            .provides_extra
+            .iter()
+            .chain(self.optional_dependencies.keys())
     }
 
     /// Returns the dependency groups the package provides, if any.
-    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
-        &self.metadata.dependency_groups
+    ///
+    /// Keep metadata-backed empty groups while recovering non-empty groups from resolved edges
+    /// when a future lockfile omits the declaration snapshot.
+    pub fn dependency_groups(&self) -> impl Iterator<Item = &GroupName> {
+        self.metadata
+            .dependency_groups
+            .keys()
+            .chain(self.dependency_groups.keys())
     }
 
     /// Returns the dependencies of the package.
@@ -4074,6 +4787,115 @@ impl Source {
             self,
             Self::Registry(RegistrySource::Url(url)) if url.as_ref() == PYPI_URL.as_str()
         )
+    }
+
+    /// Return whether this locked source satisfies the requested [`RequirementSource`].
+    fn satisfies_requirement(
+        &self,
+        requirement: &RequirementSource,
+        root: &Path,
+    ) -> Result<bool, LockError> {
+        Ok(match (self, requirement) {
+            // An unpinned registry requirement accepts any index.
+            (Self::Registry(_), RequirementSource::Registry { index: None, .. }) => true,
+            (
+                Self::Registry(RegistrySource::Path(actual)),
+                RequirementSource::Registry {
+                    index:
+                        Some(IndexMetadata {
+                            url: IndexUrl::Path(expected),
+                            ..
+                        }),
+                    ..
+                },
+            ) => {
+                // Flat indexes can preserve an absolute lock path while declaration metadata
+                // reconstructs the same location relative to the workspace.
+                let expected = expected
+                    .to_file_path()
+                    .map_err(|()| LockErrorKind::UrlToPath {
+                        url: expected.to_url(),
+                    })?;
+                normalize_path(root.join(actual)).as_ref() == normalize_path(expected).as_ref()
+            }
+            (
+                Self::Registry(_),
+                RequirementSource::Registry {
+                    index: Some(index), ..
+                },
+            ) => Self::from_index_url(&index.url, root)? == *self,
+            (
+                Self::Direct(url, source),
+                RequirementSource::Url {
+                    location,
+                    subdirectory,
+                    ..
+                },
+            ) => {
+                let mut actual = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                // Declaration normalization strips credentials, while historical direct-source
+                // lock entries may retain them; credentials do not identify a different artifact.
+                actual.remove_credentials();
+                normalize_url(actual) == normalize_url(location.clone())
+                    && source.subdirectory == *subdirectory
+            }
+            (Self::Path(path), RequirementSource::Path { install_path, .. }) => {
+                normalize_path(root.join(path)).as_ref() == install_path.as_ref()
+            }
+            (
+                Self::Directory(path) | Self::Editable(path) | Self::Virtual(path),
+                RequirementSource::Directory {
+                    install_path,
+                    editable,
+                    r#virtual,
+                    ..
+                },
+            ) => {
+                normalize_path(root.join(path)).as_ref() == install_path.as_ref()
+                    && matches!(self, Self::Editable(_)) == editable.unwrap_or(false)
+                    && (matches!(self, Self::Virtual(_)) == r#virtual.unwrap_or(false)
+                        // Workspace-root virtualness overrides a cyclic path's declared mode.
+                        || matches!(self, Self::Virtual(_))
+                            && install_path.as_ref() == normalize_path(root).as_ref())
+            }
+            (
+                Self::Git(url, source),
+                RequirementSource::GitDirectory {
+                    git, subdirectory, ..
+                },
+            ) => {
+                // A declared Git reference need not include the lockfile's resolved commit.
+                let mut expected = locked_git_url(git, subdirectory.as_deref(), None);
+                expected.set_fragment(None);
+                let mut actual = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                actual.set_fragment(None);
+                expected == actual
+                    && source.path.is_none()
+                    && git
+                        .precise()
+                        .as_ref()
+                        .is_none_or(|precise| precise == &source.precise)
+            }
+            (
+                Self::Git(url, source),
+                RequirementSource::GitPath {
+                    git, install_path, ..
+                },
+            ) => {
+                // Compare the requested Git path and reference before checking an explicit pin.
+                let mut expected = locked_git_url(git, None, Some(install_path));
+                expected.set_fragment(None);
+                let mut actual = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                actual.set_fragment(None);
+                expected == actual
+                    && source.path.is_some()
+                    && git
+                        .precise()
+                        .as_ref()
+                        .is_none_or(|precise| precise == &source.precise)
+            }
+            _ => false,
+        })
     }
 
     /// Returns `true` if the source should be considered immutable.
@@ -6138,6 +6960,8 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    #[error(transparent)]
+    InvalidScopedOverride(#[from] ScopedOverrideSourceError),
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]
