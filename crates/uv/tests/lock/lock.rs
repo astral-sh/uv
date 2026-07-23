@@ -34800,6 +34800,86 @@ fn lock_refresh() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_refresh_deindents_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let original_lock = context.read("uv.lock");
+    let dedented_lock = original_lock
+        .lines()
+        .map(str::trim_start)
+        .collect::<Vec<_>>()
+        .join("\n");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&dedented_lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--refresh").arg("--dry-run"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Lockfile changes detected
+    ");
+    assert_eq!(context.read("uv.lock"), dedented_lock);
+
+    uv_snapshot!(context.filters(), context.lock().arg("--refresh"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    "#);
+
+    uv_snapshot!(context.filters(), context.lock().arg("--refresh").arg("--dry-run"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    No lockfile changes detected
+    ");
+
+    Ok(())
+}
+
 /// Ensure conflicts on virtual packages (such as markers) give good error messages.
 #[cfg(feature = "test-universal")]
 #[test]
