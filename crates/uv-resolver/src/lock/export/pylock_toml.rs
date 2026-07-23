@@ -24,11 +24,11 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, Edge,
-    FileLocation, GitDirectorySourceDist, IndexUrl, Name, Node, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, RequiresPython,
-    Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
+    FileLocation, GitDirectorySourceDist, IndexUrl, LocalSourcePath, Name, Node, PathBuiltDist,
+    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
+    RequiresPython, Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
-use uv_fs::{PortablePathBuf, normalize_path, try_relative_to_if};
+use uv_fs::{PortablePathBuf, normalize_path};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -448,13 +448,11 @@ impl<'lock> PylockToml {
                     });
                 }
                 Dist::Built(BuiltDist::Path(dist)) => {
-                    let path = try_relative_to_if(
-                        &dist.install_path,
-                        install_path,
-                        !dist.url.was_given_absolute(),
-                    )
-                    .map(Box::<Path>::from)
-                    .unwrap_or_else(|_| dist.install_path.clone());
+                    let path = dist
+                        .source
+                        .relative_to(install_path)
+                        .map(Box::<Path>::from)
+                        .unwrap_or_else(|_| dist.source.install_path.clone());
                     package.archive = Some(PylockTomlArchive {
                         url: None,
                         path: Some(PortablePathBuf::from(path)),
@@ -521,13 +519,11 @@ impl<'lock> PylockToml {
                     });
                 }
                 Dist::Source(SourceDist::Directory(dist)) => {
-                    let path = try_relative_to_if(
-                        &dist.install_path,
-                        install_path,
-                        !dist.url.was_given_absolute(),
-                    )
-                    .map(Box::<Path>::from)
-                    .unwrap_or_else(|_| dist.install_path.clone());
+                    let path = dist
+                        .source
+                        .relative_to(install_path)
+                        .map(Box::<Path>::from)
+                        .unwrap_or_else(|_| dist.source.install_path.clone());
                     package.directory = Some(PylockTomlDirectory {
                         path: PortablePathBuf::from(path),
                         editable: dist.editable,
@@ -550,13 +546,11 @@ impl<'lock> PylockToml {
                     return Err(PylockTomlErrorKind::GitArchiveUnsupported(package.name));
                 }
                 Dist::Source(SourceDist::Path(dist)) => {
-                    let path = try_relative_to_if(
-                        &dist.install_path,
-                        install_path,
-                        !dist.url.was_given_absolute(),
-                    )
-                    .map(Box::<Path>::from)
-                    .unwrap_or_else(|_| dist.install_path.clone());
+                    let path = dist
+                        .source
+                        .relative_to(install_path)
+                        .map(Box::<Path>::from)
+                        .unwrap_or_else(|_| dist.source.install_path.clone());
                     package.archive = Some(PylockTomlArchive {
                         url: None,
                         path: Some(PortablePathBuf::from(path)),
@@ -817,10 +811,11 @@ impl<'lock> PylockToml {
                 Some(SourceDist::Directory(sdist)) => Some(PylockTomlDirectory {
                     path: PortablePathBuf::from(
                         sdist
+                            .source
                             .url
                             .given()
                             .map(PathBuf::from)
-                            .unwrap_or_else(|| sdist.install_path.to_path_buf())
+                            .unwrap_or_else(|| sdist.source.install_path.to_path_buf())
                             .into_boxed_path(),
                     ),
                     editable: match editable
@@ -865,10 +860,11 @@ impl<'lock> PylockToml {
                     url: None,
                     path: Some(PortablePathBuf::from(
                         sdist
+                            .source
                             .url
                             .given()
                             .map(PathBuf::from)
-                            .unwrap_or_else(|| sdist.install_path.to_path_buf())
+                            .unwrap_or_else(|| sdist.source.install_path.to_path_buf())
                             .into_boxed_path(),
                     )),
                     size,
@@ -1513,10 +1509,9 @@ impl PylockTomlDirectory {
             VerbatimUrl::from_normalized_path(&path).map_err(|_| PylockTomlErrorKind::PathToUrl)?;
         Ok(DirectorySourceDist {
             name: name.clone(),
-            install_path: path.into_owned().into_boxed_path(),
             editable: self.editable,
             r#virtual: Some(false),
-            url,
+            source: LocalSourcePath::new(path.into_owned().into_boxed_path(), url),
         })
     }
 }
@@ -1685,8 +1680,7 @@ impl PylockTomlArchive {
                         .map_err(|_| PylockTomlErrorKind::PathToUrl)?;
                     Ok(Dist::Built(BuiltDist::Path(PathBuiltDist {
                         filename,
-                        install_path: install_path.into_boxed_path(),
-                        url,
+                        source: LocalSourcePath::new(install_path.into_boxed_path(), url),
                     })))
                 }
                 DistExtension::Source(ext) => {
@@ -1696,9 +1690,8 @@ impl PylockTomlArchive {
                     Ok(Dist::Source(SourceDist::Path(PathSourceDist {
                         name: name.clone(),
                         version: version.cloned(),
-                        install_path: install_path.into_boxed_path(),
                         ext,
-                        url,
+                        source: LocalSourcePath::new(install_path.into_boxed_path(), url),
                     })))
                 }
             }

@@ -229,8 +229,8 @@ impl std::fmt::Display for PathSourceUrl<'_> {
 impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
     fn from(dist: &'a PathSourceDist) -> Self {
         Self {
-            url: &dist.url,
-            path: Cow::Borrowed(&dist.install_path),
+            url: &dist.source.url,
+            path: Cow::Borrowed(&dist.source.install_path),
             ext: dist.ext,
         }
     }
@@ -252,8 +252,8 @@ impl std::fmt::Display for DirectorySourceUrl<'_> {
 impl<'a> From<&'a DirectorySourceDist> for DirectorySourceUrl<'a> {
     fn from(dist: &'a DirectorySourceDist) -> Self {
         Self {
-            url: &dist.url,
-            install_path: &dist.install_path,
+            url: &dist.source.url,
+            install_path: &dist.source.install_path,
             editable: dist.editable,
         }
     }

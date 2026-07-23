@@ -42,32 +42,30 @@ impl Urls {
         let mut regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>> = FxHashMap::default();
         let mut overrides = ForkMap::default();
 
-        // Add all direct regular requirements and constraints URL.
-        for requirement in manifest.requirements_no_overrides(env, dependencies) {
+        // Prefer root lookaheads, direct requirements, and constraints over recursive lookaheads.
+        for requirement in manifest.url_requirements_no_overrides(env, dependencies) {
             let Some(url) = requirement.source.to_verbatim_parsed_url() else {
                 // Registry requirement
                 continue;
             };
-
             let package_urls = regular.entry(requirement.name.clone()).or_default();
             if let Some(package_url) = package_urls
                 .iter_mut()
                 .find(|package_url| same_resource(&package_url.parsed_url, &url.parsed_url, git))
             {
-                // Allow editables to override non-editables.
                 let previous_editable = package_url.is_editable();
+
                 *package_url = url;
-                if previous_editable {
-                    if let VerbatimParsedUrl {
+
+                if previous_editable
+                    && let VerbatimParsedUrl {
                         parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl { editable, .. }),
-                        verbatim: _,
+                        verbatim,
                     } = package_url
-                    {
-                        if editable.is_none() {
-                            debug!("Allowing an editable variant of {}", &package_url.verbatim);
-                            *editable = Some(true);
-                        }
-                    }
+                    && editable.is_none()
+                {
+                    debug!("Allowing an editable variant of {verbatim}");
+                    *editable = Some(true);
                 }
             } else {
                 package_urls.push(url);

@@ -47,6 +47,8 @@ pub struct RequestedRequirements {
     requirements: Box<[Requirement]>,
     /// Whether the dependencies were direct or transitive.
     direct: bool,
+    /// Whether the parent requirement was a root of the lookahead traversal.
+    root: bool,
 }
 
 impl RequestedRequirements {
@@ -57,6 +59,7 @@ impl RequestedRequirements {
         extras: Box<[ExtraName]>,
         requirements: Box<[Requirement]>,
         direct: bool,
+        root: bool,
     ) -> Self {
         Self {
             package,
@@ -64,6 +67,7 @@ impl RequestedRequirements {
             extras,
             requirements,
             direct,
+            root,
         }
     }
 
@@ -90,5 +94,10 @@ impl RequestedRequirements {
     /// Return whether the dependencies were direct or transitive.
     pub fn direct(&self) -> bool {
         self.direct
+    }
+
+    /// Return whether the parent requirement was a root of the lookahead traversal.
+    pub fn is_root(&self) -> bool {
+        self.root
     }
 }

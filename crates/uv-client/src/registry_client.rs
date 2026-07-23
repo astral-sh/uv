@@ -1004,14 +1004,17 @@ impl RegistryClient {
                 .await?
             }
             BuiltDist::Path(wheel) => {
-                let file = fs_err::tokio::File::open(wheel.install_path.as_ref())
+                let file = fs_err::tokio::File::open(wheel.source.install_path.as_ref())
                     .await
                     .map_err(ErrorKind::Io)?;
                 let reader = tokio::io::BufReader::new(file);
                 let contents = read_metadata_async_seek(&wheel.filename, reader)
                     .await
                     .map_err(|err| {
-                        ErrorKind::Metadata(wheel.install_path.to_string_lossy().to_string(), err)
+                        ErrorKind::Metadata(
+                            wheel.source.install_path.to_string_lossy().to_string(),
+                            err,
+                        )
                     })?;
                 ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
                     ErrorKind::MetadataParseError(

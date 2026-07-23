@@ -332,31 +332,26 @@ impl PubGrubRequirement {
                 ));
                 (url, parsed_url)
             }
-            RequirementSource::Path {
-                ext,
-                url,
-                install_path,
-            } => {
+            RequirementSource::Path { ext, source } => {
                 let parsed_url = ParsedUrl::Path(ParsedPathUrl::from_source(
-                    install_path.clone(),
+                    source.install_path.clone(),
                     *ext,
-                    url.to_url(),
+                    source.url.to_url(),
                 ));
-                (url, parsed_url)
+                (&source.url, parsed_url)
             }
             RequirementSource::Directory {
                 editable,
                 r#virtual,
-                url,
-                install_path,
+                source,
             } => {
                 let parsed_url = ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
-                    install_path.clone(),
+                    source.install_path.clone(),
                     *editable,
                     *r#virtual,
-                    url.to_url(),
+                    source.url.to_url(),
                 ));
-                (url, parsed_url)
+                (&source.url, parsed_url)
             }
         };
 

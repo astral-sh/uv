@@ -15,7 +15,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency};
-use uv_distribution_types::{Index, Requirement, RequirementSource};
+use uv_distribution_types::{Index, LocalSourcePath, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_once_map::OnceMap;
@@ -554,7 +554,6 @@ impl Workspace {
                     .is_package(!self.is_required_member(name))
                 {
                     RequirementSource::Directory {
-                        install_path: member.root.clone().into_boxed_path(),
                         editable: Some(
                             self.required_members
                                 .get(name)
@@ -563,14 +562,13 @@ impl Workspace {
                                 .unwrap_or(true),
                         ),
                         r#virtual: Some(false),
-                        url,
+                        source: LocalSourcePath::new(member.root.clone().into_boxed_path(), url),
                     }
                 } else {
                     RequirementSource::Directory {
-                        install_path: member.root.clone().into_boxed_path(),
                         editable: Some(false),
                         r#virtual: Some(true),
-                        url,
+                        source: LocalSourcePath::new(member.root.clone().into_boxed_path(), url),
                     }
                 },
                 origin: None,
@@ -695,17 +693,15 @@ impl Workspace {
                 marker: MarkerTree::TRUE,
                 source: if member.pyproject_toml().is_package(!is_required_member) {
                     RequirementSource::Directory {
-                        install_path: member.root.clone().into_boxed_path(),
                         editable: Some(editability.unwrap_or(true)),
                         r#virtual: Some(false),
-                        url,
+                        source: LocalSourcePath::new(member.root.clone().into_boxed_path(), url),
                     }
                 } else {
                     RequirementSource::Directory {
-                        install_path: member.root.clone().into_boxed_path(),
                         editable: Some(false),
                         r#virtual: Some(true),
-                        url,
+                        source: LocalSourcePath::new(member.root.clone().into_boxed_path(), url),
                     }
                 },
                 origin: None,

@@ -409,12 +409,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             BuiltDist::Path(wheel) => {
                 let cache_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
-                    WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
+                    WheelCache::Url(&wheel.source.url).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.cache_key(),
                 );
 
                 self.load_wheel(
-                    &wheel.install_path,
+                    &wheel.source.install_path,
                     &wheel.filename,
                     WheelExtension::Whl,
                     cache_entry,
