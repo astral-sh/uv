@@ -1,3 +1,4 @@
+#!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
@@ -50,16 +51,18 @@ import json
 import logging
 import os
 import re
+from collections.abc import Generator, Iterable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Generator, Iterable, NamedTuple, Self
+from typing import Any, ClassVar, NamedTuple, Self
 from urllib.parse import unquote
 
 import httpx
 
 SELF_DIR = Path(__file__).parent
 VERSIONS_FILE = SELF_DIR / "download-metadata.json"
+logger = logging.getLogger(__name__)
 
 # The date at which the default CPython musl builds became dynamically linked
 # instead of statically.
@@ -193,7 +196,7 @@ class CPythonFinder(Finder):
 
     NDJSON_URL = "https://releases.astral.sh/github/versions/main/v1/python-build-standalone.ndjson"
 
-    FLAVOR_PREFERENCES = [
+    FLAVOR_PREFERENCES: ClassVar[list[str]] = [
         "install_only_stripped",
         "install_only",
         "shared-pgo",
@@ -201,7 +204,7 @@ class CPythonFinder(Finder):
         "static-noopt",
     ]
     # Normalized mappings to match the Rust types
-    ARCH_MAP = {
+    ARCH_MAP: ClassVar[dict[str, str]] = {
         "ppc64": "powerpc64",
         "ppc64le": "powerpc64le",
     }
@@ -217,7 +220,7 @@ class CPythonFinder(Finder):
 
     async def _fetch_downloads(self) -> list[PythonDownload]:
         """Fetch all CPython downloads from the NDJSON release index."""
-        logging.info("Fetching CPython release index")
+        logger.info("Fetching CPython release index")
         resp = await self.client.get(self.NDJSON_URL)
         resp.raise_for_status()
 
@@ -244,7 +247,7 @@ class CPythonFinder(Finder):
                     and download.triple.libc == "musl"
                 ):
                     continue
-                logging.debug("Found %s (%s)", download.key(), download.filename)
+                logger.debug("Found %s (%s)", download.key(), download.filename)
                 downloads_by_version.setdefault(download.version, []).append(download)
 
         # Collapse CPython variants to a single flavor per triple and variant
@@ -261,7 +264,7 @@ class CPythonFinder(Finder):
                     existing_download, existing_priority = existing
                     # Skip if we have a flavor with higher priority already (indicated by a smaller value)
                     if priority >= existing_priority:
-                        logging.debug(
+                        logger.debug(
                             "Skipping %s (%s): lower priority than %s (%s)",
                             download.key(),
                             download.flavor,
@@ -305,7 +308,7 @@ class CPythonFinder(Finder):
 
         # Skip static builds (not supported)
         if "static" in build_options:
-            logging.debug("Skipping %s: static unsupported", filename)
+            logger.debug("Skipping %s: static unsupported", filename)
             return None
 
         triple = self._normalize_triple(platform_str)
@@ -357,7 +360,7 @@ class CPythonFinder(Finder):
             else:
                 libc = "none"
         except IndexError:
-            logging.debug("Skipping %r: unknown triple", triple)
+            logger.debug("Skipping %r: unknown triple", triple)
             return None
 
         return PlatformTriple(operating_system, arch, libc)
@@ -410,7 +413,7 @@ class PyPyFinder(Finder):
         r"^\s*(?P<checksum>\w{64})\s+(?P<filename>pypy.+)$", re.MULTILINE
     )
 
-    ARCH_MAPPING = {
+    ARCH_MAPPING: ClassVar[dict[str, str]] = {
         "x64": "x86_64",
         "x86": "i686",
         "i686": "i686",
@@ -419,7 +422,7 @@ class PyPyFinder(Finder):
         "s390x": "s390x",
     }
 
-    PLATFORM_MAPPING = {
+    PLATFORM_MAPPING: ClassVar[dict[str, str]] = {
         "win32": "windows",
         "win64": "windows",
         "linux": "linux",
@@ -478,7 +481,7 @@ class PyPyFinder(Finder):
         return self.PLATFORM_MAPPING.get(os, os)
 
     async def _fetch_checksums(self, downloads: list[PythonDownload]) -> None:
-        logging.info("Fetching PyPy checksums")
+        logger.info("Fetching PyPy checksums")
         resp = await self.client.get(self.CHECKSUM_URL)
         resp.raise_for_status()
         text = resp.text
@@ -571,7 +574,7 @@ class PyodideFinder(Finder):
 
     async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
         for idx, batch in enumerate(batched(downloads, n)):
-            logging.info("Fetching Pyodide checksums: %d/%d", idx * n, len(downloads))
+            logger.info("Fetching Pyodide checksums: %d/%d", idx * n, len(downloads))
             checksum_requests = []
             for download in batch:
                 url = download.url + ".sha256"
@@ -593,13 +596,13 @@ class GraalPyFinder(Finder):
 
     RELEASE_URL = "https://api.github.com/repos/oracle/graalpython/releases"
 
-    PLATFORM_MAPPING = {
+    PLATFORM_MAPPING: ClassVar[dict[str, str]] = {
         "windows": "windows",
         "linux": "linux",
         "macos": "darwin",
     }
 
-    ARCH_MAPPING = {
+    ARCH_MAPPING: ClassVar[dict[str, str]] = {
         "amd64": "x86_64",
         "aarch64": "aarch64",
     }
@@ -682,7 +685,7 @@ class GraalPyFinder(Finder):
     async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
         downloads = list(filter(lambda d: not d.sha256, downloads))
         for idx, batch in enumerate(batched(downloads, n)):
-            logging.info("Fetching GraalPy checksums: %d/%d", idx * n, len(downloads))
+            logger.info("Fetching GraalPy checksums: %d/%d", idx * n, len(downloads))
             checksum_requests = []
             for download in batch:
                 url = download.url + ".sha256"
@@ -748,15 +751,15 @@ def render(downloads: list[PythonDownload]) -> None:
     for download in downloads:
         key = download.key()
         if (download.version.major, download.version.minor) < (3, 8):
-            logging.info(
+            logger.info(
                 "Skipping unsupported version %s%s",
                 key,
-                (" (%s)" % download.flavor) if download.flavor else "",
+                f" ({download.flavor})" if download.flavor else "",
             )
             continue
 
-        logging.info(
-            "Selected %s%s", key, (" (%s)" % download.flavor) if download.flavor else ""
+        logger.info(
+            "Selected %s%s", key, f" ({download.flavor})" if download.flavor else ""
         )
         results[key] = {
             "name": download.implementation,
@@ -781,7 +784,7 @@ def render(downloads: list[PythonDownload]) -> None:
 async def find() -> None:
     token = os.environ.get("GITHUB_TOKEN")
     if not token:
-        logging.warning(
+        logger.warning(
             "`GITHUB_TOKEN` env var not found, you may hit rate limits for GitHub API requests."
         )
 
@@ -803,7 +806,7 @@ async def find() -> None:
 
     async with client:
         for finder in finders:
-            logging.info("Finding %s downloads...", finder.implementation)
+            logger.info("Finding %s downloads...", finder.implementation)
             downloads.extend(await finder.find())
 
     render(downloads)

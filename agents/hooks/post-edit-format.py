@@ -19,6 +19,7 @@ def format_rust(file_path: str, cwd: str) -> None:
             ["cargo", "fmt", "--", file_path],
             cwd=cwd,
             capture_output=True,
+            check=False,
         )
     except FileNotFoundError:
         pass
@@ -31,6 +32,7 @@ def format_python(file_path: str, cwd: str) -> None:
             ["uvx", "ruff", "format", file_path],
             cwd=cwd,
             capture_output=True,
+            check=False,
         )
     except FileNotFoundError:
         pass
@@ -40,7 +42,10 @@ def format_prettier(file_path: str, cwd: str) -> None:
     """Format files with prettier."""
     try:
         subprocess.run(
-            ["npx", "prettier", "--write", file_path], cwd=cwd, capture_output=True
+            ["npx", "prettier", "--write", file_path],
+            cwd=cwd,
+            capture_output=True,
+            check=False,
         )
     except FileNotFoundError:
         pass

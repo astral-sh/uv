@@ -28,7 +28,7 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess:
         + os.pathsep
         + env.get("PATH"),
     }
-    return subprocess.run(command, capture_output=True, text=True, env=env)
+    return subprocess.run(command, capture_output=True, text=True, env=env, check=False)
 
 
 def report_result(result: subprocess.CompletedProcess):

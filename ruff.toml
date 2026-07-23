@@ -1,4 +1,8 @@
 target-version = "py312"
+per-file-target-version = {
+  "scripts/check_system_python.py" = "py37",
+  "scripts/create-python-mirror.py" = "py38",
+}
 exclude = [
   "crates/uv-virtualenv/src/activator/activate_this.py",
   "crates/uv-virtualenv/src/_virtualenv.py",
@@ -8,8 +12,9 @@ exclude = [
 ]
 
 [lint]
-select = ["E4", "E7", "E9", "F"]
 extend-select = ["I", "B"]
 
 [lint.per-file-ignores]
 "__init__.py" = ["F403", "F405"]
+# This script intentionally runs on Python 3.6, below Ruff's minimum target version.
+"scripts/check_system_python.py" = ["FA100", "UP036"]
