@@ -513,59 +513,69 @@ fn identify_installation_target<'a>(
     all_packages: bool,
     package: &'a [PackageName],
 ) -> InstallTarget<'a> {
-    match &target {
+    match target {
         SyncTarget::Project(project) => {
-            match &project {
-                VirtualProject::Project(project) => {
-                    if all_packages {
-                        InstallTarget::Workspace {
-                            workspace: project.workspace(),
-                            lock,
-                        }
-                    } else {
-                        match package {
-                            // By default, install the root project.
-                            [] => InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name: project.project_name(),
-                                lock,
-                            },
-                            [name] => InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name,
-                                lock,
-                            },
-                            names => InstallTarget::Projects {
-                                workspace: project.workspace(),
-                                names,
-                                lock,
-                            },
-                        }
-                    }
+            identify_project_installation_target(project, lock, all_packages, package)
+        }
+        SyncTarget::Script(script) => InstallTarget::Script { script, lock },
+    }
+}
+
+/// Select workspace members with the same semantics as `uv sync`.
+pub(crate) fn identify_project_installation_target<'a>(
+    project: &'a VirtualProject,
+    lock: &'a Lock,
+    all_packages: bool,
+    package: &'a [PackageName],
+) -> InstallTarget<'a> {
+    match project {
+        VirtualProject::Project(project) => {
+            if all_packages {
+                InstallTarget::Workspace {
+                    workspace: project.workspace(),
+                    lock,
                 }
-                VirtualProject::NonProject(workspace) => {
-                    if all_packages {
-                        InstallTarget::NonProjectWorkspace { workspace, lock }
-                    } else {
-                        match package {
-                            // By default, install the entire workspace.
-                            [] => InstallTarget::NonProjectWorkspace { workspace, lock },
-                            [name] => InstallTarget::Project {
-                                workspace,
-                                name,
-                                lock,
-                            },
-                            names => InstallTarget::Projects {
-                                workspace,
-                                names,
-                                lock,
-                            },
-                        }
-                    }
+            } else {
+                match package {
+                    // By default, install the current project.
+                    [] => InstallTarget::Project {
+                        workspace: project.workspace(),
+                        name: project.project_name(),
+                        lock,
+                    },
+                    [name] => InstallTarget::Project {
+                        workspace: project.workspace(),
+                        name,
+                        lock,
+                    },
+                    names => InstallTarget::Projects {
+                        workspace: project.workspace(),
+                        names,
+                        lock,
+                    },
                 }
             }
         }
-        SyncTarget::Script(script) => InstallTarget::Script { script, lock },
+        VirtualProject::NonProject(workspace) => {
+            if all_packages {
+                InstallTarget::NonProjectWorkspace { workspace, lock }
+            } else {
+                match package {
+                    // By default, install the entire virtual workspace.
+                    [] => InstallTarget::NonProjectWorkspace { workspace, lock },
+                    [name] => InstallTarget::Project {
+                        workspace,
+                        name,
+                        lock,
+                    },
+                    names => InstallTarget::Projects {
+                        workspace,
+                        names,
+                        lock,
+                    },
+                }
+            }
+        }
     }
 }
 

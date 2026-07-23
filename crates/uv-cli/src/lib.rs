@@ -5263,6 +5263,24 @@ pub struct FormatArgs {
 
 #[derive(Args)]
 pub struct CheckArgs {
+    /// Check all packages in the workspace.
+    ///
+    /// The workspace's environment is synchronized to include all workspace members, and files in
+    /// every member are checked.
+    #[arg(long, conflicts_with_all = ["package", "script", "no_project"])]
+    pub all_packages: bool,
+
+    /// Check specific packages in the workspace.
+    ///
+    /// The workspace's environment is synchronized to include the selected members and their
+    /// dependencies. Only files owned by the selected members are checked.
+    #[arg(
+        long,
+        conflicts_with_all = ["all_packages", "script", "no_project"],
+        value_hint = ValueHint::Other
+    )]
+    pub package: Vec<PackageName>,
+
     /// Run checks for the specified PEP 723 Python script, rather than the current project.
     ///
     /// If provided, uv will use the dependencies based on the script's inline metadata table, in
@@ -5282,6 +5300,8 @@ pub struct CheckArgs {
         conflicts_with = "only_group",
         conflicts_with = "all_groups",
         conflicts_with = "no_project",
+        conflicts_with = "all_packages",
+        conflicts_with = "package",
         value_hint = ValueHint::FilePath,
     )]
     pub script: Option<PathBuf>,
