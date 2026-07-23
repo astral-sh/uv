@@ -1040,6 +1040,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) force: bool,
+    pub(crate) suffix: Option<String>,
     pub(crate) editable: bool,
     pub(crate) install_mirrors: PythonInstallMirrors,
 }
@@ -1066,6 +1067,7 @@ impl ToolInstallSettings {
             lfs,
             installer,
             force,
+            suffix,
             build,
             refresh,
             python,
@@ -1135,6 +1137,7 @@ impl ToolInstallSettings {
             python: python.and_then(Maybe::into_option),
             python_platform,
             force,
+            suffix,
             editable,
             refresh: Refresh::try_from(refresh)?,
             options,
@@ -1319,7 +1322,7 @@ impl ToolListSettings {
 /// The resolved settings to use for a `tool uninstall` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUninstallSettings {
-    pub(crate) name: Vec<PackageName>,
+    pub(crate) name: Vec<String>,
 }
 
 impl ToolUninstallSettings {

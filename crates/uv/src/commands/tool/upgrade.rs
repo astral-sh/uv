@@ -23,7 +23,7 @@ use uv_python::{
 };
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
-use uv_tool::{InstalledTools, Tool};
+use uv_tool::{InstalledTools, Tool, ToolName};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
@@ -36,7 +36,9 @@ use crate::commands::project::{
     update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
+use crate::commands::tool::common::{
+    ToolLock, format_tool_suffix_arg, remove_entrypoints, tool_environment_spec,
+};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -63,7 +65,7 @@ pub(crate) async fn upgrade(
     let _lock = installed_tools.lock().await?;
 
     // Collect the tools to upgrade, along with any constraints.
-    let names: BTreeMap<PackageName, Vec<Requirement>> = {
+    let names: BTreeMap<ToolName, Vec<Requirement>> = {
         if names.is_empty() {
             installed_tools
                 .tools()
@@ -72,12 +74,32 @@ pub(crate) async fn upgrade(
                 .map(|(name, _)| (name, Vec::new()))
                 .collect()
         } else {
+            let installed_names = installed_tools
+                .tools()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect::<Vec<_>>();
             let mut map = BTreeMap::new();
-            for name in names {
-                let requirement = Requirement::from(uv_pep508::Requirement::parse(&name, &*CWD)?);
-                map.entry(requirement.name.clone())
-                    .or_insert_with(Vec::new)
-                    .push(requirement);
+            for request in names {
+                if let Some((name, specifier)) = split_upgrade_request(&request, &installed_names) {
+                    let constraints = map.entry(name.clone()).or_insert_with(Vec::new);
+                    if !specifier.is_empty()
+                        && let Ok(Some(tool)) = installed_tools.get_tool_receipt(name)
+                    {
+                        let requirement = format!("{}{specifier}", tool.package());
+                        constraints.push(Requirement::from(uv_pep508::Requirement::parse(
+                            &requirement,
+                            &*CWD,
+                        )?));
+                    }
+                } else {
+                    let requirement =
+                        Requirement::from(uv_pep508::Requirement::parse(&request, &*CWD)?);
+                    map.entry(ToolName::from(requirement.name.clone()))
+                        .or_insert_with(Vec::new)
+                        .push(requirement);
+                }
             }
             map
         }
@@ -120,7 +142,7 @@ pub(crate) async fn upgrade(
     let mut did_upgrade_environment = vec![];
 
     // Constraints that caused upgrades to be skipped or altered.
-    let mut collected_constraints: Vec<(PackageName, UpgradeConstraint)> = Vec::new();
+    let mut collected_constraints: Vec<(ToolName, UpgradeConstraint)> = Vec::new();
 
     let mut errors = Vec::new();
     for (name, constraints) in &names {
@@ -214,6 +236,25 @@ pub(crate) async fn upgrade(
     Ok(ExitStatus::Success)
 }
 
+/// Split a request into an exact installed tool name and an optional requirement suffix.
+fn split_upgrade_request<'a>(
+    request: &'a str,
+    installed_names: &'a [ToolName],
+) -> Option<(&'a ToolName, &'a str)> {
+    installed_names
+        .iter()
+        .filter_map(|name| {
+            let specifier = request.strip_prefix(name.as_str())?;
+            (specifier.is_empty()
+                || specifier.as_bytes().first().is_some_and(|character| {
+                    character.is_ascii_whitespace()
+                        || matches!(character, b'<' | b'>' | b'=' | b'!' | b'~' | b'@')
+                }))
+            .then_some((name, specifier))
+        })
+        .max_by_key(|(name, _)| name.as_str().len())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UpgradeOutcome {
     /// The tool itself was upgraded.
@@ -229,20 +270,35 @@ enum UpgradeOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum UpgradeConstraint {
     /// The tool remains pinned to an exact version, so an upgrade was skipped.
-    PinnedVersion { version: Version },
+    PinnedVersion {
+        version: Version,
+        package: PackageName,
+        suffix: Option<String>,
+    },
 }
 
 impl UpgradeConstraint {
-    fn print(&self, name: &PackageName, printer: Printer) -> Result<()> {
+    fn print(&self, name: &ToolName, printer: Printer) -> Result<()> {
         match self {
-            Self::PinnedVersion { version } => {
-                let name = name.to_string();
-                let reinstall_command = format!("uv tool install {name}@latest");
+            Self::PinnedVersion {
+                version,
+                package,
+                suffix,
+            } => {
+                let reinstall_command = suffix.as_ref().map_or_else(
+                    || format!("uv tool install {package}@latest"),
+                    |suffix| {
+                        format!(
+                            "uv tool install {package}@latest {}",
+                            format_tool_suffix_arg(suffix)
+                        )
+                    },
+                );
 
                 writeln!(
                     printer.stderr(),
                     "hint: `{}` is pinned to `{}` (installed with an exact version pin); reinstall with `{}` to upgrade to a new version.",
-                    name.cyan(),
+                    name.to_string().cyan(),
                     version.to_string().magenta(),
                     reinstall_command.green(),
                 )?;
@@ -261,7 +317,7 @@ struct UpgradeReport {
 
 /// Upgrade a specific tool.
 async fn upgrade_tool(
-    name: &PackageName,
+    name: &ToolName,
     constraints: &[Requirement],
     interpreter: Option<&Interpreter>,
     python_platform: Option<&TargetTriple>,
@@ -281,6 +337,12 @@ async fn upgrade_tool(
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
         Ok(Some(receipt)) => receipt,
         Ok(None) => {
+            if installed_tools.tool_dir(name).exists() {
+                return Err(anyhow::anyhow!(
+                    "`{}` is missing a receipt and cannot be upgraded",
+                    name.cyan()
+                ));
+            }
             let install_command = format!("uv tool install {name}");
             return Err(anyhow::anyhow!(
                 "`{}` is not installed; run `{}` to install",
@@ -289,19 +351,18 @@ async fn upgrade_tool(
             ));
         }
         Err(_) => {
-            let install_command = format!("uv tool install --force {name}");
             return Err(anyhow::anyhow!(
-                "`{}` is missing a valid receipt; run `{}` to reinstall",
-                name.cyan(),
-                install_command.green()
+                "`{}` is missing a valid receipt and cannot be upgraded",
+                name.cyan()
             ));
         }
     };
+    let package = existing_tool_receipt.package();
 
-    let environment = match installed_tools.get_environment(name, cache) {
+    let environment = match installed_tools.get_environment(name, package, cache) {
         Ok(Some(environment)) => environment,
         Ok(None) => {
-            let install_command = format!("uv tool install {name}");
+            let install_command = install_command(&existing_tool_receipt, false);
             return Err(anyhow::anyhow!(
                 "`{}` is not installed; run `{}` to install",
                 name.cyan(),
@@ -309,7 +370,7 @@ async fn upgrade_tool(
             ));
         }
         Err(_) => {
-            let install_command = format!("uv tool install --force {name}");
+            let install_command = install_command(&existing_tool_receipt, true);
             return Err(anyhow::anyhow!(
                 "`{}` is missing a valid environment; run `{}` to reinstall",
                 name.cyan(),
@@ -390,7 +451,7 @@ async fn upgrade_tool(
             &settings.resolver.index_locations,
         )?;
         let resolution = tool_lock.to_resolution(
-            Some(name),
+            Some(package),
             target_interpreter,
             python_platform,
             &settings.resolver.build_options,
@@ -459,10 +520,10 @@ async fn upgrade_tool(
                 &tags,
             )?;
             let plan_is_empty = plan.is_empty();
-            let changes_tool = plan.cached.iter().any(|dist| dist.name() == name)
-                || plan.remote.iter().any(|dist| dist.name() == name)
-                || plan.reinstalls.iter().any(|dist| dist.name() == name)
-                || plan.extraneous.iter().any(|dist| dist.name() == name);
+            let changes_tool = plan.cached.iter().any(|dist| dist.name() == package)
+                || plan.remote.iter().any(|dist| dist.name() == package)
+                || plan.reinstalls.iter().any(|dist| dist.name() == package)
+                || plan.extraneous.iter().any(|dist| dist.name() == package);
             let outcome = if plan_is_empty {
                 UpgradeOutcome::NoOp
             } else if changes_tool {
@@ -482,7 +543,7 @@ async fn upgrade_tool(
                     (&settings).into(),
                     client_builder,
                     &state,
-                    Box::new(UpgradeInstallLogger::new(name.clone())),
+                    Box::new(UpgradeInstallLogger::new(package.clone())),
                     installer_metadata,
                     concurrency,
                     cache,
@@ -548,7 +609,7 @@ async fn upgrade_tool(
             client_builder,
             &state,
             Box::new(SummaryResolveLogger),
-            Box::new(UpgradeInstallLogger::new(name.clone())),
+            Box::new(UpgradeInstallLogger::new(package.clone())),
             installer_metadata,
             concurrency,
             cache,
@@ -559,7 +620,7 @@ async fn upgrade_tool(
         )
         .await?;
 
-        let outcome = if changelog.includes(name) {
+        let outcome = if changelog.includes(package) {
             UpgradeOutcome::UpgradeTool
         } else if changelog.is_empty() {
             UpgradeOutcome::NoOp
@@ -587,7 +648,9 @@ async fn upgrade_tool(
         // If we modified the target tool, reinstall the entrypoints.
         finalize_tool_install(
             &environment,
+            package,
             name,
+            existing_tool_receipt.suffix(),
             &entrypoints,
             installed_tools,
             &ToolOptions::from(options),
@@ -613,8 +676,13 @@ async fn upgrade_tool(
 
     let constraint = match &outcome {
         UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => {
-            pinned_requirement_version(&existing_tool_receipt, name)
-                .map(|version| UpgradeConstraint::PinnedVersion { version })
+            pinned_requirement_version(&existing_tool_receipt, package).map(|version| {
+                UpgradeConstraint::PinnedVersion {
+                    version,
+                    package: package.clone(),
+                    suffix: existing_tool_receipt.suffix().map(ToOwned::to_owned),
+                }
+            })
         }
         UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
     };
@@ -623,6 +691,23 @@ async fn upgrade_tool(
         outcome,
         constraint,
     })
+}
+
+fn install_command(tool: &Tool, force: bool) -> String {
+    let mut command = tool.suffix().map_or_else(
+        || format!("uv tool install {}", tool.package()),
+        |suffix| {
+            format!(
+                "uv tool install {} {}",
+                tool.package(),
+                format_tool_suffix_arg(suffix)
+            )
+        },
+    );
+    if force {
+        command.push_str(" --force");
+    }
+    command
 }
 
 fn pinned_requirement_version(tool: &Tool, name: &PackageName) -> Option<Version> {

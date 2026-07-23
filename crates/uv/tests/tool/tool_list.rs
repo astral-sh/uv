@@ -274,6 +274,8 @@ fn tool_list_bad_environment() -> Result<()> {
     context
         .tool_install()
         .arg("black==24.2.0")
+        .arg("--suffix")
+        .arg(" old;echo unsafe")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
@@ -288,7 +290,7 @@ fn tool_list_bad_environment() -> Result<()> {
         .assert()
         .success();
 
-    let venv_path = uv_test::venv_bin_path(tool_dir.path().join("black"));
+    let venv_path = uv_test::venv_bin_path(tool_dir.path().join("black old;echo unsafe"));
     // Remove the python interpreter for black
     fs::remove_dir_all(venv_path.clone())?;
 
@@ -296,6 +298,7 @@ fn tool_list_bad_environment() -> Result<()> {
         context.filters(),
         context
             .tool_list()
+            .env(EnvVars::BASH_VERSION, "5")
             .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
             .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()),
         @"
@@ -305,7 +308,7 @@ fn tool_list_bad_environment() -> Result<()> {
     - ruff
 
     ----- stderr -----
-    warning: Invalid environment at `tools/black`: missing Python executable at `tools/black/[BIN]/[PYTHON]` (run `uv tool install black --reinstall` to reinstall)
+    warning: Invalid environment at `tools/black old;echo unsafe`: missing Python executable at `tools/black old;echo unsafe/[BIN]/[PYTHON]` (run `uv tool install black '--suffix= old;echo unsafe' --reinstall` to reinstall)
     "
     );
 
