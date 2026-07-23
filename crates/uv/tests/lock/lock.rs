@@ -32,25 +32,15 @@ fn lock_canonical_reader_preserves_noncanonical_lock() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+    context.lock().arg("--offline").assert().success();
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--offline")
+        .assert()
+        .success();
 
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
-
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
-
-    context.temp_dir.child("uv.lock").write_str(indoc! {
+    let noncanonical_lock = indoc! {
         r"
         # Hand-edited lockfiles continue to use the general TOML parser.
         version = 1
@@ -65,16 +55,19 @@ fn lock_canonical_reader_preserves_noncanonical_lock() -> Result<()> {
         version = '0.1.0'
         source = { virtual = '.' }
         "
-    })?;
+    };
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(noncanonical_lock)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--offline")
+        .assert()
+        .success();
+    assert_eq!(context.read("uv.lock"), noncanonical_lock);
 
     Ok(())
 }
@@ -93,33 +86,31 @@ fn lock_canonical_reader_rejects_invalid_toml() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
+    context.lock().arg("--offline").assert().success();
 
     let invalid_lock = context
         .read("uv.lock")
         .replace("version = 1\n", "version = 01\n");
     context.temp_dir.child("uv.lock").write_str(&invalid_lock)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+    let output = context
+        .lock()
+        .arg("--locked")
+        .arg("--offline")
+        .assert()
+        .failure()
+        .code(2);
 
-    ----- stderr -----
-    error: Failed to parse `uv.lock`
-      Caused by: TOML parse error at line 1, column 11
-          |
-        1 | version = 01
-          |           ^
-        unexpected leading zero, expected nothing
-    ");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(String::from_utf8_lossy(&output.get_output().stderr), @r"
+        error: Failed to parse `uv.lock`
+          Caused by: TOML parse error at line 1, column 11
+              |
+            1 | version = 01
+              |           ^
+            unexpected leading zero, expected nothing
+        ");
+    });
 
     Ok(())
 }
