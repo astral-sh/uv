@@ -3259,6 +3259,7 @@ fn preview_features() {
     +            WorkspaceListScripts,
     +            NoDistutilsPatch,
     +            IndexHashAlgorithm,
+    +            NoLockVirtual,
     +        ],
          },
          python_preference: Managed,

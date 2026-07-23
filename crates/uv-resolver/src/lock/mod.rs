@@ -34,7 +34,7 @@ use uv_distribution_types::{
     ToUrlError, UrlString,
 };
 use uv_fs::{
-    PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
+    CWD, PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
 };
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
@@ -84,6 +84,9 @@ pub const VERSION: u32 = 1;
 
 /// The current revision of the lockfile format.
 const REVISION: u32 = 3;
+
+/// The first revision that permits omitted virtual workspace-member sources.
+const COMPACT_REVISION: u32 = REVISION + 1;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -827,6 +830,11 @@ impl Lock {
     /// Returns the lockfile revision.
     fn revision(&self) -> u32 {
         self.revision
+    }
+
+    /// Returns `true` if this [`Lock`] uses the compact lockfile format.
+    pub fn uses_compact_format(&self) -> bool {
+        self.revision() >= COMPACT_REVISION
     }
 
     /// Returns the number of packages in the lockfile.
@@ -2756,6 +2764,23 @@ impl TryFrom<LockWire> for Lock {
             unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
         }
 
+        // Compact lockfiles omit virtual sources from workspace-member requirement metadata.
+        let virtual_members = if wire.revision.unwrap_or_default() >= COMPACT_REVISION {
+            wire.packages
+                .iter()
+                .filter(|package| wire.manifest.members.contains(&package.id.name))
+                .filter_map(|package| {
+                    if let Source::Virtual(path) = &package.id.source {
+                        Some((package.id.name.clone(), path.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<FxHashMap<_, _>>()
+        } else {
+            FxHashMap::default()
+        };
+
         let fork_markers = wire
             .fork_markers
             .into_iter()
@@ -2779,6 +2804,7 @@ impl TryFrom<LockWire> for Lock {
                     environment,
                     default,
                     &unambiguous_package_ids,
+                    &virtual_members,
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -3735,6 +3761,7 @@ impl PackageWire {
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        virtual_members: &FxHashMap<PackageName, Box<Path>>,
     ) -> Result<Package, LockError> {
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
@@ -3777,9 +3804,54 @@ impl PackageWire {
                 .collect()
         };
 
+        // Reconstruct omitted workspace-member sources before comparing requirement metadata.
+        let restore_virtual_member = |mut requirement: Requirement| {
+            if let RequirementSource::Registry {
+                specifier,
+                index: None,
+                conflict: None,
+            } = &requirement.source
+                && specifier.is_empty()
+                && requirement.name != self.id.name
+                && let Some(install_path) = virtual_members.get(&requirement.name)
+            {
+                let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(install_path)))
+                    .map_err(LockErrorKind::RequirementVerbatimUrl)?;
+                requirement.source = RequirementSource::Directory {
+                    install_path: install_path.clone(),
+                    editable: Some(false),
+                    r#virtual: Some(true),
+                    url,
+                };
+            }
+            Ok::<_, LockError>(requirement)
+        };
+        let requires_dist = self
+            .metadata
+            .requires_dist
+            .into_iter()
+            .map(&restore_virtual_member)
+            .collect::<Result<_, _>>()?;
+        let dependency_groups = self
+            .metadata
+            .dependency_groups
+            .into_iter()
+            .map(|(group, requirements)| {
+                let requirements = requirements
+                    .into_iter()
+                    .map(&restore_virtual_member)
+                    .collect::<Result<_, _>>()?;
+                Ok::<_, LockError>((group, requirements))
+            })
+            .collect::<Result<_, _>>()?;
+
         Ok(Package {
             id: self.id,
-            metadata: self.metadata,
+            metadata: PackageMetadata {
+                requires_dist,
+                dependency_groups,
+                ..self.metadata
+            },
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self

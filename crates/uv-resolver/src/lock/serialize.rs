@@ -1,20 +1,23 @@
 use std::collections::BTreeSet;
 use std::fmt;
+use std::path::Path;
 
 use rustc_hash::FxHashMap;
 use serde::Serialize;
 use toml_edit::Value;
 use toml_writer::{TomlWrite, WriteTomlValue};
-use uv_distribution_types::{RequiresPython, SimplifiedMarkerTree};
+use uv_distribution_types::{Requirement, RequirementSource, RequiresPython, SimplifiedMarkerTree};
 use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::ConflictKind;
 
 use super::{
-    Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue, ForkStrategy, Lock, Package,
-    PackageId, PrereleaseMode, RegistrySource, ResolutionMode, ResolverManifest, ResolverOptions,
-    Source, SourceDist, Wheel, WheelWireSource, simplified_universal_markers,
+    COMPACT_REVISION, Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue,
+    ForkStrategy, Lock, Package, PackageId, PrereleaseMode, REVISION, RegistrySource,
+    ResolutionMode, ResolverManifest, ResolverOptions, Source, SourceDist, Wheel, WheelWireSource,
+    simplified_universal_markers,
 };
 
 /// Serializes a lockfile directly while preserving the canonical `uv.lock` layout.
@@ -34,9 +37,42 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
     // environments.
     debug_assert!(lock.check_marker_coverage().is_ok());
 
+    let virtual_members = if uv_preview::is_enabled(PreviewFeature::NoLockVirtual) {
+        lock.packages
+            .iter()
+            .filter(|package| lock.manifest.members.contains(&package.id.name))
+            .filter_map(|package| {
+                if let Source::Virtual(path) = &package.id.source {
+                    Some((package.id.name.clone(), path.as_ref()))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    } else {
+        FxHashMap::default()
+    };
+    let compact_lockfile = lock.packages.iter().any(|package| {
+        package
+            .metadata
+            .requires_dist
+            .iter()
+            .chain(package.metadata.dependency_groups.values().flatten())
+            .any(|requirement| {
+                can_omit_virtual_source(requirement, &package.id.name, &virtual_members)
+            })
+    });
+    let revision = if compact_lockfile {
+        lock.revision.max(COMPACT_REVISION)
+    } else if lock.uses_compact_format() {
+        REVISION
+    } else {
+        lock.revision
+    };
+
     writer.key_value("version", lock.version)?;
-    if lock.revision > 0 {
-        writer.key_value("revision", lock.revision)?;
+    if revision > 0 {
+        writer.key_value("revision", revision)?;
     }
     writer.key_value("requires-python", lock.requires_python.to_string())?;
 
@@ -128,6 +164,7 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             &lock.requires_python,
             simplified_environment,
             &dist_count_by_name,
+            &virtual_members,
         )?;
     }
 
@@ -264,6 +301,7 @@ fn write_package(
     requires_python: &RequiresPython,
     simplified_environment: MarkerTree,
     dist_count_by_name: &FxHashMap<PackageName, u64>,
+    virtual_members: &FxHashMap<PackageName, &Path>,
 ) -> Result<(), WriteError> {
     writer.array_of_tables(&["package"])?;
     write_package_id(writer, &package.id, None, PackageIdLocation::Table)?;
@@ -350,7 +388,15 @@ fn write_package(
         || !metadata.provides_extra.is_empty();
     if has_metadata {
         writer.table(&["package", "metadata"])?;
-        write_serialized_non_empty_array(writer, "requires-dist", &metadata.requires_dist)?;
+        if !metadata.requires_dist.is_empty() {
+            write_package_requirements(
+                writer,
+                "requires-dist",
+                &package.id.name,
+                &metadata.requires_dist,
+                virtual_members,
+            )?;
+        }
         if !metadata.provides_extra.is_empty() {
             writer.key_start("provides-extras")?;
             writer.array(&metadata.provides_extra, |writer, extra| {
@@ -362,12 +408,71 @@ fn write_package(
         if !metadata.dependency_groups.is_empty() {
             writer.table(&["package", "metadata", "requires-dev"])?;
             for (group, requirements) in &metadata.dependency_groups {
-                write_serialized_array(writer, group.as_ref(), requirements)?;
+                write_package_requirements(
+                    writer,
+                    group.as_ref(),
+                    &package.id.name,
+                    requirements,
+                    virtual_members,
+                )?;
             }
         }
     }
 
     Ok(())
+}
+
+/// Writes requirement metadata, omitting virtual sources already recorded for workspace members.
+fn write_package_requirements(
+    writer: &mut LockWriter,
+    key: &str,
+    package_name: &PackageName,
+    requirements: &BTreeSet<Requirement>,
+    virtual_members: &FxHashMap<PackageName, &Path>,
+) -> Result<(), WriteError> {
+    writer.key_start(key)?;
+    let write_requirement = |writer: &mut LockWriter, requirement: &Requirement| {
+        let mut value = serialize_value(requirement)?;
+        if can_omit_virtual_source(requirement, package_name, virtual_members)
+            && let Value::InlineTable(table) = &mut value.0
+        {
+            table.remove("virtual");
+        }
+        writer.value(value)
+    };
+
+    if requirements.len() <= 1 {
+        writer.array(requirements, write_requirement)?;
+        writer.raw("\n");
+    } else {
+        writer.multiline_array(requirements, write_requirement)?;
+    }
+
+    Ok(())
+}
+
+/// Returns `true` if the requirement's virtual source can be inferred from a workspace member.
+fn can_omit_virtual_source(
+    requirement: &Requirement,
+    package_name: &PackageName,
+    virtual_members: &FxHashMap<PackageName, &Path>,
+) -> bool {
+    if &requirement.name == package_name {
+        return false;
+    }
+
+    if let RequirementSource::Directory {
+        install_path,
+        r#virtual: Some(true),
+        ..
+    } = &requirement.source
+    {
+        virtual_members
+            .get(&requirement.name)
+            .is_some_and(|path| *path == install_path.as_ref())
+    } else {
+        false
+    }
 }
 
 /// Writes a package identity, omitting fields that a unique package name makes redundant.

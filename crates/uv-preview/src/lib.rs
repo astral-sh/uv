@@ -264,6 +264,7 @@ pub enum PreviewFeature {
     WorkspaceListScripts = 1 << 37,
     NoDistutilsPatch = 1 << 38,
     IndexHashAlgorithm = 1 << 39,
+    NoLockVirtual = 1 << 40,
 }
 
 impl PreviewFeature {
@@ -310,6 +311,7 @@ impl PreviewFeature {
             Self::WorkspaceListScripts => "workspace-list-scripts",
             Self::NoDistutilsPatch => "no-distutils-patch",
             Self::IndexHashAlgorithm => "index-hash-algorithm",
+            Self::NoLockVirtual => "no-lock-virtual",
         }
     }
 }
@@ -369,6 +371,7 @@ impl FromStr for PreviewFeature {
             "workspace-list-scripts" => Self::WorkspaceListScripts,
             "no-distutils-patch" => Self::NoDistutilsPatch,
             "index-hash-algorithm" => Self::IndexHashAlgorithm,
+            "no-lock-virtual" => Self::NoLockVirtual,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -552,6 +555,9 @@ mod tests {
         let preview = Preview::from_str("tool-install-locks").unwrap();
         assert!(preview.is_enabled(PreviewFeature::ToolInstallLocks));
 
+        let preview = Preview::from_str("no-lock-virtual").unwrap();
+        assert!(preview.is_enabled(PreviewFeature::NoLockVirtual));
+
         // Test with whitespace
         let preview = Preview::from_str("pylock , add-bounds").unwrap();
         assert!(preview.is_enabled(PreviewFeature::Pylock));
@@ -684,6 +690,7 @@ mod tests {
             PreviewFeature::IndexHashAlgorithm.as_str(),
             "index-hash-algorithm"
         );
+        assert_eq!(PreviewFeature::NoLockVirtual.as_str(), "no-lock-virtual");
     }
 
     #[test]

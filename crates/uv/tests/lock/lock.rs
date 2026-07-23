@@ -10914,6 +10914,261 @@ fn lock_no_workspace_source() -> Result<()> {
     Ok(())
 }
 
+/// Omit redundant virtual workspace-member sources from requirement metadata in compact locks.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_compact_virtual_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "external"]
+
+        [dependency-groups]
+        dev = ["project", "child", "external"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        external = { path = "external" }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv]
+            package = false
+            "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("external")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "external"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv]
+            package = false
+            "#,
+        )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let standard_lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(standard_lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+            "project",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { virtual = "child" }
+
+        [[package]]
+        name = "external"
+        version = "0.1.0"
+        source = { virtual = "external" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child" },
+            { name = "external" },
+        ]
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "child" },
+            { name = "external" },
+            { name = "project" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "child", virtual = "child" },
+            { name = "external", virtual = "external" },
+        ]
+
+        [package.metadata.requires-dev]
+        dev = [
+            { name = "child", virtual = "child" },
+            { name = "external", virtual = "external" },
+            { name = "project" },
+        ]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("no-lock-virtual"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+            "project",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { virtual = "child" }
+
+        [[package]]
+        name = "external"
+        version = "0.1.0"
+        source = { virtual = "external" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child" },
+            { name = "external" },
+        ]
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "child" },
+            { name = "external" },
+            { name = "project" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "child" },
+            { name = "external", virtual = "external" },
+        ]
+
+        [package.metadata.requires-dev]
+        dev = [
+            { name = "child" },
+            { name = "external", virtual = "external" },
+            { name = "project" },
+        ]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Disabling compact locks restores the compatible standard format.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), standard_lock);
+
+    Ok(())
+}
+
+/// Enabling compact locks should not change lockfiles without a redundant virtual source.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_compact_without_virtual_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let standard_lock = context.read("uv.lock");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("no-lock-virtual"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), standard_lock);
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/astral-sh/uv/issues/19916>.
 ///
 /// Lock a workspace with a member that also supports standalone installation via platform-specific

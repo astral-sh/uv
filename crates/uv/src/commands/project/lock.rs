@@ -453,6 +453,13 @@ impl<'env> LockOperation<'env> {
                 if !matches!(self.mode, LockMode::DryRun(_)) {
                     if let LockResult::Changed(_, lock) = &result {
                         target.commit(lock).await?;
+                    } else if (self.preview.is_enabled(PreviewFeature::NoLockVirtual)
+                        || result.lock().uses_compact_format())
+                        && target.read_bytes().await?.as_deref()
+                            != Some(result.lock().to_toml()?.as_bytes())
+                    {
+                        // The resolved packages are unchanged, but the lockfile format changed.
+                        target.commit(result.lock()).await?;
                     }
                 }
 
