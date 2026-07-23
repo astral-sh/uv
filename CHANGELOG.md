@@ -3,6 +3,26 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.32
+
+Released on 2026-07-23.
+
+### Preview features
+
+- Add `--package` and `--all-packages` selection to `uv check` ([#20628](https://github.com/astral-sh/uv/pull/20628))
+- Allow `uv upgrade` to update multiple marker-specific declarations of the same package ([#20335](https://github.com/astral-sh/uv/pull/20335))
+- Reject non-canonically formatted lockfiles in `uv lock --check` and commands using `--locked` ([#20646](https://github.com/astral-sh/uv/pull/20646))
+- Regenerate non-canonically formatted lockfiles with `uv lock --refresh` ([#20634](https://github.com/astral-sh/uv/pull/20634))
+- Include best-effort information about the active environment in `uv workspace metadata` by default ([#20643](https://github.com/astral-sh/uv/pull/20643))
+
+### Performance
+
+- Skip dependency-group conflict expansion when no additional conflicts can be inferred ([#20611](https://github.com/astral-sh/uv/pull/20611))
+
+### Bug fixes
+
+- Fork universal resolutions when `Requires-Python` is discovered only from distribution metadata ([#20586](https://github.com/astral-sh/uv/pull/20586))
+
 ## 0.11.31
 
 Released on 2026-07-21.
@@ -1039,3 +1059,4 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
