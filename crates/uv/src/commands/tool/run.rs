@@ -302,7 +302,11 @@ pub(crate) async fn run(
         }
 
         Err(ProjectError::Requirements(err)) => {
-            let err = anyhow::Error::new(err).context("Failed to resolve `--with` requirement");
+            // Prefer `--from` in the context when the user provided it; otherwise `--with`.
+            // (A requirements failure with an explicit `--from` is usually the `--from` package.)
+            let flag = if explicit_from { "--from" } else { "--with" };
+            let err =
+                anyhow::Error::new(err).context(format!("Failed to resolve `{flag}` requirement"));
             return Err(UvError::user(err).into());
         }
         Err(err) => return Err(err.into()),
