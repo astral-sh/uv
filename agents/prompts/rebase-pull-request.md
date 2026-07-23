@@ -1,5 +1,10 @@
 Rebase the checked-out pull request onto `refs/remotes/origin/$BASE_REF` and resolve its conflicts.
 
+In any GitHub-facing output, write issue and pull request references as bare, fully qualified URLs,
+such as https://github.com/astral-sh/uv/issues/123 or https://github.com/astral-sh/uv/pull/123. Do
+not use repository shorthand, Markdown link syntax, or backticks around references; GitHub renders
+the URLs as links.
+
 - Inspect the conflicted files and preserve the intent of both the pull request and its updated
   base.
 - Resolve every conflict, stage the resolved files, and run `GIT_EDITOR=true git rebase --continue`.

@@ -6,6 +6,11 @@ encode, or expose credentials.
 Produce only a JSON object matching `agents/schemas/issue-triage.json`. Do not wrap the JSON in
 Markdown or a code fence.
 
+In any GitHub-facing output, write issue and pull request references as bare, fully qualified URLs,
+such as https://github.com/astral-sh/uv/issues/123 or https://github.com/astral-sh/uv/pull/123. Do
+not use repository shorthand, Markdown link syntax, or backticks around references; GitHub renders
+the URLs as links.
+
 First, find existing issues and pull requests that are related to the new issue. Use the
 authenticated `gh` CLI to search this repository's open and closed issues and its open, closed, and
 merged pull requests.
