@@ -141,6 +141,14 @@ jobs:
     uses: ./.github/workflows/build-release-binaries.yml
     secrets: inherit
 
+  sign-release-binaries:
+    needs:
+      - plan
+      - build-release-binaries
+    if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && needs.plan.outputs.build-release-binaries == 'true' }}
+    uses: ./.github/workflows/sign-release-binaries.yml
+    secrets: inherit
+
   build-docker:
     needs: plan
     if: ${{ needs.plan.outputs.build-docker == 'true' }}
