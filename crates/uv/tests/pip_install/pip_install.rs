@@ -14282,6 +14282,52 @@ fn reserved_script_name() -> Result<()> {
     Ok(())
 }
 
+/// Reject a wheel whose filename advertises a compatible tag while its internal WHEEL metadata
+/// declares a different, incompatible platform.
+#[test]
+fn reject_mismatched_wheel_tags() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context.temp_dir.child("foo-0.1.0-py3-none-any.whl");
+
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for (path, contents) in [
+        ("foo/__init__.py", "VALUE = 1\n"),
+        (
+            "foo-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+        ),
+        (
+            "foo-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-win_amd64\n",
+        ),
+        (
+            "foo-0.1.0.dist-info/RECORD",
+            "foo/__init__.py,,\nfoo-0.1.0.dist-info/METADATA,,\nfoo-0.1.0.dist-info/WHEEL,,\nfoo-0.1.0.dist-info/RECORD,,\n",
+        ),
+    ] {
+        let entry = ZipEntryBuilder::new(path.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+    }
+    fs_err::write(wheel.path(), block_on(writer.close())?)?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(wheel.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      Caused by: The wheel is invalid: Wheel tags do not match filename (py3-none-win_amd64 != py3-none-any)
+    ");
+
+    assert!(!context.site_packages().join("foo").exists());
+    assert!(!context.site_packages().join("foo-0.1.0.dist-info").exists());
+
+    Ok(())
+}
+
 fn repacked_wheel_with_entrypoint(
     context: &TestContext,
     section: &str,
@@ -16227,32 +16273,19 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
 
         [build-system]
         requires = ["hatchling"]
-        backend-path = ["."]
-        build-backend = "build_backend"
+        build-backend = "hatchling.build"
+
+        [tool.hatch.build.targets.wheel.hooks.custom]
     "#})?;
 
-    let build_backend = py313.child("build_backend.py");
-    build_backend.write_str(indoc! {r#"
-        import os
-
-        from hatchling.build import *
-        from hatchling.build import build_wheel as build_wheel_original
+    let hatch_build = py313.child("hatch_build.py");
+    hatch_build.write_str(indoc! {r#"
+        from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 
-        def build_wheel(
-            wheel_directory: str,
-            config_settings: "Mapping[Any, Any] | None" = None,
-            metadata_directory: "str | None" = None,
-        ) -> str:
-            filename = build_wheel_original(
-                wheel_directory, config_settings, metadata_directory
-            )
-            py313_wheel = "py313-0.1.0-py313-none-any.whl"
-            os.rename(
-                os.path.join(wheel_directory, filename),
-                os.path.join(wheel_directory, py313_wheel),
-            )
-            return py313_wheel
+        class CustomBuildHook(BuildHookInterface):
+            def initialize(self, version, build_data):
+                build_data["tag"] = "py313-none-any"
     "#})?;
     py313.child("src/py313/__init__.py").touch()?;
 
