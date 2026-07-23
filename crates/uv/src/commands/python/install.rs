@@ -486,37 +486,32 @@ async fn perform_install(
 
             for installation in matching_installations {
                 changelog.existing.insert(installation.key().clone());
-                if matches!(&request.request, &PythonRequest::Any) {
-                    // Construct an install request matching the existing installation
-                    match InstallRequest::new(
-                        PythonRequest::Key(installation.into()),
-                        &download_list,
-                    ) {
-                        Ok(request) => {
-                            debug!("Will reinstall `{}`", installation.key());
-                            unsatisfied.push(Cow::Owned(request));
-                        }
-                        Err(err) => {
-                            // This shouldn't really happen, but maybe a new version of uv dropped
-                            // support for a key we previously supported
-                            warn_user!(
-                                "Failed to create reinstall request for existing installation `{}`: {err}",
-                                installation.key().green()
-                            );
-                        }
-                    }
-                } else {
-                    // TODO(zanieb): This isn't really right! But we need `--upgrade` or similar
-                    // to handle this case correctly without causing a breaking change.
 
-                    // If we have real requests, just ignore the existing installation
-                    debug!(
-                        "Ignoring match `{}` for request `{}` due to `--reinstall` flag",
-                        installation.key(),
-                        request
-                    );
+                if matches!(
+                    upgrade,
+                    PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
+                ) && !matches!(&request.request, &PythonRequest::Any)
+                {
+                    // An upgrade must reinstall the latest patch, not every matching patch.
+                    debug!("Will reinstall the latest patch for `{}`", request);
                     unsatisfied.push(Cow::Borrowed(request));
                     break;
+                }
+
+                // Construct an install request matching the existing installation.
+                match InstallRequest::new(PythonRequest::Key(installation.into()), &download_list) {
+                    Ok(request) => {
+                        debug!("Will reinstall `{}`", installation.key());
+                        unsatisfied.push(Cow::Owned(request));
+                    }
+                    Err(err) => {
+                        // This shouldn't really happen, but maybe a new version of uv dropped
+                        // support for a key we previously supported.
+                        warn_user!(
+                            "Failed to create reinstall request for existing installation `{}`: {err}",
+                            installation.key().green()
+                        );
+                    }
                 }
             }
         }

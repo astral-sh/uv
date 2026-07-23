@@ -6797,6 +6797,8 @@ pub struct PythonInstallArgs {
 
     /// Reinstall the requested Python version, if it's already installed.
     ///
+    /// If a minor version is requested, all matching installed patch versions are reinstalled.
+    ///
     /// By default, uv will exit successfully if the version is already
     /// installed.
     #[arg(long, short)]
