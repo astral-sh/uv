@@ -18,7 +18,7 @@ use uv_configuration::{
     ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
+use uv_distribution::{DistributionDatabase, GitWorkspaceSourceContext, SourcedDependencyGroups};
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, Diagnostic, Dist, ExtraBuildRequires,
     ExtraBuildVariables, IndexLocations, InstalledDist, InstalledVersion, LocalDist,
@@ -225,6 +225,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 build_dispatch.cache(),
                 build_dispatch.workspace_cache(),
                 client.credentials_cache(),
+                &GitWorkspaceSourceContext::new(build_dispatch.git(), |url| {
+                    build_dispatch.git_http_settings(url)
+                }),
             )
             .await
             .with_context(|| {

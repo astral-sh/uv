@@ -6,14 +6,15 @@ use either::Either;
 use futures::future::join_all;
 
 use thiserror::Error;
-use uv_auth::CredentialsCache;
-use uv_cache::Cache;
+use uv_auth::{CredentialsCache, CredentialsFromUrlError};
+use uv_cache::{Cache, CacheBucket};
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
     RequirementSource,
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
+use uv_git::GitResolverError;
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
@@ -23,10 +24,12 @@ use uv_pypi_types::{
     VerbatimParsedUrl,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
-use uv_workspace::pyproject::{PyProjectToml, Source, Sources, WorkspaceReference};
+use uv_workspace::pyproject::{
+    PyProjectToml, Source, Sources, WorkspaceReference, WorkspaceSource,
+};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
-use crate::metadata::GitWorkspaceMember;
+use crate::metadata::{GitWorkspaceMember, GitWorkspaceSourceContext};
 
 #[derive(Debug, Clone)]
 pub struct LoweredRequirement(Requirement);
@@ -56,6 +59,7 @@ impl LoweredRequirement {
         cache: &'data Cache,
         workspace_cache: &'data WorkspaceCache,
         credentials_cache: &'data CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
         // Identify the source from the `tool.uv.sources` table.
         let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
@@ -295,6 +299,7 @@ impl LoweredRequirement {
                                 git_member,
                                 cache,
                                 workspace_cache,
+                                git_workspace,
                             )
                             .await?;
                             (source, marker)
@@ -334,6 +339,7 @@ impl LoweredRequirement {
         cache: &'data Cache,
         workspace_cache: &'data WorkspaceCache,
         credentials_cache: &'data CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let source = sources.get(&requirement.name).cloned();
 
@@ -475,6 +481,7 @@ impl LoweredRequirement {
                                 None,
                                 cache,
                                 workspace_cache,
+                                git_workspace,
                             )
                             .await?;
                             (source, marker)
@@ -573,6 +580,10 @@ pub enum LoweringError {
     MoreThanOneGitRef,
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
+    #[error(transparent)]
+    Git(#[from] GitResolverError),
+    #[error(transparent)]
+    GitCredentials(#[from] CredentialsFromUrlError),
     #[error("Package `{package}` references an undeclared index: `{index}`")]
     MissingIndex {
         package: PackageName,
@@ -682,13 +693,7 @@ fn git_source(
     branch: Option<String>,
     lfs: Option<bool>,
 ) -> Result<RequirementSource, LoweringError> {
-    let reference = match (rev, tag, branch) {
-        (None, None, None) => GitReference::DefaultBranch,
-        (Some(rev), None, None) => GitReference::from_rev(rev),
-        (None, Some(tag), None) => GitReference::Tag(tag),
-        (None, None, Some(branch)) => GitReference::Branch(branch),
-        _ => return Err(LoweringError::MoreThanOneGitRef),
-    };
+    let reference = git_reference(rev, tag, branch)?;
 
     // Create a PEP 508-compatible URL.
     let mut url = DisplaySafeUrl::parse(&format!("git+{git}"))?;
@@ -743,6 +748,21 @@ fn git_source(
             git,
             subdirectory,
         })
+    }
+}
+
+/// Convert the revision fields from a Git source into a [`GitReference`].
+fn git_reference(
+    rev: Option<String>,
+    tag: Option<String>,
+    branch: Option<String>,
+) -> Result<GitReference, LoweringError> {
+    match (rev, tag, branch) {
+        (None, None, None) => Ok(GitReference::DefaultBranch),
+        (Some(rev), None, None) => Ok(GitReference::from_rev(rev)),
+        (None, Some(tag), None) => Ok(GitReference::Tag(tag)),
+        (None, None, Some(branch)) => Ok(GitReference::Branch(branch)),
+        _ => Err(LoweringError::MoreThanOneGitRef),
     }
 }
 
@@ -822,6 +842,7 @@ async fn workspace_source(
     git_member: Option<&GitWorkspaceMember<'_>>,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
+    git_workspace: &GitWorkspaceSourceContext<'_>,
 ) -> Result<RequirementSource, LoweringError> {
     let base = match origin {
         RequirementOrigin::Project => project_dir,
@@ -855,7 +876,8 @@ async fn workspace_source(
                 false,
             )
         }
-        WorkspaceReference::Path(path) => {
+        WorkspaceReference::Path(path)
+        | WorkspaceReference::Source(WorkspaceSource::Path { path }) => {
             let workspace_path = VerbatimUrl::from_path(path.as_ref(), base)?
                 .to_file_path()
                 .map_err(|()| {
@@ -901,6 +923,53 @@ async fn workspace_source(
                 editable,
                 Some(is_package),
                 true,
+            )
+        }
+        WorkspaceReference::Source(WorkspaceSource::Git {
+            git,
+            rev,
+            tag,
+            branch,
+            lfs,
+        }) => {
+            uv_git::store_credentials_from_url(git)?;
+
+            let reference = git_reference(rev.clone(), tag.clone(), branch.clone())?;
+            let git_url = GitUrl::from_fields(git.clone(), reference, None, GitLfs::from(*lfs))?;
+            let fetch = git_workspace
+                .resolver()
+                .fetch(
+                    &git_url,
+                    git_workspace.http_settings(git),
+                    cache.bucket(CacheBucket::Git),
+                    None,
+                )
+                .await?;
+            let target_workspace = Workspace::discover(
+                fetch.path(),
+                &DiscoveryOptions::default(),
+                cache,
+                workspace_cache,
+            )
+            .await?;
+            let member = target_workspace
+                .packages()
+                .get(&requirement.name)
+                .ok_or_else(|| {
+                    LoweringError::UndeclaredWorkspacePackage(requirement.name.clone())
+                })?;
+            let subdirectory = uv_fs::relative_to(member.root(), fetch.path())
+                .map_err(LoweringError::RelativeTo)?
+                .into_boxed_path();
+
+            git_source(
+                git.clone(),
+                Some(subdirectory),
+                None,
+                rev.clone(),
+                tag.clone(),
+                branch.clone(),
+                *lfs,
             )
         }
     }

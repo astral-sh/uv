@@ -2165,7 +2165,7 @@
           "type": "object",
           "properties": {
             "editable": {
-              "description": "Whether the package should be installed as editable. Defaults to `true`.",
+              "description": "Whether a local workspace package should be installed as editable. Defaults to `true`.",
               "type": ["boolean", "null"]
             },
             "extra": {
@@ -2192,7 +2192,7 @@
               "$ref": "#/definitions/MarkerTree"
             },
             "workspace": {
-              "description": "`true` selects the current workspace. A string selects another workspace discovered\nfrom the given path.\n\nWhen set to `false`, the package will be fetched from the remote index, rather than\nincluded as a workspace package.",
+              "description": "`true` selects the current workspace. A path or Git source selects another workspace\ndiscovered from that source. A string is shorthand for a path source.\n\nWhen set to `false`, the package will be fetched from the remote index, rather than\nincluded as a workspace package.",
               "allOf": [
                 {
                   "$ref": "#/definitions/WorkspaceReference"
@@ -2824,13 +2824,53 @@
       "additionalProperties": false
     },
     "WorkspaceReference": {
-      "description": "A reference to either the current workspace or a workspace discovered from a path.",
+      "description": "A reference to either the current workspace or a workspace discovered from a source.",
       "anyOf": [
         {
           "type": "boolean"
         },
         {
           "$ref": "#/definitions/PortablePathBuf"
+        },
+        {
+          "$ref": "#/definitions/WorkspaceSource"
+        }
+      ]
+    },
+    "WorkspaceSource": {
+      "description": "A source from which to discover a workspace.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "$ref": "#/definitions/PortablePathBuf"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["path"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "branch": {
+              "type": ["string", "null"]
+            },
+            "git": {
+              "$ref": "#/definitions/DisplaySafeUrl"
+            },
+            "lfs": {
+              "type": ["boolean", "null"]
+            },
+            "rev": {
+              "type": ["string", "null"]
+            },
+            "tag": {
+              "type": ["string", "null"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["git"]
         }
       ]
     }

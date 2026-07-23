@@ -11028,7 +11028,7 @@ fn lock_workspace_member_with_standalone_path_source() -> Result<()> {
     Ok(())
 }
 
-/// Lock a project that correctly points at an external workspace via `workspace = "..."`.
+/// Lock a project that correctly points at an external workspace via `workspace = { path = "..." }`.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_external_workspace_source() -> Result<()> {
@@ -11044,7 +11044,7 @@ fn lock_external_workspace_source() -> Result<()> {
         dependencies = ["pkg-b"]
 
         [tool.uv.sources]
-        pkg-b = { workspace = "../external-workspace" }
+        pkg-b = { workspace = { path = "../external-workspace" } }
         "#,
     )?;
 
@@ -27866,6 +27866,40 @@ fn lock_group_workspace() -> Result<()> {
 
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
+fn lock_git_workspace_source_respects_offline_mode() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["c"]
+
+        [tool.uv.sources]
+        c = { workspace = { git = "https://github.com/astral-sh/workspace-virtual-root-test" } }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `a @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `c`
+      ├─▶ Git operation failed
+      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/fb733c6c2cd489bf
+      ╰─▶ Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+    ");
+
+    Ok(())
+}
+
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
 fn lock_transitive_git() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -27879,7 +27913,7 @@ fn lock_transitive_git() -> Result<()> {
         dependencies = ["c"]
 
         [tool.uv.sources]
-        c = { git = "https://github.com/astral-sh/workspace-virtual-root-test", subdirectory = "packages/c", rev = "fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" }
+        c = { workspace = { git = "https://github.com/astral-sh/workspace-virtual-root-test", rev = "fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" } }
         "#,
     )?;
 
@@ -27977,9 +28011,8 @@ fn lock_transitive_git() -> Result<()> {
     Resolved 6 packages in [TIME]
     ");
 
-    // Re-run with `--offline`. We shouldn't need a network connection to validate an
-    // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
+    // Re-run with `--offline`. Workspace member discovery can reuse the cached Git checkout.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
     success: true
     exit_code: 0
     ----- stdout -----

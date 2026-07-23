@@ -51,7 +51,7 @@ use uv_workspace::pyproject::ToolUvSources;
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
 use crate::hash::http_hash_algorithms;
-use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
+use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, GitWorkspaceSourceContext, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
 use crate::{Reporter, RequiresDist};
@@ -1494,6 +1494,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         self.build_context.cache(),
                         self.build_context.workspace_cache(),
                         credentials_cache,
+                        &GitWorkspaceSourceContext::new(self.build_context.git(), |url| {
+                            self.build_context.git_http_settings(url)
+                        }),
                     )
                     .await?,
                 ));
@@ -1550,6 +1553,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             self.build_context.cache(),
                             self.build_context.workspace_cache(),
                             credentials_cache,
+                            &GitWorkspaceSourceContext::new(self.build_context.git(), |url| {
+                                self.build_context.git_http_settings(url)
+                            }),
                         )
                         .await?,
                     ));
@@ -1602,6 +1608,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.cache(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
+                    &GitWorkspaceSourceContext::new(self.build_context.git(), |url| {
+                        self.build_context.git_http_settings(url)
+                    }),
                 )
                 .await?,
             ));
@@ -1669,6 +1678,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context.cache(),
                 self.build_context.workspace_cache(),
                 credentials_cache,
+                &GitWorkspaceSourceContext::new(self.build_context.git(), |url| {
+                    self.build_context.git_http_settings(url)
+                }),
             )
             .await?,
         ))
@@ -1749,6 +1761,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.cache(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
+                    &GitWorkspaceSourceContext::new(self.build_context.git(), |url| {
+                        self.build_context.git_http_settings(url)
+                    }),
                 )
                 .await?;
                 Ok(Some(requires_dist))
@@ -2354,6 +2369,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             self.build_context.cache(),
                             self.build_context.workspace_cache(),
                             credentials_cache,
+                            &GitWorkspaceSourceContext::new(self.build_context.git(), |url| {
+                                self.build_context.git_http_settings(url)
+                            }),
                         )
                         .await?,
                     ));
@@ -2392,6 +2410,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 self.build_context.cache(),
                                 self.build_context.workspace_cache(),
                                 credentials_cache,
+                                &GitWorkspaceSourceContext::new(self.build_context.git(), |url| {
+                                    self.build_context.git_http_settings(url)
+                                }),
                             )
                             .await?,
                         ));
@@ -2449,6 +2470,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.cache(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
+                    &GitWorkspaceSourceContext::new(self.build_context.git(), |url| {
+                        self.build_context.git_http_settings(url)
+                    }),
                 )
                 .await?,
             ));
@@ -2518,6 +2542,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context.cache(),
                 self.build_context.workspace_cache(),
                 credentials_cache,
+                &GitWorkspaceSourceContext::new(self.build_context.git(), |url| {
+                    self.build_context.git_http_settings(url)
+                }),
             )
             .await?,
         ))

@@ -24,7 +24,7 @@ use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile, ExtrasSpecification,
     InstallOptions, TargetTriple,
 };
-use uv_distribution::LoweredExtraBuildDependencies;
+use uv_distribution::{GitWorkspaceSourceContext, LoweredExtraBuildDependencies};
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
@@ -366,6 +366,9 @@ pub(crate) async fn run(
                 &cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
+                &GitWorkspaceSourceContext::new(sync_state.git(), |url| {
+                    client_builder.git_http_settings(url)
+                }),
             )
             .await?
             {
@@ -375,6 +378,9 @@ pub(crate) async fn run(
                     &cache,
                     workspace_cache,
                     client_builder.credentials_cache(),
+                    &GitWorkspaceSourceContext::new(sync_state.git(), |url| {
+                        client_builder.git_http_settings(url)
+                    }),
                 )
                 .await?
                 .into_inner();

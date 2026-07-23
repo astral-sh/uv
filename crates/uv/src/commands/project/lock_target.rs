@@ -6,7 +6,7 @@ use tracing::info_span;
 use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency, NoSources};
-use uv_distribution::LoweredRequirement;
+use uv_distribution::{GitWorkspaceSourceContext, LoweredRequirement};
 use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
@@ -356,6 +356,7 @@ impl<'lock> LockTarget<'lock> {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_workspace: &GitWorkspaceSourceContext<'_>,
     ) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
         match self {
             Self::Workspace(workspace) => {
@@ -378,6 +379,7 @@ impl<'lock> LockTarget<'lock> {
                     cache,
                     workspace_cache,
                     credentials_cache,
+                    git_workspace,
                 )
                 .await?;
 
@@ -426,6 +428,7 @@ impl<'lock> LockTarget<'lock> {
                             cache,
                             workspace_cache,
                             credentials_cache,
+                            git_workspace,
                         )
                         .await
                         .map(|requirement| {

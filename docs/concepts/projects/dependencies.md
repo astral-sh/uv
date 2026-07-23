@@ -471,11 +471,21 @@ workspace members must be explicitly stated. Workspace members are always
 [editable](#editable-dependencies) . See the [workspace](./workspaces.md) documentation for more
 details on workspaces.
 
-To source a dependency from a different workspace, `workspace` can also be a path string:
+To source a dependency from a different workspace, `workspace` can also be a path source:
 
 ```toml title="pyproject.toml"
 [tool.uv.sources]
-foo = { workspace = "../other-workspace" }
+foo = { workspace = { path = "../other-workspace" } }
+```
+
+A path string, such as `workspace = "../other-workspace"`, is shorthand for a path source.
+
+A Git source can also be used to select a member from a Git-hosted workspace without specifying its
+subdirectory:
+
+```toml title="pyproject.toml"
+[tool.uv.sources]
+foo = { workspace = { git = "https://github.com/example/other-workspace", rev = "..." } }
 ```
 
 ```toml title="pyproject.toml"

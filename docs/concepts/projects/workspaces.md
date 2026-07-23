@@ -82,10 +82,15 @@ build-backend = "uv_build"
 In this example, the `albatross` project depends on the `bird-feeder` project, which is a member of
 the workspace. The `workspace = true` key-value pair in the `tool.uv.sources` table indicates the
 `bird-feeder` dependency should be provided by the workspace, rather than fetched from PyPI or
-another registry. The `workspace` field can also be set to a path string to resolve a dependency
-from a different workspace. The path is resolved relative to the project that declares the source
-(or the workspace root for a workspace-level source) and must point to the external workspace root.
-uv selects the member that matches the dependency name.
+another registry. The `workspace` field can also be set to a path source, for example
+`workspace = { path = "../other-workspace" }`, to resolve a dependency from a different workspace. A
+path string is shorthand for a path source. The path is resolved relative to the project that
+declares the source (or the workspace root for a workspace-level source) and must point to the
+external workspace root. uv selects the member that matches the dependency name.
+
+Git-hosted workspaces can be selected in the same way, for example
+`workspace = { git = "https://github.com/example/other-workspace", rev = "..." }`. uv discovers the
+workspace from the repository root and selects the member that matches the dependency name.
 
 !!! note
 

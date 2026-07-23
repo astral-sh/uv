@@ -19,7 +19,7 @@ use uv_configuration::{
     TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::LoweredExtraBuildDependencies;
+use uv_distribution::{GitWorkspaceSourceContext, LoweredExtraBuildDependencies};
 use uv_distribution_types::{Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist};
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
@@ -38,7 +38,7 @@ use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::Source;
+use uv_workspace::pyproject::{Source, WorkspaceReference, WorkspaceSource};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::editable::apply_editable_mode;
@@ -238,6 +238,11 @@ pub(crate) async fn sync(
                 ));
             }
 
+            let state = PlatformState::default();
+            let git_workspace = GitWorkspaceSourceContext::new(state.git(), |url| {
+                client_builder.git_http_settings(url)
+            });
+
             // Parse the requirements from the script.
             let spec = script_specification(
                 script.into(),
@@ -245,6 +250,7 @@ pub(crate) async fn sync(
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
+                &git_workspace,
             )
             .await?
             .unwrap_or_default();
@@ -254,6 +260,7 @@ pub(crate) async fn sync(
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
+                &git_workspace,
             )
             .await?
             .into_inner();
@@ -286,7 +293,7 @@ pub(crate) async fn sync(
                 script_extra_build_requires,
                 &settings,
                 &client_builder,
-                &PlatformState::default(),
+                &state,
                 Box::new(DefaultResolveLogger),
                 Box::new(DefaultInstallLogger),
                 installer_metadata,
@@ -664,6 +671,9 @@ pub(crate) async fn do_sync(
         sources,
     } = settings;
 
+    let git_workspace =
+        GitWorkspaceSourceContext::new(state.git(), |url| client_builder.git_http_settings(url));
+
     // Lower the extra build dependencies with source resolution.
     let extra_build_requires = match &target {
         InstallTarget::Workspace { workspace, .. }
@@ -678,6 +688,7 @@ pub(crate) async fn do_sync(
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
+                &git_workspace,
             )
             .await?
         }
@@ -711,6 +722,7 @@ pub(crate) async fn do_sync(
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
+                &git_workspace,
             )
             .await?
         }
@@ -1100,6 +1112,12 @@ pub(super) fn store_credentials_from_target(
     for source in target.sources() {
         match source {
             Source::Git { git, .. } => {
+                uv_git::store_credentials_from_url(git)?;
+            }
+            Source::Workspace {
+                workspace: WorkspaceReference::Source(WorkspaceSource::Git { git, .. }),
+                ..
+            } => {
                 uv_git::store_credentials_from_url(git)?;
             }
             Source::Url { url, .. } => {
