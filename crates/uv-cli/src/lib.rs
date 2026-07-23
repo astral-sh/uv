@@ -1062,6 +1062,10 @@ pub enum ProjectCommand {
     /// When used in a project, the project environment will be created and updated before invoking
     /// the command.
     ///
+    /// By default, this environment is synced with development dependencies. To prevent development
+    /// dependencies from being installed (e.g., in a production environment), use the `--no-dev`
+    /// flag, use the `--no-sync` flag, or set `UV_NO_DEV=1`.
+    ///
     /// When used outside a project, if a virtual environment can be found in the current directory
     /// or a parent directory, the command will be run in that environment. Otherwise, the command
     /// will be run in the environment of the discovered interpreter.
@@ -1185,6 +1189,9 @@ pub enum ProjectCommand {
     ///
     /// At present, `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output
     /// formats are supported.
+    ///
+    /// By default, the exported requirements include the project's default dependency groups
+    /// (such as the standard dependencies and the `dev` group).
     ///
     /// The project is re-locked before exporting unless the `--locked` or `--frozen` flag is
     /// provided.

@@ -11,6 +11,14 @@ and synced before invoking the requested command. This ensures the project envir
 up-to-date. Similarly, commands which read the lockfile, such as `uv tree`, will automatically
 update it before running.
 
+!!! tip "Syncing in production environments"
+
+    Because `uv run` automatically syncs the environment and includes development dependencies by default,
+    it may inadvertently install development dependencies when used in production.
+
+    To avoid this, use the `--no-dev` flag (e.g., `uv run --no-dev ...`), or `--no-sync` if the environment
+    is already prepared (e.g., via an earlier `uv sync --no-dev`). You can also enforce this by setting `UV_NO_SYNC=1` or `UV_NO_DEV=1` in your environment.
+
 To disable automatic locking, use the `--locked` option:
 
 ```console
