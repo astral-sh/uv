@@ -1765,7 +1765,6 @@
         {
           "enum": [
             "python-install-default",
-            "python-upgrade",
             "json-output",
             "pylock",
             "add-bounds",

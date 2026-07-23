@@ -328,8 +328,8 @@ pub struct GlobalArgs {
     ///
     /// Use comma-separated values or pass multiple times to enable multiple features.
     ///
-    /// The following features are available: `python-install-default`, `python-upgrade`,
-    /// `json-output`, `pylock`, `add-bounds`.
+    /// The following features are available: `python-install-default`, `json-output`, `pylock`,
+    /// `add-bounds`.
     #[arg(
         global = true,
         long = "preview-features",

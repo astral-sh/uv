@@ -3187,7 +3187,6 @@ fn preview_features() {
     -        flags: [],
     +        flags: [
     +            PythonInstallDefault,
-    +            PythonUpgrade,
     +            JsonOutput,
     +            Pylock,
     +            AddBounds,
@@ -3245,7 +3244,7 @@ fn preview_features() {
     diff_uv_snapshot!(context.filters(), &preview, add_shared_args(context.version()).arg("--show-settings").arg("--preview").arg("--preview-features").arg("python-install-default"), @""
     );
 
-    let preview_features = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default,python-upgrade"), @"
+    let preview_features = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default,json-output"), @"
     ...
          },
          show_settings: true,
@@ -3253,7 +3252,7 @@ fn preview_features() {
     -        flags: [],
     +        flags: [
     +            PythonInstallDefault,
-    +            PythonUpgrade,
+    +            JsonOutput,
     +        ],
          },
          python_preference: Managed,
@@ -3268,7 +3267,7 @@ fn preview_features() {
         add_shared_args(context.version())
             .arg("--show-settings")
             .arg("--preview-features")
-            .arg("python-install-default,unknown-preview-feature,python-upgrade"),
+            .arg("python-install-default,unknown-preview-feature,json-output"),
         @"
     ...
              malware_check_url: None,
@@ -3288,7 +3287,7 @@ fn preview_features() {
             .arg("--show-settings")
             .env(
                 EnvVars::UV_PREVIEW_FEATURES,
-                "python-install-default,unknown-preview-feature,python-upgrade",
+                "python-install-default,unknown-preview-feature,json-output",
             ),
         @"
     ...
@@ -3303,14 +3302,14 @@ fn preview_features() {
     );
 
     // Compare against output with both features passed to one `--preview-features` option.
-    diff_uv_snapshot!(context.filters(), &preview_features, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade"), @""
+    diff_uv_snapshot!(context.filters(), &preview_features, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("json-output"), @""
     );
 
     diff_uv_snapshot!(
         context.filters(),
         &baseline,
         add_shared_args(context.version()).arg("--show-settings")
-        .arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade")
+        .arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("json-output")
         .arg("--no-preview"),
         @""
     );
@@ -3320,7 +3319,7 @@ fn preview_features() {
         add_shared_args(context.version())
             .arg("--show-settings")
             .arg("--preview-features")
-            .arg("python-install-default,,python-upgrade"),
+            .arg("python-install-default,,json-output"),
         @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -3336,7 +3335,7 @@ fn preview_features() {
             .arg("--show-settings")
             .env(
                 EnvVars::UV_PREVIEW_FEATURES,
-                "python-install-default,,python-upgrade",
+                "python-install-default,,json-output",
             ),
         @"
     exit_code: 2 (failure)
