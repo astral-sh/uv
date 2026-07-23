@@ -1,0 +1,103 @@
+# Exercise isolated macOS signing with the self-signed CI certificate.
+name: "Sign release binaries (test)"
+
+on:
+  workflow_call:
+
+permissions: {}
+
+env:
+  TARGET: aarch64-apple-darwin
+
+jobs:
+  sign-macos:
+    name: "sign, assemble, and verify macOS artifacts"
+    runs-on: namespace-profile-macos-15
+    environment: release-test
+    steps:
+      - name: "Download unsigned wheels"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheels_*-${{ env.TARGET }}
+          path: ${{ runner.temp }}/uv-signing/wheels
+          merge-multiple: true
+
+      - name: "Extract executable wheel members"
+        shell: bash
+        run: |
+          set -eu
+          shopt -s nullglob
+
+          root=$RUNNER_TEMP/uv-signing
+          mkdir -p "$root/unsigned"
+
+          uv_wheels=("$root"/wheels/uv-*.whl)
+          uv_build_wheels=("$root"/wheels/uv_build-*.whl)
+          if (( ${#uv_wheels[@]} != 1 || ${#uv_build_wheels[@]} != 1 )); then
+            printf 'Expected one uv wheel and one uv-build wheel.\n' >&2
+            exit 1
+          fi
+
+          unzip -q -j "${uv_wheels[0]}" \
+            'uv-*.data/scripts/uv' 'uv-*.data/scripts/uvx' \
+            -d "$root/unsigned"
+          unzip -q -j "${uv_build_wheels[0]}" \
+            'uv_build-*.data/scripts/uv-build' \
+            -d "$root/unsigned"
+
+      - name: "Sign executable wheel members"
+        shell: bash
+        env:
+          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
+        run: |
+          set -eu
+          umask 077
+
+          root=$RUNNER_TEMP/uv-signing
+          certificate=$root/codesign.p12
+          keychain=$root/codesign.keychain-db
+          keychain_password=$(uuidgen)
+          trap 'security delete-keychain "$keychain" >/dev/null 2>&1 || true; rm -f "$certificate"' EXIT
+
+          base64 --decode <<< "$CODESIGN_CERTIFICATE_MACOS" > "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -t 21600 -u "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -k "$keychain" \
+            -P "$CODESIGN_CERTIFICATE_PASSWORD" -f pkcs12 \
+            -T /usr/bin/codesign -T /usr/bin/security >/dev/null
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain"
+
+          mkdir -p "$root/signed"
+          for binary in uv uvx uv-build; do
+            install -m 0755 "$root/unsigned/$binary" "$root/signed/$binary"
+            codesign --force --keychain "$keychain" \
+              --sign "$CODESIGN_IDENTITY_MACOS" --options runtime --timestamp=none \
+              "$root/signed/$binary"
+          done
+
+      - name: "Upload signed executable wheel members"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-macos-${{ env.TARGET }}
+          path: ${{ runner.temp }}/uv-signing/signed/*
+          if-no-files-found: error
+
+      - name: "Check out repository after signing"
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Assemble and verify signed macOS artifacts"
+        run: python3 scripts/assemble-signed-macos-artifacts.py "$RUNNER_TEMP/uv-signing" "$TARGET"
+
+      - name: "Upload signed macOS artifacts"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-macos-artifacts-${{ env.TARGET }}
+          path: dist
+          if-no-files-found: error
