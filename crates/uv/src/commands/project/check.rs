@@ -112,6 +112,9 @@ pub(crate) async fn check(
                 Some(project)
             }
             Err(err) => {
+                if let WorkspaceErrorKind::NoSuchMember(name, _) = err.as_ref() {
+                    anyhow::bail!("Package `{name}` not found in workspace");
+                }
                 if !all_packages
                     && package.is_empty()
                     && matches!(
@@ -163,13 +166,20 @@ pub(crate) async fn check(
         }
     }
 
+    let is_virtual_workspace = project
+        .as_ref()
+        .is_some_and(|project| project.project_name().is_none());
+    let defacto_all_packages = all_packages || (is_virtual_workspace && package.is_empty());
+
     let target_dir = script
         .as_ref()
         .and_then(|script| script.path.parent())
         .map(Path::to_path_buf)
         .or_else(|| {
             project.as_ref().map(|project| {
-                if all_packages
+                // If multiple packages are selected, or the package is outside the workspace dir,
+                // require analysis to run in the workspace dir.
+                if defacto_all_packages
                     || package.len() > 1
                     || !normalize_path(project.root())
                         .starts_with(project.workspace().install_path())
@@ -185,7 +195,7 @@ pub(crate) async fn check(
     let check_targets = if let Some(script) = script.as_ref() {
         vec![script.path.clone()]
     } else if let Some(project) = project.as_ref() {
-        if all_packages || (package.is_empty() && project.project_name().is_none()) {
+        if defacto_all_packages {
             // In --all-packages mode, and anything equivalent like virtual workspaces,
             // we can't just pass ty the root of the project because:
             //
@@ -236,8 +246,7 @@ pub(crate) async fn check(
     // package will almost always have the other packages nested under it, and we need a
     // way to select just the workspace root.
     let excluded_targets = if let Some(project) = project.as_ref()
-        && !all_packages
-        && (project.project_name().is_some() || !package.is_empty())
+        && !defacto_all_packages
     {
         project
             .workspace()

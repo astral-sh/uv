@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -7,6 +9,12 @@ use insta::assert_snapshot;
 use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
 use uv_test::{diff_snapshot, uv_snapshot};
+
+fn workspace_check(context: &uv_test::TestContext) -> Command {
+    let mut command = context.check();
+    command.env("TY_OUTPUT_FORMAT", "concise");
+    command
+}
 
 fn write_workspace_member(context: &uv_test::TestContext, name: &str, source: &str) -> Result<()> {
     let member = context.temp_dir.child("packages").child(name);
@@ -50,6 +58,7 @@ fn check_project() -> Result<()> {
     Ok(())
 }
 
+/// Check only the selected workspace member, whether selected implicitly or explicitly.
 #[test]
 fn check_workspace_member_selection() -> Result<()> {
     let context =
@@ -61,33 +70,36 @@ fn check_workspace_member_selection() -> Result<()> {
             [tool.uv.workspace]
             members = ["packages/*"]
         "#})?;
-    write_workspace_member(&context, "member-a", "value: int = 1\n")?;
-    write_workspace_member(&context, "member-b", "value: int = 'wrong'\n")?;
+    write_workspace_member(&context, "member-a", "value: int = 'selected'\n")?;
+    write_workspace_member(&context, "member-b", "value: int = 'excluded'\n")?;
 
     let member_a = context.temp_dir.child("packages").child("member-a");
-    uv_snapshot!(context.filters(), context.check().current_dir(&member_a), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), workspace_check(&context).current_dir(&member_a), @r#"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    All checks passed!
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    ");
+    "#);
 
-    uv_snapshot!(context.filters(), context.check().arg("--package").arg("member-a"), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("member-a"), @r#"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    All checks passed!
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    ");
+    "#);
 
     Ok(())
 }
 
+/// Check every member when invoked from the root of a virtual workspace.
 #[test]
 fn check_virtual_workspace_checks_all_members_by_default() -> Result<()> {
     let context =
@@ -99,32 +111,25 @@ fn check_virtual_workspace_checks_all_members_by_default() -> Result<()> {
             [tool.uv.workspace]
             members = ["packages/*"]
         "#})?;
-    write_workspace_member(&context, "member-a", "value: int = 1\n")?;
-    write_workspace_member(&context, "member-b", "value: int = 'wrong'\n")?;
+    write_workspace_member(&context, "member-a", "value: int = 'selected-a'\n")?;
+    write_workspace_member(&context, "member-b", "value: int = 'selected-b'\n")?;
 
-    uv_snapshot!(context.filters(), context.check(), @r###"
+    uv_snapshot!(context.filters(), workspace_check(&context), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    error[invalid-assignment]: Object of type `Literal["wrong"]` is not assignable to `int`
-     --> packages/member-b/main.py:1:8
-      |
-    1 | value: int = 'wrong'
-      |        ---   ^^^^^^^ Incompatible value of type `Literal["wrong"]`
-      |        |
-      |        Declared type
-      |
-    info: rule `invalid-assignment` is enabled by default
-
-    Found 1 diagnostic
+    packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
+    packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-b"]` is not assignable to `int`
+    Found 2 diagnostics
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    "###);
+    "#);
 
     Ok(())
 }
 
+/// Ignore Python files at a virtual workspace root that do not belong to a member.
 #[test]
 fn check_virtual_workspace_only_checks_declared_members() -> Result<()> {
     let context =
@@ -139,32 +144,35 @@ fn check_virtual_workspace_only_checks_declared_members() -> Result<()> {
     context
         .temp_dir
         .child("unowned.py")
-        .write_str("value: int = 'wrong'\n")?;
-    write_workspace_member(&context, "member", "value: int = 1\n")?;
+        .write_str("value: int = 'unowned'\n")?;
+    write_workspace_member(&context, "member", "value: int = 'selected'\n")?;
 
-    uv_snapshot!(context.filters(), context.check(), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), workspace_check(&context), @r#"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    All checks passed!
+    packages/member/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    ");
+    "#);
 
-    uv_snapshot!(context.filters(), context.check().arg("--all-packages"), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    All checks passed!
+    packages/member/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    ");
+    "#);
 
     Ok(())
 }
 
+/// Include workspace members located outside the workspace root with `--all-packages`.
 #[test]
 fn check_workspace_all_packages_includes_external_members() -> Result<()> {
     let context =
@@ -187,37 +195,31 @@ fn check_workspace_all_packages_includes_external_members() -> Result<()> {
     "#})?;
     external
         .child("main.py")
-        .write_str("value: int = 'wrong'\n")?;
+        .write_str("value: int = 'selected'\n")?;
 
     uv_snapshot!(
         context.filters(),
-        context.check().current_dir(&workspace).arg("--all-packages"),
-        @r###"
+        workspace_check(&context)
+            .current_dir(&workspace)
+            .arg("--all-packages"),
+        @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    error[invalid-assignment]: Object of type `Literal["wrong"]` is not assignable to `int`
-     --> [TEMP_DIR]/external-package/main.py:1:8
-      |
-    1 | value: int = 'wrong'
-      |        ---   ^^^^^^^ Incompatible value of type `Literal["wrong"]`
-      |        |
-      |        Declared type
-      |
-    info: rule `invalid-assignment` is enabled by default
-
+    [TEMP_DIR]/external-package/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
     Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    "###
+    "#
     );
 
     Ok(())
 }
 
+/// Apply workspace configuration when checking an externally located member.
 #[test]
 fn check_external_workspace_member_inherits_workspace_configuration() -> Result<()> {
     let context =
@@ -241,33 +243,37 @@ fn check_external_workspace_member_inherits_workspace_configuration() -> Result<
         requires-python = ">=3.12"
         dependencies = []
     "#})?;
-    external
-        .child("main.py")
-        .write_str("value: int = 'wrong'\n")?;
+    external.child("main.py").write_str(indoc! {r#"
+        value: int = "ignored"
+
+        def broken() -> int:
+            return "reported"
+    "#})?;
 
     uv_snapshot!(
         context.filters(),
-        context
-            .check()
+        workspace_check(&context)
             .current_dir(&workspace)
             .arg("--package")
             .arg("external-package"),
-        @"
-    success: true
-    exit_code: 0
+        @r#"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    All checks passed!
+    [TEMP_DIR]/external-package/main.py:4:12: error[invalid-return-type] Return type does not match returned value: expected `int`, found `Literal["reported"]`
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    "
+    "#
     );
 
     Ok(())
 }
 
+/// Exclude nested workspace members unless all packages are explicitly selected.
 #[test]
 fn check_virtual_workspace_member_excludes_nested_members() -> Result<()> {
     let context =
@@ -279,7 +285,7 @@ fn check_virtual_workspace_member_excludes_nested_members() -> Result<()> {
             [tool.uv.workspace]
             members = ["packages/parent", "packages/parent/child"]
         "#})?;
-    write_workspace_member(&context, "parent", "value: int = 1\n")?;
+    write_workspace_member(&context, "parent", "value: int = 'parent'\n")?;
 
     let child = context.temp_dir.child("packages/parent/child");
     child.create_dir_all()?;
@@ -290,41 +296,35 @@ fn check_virtual_workspace_member_excludes_nested_members() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
     "#})?;
-    child.child("main.py").write_str("value: int = 'wrong'\n")?;
+    child.child("main.py").write_str("value: int = 'child'\n")?;
 
-    uv_snapshot!(context.filters(), context.check().arg("--package").arg("parent"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    All checks passed!
-
-    ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    ");
-
-    uv_snapshot!(context.filters(), context.check().arg("--all-packages"), @r###"
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("parent"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    error[invalid-assignment]: Object of type `Literal["wrong"]` is not assignable to `int`
-     --> packages/parent/child/main.py:1:8
-      |
-    1 | value: int = 'wrong'
-      |        ---   ^^^^^^^ Incompatible value of type `Literal["wrong"]`
-      |        |
-      |        Declared type
-      |
-    info: rule `invalid-assignment` is enabled by default
-
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["parent"]` is not assignable to `int`
     Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    "###);
+    "#);
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    packages/parent/child/main.py:1:14: error[invalid-assignment] Object of type `Literal["child"]` is not assignable to `int`
+    packages/parent/main.py:1:14: error[invalid-assignment] Object of type `Literal["parent"]` is not assignable to `int`
+    Found 2 diagnostics
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
 
     Ok(())
 }
 
+/// Resolve an excluded nested member as a dependency without checking its files.
 #[test]
 fn check_virtual_workspace_member_resolves_excluded_nested_dependency() -> Result<()> {
     let context =
@@ -352,7 +352,7 @@ fn check_virtual_workspace_member_resolves_excluded_nested_dependency() -> Resul
     parent.child("main.py").write_str(indoc! {r"
         from child import exported
 
-        value: str = exported
+        value: int = exported
     "})?;
 
     let child = parent.child("child");
@@ -375,11 +375,12 @@ fn check_virtual_workspace_member_resolves_excluded_nested_dependency() -> Resul
         internal_broken: int = "wrong"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.check().arg("--package").arg("parent"), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("parent"), @"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    All checks passed!
+    main.py:3:14: error[invalid-assignment] Object of type `str` is not assignable to `int`
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
@@ -389,6 +390,7 @@ fn check_virtual_workspace_member_resolves_excluded_nested_dependency() -> Resul
     Ok(())
 }
 
+/// Apply workspace configuration when checking an explicitly selected member.
 #[test]
 fn check_workspace_member_inherits_workspace_configuration() -> Result<()> {
     let context =
@@ -403,21 +405,32 @@ fn check_workspace_member_inherits_workspace_configuration() -> Result<()> {
             [tool.ty.rules]
             invalid-assignment = "ignore"
         "#})?;
-    write_workspace_member(&context, "member", "value: int = 'wrong'\n")?;
+    write_workspace_member(
+        &context,
+        "member",
+        indoc! {r#"
+            value: int = "ignored"
 
-    uv_snapshot!(context.filters(), context.check().arg("--package").arg("member"), @"
-    success: true
-    exit_code: 0
+            def broken() -> int:
+                return "reported"
+        "#},
+    )?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("member"), @r#"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    All checks passed!
+    main.py:4:12: error[invalid-return-type] Return type does not match returned value: expected `int`, found `Literal["reported"]`
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    ");
+    "#);
 
     Ok(())
 }
 
+/// Reject package selections that do not match any workspace member.
 #[test]
 fn check_workspace_missing_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -430,19 +443,20 @@ fn check_workspace_missing_package() -> Result<()> {
         "#})?;
     write_workspace_member(&context, "member", "value: int = 1\n")?;
 
-    uv_snapshot!(context.filters(), context.check().arg("--package").arg("missing"), @"
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("missing"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    error: The workspace does not have a member missing: [TEMP_DIR]/
+    error: Package `missing` not found in workspace
     ");
 
     Ok(())
 }
 
+/// Exclude nested members when checking only a non-virtual workspace's root package.
 #[test]
 fn check_workspace_root_excludes_nested_members() -> Result<()> {
     let context =
@@ -463,42 +477,36 @@ fn check_workspace_root_excludes_nested_members() -> Result<()> {
     context
         .temp_dir
         .child("main.py")
-        .write_str("value: int = 1\n")?;
-    write_workspace_member(&context, "member", "value: int = 'wrong'\n")?;
+        .write_str("value: int = 'selected'\n")?;
+    write_workspace_member(&context, "member", "value: int = 'excluded'\n")?;
 
-    uv_snapshot!(context.filters(), context.check(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    All checks passed!
-
-    ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    ");
-
-    uv_snapshot!(context.filters(), context.check().arg("--all-packages"), @r###"
+    uv_snapshot!(context.filters(), workspace_check(&context), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    error[invalid-assignment]: Object of type `Literal["wrong"]` is not assignable to `int`
-     --> packages/member/main.py:1:8
-      |
-    1 | value: int = 'wrong'
-      |        ---   ^^^^^^^ Incompatible value of type `Literal["wrong"]`
-      |        |
-      |        Declared type
-      |
-    info: rule `invalid-assignment` is enabled by default
-
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
     Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    "###);
+    "#);
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    packages/member/main.py:1:14: error[invalid-assignment] Object of type `Literal["excluded"]` is not assignable to `int`
+    Found 2 diagnostics
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
 
     Ok(())
 }
 
+/// Check only explicitly selected packages and include every member with `--all-packages`.
 #[test]
 fn check_workspace_multiple_packages() -> Result<()> {
     let context =
@@ -510,48 +518,42 @@ fn check_workspace_multiple_packages() -> Result<()> {
             [tool.uv.workspace]
             members = ["packages/*"]
         "#})?;
-    write_workspace_member(&context, "member-a", "value: int = 1\n")?;
-    write_workspace_member(&context, "member-b", "value: int = 2\n")?;
-    write_workspace_member(&context, "member-c", "value: int = 'wrong'\n")?;
+    write_workspace_member(&context, "member-a", "value: int = 'selected-a'\n")?;
+    write_workspace_member(&context, "member-b", "value: int = 'selected-b'\n")?;
+    write_workspace_member(&context, "member-c", "value: int = 'excluded'\n")?;
 
     uv_snapshot!(
         context.filters(),
-        context
-            .check()
+        workspace_check(&context)
             .arg("--package")
             .arg("member-a")
             .arg("--package")
             .arg("member-b"),
-        @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    All checks passed!
-
-    ----- stderr -----
-    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    "
-    );
-
-    uv_snapshot!(context.filters(), context.check().arg("--all-packages"), @r###"
+        @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    error[invalid-assignment]: Object of type `Literal["wrong"]` is not assignable to `int`
-     --> packages/member-c/main.py:1:8
-      |
-    1 | value: int = 'wrong'
-      |        ---   ^^^^^^^ Incompatible value of type `Literal["wrong"]`
-      |        |
-      |        Declared type
-      |
-    info: rule `invalid-assignment` is enabled by default
-
-    Found 1 diagnostic
+    packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
+    packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-b"]` is not assignable to `int`
+    Found 2 diagnostics
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    "###);
+    "#
+    );
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
+    packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-b"]` is not assignable to `int`
+    packages/member-c/main.py:1:14: error[invalid-assignment] Object of type `Literal["excluded"]` is not assignable to `int`
+    Found 3 diagnostics
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
 
     Ok(())
 }
