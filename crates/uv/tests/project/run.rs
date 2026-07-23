@@ -153,8 +153,14 @@ fn run_args() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let context = context
-        .with_filter((r"Usage: uv(\.exe)? run \[OPTIONS\] (?s).*", "[UV RUN HELP]"))
-        .with_filter((r"usage: .*(\n|.*)*", "usage: [PYTHON HELP]"));
+        .with_filter((
+            r"Usage: uv(?:\.exe)? run \[OPTIONS\] (?s:.*?)(\n----- stderr -----|$)",
+            "[UV RUN HELP]$1",
+        ))
+        .with_filter((
+            r"usage: (?s:.*?)(\n----- stderr -----|$)",
+            "usage: [PYTHON HELP]$1",
+        ));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -184,6 +190,7 @@ fn run_args() -> Result<()> {
     Run a command or script
 
     [UV RUN HELP]
+    ----- stderr -----
     ");
 
     // We don't treat arguments after the command as uv arguments
@@ -192,6 +199,11 @@ fn run_args() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     usage: [PYTHON HELP]
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
     ");
 
     // Can use `--` to separate uv arguments from the command arguments.
