@@ -46,6 +46,15 @@
       "caller": "uv",
       "environment": "automations",
       "caller_workflow": "issue-triage.yml",
+      "on": ["issues", "workflow_dispatch"],
+      "permissions": { "contents": "write", "issues": "write" },
+      "targets": ["uv", "uv-dev"],
+      "installation": "automations"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "issue-triage.yml",
       "reusable_workflow": "reproduce-bug.yml",
       "on": ["issues", "workflow_dispatch"],
       "permissions": { "contents": "write", "pull_requests": "write" },
