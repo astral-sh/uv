@@ -66,11 +66,11 @@ jobs:
           repositories: |
             astral-sh/uv
             astral-sh/uv-dev
-          # GitHub requires write access to the uv-dev source branch when creating a
-          # cross-repository pull request, so `contents: write` is required for both repositories.
+          # `workflows: write` is required when the promoted branch modifies workflow files.
           permissions: |
             contents: write
             pull_requests: write
+            workflows: write
 
       - name: Promote pull request
         id: promote
@@ -90,6 +90,8 @@ jobs:
             exit 1
           fi
 
+          source_head=$(jq --raw-output '.head.sha' <<< "$source_pull_request")
+
           if ! gh api --method GET "repos/astral-sh/uv/git/ref/heads/$BASE_REF" --silent; then
             echo "The upstream base branch $BASE_REF does not exist; refusing to promote." >&2
             exit 1
@@ -101,7 +103,7 @@ jobs:
               repos/astral-sh/uv/pulls \
               --raw-field state=all \
               --raw-field head="astral-sh:$HEAD_REF" |
-              jq --compact-output '[.[] | select(.head.repo.id == 1302176231)]'
+              jq --compact-output '[.[] | select(.head.repo.id == 699532645)]'
           )
           existing_count=$(jq 'length' <<< "$existing_pull_requests")
           if (( existing_count > 1 )); then
@@ -113,7 +115,8 @@ jobs:
             if ! jq --exit-status \
               --arg base_ref "$BASE_REF" \
               --arg head_ref "$HEAD_REF" \
-              '.[0].state == "open" and .[0].base.ref == $base_ref and .[0].head.ref == $head_ref and .[0].base.repo.id == 699532645 and .[0].head.repo.id == 1302176231' \
+              --arg head_sha "$source_head" \
+              '.[0].state == "open" and .[0].base.ref == $base_ref and .[0].head.ref == $head_ref and .[0].head.sha == $head_sha and .[0].base.repo.id == 699532645 and .[0].head.repo.id == 699532645' \
               <<< "$existing_pull_requests" > /dev/null; then
               echo "An upstream pull request already exists with a different state, base, or head; refusing to promote." >&2
               exit 1
@@ -121,10 +124,32 @@ jobs:
 
             upstream_pull_request=$(jq --compact-output '.[0]' <<< "$existing_pull_requests")
           else
+            upstream_refs=$(gh api --method GET "repos/astral-sh/uv/git/matching-refs/heads/$HEAD_REF")
+            upstream_head=$(
+              jq --raw-output \
+                --arg head_ref "refs/heads/$HEAD_REF" \
+                '.[] | select(.ref == $head_ref) | .object.sha' \
+                <<< "$upstream_refs"
+            )
+
+            if [ -n "$upstream_head" ] && [ "$upstream_head" != "$source_head" ]; then
+              echo "The upstream branch already exists at a different head; refusing to overwrite it." >&2
+              exit 1
+            fi
+
+            if [ -z "$upstream_head" ]; then
+              gh api \
+                --method POST \
+                repos/astral-sh/uv/git/refs \
+                --raw-field ref="refs/heads/$HEAD_REF" \
+                --raw-field sha="$source_head" \
+                --silent
+            fi
+
             upstream_pull_request=$(
               jq \
                 --arg base_ref "$BASE_REF" \
-                --arg head_ref "astral-sh:$HEAD_REF" \
+                --arg head_ref "$HEAD_REF" \
                 --arg source_repository "$GITHUB_REPOSITORY" \
                 '{
                   title: .title,
@@ -136,8 +161,7 @@ jobs:
                     )
                   ),
                   base: $base_ref,
-                  head: $head_ref,
-                  head_repo: "astral-sh/uv-dev"
+                  head: $head_ref
                 }' \
                 "$RUNNER_TEMP/pull-request.json" |
                 gh api \
