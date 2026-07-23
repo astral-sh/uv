@@ -98,7 +98,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: codex-thread-reproduce-bug-${{ github.run_id }}-${{ github.run_attempt }}
+          name: codex-thread-reproduce-bug-${{ inputs.issue }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: agents/codex/sessions
           if-no-files-found: warn
 
@@ -109,7 +109,12 @@ jobs:
     permissions: {}
     steps:
       - name: "Write reproduction summary"
-        run: printf '```json\n%s\n```\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          {
+            printf '%s\n' '```json'
+            printf '%s\n' "$REPRODUCTION_RESULT" | jq .
+            printf '%s\n' '```'
+          } >> "$GITHUB_STEP_SUMMARY"
         env:
           REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
 

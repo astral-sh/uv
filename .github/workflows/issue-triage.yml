@@ -10,6 +10,12 @@ on:
         description: "An issue URL or number"
         required: true
         type: string
+  workflow_call:
+    inputs:
+      issue:
+        description: "An issue URL or number"
+        required: true
+        type: string
 
 permissions: {}
 
@@ -64,7 +70,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: codex-thread-issue-triage-${{ github.run_id }}-${{ github.run_attempt }}
+          name: codex-thread-issue-triage-${{ inputs.issue || github.event.issue.number }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: agents/codex/sessions
           if-no-files-found: warn
 
@@ -88,6 +94,11 @@ jobs:
     permissions: {}
     steps:
       - name: "Write triage summary"
-        run: printf '```json\n%s\n```\n' "$TRIAGE_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          {
+            printf '%s\n' '```json'
+            printf '%s\n' "$TRIAGE_RESULT" | jq .
+            printf '%s\n' '```'
+          } >> "$GITHUB_STEP_SUMMARY"
         env:
           TRIAGE_RESULT: ${{ needs.triage.outputs.result }}
