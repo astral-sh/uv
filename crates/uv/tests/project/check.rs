@@ -1352,7 +1352,7 @@ fn check_virtual_root_uses_own_ty() -> Result<()> {
         [dependency-groups]
         dev = ["ty==0.0.16 ; python_version < '3.12'"]
     "#})?;
-    context.temp_dir.child("main.py").write_str("x = 1")?;
+    member.child("main.py").write_str("x = 1")?;
     context
         .lock()
         .arg("--exclude-newer")
