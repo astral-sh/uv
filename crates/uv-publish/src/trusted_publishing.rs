@@ -144,7 +144,7 @@ pub(crate) trait TrustedPublishingService {
         // Perform ambient OIDC token discovery.
         // Depending on the host (GitHub Actions, GitLab CI, etc.)
         // this may perform additional network requests.
-        let oidc_token = get_oidc_token(&audience, self.client()).await?;
+        let oidc_token = get_oidc_token(&audience, self.client().clone()).await?;
 
         // Exchange the OIDC token for a short-lived upload token,
         // if OIDC token discovery succeeded.
@@ -168,9 +168,9 @@ pub(crate) trait TrustedPublishingService {
 /// Perform ambient OIDC token discovery.
 async fn get_oidc_token(
     audience: &str,
-    client: &ClientWithMiddleware,
+    client: ClientWithMiddleware,
 ) -> Result<Option<ambient_id::IdToken>, TrustedPublishingError> {
-    let detector = ambient_id::Detector::new_with_client(client.clone());
+    let detector = ambient_id::Detector::new_with_client(client);
 
     match detector.detect(audience).await {
         Ok(token) => Ok(token),
