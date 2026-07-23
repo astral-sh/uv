@@ -15,11 +15,7 @@ fn list_empty_columns() {
     uv_snapshot!(context.pip_list()
         .arg("--format")
         .arg("columns"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     "
     );
 }
@@ -31,11 +27,7 @@ fn list_empty_freeze() {
     uv_snapshot!(context.pip_list()
         .arg("--format")
         .arg("freeze"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     "
     );
 }
@@ -47,12 +39,9 @@ fn list_empty_json() {
     uv_snapshot!(context.pip_list()
         .arg("--format")
         .arg("json"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     []
-
-    ----- stderr -----
     "
     );
 }
@@ -71,23 +60,17 @@ fn list_editable_non_file_url() -> Result<()> {
         .write_str(r#"{"url":"https://example.com/project","dir_info":{"editable":true}}"#)?;
 
     uv_snapshot!(context.pip_list(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package Version
     ------- -------
     project 1.0.0
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.pip_list().arg("--format=json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [{"name":"project","version":"1.0.0"}]
-
-    ----- stderr -----
     "#);
 
     Ok(())
@@ -105,10 +88,7 @@ fn list_single_no_editable() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -120,14 +100,11 @@ fn list_single_no_editable() -> Result<()> {
     context.assert_command("import markupsafe").success();
 
     uv_snapshot!(context.pip_list(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package    Version
     ---------- -------
     markupsafe 2.1.3
-
-    ----- stderr -----
     "
     );
 
@@ -146,10 +123,7 @@ fn list_outdated_columns() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -161,14 +135,11 @@ fn list_outdated_columns() -> Result<()> {
     );
 
     uv_snapshot!(context.pip_list().arg("--outdated"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package Version Latest Type
     ------- ------- ------ -----
     anyio   3.0.0   4.3.0  wheel
-
-    ----- stderr -----
     "
     );
 
@@ -187,10 +158,7 @@ fn list_outdated_json() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -202,12 +170,9 @@ fn list_outdated_json() -> Result<()> {
     );
 
     uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [{"name":"anyio","version":"3.0.0","latest_version":"4.3.0","latest_filetype":"wheel"}]
-
-    ----- stderr -----
     "#
     );
 
@@ -242,10 +207,7 @@ fn list_outdated_find_links() -> Result<()> {
         .arg("--find-links")
         .arg(&links_dir)
         .arg("--no-index"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -262,14 +224,11 @@ fn list_outdated_find_links() -> Result<()> {
         .arg("--find-links")
         .arg(second_links_dir.path())
         .arg("--no-index"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package    Version Latest Type
     ---------- ------- ------ -----
     validation 1.0.0   3.0.0  wheel
-
-    ----- stderr -----
     "###
     );
 
@@ -281,10 +240,7 @@ fn list_outdated_freeze() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("freeze"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `--outdated` cannot be used with `--format freeze`
     "
@@ -306,10 +262,7 @@ fn list_outdated_git() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -320,14 +273,11 @@ fn list_outdated_git() -> Result<()> {
     );
 
     uv_snapshot!(context.pip_list().arg("--outdated"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package   Version Latest Type
     --------- ------- ------ -----
     iniconfig 1.0.0   2.0.0  wheel
-
-    ----- stderr -----
     "
     );
 
@@ -346,10 +296,7 @@ fn list_outdated_index() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -364,14 +311,11 @@ fn list_outdated_index() -> Result<()> {
         .arg("--outdated")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package Version Latest Type
     ------- ------- ------ -----
     anyio   3.0.0   3.5.0  wheel
-
-    ----- stderr -----
     "
     );
 
@@ -387,10 +331,7 @@ fn list_editable() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -409,8 +350,7 @@ fn list_editable() {
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.pip_list(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package Version Editable project location
     [UNDERLINE]
@@ -418,8 +358,6 @@ fn list_editable() {
     idna 3.6
     poetry-editable 0.1.0 [WORKSPACE]/test/packages/poetry_editable
     sniffio 1.3.1
-
-    ----- stderr -----
     "
     );
 }
@@ -433,10 +371,7 @@ fn list_editable_only() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -456,39 +391,30 @@ fn list_editable_only() {
 
     uv_snapshot!(filters, context.pip_list()
         .arg("--editable"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package Version Editable project location
     [UNDERLINE]
     poetry-editable 0.1.0 [WORKSPACE]/test/packages/poetry_editable
-
-    ----- stderr -----
     "
     );
 
     uv_snapshot!(filters, context.pip_list()
         .arg("--exclude-editable"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package Version
     [UNDERLINE]
     anyio 4.3.0
     idna 3.6
     sniffio 1.3.1
-
-    ----- stderr -----
     "
     );
 
     uv_snapshot!(filters, context.pip_list()
         .arg("--editable")
         .arg("--exclude-editable"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--editable' cannot be used with '--exclude-editable'
 
@@ -508,10 +434,7 @@ fn list_exclude() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -532,8 +455,7 @@ fn list_exclude() {
     uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
     .arg("numpy"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package Version Editable project location
     [UNDERLINE]
@@ -541,24 +463,19 @@ fn list_exclude() {
     idna 3.6
     poetry-editable 0.1.0 [WORKSPACE]/test/packages/poetry_editable
     sniffio 1.3.1
-
-    ----- stderr -----
     "
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
     .arg("poetry-editable"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package Version
     [UNDERLINE]
     anyio 4.3.0
     idna 3.6
     sniffio 1.3.1
-
-    ----- stderr -----
     "
     );
 
@@ -567,16 +484,13 @@ fn list_exclude() {
     .arg("numpy")
     .arg("--exclude")
     .arg("poetry-editable"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package Version
     [UNDERLINE]
     anyio 4.3.0
     idna 3.6
     sniffio 1.3.1
-
-    ----- stderr -----
     "
     );
 }
@@ -591,10 +505,7 @@ fn list_format_json() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -614,36 +525,27 @@ fn list_format_json() {
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/test/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
-
-    ----- stderr -----
     "#
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=json")
     .arg("--editable"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/test/packages/poetry_editable"}]
-
-    ----- stderr -----
     "#
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=json")
     .arg("--exclude-editable"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"sniffio","version":"1.3.1"}]
-
-    ----- stderr -----
     "#
     );
 }
@@ -658,10 +560,7 @@ fn list_format_freeze() {
         .pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -681,41 +580,32 @@ fn list_format_freeze() {
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio==4.3.0
     idna==3.6
     poetry-editable==0.1.0
     sniffio==1.3.1
-
-    ----- stderr -----
     "
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--editable"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     poetry-editable==0.1.0
-
-    ----- stderr -----
     "
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--exclude-editable"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio==4.3.0
     idna==3.6
     sniffio==1.3.1
-
-    ----- stderr -----
     "
     );
 }
@@ -758,14 +648,11 @@ Version: 0.22.0
 
     uv_snapshot!(filters, context.pip_list()
         .arg("--editable"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package Version Editable project location
     [UNDERLINE]
     zstandard 0.22.0 [TEMP_DIR]/zstandard_project
-
-    ----- stderr -----
     "
     );
 
@@ -801,10 +688,7 @@ Version: 0.1-bulbasaur
 
     uv_snapshot!(filters, context.pip_list()
         .arg("--editable"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read metadata from: `[SITE_PACKAGES]/paramiko.egg-link`
      Caused by: after parsing `0.1-b`, found `ulbasaur`, which is not part of a valid version
@@ -824,10 +708,7 @@ fn list_ignores_quiet_flag_format_freeze() {
         .pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -848,15 +729,12 @@ fn list_ignores_quiet_flag_format_freeze() {
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--quiet"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio==4.3.0
     idna==3.6
     poetry-editable==0.1.0
     sniffio==1.3.1
-
-    ----- stderr -----
     "
     );
 
@@ -864,12 +742,9 @@ fn list_ignores_quiet_flag_format_freeze() {
     .arg("--format=freeze")
     .arg("--editable")
     .arg("--quiet"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     poetry-editable==0.1.0
-
-    ----- stderr -----
     "
     );
 
@@ -877,14 +752,11 @@ fn list_ignores_quiet_flag_format_freeze() {
     .arg("--format=freeze")
     .arg("--exclude-editable")
     .arg("--quiet"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio==4.3.0
     idna==3.6
     sniffio==1.3.1
-
-    ----- stderr -----
     "
     );
 }
@@ -913,25 +785,18 @@ fn list_target() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_list()
         .arg("--target")
         .arg(target.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package    Version
     ---------- -------
     markupsafe 2.1.3
     tomli      2.0.1
-
-    ----- stderr -----
     "
     );
 
     // Without --target, the packages should not be visible.
     uv_snapshot!(context.pip_list(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     "
     );
 
@@ -962,25 +827,18 @@ fn list_prefix() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_list()
         .arg("--prefix")
         .arg(prefix.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Package    Version
     ---------- -------
     markupsafe 2.1.3
     tomli      2.0.1
-
-    ----- stderr -----
     "
     );
 
     // Without --prefix, the packages should not be visible.
     uv_snapshot!(context.pip_list(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     "
     );
 

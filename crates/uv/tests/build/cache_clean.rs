@@ -23,10 +23,7 @@ fn clean_all() -> Result<()> {
         .success();
 
     uv_snapshot!(context.with_filtered_counts().filters(), context.clean().arg("--verbose"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -56,10 +53,7 @@ fn clear_all_alias() -> Result<()> {
     command.arg("cache").arg("clear").arg("--verbose");
 
     uv_snapshot!(context.with_filtered_counts().filters(), command, @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -86,10 +80,7 @@ async fn clean_force() -> Result<()> {
 
     // When unlocked, `--force` should still take a lock
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -109,10 +100,7 @@ async fn clean_force() -> Result<()> {
         .with_exclusive_lock()
         .await;
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -166,10 +154,7 @@ fn clean_package_pypi() -> Result<()> {
         .collect();
 
     uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -185,10 +170,7 @@ fn clean_package_pypi() -> Result<()> {
 
     // Running `uv cache prune` should have no effect.
     uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -243,10 +225,7 @@ fn clean_package_index() -> Result<()> {
         .collect();
 
     uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -286,10 +265,7 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
     fs_err::os::unix::fs::symlink(&archive_entry, package_entry.join("archive"))?;
 
     uv_snapshot!(context.filters(), context.clean().arg("demo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Removed 3 files ([SIZE])
     ");
@@ -312,10 +288,7 @@ async fn cache_timeout() {
         .await;
 
     uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
     error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
@@ -354,10 +327,7 @@ fn clean_handles_verbatim_paths() -> Result<()> {
 
     // Tests cache clean leverages verbatim conversion
     uv_snapshot!(context.filters(), context.clean().arg("--verbose"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)

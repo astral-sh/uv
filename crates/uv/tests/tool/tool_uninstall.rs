@@ -23,10 +23,7 @@ fn tool_uninstall() {
     uv_snapshot!(context.filters(), context.tool_uninstall().arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 2 executables: black, blackd
     ");
@@ -35,10 +32,7 @@ fn tool_uninstall() {
     uv_snapshot!(context.filters(), context.tool_list()
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     No tools installed
     ");
@@ -49,10 +43,7 @@ fn tool_uninstall() {
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -92,10 +83,7 @@ fn tool_uninstall_multiple_names() {
     uv_snapshot!(context.filters(), context.tool_uninstall().arg("black").arg("ruff")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 3 executables: black, blackd, ruff
     ");
@@ -104,10 +92,7 @@ fn tool_uninstall_multiple_names() {
     uv_snapshot!(context.filters(), context.tool_list()
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     No tools installed
     ");
@@ -122,10 +107,7 @@ fn tool_uninstall_not_installed() {
     uv_snapshot!(context.filters(), context.tool_uninstall().arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `black` is not installed
     ");
@@ -151,10 +133,7 @@ fn tool_uninstall_missing_receipt() {
     uv_snapshot!(context.filters(), context.tool_uninstall().arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Removed dangling environment for `black`
     ");
@@ -188,10 +167,7 @@ fn tool_uninstall_multiple_names_with_missing_receipt() {
     uv_snapshot!(context.filters(), context.tool_uninstall().arg("black").arg("ruff")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Removed dangling environment for `black`
     Uninstalled 1 executable: ruff
@@ -201,10 +177,7 @@ fn tool_uninstall_multiple_names_with_missing_receipt() {
     uv_snapshot!(context.filters(), context.tool_list()
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     No tools installed
     ");
@@ -230,10 +203,7 @@ fn tool_uninstall_all_missing_receipt() {
     uv_snapshot!(context.filters(), context.tool_uninstall().arg("--all")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Removed dangling environment for `black`
     ");

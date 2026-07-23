@@ -29,10 +29,7 @@ fn prune_no_op() -> Result<()> {
         .collect();
 
     uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -69,10 +66,7 @@ fn prune_stale_directory() -> Result<()> {
         .collect();
 
     uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -95,10 +89,7 @@ fn prune_python_downloads() -> Result<()> {
     download.write_binary(b"cached Python download")?;
 
     uv_snapshot!(context.filters(), context.prune(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
@@ -127,8 +118,7 @@ fn prune_cached_env() {
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pytest 8.0.0
 
@@ -155,10 +145,7 @@ fn prune_cached_env() {
         .collect();
 
     uv_snapshot!(filters, context.prune().arg("--verbose"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -201,10 +188,7 @@ fn prune_stale_symlink() -> Result<()> {
         .collect();
 
     uv_snapshot!(filters, context.prune().arg("--verbose"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -232,10 +216,7 @@ async fn prune_force() -> Result<()> {
 
     // When unlocked, `--force` should still take a lock
     uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -252,10 +233,7 @@ async fn prune_force() -> Result<()> {
         .with_exclusive_lock()
         .await;
     uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
@@ -277,10 +255,7 @@ fn prune_ci_empty_cache() -> Result<()> {
     context.cache_dir.create_dir_all()?;
 
     uv_snapshot!(context.filters(), context.prune().arg("--ci"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
@@ -306,10 +281,7 @@ fn prune_unzipped() -> Result<()> {
 
     // Install a requirement, to populate the cache.
     uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -319,10 +291,7 @@ fn prune_unzipped() -> Result<()> {
     ");
 
     uv_snapshot!(&filters, context.prune().arg("--ci"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
@@ -336,10 +305,7 @@ fn prune_unzipped() -> Result<()> {
         source-distribution==0.0.1
     " })?;
     uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -352,10 +318,7 @@ fn prune_unzipped() -> Result<()> {
         iniconfig
     " })?;
     uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of iniconfig need to be downloaded from a registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
@@ -406,10 +369,7 @@ fn prune_stale_revision() -> Result<()> {
         .pip_install()
         .arg(".")
         .arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -421,10 +381,7 @@ fn prune_stale_revision() -> Result<()> {
         .pip_install()
         .arg(".")
         .arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -446,10 +403,7 @@ fn prune_stale_revision() -> Result<()> {
 
     // Pruning should remove the unused revision.
     uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     DEBUG Found workspace root: `[TEMP_DIR]/`
     DEBUG Adding root workspace member: `[TEMP_DIR]/`
@@ -466,10 +420,7 @@ fn prune_stale_revision() -> Result<()> {
     uv_snapshot!(&filters, context
         .pip_uninstall()
         .arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - project==0.1.0 (from file://[TEMP_DIR]/)
@@ -478,10 +429,7 @@ fn prune_stale_revision() -> Result<()> {
     uv_snapshot!(&filters, context
         .pip_install()
         .arg("."), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]

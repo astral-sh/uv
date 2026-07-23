@@ -94,10 +94,7 @@ fn extra_conflict_discovery_respects_parent_reachability() -> Result<()> {
         .arg("--extra")
         .arg("feature")
         .arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     ");
@@ -135,10 +132,7 @@ fn extra_basic() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
@@ -171,10 +165,7 @@ fn extra_basic() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -240,29 +231,20 @@ fn extra_basic() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     ");
     // Another install, but with one of the extras enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -270,10 +252,7 @@ fn extra_basic() -> Result<()> {
     ");
     // Another install, but with the other extra enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra2"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -283,19 +262,13 @@ fn extra_basic() -> Result<()> {
     ");
     // And finally, installing both extras should error.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--all-extras"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
     ");
     // As should exporting them.
     uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--all-extras"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
     ");
@@ -327,10 +300,7 @@ fn extra_basic_three_extras() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.2.0, we can conclude that project[extra1] and project[extra2] are incompatible.
@@ -365,10 +335,7 @@ fn extra_basic_three_extras() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -484,20 +451,14 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     ");
@@ -506,10 +467,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=extra1").arg("--extra=extra2"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
     ");
@@ -518,10 +476,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=project3").arg("--extra=project4"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Extras `project3` and `project4` are incompatible with the declared conflicts: {`project[project3]`, `project[project4]`}
     ");
@@ -530,10 +485,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=extra1").arg("--extra=project3"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     ");
@@ -542,10 +494,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=extra2").arg("--extra=project3"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     ");
@@ -554,10 +503,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=extra1").arg("--extra=project4"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     ");
@@ -566,10 +512,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=extra2").arg("--extra=project4"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     ");
@@ -603,10 +546,7 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
 
     // Fails, as expected.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
@@ -643,10 +583,7 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies for split (included: project[extra2], project[project3]; excluded: project[extra1], project[project4]):
       ╰─▶ Because project[project3] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra2] and project[project3] are incompatible.
@@ -693,10 +630,7 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -729,10 +663,7 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -764,10 +695,7 @@ fn extra_multiple_independent() -> Result<()> {
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
@@ -800,10 +728,7 @@ fn extra_multiple_independent() -> Result<()> {
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies for split (included: project[project4]; excluded: project[project3]):
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
@@ -840,10 +765,7 @@ fn extra_multiple_independent() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     ");
@@ -991,10 +913,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -1059,10 +978,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
 
     // Re-run with `--locked` to check it's okay.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -1084,10 +1000,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
     // Re-run with `--locked`, which should now fail because of
     // the conflicting group config removal.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
@@ -1146,20 +1059,14 @@ fn extra_unconditional() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     ");
 
     // This should error since we're enabling two conflicting extras.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Found conflicting extras `proxy1[extra1]` and `proxy1[extra2]` enabled simultaneously
     ");
@@ -1182,20 +1089,14 @@ fn extra_unconditional() -> Result<()> {
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     ");
     // This is fine because we are only enabling one
     // extra, and thus, there is no conflict.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -1224,20 +1125,14 @@ fn extra_unconditional() -> Result<()> {
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     ");
     // This is fine because we are only enabling one
     // extra, and thus, there is no conflict.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -1300,10 +1195,7 @@ fn extra_unconditional_non_conflicting() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
@@ -1314,10 +1206,7 @@ fn extra_unconditional_non_conflicting() -> Result<()> {
     // that would satisfy the conflict markers that got added
     // to the `proxy1[extra1]` dependency.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -1381,30 +1270,21 @@ fn extra_unconditional_in_optional() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
 
     // This shouldn't install anything.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     ");
 
     // This should install `sortedcontainers==2.3.0`.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=x1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -1414,10 +1294,7 @@ fn extra_unconditional_in_optional() -> Result<()> {
 
     // This should install `sortedcontainers==2.4.0`.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=x2"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -1431,10 +1308,7 @@ fn extra_unconditional_in_optional() -> Result<()> {
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=x1").arg("--extra=x2"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Found conflicting extras `proxy1[nested-x1]` and `proxy1[nested-x2]` enabled simultaneously
     ");
@@ -1523,10 +1397,7 @@ fn extra_unconditional_non_local_conflict() -> Result<()> {
     // conflicting extras are enabled unconditionally in all
     // configurations.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     ");
@@ -1535,10 +1406,7 @@ fn extra_unconditional_non_local_conflict() -> Result<()> {
     // file above, then this will likely result in the installation
     // of two different versions of the same package.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Found conflicting extras `c[x1]` and `c[x2]` enabled simultaneously
     ");
@@ -1648,10 +1516,7 @@ fn extra_nested_across_workspace() -> Result<()> {
     // `dummy[extra2]` conflicts with `dummysub[extra1]`. So we end
     // up with a resolution failure.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies for split (included: dummy[extra2], dummysub[extra1]; excluded: dummy[extra1], dummysub[extra2]):
       ╰─▶ Because dummy[extra2] depends on proxy1[extra2] and only proxy1[extra2]==0.1.0 is available, we can conclude that dummy[extra2] depends on proxy1[extra2]==0.1.0. (1)
@@ -1738,10 +1603,7 @@ fn extra_nested_across_workspace() -> Result<()> {
     )?;
     // And now things should work.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     ");
@@ -1787,10 +1649,7 @@ fn extra_depends_on_conflicting_extra() -> Result<()> {
     // This should fail to resolve, because the extras are always required together and
     // `example[foo]` is unusable.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies for split (included: example[foo]; excluded: example[bar]):
       ╰─▶ Because example[foo] depends on sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that example[foo]'s requirements are unsatisfiable.
@@ -1867,10 +1726,7 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
     // This succeeds, but probably shouldn't. There's an unconditional conflict in `example[foo]
     // -> indirection[bar] -> example[bar]`, which means `example[foo]` can never be used.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -1956,10 +1812,7 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
 
     // Install from the lockfile
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1968,20 +1821,14 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
 
     // Install with `foo`
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Found conflicting extras `example[bar]` and `example[foo]` enabled simultaneously
     ");
 
     // Install the child package
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("indirection"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -2015,10 +1862,7 @@ fn group_basic() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project:group2 depends on sortedcontainers==2.4.0 and project:group1 depends on sortedcontainers==2.3.0, we can conclude that project:group1 and project:group2 are incompatible.
@@ -2052,10 +1896,7 @@ fn group_basic() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -2120,29 +1961,20 @@ fn group_basic() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     ");
     // Another install, but with one of the groups enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2150,10 +1982,7 @@ fn group_basic() -> Result<()> {
     ");
     // Another install, but with the other group enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group2"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -2163,10 +1992,7 @@ fn group_basic() -> Result<()> {
     ");
     // And finally, installing both groups should error.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--group=group2"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Groups `group1` and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     ");
@@ -2207,10 +2033,7 @@ fn group_default() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -2275,20 +2098,14 @@ fn group_default() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 
     // Install from the lockfile, which should include the `extra1` group by default.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2297,10 +2114,7 @@ fn group_default() -> Result<()> {
 
     // Another install, but with one of the groups enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     ");
@@ -2308,10 +2122,7 @@ fn group_default() -> Result<()> {
     // Another install, but with the other group enabled. This should error, since `group1` is
     // enabled by default.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group2"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Groups `group1` (enabled by default) and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     ");
@@ -2319,10 +2130,7 @@ fn group_default() -> Result<()> {
     // If the group is explicitly requested, we should still fail, but shouldn't mark it as
     // "enabled by default".
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--group=group2"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Groups `group1` and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     ");
@@ -2330,20 +2138,14 @@ fn group_default() -> Result<()> {
     // If we install via `--all-groups`, we should also avoid marking the group as "enabled by
     // default".
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--all-groups"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Groups `group1` and `group2` are incompatible with the conflicts: {`project:group1`, `project:group2`}
     ");
 
     // Disabling the default group should succeed.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-group=group1").arg("--group=group2"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -2376,10 +2178,7 @@ fn group_virtual() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
       × No solution found when resolving dependencies:
@@ -2407,10 +2206,7 @@ fn group_virtual() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Expected `package` field in conflicting entry: { group = "group1" }
     "#);
@@ -2450,10 +2246,7 @@ fn groups_respect_supported_environments_when_filtering_wheels() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
@@ -2557,10 +2350,7 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     ");
@@ -2703,10 +2493,7 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     ");
@@ -2739,10 +2526,7 @@ fn mixed() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project:group1 depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.4.0, we can conclude that project:group1 and project[extra1] are incompatible.
@@ -2778,10 +2562,7 @@ fn mixed() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -2849,29 +2630,20 @@ fn mixed() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked in [TIME]
     ");
     // Another install, but with the group enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2879,10 +2651,7 @@ fn mixed() -> Result<()> {
     ");
     // Another install, but with the extra enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -2892,10 +2661,7 @@ fn mixed() -> Result<()> {
     ");
     // And finally, installing both the group and the extra should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--extra=extra1"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Extra `extra1` and group `group1` are incompatible with the declared conflicts: {`project[extra1]`, `project:group1`}
     ");
@@ -2948,10 +2714,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -3042,10 +2805,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -3098,10 +2858,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -3191,10 +2948,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -3247,10 +3001,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
@@ -3360,10 +3111,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
@@ -3416,10 +3164,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
@@ -3536,10 +3281,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
@@ -3581,10 +3323,7 @@ fn non_optional_dependency_extra() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -3628,10 +3367,7 @@ fn non_optional_dependency_group() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -3678,10 +3414,7 @@ fn non_optional_dependency_mixed() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -3738,10 +3471,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
     uv_snapshot!(context.filters(), context.sync().arg("--extra=baz").arg("--extra=foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -3878,10 +3608,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
     uv_snapshot!(context.filters(), context.sync().arg("--group=baz").arg("--group=foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4019,10 +3746,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
     uv_snapshot!(context.filters(), context.sync().arg("--group=baz").arg("--extra=foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4164,10 +3888,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.6`.
     uv_snapshot!(context.filters(), context.sync().arg("--extra=bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4305,10 +4026,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.6`.
     uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4451,10 +4169,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.6`.
     uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4595,10 +4310,7 @@ fn shared_dependency_extra() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4696,10 +4408,7 @@ fn shared_dependency_extra() -> Result<()> {
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
     // So this should remove `idna==3.6` installed above.
     uv_snapshot!(context.filters(), context.sync().arg("--extra=foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -4710,10 +4419,7 @@ fn shared_dependency_extra() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--extra=bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4723,10 +4429,7 @@ fn shared_dependency_extra() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked 3 packages in [TIME]
@@ -4770,10 +4473,7 @@ fn shared_dependency_group() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4870,10 +4570,7 @@ fn shared_dependency_group() -> Result<()> {
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
     // So this should remove `idna==3.6` installed above.
     uv_snapshot!(context.filters(), context.sync().arg("--group=foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -4884,10 +4581,7 @@ fn shared_dependency_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4897,10 +4591,7 @@ fn shared_dependency_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked 3 packages in [TIME]
@@ -4946,10 +4637,7 @@ fn shared_dependency_mixed() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -5051,10 +4739,7 @@ fn shared_dependency_mixed() -> Result<()> {
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
     // So this should remove `idna==3.6` installed above.
     uv_snapshot!(context.filters(), context.sync().arg("--extra=foo"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5065,10 +4750,7 @@ fn shared_dependency_mixed() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -5078,10 +4760,7 @@ fn shared_dependency_mixed() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked 3 packages in [TIME]
@@ -5153,20 +4832,14 @@ conflicts = [
 
     // Error out, as x2 extra is only on the child.
     uv_snapshot!(context.filters(), context.sync().arg("--extra=x2"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     error: Extra `x2` is not defined in the `optional-dependencies` table for `project`
     ");
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -5354,10 +5027,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked in [TIME]
@@ -5516,10 +5186,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked in [TIME]
@@ -5677,10 +5344,7 @@ fn collision_extra() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     ");
@@ -5785,10 +5449,7 @@ fn collision_extra() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -5806,10 +5467,7 @@ fn collision_extra() -> Result<()> {
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=extra-3-pkg-foo"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5822,10 +5480,7 @@ fn collision_extra() -> Result<()> {
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=foo"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -5842,10 +5497,7 @@ fn collision_extra() -> Result<()> {
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=extra-3-pkg-foo").arg("--extra=foo"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 1 package in [TIME]
      + sortedcontainers==2.4.0
@@ -5906,10 +5558,7 @@ fn extra_inferences() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 137 packages in [TIME]
     ");
@@ -7942,10 +7591,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
@@ -8115,10 +7761,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
     )?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     ");
@@ -8233,10 +7876,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
         .arg("--frozen")
         .arg("--extra")
         .arg("chgnet"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -8251,10 +7891,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
         .arg("--frozen")
         .arg("--extra")
         .arg("m3gnet"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -8359,10 +7996,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 11 packages in [TIME]
     ");
@@ -8542,10 +8176,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         .arg("--frozen")
         .arg("--extra")
         .arg("all"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -8564,10 +8195,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         .arg("sevennet")
         .arg("--extra")
         .arg("m3gnet"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 3 packages in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -8627,10 +8255,7 @@ fn overlapping_resolution_markers() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 45 packages in [TIME]
     ");
@@ -9300,10 +8925,7 @@ fn conditional_sources_keep_default_platform_specific_transitive_dependencies() 
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 27 packages in [TIME]
     ");
@@ -9679,10 +9301,7 @@ fn conditional_sources_keep_default_platform_specific_transitive_dependencies() 
             .arg("--python-platform")
             .arg("x86_64-manylinux2014"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Would use project environment at: .venv
     Would download 24 packages
@@ -9767,10 +9386,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
     pyproject_toml.write_str(pyproject)?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 27 packages in [TIME]
     ");
@@ -10181,10 +9797,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
     pyproject_toml.write_str(&pyproject)?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 27 packages in [TIME]
     Updated resolution-markers-for-days v0.1.0 -> v0.1.1
@@ -10631,10 +10244,7 @@ fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves()
     pyproject_toml.write_str(pyproject)?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -10730,10 +10340,7 @@ fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves()
 
     // The incorrect behavior was that only python-dateutil was installed and six was missing.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("a").arg("--dry-run"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Would use project environment at: .venv
     Resolved 4 packages in [TIME]
@@ -10778,10 +10385,7 @@ fn conflict_item_unknown_field() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 10, column 17
@@ -10855,10 +10459,7 @@ fn many_pairwise_conflicts_shared_extra() -> Result<()> {
 
     // This should resolve quickly — not hang due to exponential forking.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
@@ -11022,10 +10623,7 @@ fn project_level_conflict_with_extra() -> Result<()> {
     // pkg-b[extra1] (with sortedcontainers==2.4.0) are in separate forks
     // because of the declared project-level conflict.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 5 packages in [TIME]
@@ -11110,10 +10708,7 @@ fn project_level_conflict_with_extra() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 5 packages in [TIME]
@@ -11206,10 +10801,7 @@ fn project_level_conflict_with_extras_and_cross_dependency() -> Result<()> {
     // conflict between pkg-a and pkg-b[extra1] should properly separate these
     // into different forks, including pkg-a's extras (all, foo, bar).
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 7 packages in [TIME]
@@ -11340,10 +10932,7 @@ fn project_level_conflict_with_extras_and_cross_dependency() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 7 packages in [TIME]
@@ -11424,10 +11013,7 @@ fn project_level_conflict_with_group() -> Result<()> {
     // be excluded by the project-level conflict since groups don't depend
     // on the base package.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 6 packages in [TIME]
@@ -11529,10 +11115,7 @@ fn project_level_conflict_with_group() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 6 packages in [TIME]

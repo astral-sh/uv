@@ -79,8 +79,7 @@ fn workspace_metadata_simple() {
     let workspace = context.temp_dir.child("foo");
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -153,8 +152,7 @@ import iniconfig
             .arg(script.path())
             .arg("--sync"),
         @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -274,8 +272,7 @@ print("Hello, world!")
             .arg("--script")
             .arg(script.path()),
         @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -633,8 +630,7 @@ dependencies = [
     filters.push((r#""sha256": "[0-9a-f]{64}""#, r#""sha256": "[SHA256]""#));
 
     uv_snapshot!(filters, context.workspace_metadata().arg("--sync"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -924,10 +920,7 @@ dependencies = [
     fs_err::remove_file(gpu_a.path())?;
 
     uv_snapshot!(context.filters(), context.workspace_metadata().arg("--frozen").arg("--sync"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     error: Failed to collect module owners
@@ -953,8 +946,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1131,8 +1123,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
     ));
 
     uv_snapshot!(filters, context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1372,8 +1363,7 @@ fn workspace_metadata_from_member() -> Result<()> {
     let member_dir = workspace.join("packages").join("bird-feeder");
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&member_dir), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1555,8 +1545,7 @@ fn workspace_metadata_multiple_members() {
         .success();
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace_root), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1642,8 +1631,7 @@ fn workspace_metadata_single_project() {
     let project = context.temp_dir.child("my-project");
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&project), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1706,8 +1694,7 @@ fn workspace_metadata_with_excluded() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1806,8 +1793,7 @@ fn workspace_metadata_group_only() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1931,10 +1917,7 @@ fn workspace_metadata_no_project() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.workspace_metadata(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     error: No `pyproject.toml` found in current directory or any parent directory
@@ -1957,8 +1940,7 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {

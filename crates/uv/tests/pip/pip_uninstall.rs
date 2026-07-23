@@ -13,10 +13,7 @@ fn no_arguments() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.pip_uninstall(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the following required arguments were not provided:
       <PACKAGE|--requirements <REQUIREMENTS>>
@@ -34,10 +31,7 @@ fn invalid_requirement() {
 
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("flask==1.0.x"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `flask==1.0.x`
       Caused by: after parsing `1.0`, found `.x`, which is not part of a valid version
@@ -53,10 +47,7 @@ fn missing_requirements_txt() {
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: File not found: `requirements.txt`
     "
@@ -73,10 +64,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("-r")
         .arg("requirements.txt"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.txt` at position 0
       Caused by: after parsing `1.0`, found `.x`, which is not part of a valid version
@@ -105,10 +93,7 @@ fn uninstall() -> Result<()> {
 
     uv_snapshot!(context.pip_uninstall()
         .arg("MarkupSafe"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - markupsafe==2.1.3
@@ -142,10 +127,7 @@ fn missing_record() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("MarkupSafe"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot uninstall package; `RECORD` file not found at: [SITE_PACKAGES]/MarkupSafe-2.1.3.dist-info/RECORD
     "
@@ -180,10 +162,7 @@ fn uninstall_editable_by_name() -> Result<()> {
     // Uninstall the editable by name.
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("flit-editable"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - flit-editable==0.1.0 (from file://[WORKSPACE]/test/packages/flit_editable)
@@ -221,10 +200,7 @@ fn uninstall_by_path() -> Result<()> {
     // Uninstall the editable by path.
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg(context.workspace_root.join("test/packages/flit_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - flit-editable==0.1.0 (from file://[WORKSPACE]/test/packages/flit_editable)
@@ -263,10 +239,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("flit-editable")
         .arg(context.workspace_root.join("test/packages/flit_editable")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - flit-editable==0.1.0 (from file://[WORKSPACE]/test/packages/flit_editable)
@@ -317,10 +290,7 @@ fn uninstall_duplicate() -> Result<()> {
     // Run `pip uninstall`.
     uv_snapshot!(context1.pip_uninstall()
         .arg("pip"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 2 packages in [TIME]
      - pip==21.3.1
@@ -373,10 +343,7 @@ fn uninstall_egg_info() -> Result<()> {
     // Run `pip uninstall`.
     uv_snapshot!(context.pip_uninstall()
         .arg("zstandard"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - zstandard==0.22.0
@@ -394,10 +361,7 @@ fn uninstall_versionless_egg_info_file() -> Result<()> {
     egg_info.write_str("Metadata-Version: 1.1\nName: demo\nVersion: 1.0\n")?;
 
     uv_snapshot!(context.pip_uninstall().arg("demo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to uninstall `demo==1.0`. distutils-installed distributions do not include the metadata required to uninstall safely.
     "
@@ -450,10 +414,7 @@ Version: 0.22.0
     // Run `pip uninstall`.
     uv_snapshot!(context.pip_uninstall()
         .arg("zstandard"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - zstandard==0.22.0
@@ -515,10 +476,7 @@ fn dry_run_uninstall_egg_info() -> Result<()> {
     uv_snapshot!(context.pip_uninstall()
         .arg("--dry-run")
         .arg("zstandard"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Would uninstall 1 package
      - zstandard==0.22.0
@@ -589,10 +547,7 @@ fn uninstall_record_path_traversal() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("evilpkg"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Invalid RECORD entry in evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg) that escapes the Python environment, skipping: [..]/traversal_target.txt
     Uninstalled 1 package in [TIME]
@@ -644,10 +599,7 @@ fn uninstall_egg_info_top_level_path_traversal() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("evilpkg"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Invalid `top_level.txt` entry in evilpkg==0.1.0 that is not a top-level module or package, skipping: [..]/traversal_target
     Uninstalled 1 package in [TIME]
@@ -698,10 +650,7 @@ fn uninstall_egg_info_top_level_drive_relative() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("evilpkg"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Invalid `top_level.txt` entry in evilpkg==0.1.0 that is not a top-level module or package, skipping: [DRIVE]:traversal_target
     Uninstalled 1 package in [TIME]
@@ -723,10 +672,7 @@ fn yes_flag() {
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("--yes")
         .arg("flask"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `--yes` has no effect (uv never asks for confirmation)
     warning: Skipping flask as it is not installed
@@ -743,10 +689,7 @@ fn yes_short_flag() {
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("-y")
         .arg("flask"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `--yes` has no effect (uv never asks for confirmation)
     warning: Skipping flask as it is not installed

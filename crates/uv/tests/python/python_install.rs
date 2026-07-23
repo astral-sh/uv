@@ -31,10 +31,7 @@ fn python_install() {
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -73,40 +70,28 @@ fn python_install() {
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
         .arg("-c").arg("import subprocess; print('hello world')"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     hello world
-
-    ----- stderr -----
     ");
 
     // Should be a no-op when already installed
     uv_snapshot!(context.filters(), context.python_install(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python is already installed. Use `uv python install <request>` to install another version.
     ");
 
     // Similarly, when a requested version is already installed
     uv_snapshot!(context.filters(), context.python_install().arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.14 is already installed
     ");
 
     // You can opt-in to a reinstall
     uv_snapshot!(context.filters(), context.python_install().arg("3.14").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      ~ cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -117,10 +102,7 @@ fn python_install() {
 
     // Uninstallation requires an argument
     uv_snapshot!(context.filters(), context.python_uninstall(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the following required arguments were not provided:
       <TARGETS>...
@@ -131,10 +113,7 @@ fn python_install() {
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.14
     Uninstalled Python 3.14.[LATEST] in [TIME]
@@ -156,10 +135,7 @@ fn python_reinstall() {
 
     // Install a couple versions
     uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
      + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
@@ -168,10 +144,7 @@ fn python_reinstall() {
 
     // Reinstall a single version
     uv_snapshot!(context.filters(), context.python_install().arg("3.13").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      ~ cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
@@ -179,10 +152,7 @@ fn python_reinstall() {
 
     // Reinstall multiple versions
     uv_snapshot!(context.filters(), context.python_install().arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
      ~ cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
@@ -191,10 +161,7 @@ fn python_reinstall() {
 
     // Reinstalling a version that is not installed should also work
     uv_snapshot!(context.filters(), context.python_install().arg("3.11").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.11.[LATEST] in [TIME]
      + cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
@@ -212,10 +179,7 @@ fn python_reinstall_patch() {
 
     // Install a couple patch versions
     uv_snapshot!(context.filters(), context.python_install().arg("3.12.6").arg("3.12.7"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
      + cpython-3.12.6-[PLATFORM]
@@ -226,10 +190,7 @@ fn python_reinstall_patch() {
     // TODO(zanieb): This doesn't work today, because we need this to install the "latest" as there
     // is no workflow for `--upgrade` yet
     uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.[LATEST] in [TIME]
      + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
@@ -250,10 +211,7 @@ fn python_install_automatic() {
         .env_remove(EnvVars::VIRTUAL_ENV)
         .arg("--no-python-downloads")
         .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found in [PYTHON SOURCES]
 
@@ -264,12 +222,9 @@ fn python_install_automatic() {
     uv_snapshot!(context.filters(), context.run()
         .env_remove(EnvVars::VIRTUAL_ENV)
         .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     (3, 14)
-
-    ----- stderr -----
     ");
 
     // Subsequently, we can use the interpreter even with downloads disabled
@@ -277,12 +232,9 @@ fn python_install_automatic() {
         .env_remove(EnvVars::VIRTUAL_ENV)
         .arg("--no-python-downloads")
         .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     (3, 14)
-
-    ----- stderr -----
     ");
 
     // We should respect the Python request
@@ -290,12 +242,9 @@ fn python_install_automatic() {
     .env_remove(EnvVars::VIRTUAL_ENV)
     .arg("-p").arg("3.12")
     .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     (3, 12)
-
-    ----- stderr -----
     ");
 
     // But some requests cannot be mapped to a download
@@ -303,10 +252,7 @@ fn python_install_automatic() {
        .env_remove(EnvVars::VIRTUAL_ENV)
        .arg("-p").arg("foobar")
        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for executable name `foobar` in [PYTHON SOURCES]
     ");
@@ -336,12 +282,9 @@ fn python_install_automatic() {
             .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.as_os_str())
             .arg("-p").arg("3.11")
             .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
-        success: true
-        exit_code: 0
+        exit_code: 0 (success)
         ----- stdout -----
         (3, 11)
-
-        ----- stderr -----
         ");
     }
 }
@@ -373,11 +316,7 @@ fn regression_cpython() {
         .env_remove(EnvVars::VIRTUAL_ENV)
         .arg("-p").arg("3.12")
         .arg("mre.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 }
 
@@ -391,10 +330,7 @@ fn python_install_force() {
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -406,10 +342,7 @@ fn python_install_force() {
 
     // You can force replacement of the executables
     uv_snapshot!(context.filters(), context.python_install().arg("--force"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -423,20 +356,14 @@ fn python_install_force() {
     bin_python.touch().unwrap();
 
     uv_snapshot!(context.filters(), context.python_install().arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
     ");
 
     uv_snapshot!(context.filters(), context.python_install().arg("--force").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -455,10 +382,7 @@ fn python_install_minor() {
 
     // Install a minor version
     uv_snapshot!(context.filters(), context.python_install().arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.11.[LATEST] in [TIME]
      + cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
@@ -491,10 +415,7 @@ fn python_install_minor() {
     }
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.11
     Uninstalled Python 3.11.[LATEST] in [TIME]
@@ -514,10 +435,7 @@ fn python_install_multiple_patch() {
 
     // Install multiple patch versions
     uv_snapshot!(context.filters(), context.python_install().arg("3.12.8").arg("3.12.6"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
      + cpython-3.12.6-[PLATFORM]
@@ -551,10 +469,7 @@ fn python_install_multiple_patch() {
     }
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12.8"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.12.8
     Uninstalled Python 3.12.8 in [TIME]
@@ -596,10 +511,7 @@ fn python_install_preview() {
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
@@ -638,30 +550,21 @@ fn python_install_preview() {
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
         .arg("-c").arg("import subprocess; print('hello world')"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     hello world
-
-    ----- stderr -----
     ");
 
     // Should be a no-op when already installed
     uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python is already installed. Use `uv python install <request>` to install another version.
     ");
 
     // You can opt-in to a reinstall
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      ~ cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
@@ -672,10 +575,7 @@ fn python_install_preview() {
 
     // You can also force replacement of the executables
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--force"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
@@ -689,10 +589,7 @@ fn python_install_preview() {
     bin_python.touch().unwrap();
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
@@ -700,19 +597,13 @@ fn python_install_preview() {
 
     // With `--bin`, this should error instead of warn
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--bin").arg("3.14"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
     ");
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14").env(EnvVars::UV_PYTHON_INSTALL_BIN, "1"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
@@ -720,27 +611,18 @@ fn python_install_preview() {
 
     // With `--no-bin`, this should be silent
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.14 is already installed
     ");
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14").env(EnvVars::UV_PYTHON_INSTALL_BIN, "0"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.14 is already installed
     ");
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--force").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -754,10 +636,7 @@ fn python_install_preview() {
 
     // Uninstallation requires an argument
     uv_snapshot!(context.filters(), context.python_uninstall(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the following required arguments were not provided:
       <TARGETS>...
@@ -768,10 +647,7 @@ fn python_install_preview() {
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.14
     Uninstalled Python 3.14.[LATEST] in [TIME]
@@ -783,10 +659,7 @@ fn python_install_preview() {
 
     // Install a minor version
     uv_snapshot!(context.filters(), context.python_install().arg("3.11").arg("--preview"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.11.[LATEST] in [TIME]
      + cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
@@ -816,10 +689,7 @@ fn python_install_preview() {
     }
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.11
     Uninstalled Python 3.11.[LATEST] in [TIME]
@@ -828,10 +698,7 @@ fn python_install_preview() {
 
     // Install multiple patch versions
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.8").arg("3.12.6"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
      + cpython-3.12.6-[PLATFORM]
@@ -877,10 +744,7 @@ fn python_install_multiple_unmanaged_executables() {
 
     // Install a version with the default `python`, `python3`, and `python3.13` executables.
     uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("--preview-features").arg("python-install-default").arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-[PLATFORM] (python, python3, python3.13)
@@ -897,10 +761,7 @@ fn python_install_multiple_unmanaged_executables() {
 
     // Re-installing without `--force` should report all three conflicts in a single grouped error.
     uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("--preview-features").arg("python-install-default").arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to install executable for cpython-3.13.[LATEST]-[PLATFORM]
       Caused by: Executables `python3.13`, `python3`, and `python` already exist in `[BIN]/` but are not managed by uv; use `--force` to replace them
@@ -926,10 +787,7 @@ fn python_install_preview_no_bin() {
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM]
@@ -943,10 +801,7 @@ fn python_install_preview_no_bin() {
     bin_python.assert(predicate::path::missing());
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin").arg("--default"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--no-bin' cannot be used with '--default'
 
@@ -977,10 +832,7 @@ fn python_install_preview_upgrade() {
 
     // Install 3.12.5
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.5"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.5 in [TIME]
      + cpython-3.12.5-[PLATFORM] (python3.12)
@@ -1007,10 +859,7 @@ fn python_install_preview_upgrade() {
 
     // Installing 3.12.4 should not replace the executable, but also shouldn't fail
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.4 in [TIME]
      + cpython-3.12.4-[PLATFORM]
@@ -1036,10 +885,7 @@ fn python_install_preview_upgrade() {
 
     // Using `--reinstall` is not sufficient to replace it either
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.4 in [TIME]
      ~ cpython-3.12.4-[PLATFORM]
@@ -1065,10 +911,7 @@ fn python_install_preview_upgrade() {
 
     // But `--force` is
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4").arg("--force"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.4 in [TIME]
      + cpython-3.12.4-[PLATFORM] (python3.12)
@@ -1094,10 +937,7 @@ fn python_install_preview_upgrade() {
 
     // But installing 3.12.6 should upgrade automatically
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.6"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.6 in [TIME]
      + cpython-3.12.6-[PLATFORM] (python3.12)
@@ -1135,10 +975,7 @@ fn python_install_freethreaded() {
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13t"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]+freethreaded-[PLATFORM] (python3.13t)
@@ -1158,40 +995,28 @@ fn python_install_freethreaded() {
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
         .arg("-c").arg("import subprocess; print('hello world')"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     hello world
-
-    ----- stderr -----
     ");
 
     // We should find it with opt-in
     uv_snapshot!(context.filters(), context.python_find().arg("3.13t"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     // We should be able to select it with `+freethreaded`
     uv_snapshot!(context.filters(), context.python_find().arg("3.13+freethreaded"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     // Create a virtual environment with the freethreaded Python
     uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.13t"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.13.[LATEST]+freethreaded
     Creating virtual environment at: .venv
@@ -1247,10 +1072,7 @@ fn python_install_freethreaded() {
 
     // Should be distinct from 3.13
     uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
@@ -1258,19 +1080,13 @@ fn python_install_freethreaded() {
 
     // Should not work with older Python versions
     uv_snapshot!(context.filters(), context.python_install().arg("3.12t"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No download found for request: cpython-3.12+freethreaded-[PLATFORM]
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python installations
     Uninstalled 2 versions in [TIME]
@@ -1335,14 +1151,11 @@ fn python_install_freethreaded_and_gil_list() {
         .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
         .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     cpython-3.13.[LATEST]-[PLATFORM] [BIN]/[INSTALL-BIN]/[PYTHON]
     cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.python_list()
@@ -1352,14 +1165,11 @@ fn python_install_freethreaded_and_gil_list() {
         .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
         .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     cpython-3.13.[LATEST]+freethreaded-[PLATFORM] managed/cpython-3.13.[LATEST]+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     cpython-3.13.[LATEST]+freethreaded-[PLATFORM] [BIN]/python3.13t
     cpython-3.13.[LATEST]+freethreaded-[PLATFORM] managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     // Clean up registry entries
@@ -1404,13 +1214,10 @@ fn python_install_registry_takes_precedence_over_no_registry() {
         .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
         .env(EnvVars::UV_PYTHON_SEARCH_PATH, "")
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     context
@@ -1430,20 +1237,14 @@ fn python_upgrade_not_allowed() {
 
     // Request a patch upgrade
     uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.13.0"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: `uv python upgrade` only accepts minor versions, got: 3.13.0
     ");
 
     // Request a pre-release upgrade
     uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.14rc3"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: `uv python upgrade` only accepts minor versions, got: 3.14rc3
     ");
@@ -1461,10 +1262,7 @@ fn python_install_debug() {
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13+debug"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]+debug-[PLATFORM] (python3.13d)
@@ -1484,40 +1282,28 @@ fn python_install_debug() {
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
         .arg("-c").arg("import subprocess; print('hello world')"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     hello world
-
-    ----- stderr -----
     ");
 
     // We should find it with opt-in
     uv_snapshot!(context.filters(), context.python_find().arg("3.13d"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+debug-[PLATFORM]/bin/python3.13d
-
-    ----- stderr -----
     ");
 
     // We should find it without opt-in
     uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+debug-[PLATFORM]/bin/python3.13d
-
-    ----- stderr -----
     ");
 
     // Should be distinct from 3.13
     uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
@@ -1525,50 +1311,35 @@ fn python_install_debug() {
 
     // Now we should prefer the non-debug version without opt-in
     uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/bin/python3.13
-
-    ----- stderr -----
     ");
 
     // But still select it with opt-in
     uv_snapshot!(context.filters(), context.python_find().arg("3.13d"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+debug-[PLATFORM]/bin/python3.13d
-
-    ----- stderr -----
     ");
 
     // We should allow selection with `+debug`
     uv_snapshot!(context.filters(), context.python_find().arg("3.13+debug"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+debug-[PLATFORM]/bin/python3.13d
-
-    ----- stderr -----
     ");
 
     // Should work with older Python versions too
     uv_snapshot!(context.filters(), context.python_install().arg("3.12d"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.[LATEST] in [TIME]
      + cpython-3.12.[LATEST]+debug-[PLATFORM] (python3.12d)
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python installations
     Uninstalled 3 versions in [TIME]
@@ -1591,10 +1362,7 @@ fn python_install_debug_freethreaded() {
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13td"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]+freethreaded+debug-[PLATFORM] (python3.13td)
@@ -1614,50 +1382,35 @@ fn python_install_debug_freethreaded() {
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
         .arg("-c").arg("import subprocess; print('hello world')"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     hello world
-
-    ----- stderr -----
     ");
 
     // We should find it with opt-in
     uv_snapshot!(context.filters(), context.python_find().arg("3.13td"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+freethreaded+debug-[PLATFORM]/bin/python3.13td
-
-    ----- stderr -----
     ");
 
     // We should not find it without opt-in
     uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for Python 3.13 in virtual environments, managed installations, or search path
     ");
 
     // A `+freethreaded+debug` request should select the combined build.
     uv_snapshot!(context.filters(), context.python_find().arg("3.13+freethreaded+debug"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+freethreaded+debug-[PLATFORM]/bin/python3.13td
-
-    ----- stderr -----
     ");
 
     // Should be distinct from 3.13
     uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
@@ -1665,10 +1418,7 @@ fn python_install_debug_freethreaded() {
 
     // Should be distinct from 3.13t
     uv_snapshot!(context.filters(), context.python_install().arg("3.13t"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]+freethreaded-[PLATFORM] (python3.13t)
@@ -1676,10 +1426,7 @@ fn python_install_debug_freethreaded() {
 
     // Should be distinct from 3.13d
     uv_snapshot!(context.filters(), context.python_install().arg("3.13d"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]+debug-[PLATFORM] (python3.13d)
@@ -1687,38 +1434,26 @@ fn python_install_debug_freethreaded() {
 
     // Now we should prefer the non-debug version without opt-in
     uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/bin/python3.13
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.python_find().arg("3.13t"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/bin/python3.13t
-
-    ----- stderr -----
     ");
 
     // But still select it with opt-in
     uv_snapshot!(context.filters(), context.python_find().arg("3.13td"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+freethreaded+debug-[PLATFORM]/bin/python3.13td
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python installations
     Uninstalled 4 versions in [TIME]
@@ -1739,30 +1474,21 @@ fn python_install_invalid_request() {
 
     // Request something that is not a Python version
     uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `foobar` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions
     ");
 
     // Request a version we don't have a download for
     uv_snapshot!(context.filters(), context.python_install().arg("3.8.0"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No download found for request: cpython-3.8.0-[PLATFORM]
     ");
 
     // Request a version we don't have a download for mixed with one we do
     uv_snapshot!(context.filters(), context.python_install().arg("3.8.0").arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No download found for request: cpython-3.8.0-[PLATFORM]
     ");
@@ -1791,10 +1517,7 @@ fn python_install_default() {
 
     // Install a specific version
     uv_snapshot!(context.filters(), context.python_install().arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -1807,10 +1530,7 @@ fn python_install_default() {
 
     // Install again, with `--default`
     uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
     Installed Python 3.14.[LATEST] in [TIME]
@@ -1824,10 +1544,7 @@ fn python_install_default() {
 
     // Uninstall
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python installations
     Uninstalled Python 3.14.[LATEST] in [TIME]
@@ -1841,10 +1558,7 @@ fn python_install_default() {
 
     // Install the latest version, i.e., a "default install"
     uv_snapshot!(context.filters(), context.python_install().arg("--default"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
     Installed Python 3.14.[LATEST] in [TIME]
@@ -1909,10 +1623,7 @@ fn python_install_default() {
 
     // Uninstall again
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.14
     Uninstalled Python 3.14.[LATEST] in [TIME]
@@ -1926,10 +1637,7 @@ fn python_install_default() {
 
     // Install multiple versions, with the `--default` flag
     uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("3.14").arg("--default"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
     error: The `--default` flag cannot be used with multiple targets
@@ -1937,10 +1645,7 @@ fn python_install_default() {
 
     // Install 3.12 as a new default
     uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("--default"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
     Installed Python 3.12.[LATEST] in [TIME]
@@ -2031,10 +1736,7 @@ fn python_install_default_preview() {
 
     // Install a specific version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -2047,10 +1749,7 @@ fn python_install_default_preview() {
 
     // Install again, with `--default`
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--default").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python, python3)
@@ -2063,10 +1762,7 @@ fn python_install_default_preview() {
 
     // Uninstall
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python installations
     Uninstalled Python 3.14.[LATEST] in [TIME]
@@ -2080,10 +1776,7 @@ fn python_install_default_preview() {
 
     // Install the latest version, i.e., a "default install"
     uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("--preview"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
@@ -2165,10 +1858,7 @@ fn python_install_default_preview() {
 
     // Uninstall again
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.14
     Uninstalled Python 3.14.[LATEST] in [TIME]
@@ -2182,20 +1872,14 @@ fn python_install_default_preview() {
 
     // Install multiple versions, with the `--default` flag
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12").arg("3.14").arg("--default"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The `--default` flag cannot be used with multiple targets
     ");
 
     // Install 3.12 as a new default
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12").arg("--default"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.[LATEST] in [TIME]
      + cpython-3.12.[LATEST]-[PLATFORM] (python, python3, python3.12)
@@ -2281,10 +1965,7 @@ fn python_install_default_preview() {
 
     // Change the default to 3.14
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14").arg("--default"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
@@ -2404,10 +2085,7 @@ fn python_install_unknown() {
 
     // An unknown request
     uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `foobar` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions
     ");
@@ -2416,10 +2094,7 @@ fn python_install_unknown() {
 
     // A directory
     uv_snapshot!(context.filters(), context.python_install().arg("./foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `./foo` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions
     ");
@@ -2446,10 +2121,7 @@ fn python_install_broken_link() {
 
     // Install
     uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
@@ -2515,10 +2187,7 @@ fn python_install_default_from_env() {
 
     // Install the version specified by the `UV_PYTHON` environment variable by default
     uv_snapshot!(context.filters(), context.python_install().env(EnvVars::UV_PYTHON, "3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.[LATEST] in [TIME]
      + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
@@ -2526,10 +2195,7 @@ fn python_install_default_from_env() {
 
     // But prefer explicit requests
     uv_snapshot!(context.filters(), context.python_install().arg("3.11").env(EnvVars::UV_PYTHON, "3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.11.[LATEST] in [TIME]
      + cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
@@ -2537,10 +2203,7 @@ fn python_install_default_from_env() {
 
     // We should ignore `UV_PYTHON` here and complain there is not a target
     uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the following required arguments were not provided:
       <TARGETS>...
@@ -2552,10 +2215,7 @@ fn python_install_default_from_env() {
 
     // We should ignore `UV_PYTHON` here and respect `--all`
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").env(EnvVars::UV_PYTHON, "3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python installations
     Uninstalled 2 versions in [TIME]
@@ -2565,10 +2225,7 @@ fn python_install_default_from_env() {
 
     // Uninstall with no targets should error
     uv_snapshot!(context.filters(), context.python_uninstall(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the following required arguments were not provided:
       <TARGETS>...
@@ -2580,10 +2237,7 @@ fn python_install_default_from_env() {
 
     // Uninstall with conflicting options should error
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").arg("3.12"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--all' cannot be used with '<TARGETS>...'
 
@@ -2630,13 +2284,10 @@ fn python_install_patch_dylib() {
     cmd.arg("-D").arg(dylib.as_ref());
 
     uv_snapshot!(context.filters(), cmd, @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib:
     [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib
-
-    ----- stderr -----
     "###);
 }
 
@@ -2653,10 +2304,7 @@ fn python_install_prerelease() {
     // Install 3.15
     // For now, this provides test coverage of pre-release handling
     uv_snapshot!(context.filters(), context.python_install().arg("3.15"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.15.[LATEST] in [TIME]
      + cpython-3.15.[LATEST]-[PLATFORM] (python3.15)
@@ -2664,10 +2312,7 @@ fn python_install_prerelease() {
 
     // Install a specific pre-release
     uv_snapshot!(context.filters(), context.python_install().arg("3.15.0a2"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.15.0a2 in [TIME]
      + cpython-3.15.0a2-[PLATFORM]
@@ -2675,10 +2320,7 @@ fn python_install_prerelease() {
 
     // Install a release candidate for a non-zero patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.14.5rc1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.5rc1 in [TIME]
      + cpython-3.14.5rc1-[PLATFORM] (python3.14)
@@ -2703,51 +2345,36 @@ fn python_find_prerelease() {
     // We should be able to find this version without opt-in, because there is no stable release
     // installed
     uv_snapshot!(context.filters(), context.python_find().arg("3.15"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     // This also applies to `>=` requests, even though pre-releases aren't technically in the range
     uv_snapshot!(context.filters(), context.python_find().arg(">=3.15"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.python_find().arg("3"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     // If we install a stable version, that should be preferred though
     uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
 
     uv_snapshot!(context.filters(), context.python_find().arg("3"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 }
 
@@ -2774,10 +2401,7 @@ fn python_install_cached() {
     uv_snapshot!(context.filters(), context
         .python_install()
         .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -2794,19 +2418,13 @@ fn python_install_cached() {
     uv_snapshot!(context.filters(), context
         .python_install()
         .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python is already installed. Use `uv python install <request>` to install another version.
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.14
     Uninstalled Python 3.14.[LATEST] in [TIME]
@@ -2818,10 +2436,7 @@ fn python_install_cached() {
         .python_install()
         .arg("--offline")
         .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -2837,10 +2452,7 @@ fn python_install_cached() {
         .arg("3.12")
         .arg("--offline")
         .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.12.[LATEST]-[PLATFORM]
       Caused by: An offline Python installation was requested, but cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz) is missing in python-cache
@@ -2864,10 +2476,7 @@ fn python_install_no_cache() {
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -2882,30 +2491,21 @@ fn python_install_no_cache() {
 
     // Should be a no-op when already installed
     uv_snapshot!(context.filters(), context.python_install(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python is already installed. Use `uv python install <request>` to install another version.
     ");
 
     // Similarly, when a requested version is already installed
     uv_snapshot!(context.filters(), context.python_install().arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.14 is already installed
     ");
 
     // You can opt-in to a reinstall
     uv_snapshot!(context.filters(), context.python_install().arg("3.14").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      ~ cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -2913,10 +2513,7 @@ fn python_install_no_cache() {
 
     // Uninstallation requires an argument
     uv_snapshot!(context.filters(), context.python_uninstall(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the following required arguments were not provided:
       <TARGETS>...
@@ -2927,10 +2524,7 @@ fn python_install_no_cache() {
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.14
     Uninstalled Python 3.14.[LATEST] in [TIME]
@@ -2948,10 +2542,7 @@ fn python_install_no_cache() {
         .python_install()
         .arg("3.12")
         .arg("--offline"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.12.[LATEST]-[PLATFORM]
       Caused by: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
@@ -2985,20 +2576,14 @@ fn python_install_emulated_macos() {
 
     // Before installation, `uv python list` should not show the x86_64 download
     uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     cpython-3.13.[LATEST]-macos-aarch64-none    <download available>
-
-    ----- stderr -----
     ");
 
     // Install an x86_64 version (assuming an aarch64 host)
     uv_snapshot!(context.filters(), context.python_install().arg("3.13-x86_64"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-macos-x86_64-none (python3.13)
@@ -3006,30 +2591,21 @@ fn python_install_emulated_macos() {
 
     // It should be discoverable with `uv python find`
     uv_snapshot!(context.filters(), context.python_find().arg("3.13").arg("--resolve-links"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13.[LATEST]-macos-x86_64-none/bin/python3.13
-
-    ----- stderr -----
     ");
 
     // And included in `uv python list`
     uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     cpython-3.13.[LATEST]-macos-aarch64-none    <download available>
     cpython-3.13.[LATEST]-macos-x86_64-none     managed/cpython-3.13-macos-x86_64-none/bin/python3.13
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.python_install().arg("3.13-aarch64"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-macos-aarch64-none
@@ -3037,12 +2613,9 @@ fn python_install_emulated_macos() {
 
     // Once we've installed the native version, it should be preferred over x86_64
     uv_snapshot!(context.filters(), context.python_find().arg("3.13").arg("--resolve-links"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13.[LATEST]-macos-aarch64-none/bin/python3.13
-
-    ----- stderr -----
     ");
 }
 
@@ -3057,20 +2630,14 @@ fn python_install_emulated_windows_x86_on_x64() {
 
     // Before installation, `uv python list` should not show the x86_32 download
     uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     cpython-3.13.[LATEST]-windows-x86_64-none    <download available>
-
-    ----- stderr -----
     ");
 
     // Install an x86_32 version (assuming an x64 host)
     uv_snapshot!(context.filters(), context.python_install().arg("3.13-x86"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-windows-x86-none (python3.13)
@@ -3078,30 +2645,21 @@ fn python_install_emulated_windows_x86_on_x64() {
 
     // It should be discoverable with `uv python find`
     uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13-windows-x86-none/python
-
-    ----- stderr -----
     ");
 
     // And included in `uv python list`
     uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     cpython-3.13.[LATEST]-windows-x86_64-none    <download available>
     cpython-3.13.[LATEST]-windows-x86-none       managed/cpython-3.13-windows-x86-none/python
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.python_install().arg("3.13-x86_64"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-windows-x86_64-none
@@ -3109,12 +2667,9 @@ fn python_install_emulated_windows_x86_on_x64() {
 
     // Once we've installed the native version, it should be preferred over x86_32
     uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13-windows-x86_64-none/python
-
-    ----- stderr -----
     ");
 }
 
@@ -3133,10 +2688,7 @@ fn install_managed_venv_allow_existing() {
 
     // Install a managed Python version.
     uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
@@ -3145,10 +2697,7 @@ fn install_managed_venv_allow_existing() {
     // Create a virtual environment using the managed installation.
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.13")
         .arg(context.venv.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.13.[LATEST]
     Creating virtual environment at: .venv
@@ -3159,10 +2708,7 @@ fn install_managed_venv_allow_existing() {
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.13")
         .arg("--allow-existing")
         .arg(context.venv.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.13.[LATEST]
     Creating virtual environment at: .venv
@@ -3182,10 +2728,7 @@ fn install_transparent_patch_upgrade_uv_venv() {
 
     // Install a lower patch version.
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.9"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.9 in [TIME]
      + cpython-3.12.9-[PLATFORM] (python3.12)
@@ -3195,10 +2738,7 @@ fn install_transparent_patch_upgrade_uv_venv() {
     // Create a virtual environment.
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.12")
         .arg(context.venv.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.9
     Creating virtual environment at: .venv
@@ -3207,21 +2747,15 @@ fn install_transparent_patch_upgrade_uv_venv() {
     );
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.9
-
-    ----- stderr -----
     "
     );
 
     // Install a higher patch version.
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.11 in [TIME]
      + cpython-3.12.11-[PLATFORM] (python3.12)
@@ -3230,21 +2764,15 @@ fn install_transparent_patch_upgrade_uv_venv() {
 
     // Virtual environment should reflect higher version.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.11
-
-    ----- stderr -----
     "
     );
 
     // Install a lower patch version.
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.8"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.8 in [TIME]
      + cpython-3.12.8-[PLATFORM]
@@ -3253,12 +2781,9 @@ fn install_transparent_patch_upgrade_uv_venv() {
 
     // Virtual environment should reflect highest version.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.11
-
-    ----- stderr -----
     "
     );
 }
@@ -3276,10 +2801,7 @@ fn install_multiple_patches() {
 
     // Install 3.12 patches in ascending order list
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.9").arg("3.12.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
      + cpython-3.12.9-[PLATFORM]
@@ -3290,10 +2812,7 @@ fn install_multiple_patches() {
     // Create a virtual environment.
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.12")
         .arg(context.venv.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.11
     Creating virtual environment at: .venv
@@ -3303,12 +2822,9 @@ fn install_multiple_patches() {
 
     // Virtual environment should be on highest installed patch.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.11
-
-    ----- stderr -----
     "
     );
 
@@ -3317,10 +2833,7 @@ fn install_multiple_patches() {
 
     // Install 3.10 patches in descending order list
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17").arg("3.10.16"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
      + cpython-3.10.16-[PLATFORM]
@@ -3331,10 +2844,7 @@ fn install_multiple_patches() {
     // Create a virtual environment on 3.10.
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10")
         .arg(context.venv.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.17
     Creating virtual environment at: .venv
@@ -3344,12 +2854,9 @@ fn install_multiple_patches() {
 
     // Virtual environment should be on highest installed patch.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.17
-
-    ----- stderr -----
     "
     );
 }
@@ -3367,10 +2874,7 @@ fn uninstall_highest_patch() {
 
     // Install patches in ascending order list
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.11").arg("3.12.9").arg("3.12.8"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 3 versions in [TIME]
      + cpython-3.12.8-[PLATFORM]
@@ -3381,10 +2885,7 @@ fn uninstall_highest_patch() {
 
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.12")
         .arg(context.venv.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.11
     Creating virtual environment at: .venv
@@ -3393,21 +2894,15 @@ fn uninstall_highest_patch() {
     );
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.11
-
-    ----- stderr -----
     "
     );
 
     // Uninstall the highest patch version
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--preview").arg("3.12.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.12.11
     Uninstalled Python 3.12.11 in [TIME]
@@ -3417,12 +2912,9 @@ fn uninstall_highest_patch() {
 
     // Virtual environment should be on highest patch version remaining.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.9
-
-    ----- stderr -----
     "
     );
 }
@@ -3440,10 +2932,7 @@ fn install_no_transparent_upgrade_with_venv_patch_specification() {
         .with_filtered_python_install_bin();
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.9"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.9 in [TIME]
      + cpython-3.12.9-[PLATFORM] (python3.12)
@@ -3453,10 +2942,7 @@ fn install_no_transparent_upgrade_with_venv_patch_specification() {
     // Create a virtual environment with a patch version
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.12.9")
         .arg(context.venv.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.9
     Creating virtual environment at: .venv
@@ -3465,21 +2951,15 @@ fn install_no_transparent_upgrade_with_venv_patch_specification() {
     );
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.9
-
-    ----- stderr -----
     "
     );
 
     // Install a higher patch version.
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.11 in [TIME]
      + cpython-3.12.11-[PLATFORM] (python3.12)
@@ -3488,12 +2968,9 @@ fn install_no_transparent_upgrade_with_venv_patch_specification() {
 
     // The virtual environment Python version is transparently upgraded.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.9
-
-    ----- stderr -----
     "
     );
 }
@@ -3512,10 +2989,7 @@ fn install_transparent_patch_upgrade_venv_module() {
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.9"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.9 in [TIME]
      + cpython-3.12.9-[PLATFORM] (python3.12)
@@ -3523,41 +2997,28 @@ fn install_transparent_patch_upgrade_venv_module() {
     );
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.9
-
-    ----- stderr -----
     "
     );
 
     // Create a virtual environment using venv module.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-m").arg("venv").arg(context.venv.as_os_str()).arg("--without-pip")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.9
-
-    ----- stderr -----
     "
     );
 
     // Install a higher patch version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.11 in [TIME]
      + cpython-3.12.11-[PLATFORM] (python3.12)
@@ -3566,12 +3027,9 @@ fn install_transparent_patch_upgrade_venv_module() {
 
     // Virtual environment should reflect highest patch version.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.11
-
-    ----- stderr -----
     "
     );
 }
@@ -3588,10 +3046,7 @@ fn install_lower_patch_automatically() {
         .with_filtered_python_install_bin();
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.11 in [TIME]
      + cpython-3.12.11-[PLATFORM] (python3.12)
@@ -3600,10 +3055,7 @@ fn install_lower_patch_automatically() {
 
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.12")
         .arg(context.venv.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.11
     Creating virtual environment at: .venv
@@ -3612,10 +3064,7 @@ fn install_lower_patch_automatically() {
     );
 
     uv_snapshot!(context.filters(), context.init().arg("-p").arg("3.12.9").arg("proj"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Initialized project `proj` at `[TEMP_DIR]/proj`
     "
@@ -3626,10 +3075,7 @@ fn install_lower_patch_automatically() {
     uv_snapshot!(context.filters(), context.venv()
         .arg("--directory").arg("proj")
         .arg("-p").arg("3.12.9"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.9
     Creating virtual environment at: .venv
@@ -3638,12 +3084,9 @@ fn install_lower_patch_automatically() {
 
     // Original virtual environment should still point to higher patch
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.11
-
-    ----- stderr -----
     "
     );
 }
@@ -3658,10 +3101,7 @@ fn uninstall_last_patch() {
         .with_filtered_virtualenv_bin();
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.17 in [TIME]
      + cpython-3.10.17-[PLATFORM] (python3.10)
@@ -3669,10 +3109,7 @@ fn uninstall_last_patch() {
     );
 
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.17
     Creating virtual environment at: .venv
@@ -3681,20 +3118,14 @@ fn uninstall_last_patch() {
     );
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.17
-
-    ----- stderr -----
     "
     );
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--preview").arg("3.10.17"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.10.17
     Uninstalled Python 3.10.17 in [TIME]
@@ -3706,10 +3137,7 @@ fn uninstall_last_patch() {
 
     #[cfg(unix)]
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
       Caused by: Broken symlink at `.venv/[BIN]/python`, was the underlying Python interpreter removed?
@@ -3720,10 +3148,7 @@ fn uninstall_last_patch() {
 
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
       Caused by: Python interpreter not found at `[VENV]/[BIN]/python`
@@ -3753,10 +3178,7 @@ fn uninstall_last_patch_removes_minor_version_link() {
 
     // Install a single patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.12.8"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.8 in [TIME]
      + cpython-3.12.8-[PLATFORM] (python3.12)
@@ -3768,10 +3190,7 @@ fn uninstall_last_patch_removes_minor_version_link() {
 
     // Uninstall the only patch version for this minor
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12.8"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.12.8
     Uninstalled Python 3.12.8 in [TIME]
@@ -3814,10 +3233,7 @@ fn uninstall_highest_patch_updates_minor_version_link() {
 
     // Install two patch versions
     uv_snapshot!(context.filters(), context.python_install().arg("3.12.9").arg("3.12.8"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
      + cpython-3.12.8-[PLATFORM]
@@ -3847,10 +3263,7 @@ fn uninstall_highest_patch_updates_minor_version_link() {
 
     // Uninstall the highest patch version
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12.9"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.12.9
     Uninstalled Python 3.12.9 in [TIME]
@@ -3879,10 +3292,7 @@ fn uninstall_highest_patch_updates_minor_version_link() {
 
     // Uninstall the last remaining patch
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12.8"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Searching for Python versions matching: Python 3.12.8
     Uninstalled Python 3.12.8 in [TIME]
@@ -3915,10 +3325,7 @@ fn python_install_pyodide() {
         .with_filtered_latest_python_versions();
 
     uv_snapshot!(context.filters(), context.python_install().arg("cpython-3.13.2-emscripten-wasm32-musl"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
      + pyodide-3.13.2-emscripten-wasm32-musl (pyodide3.13)
@@ -3946,30 +3353,21 @@ fn python_install_pyodide() {
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
         .arg("-c").arg("import subprocess; print('hello world')"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     hello world
-
-    ----- stderr -----
     ");
 
     // We should be able to find the Pyodide interpreter
     uv_snapshot!(context.filters(), context.python_find().arg("cpython-3.13.2-emscripten-wasm32-musl"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/pyodide-3.13.2-emscripten-wasm32-musl/python
-
-    ----- stderr -----
     ");
 
     // We should be able to create a virtual environment with it
     uv_snapshot!(context.filters(), context.venv().arg("--python").arg("cpython-3.13.2-emscripten-wasm32-musl"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.13.2
     Creating virtual environment at: .venv
@@ -3978,12 +3376,9 @@ fn python_install_pyodide() {
 
     // We should be able to run the Python in the virtual environment
     uv_snapshot!(context.filters(), context.python_command().arg("-c").arg("import subprocess; print('hello world')"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     hello world
-
-    ----- stderr -----
     ");
 
     context.python_uninstall().arg("--all").assert().success();
@@ -3991,10 +3386,7 @@ fn python_install_pyodide() {
 
     // Install via `pyodide`
     uv_snapshot!(context.filters(), context.python_install().arg("pyodide"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.2 in [TIME]
      + pyodide-3.14.2-emscripten-wasm32-musl (pyodide3.14)
@@ -4004,10 +3396,7 @@ fn python_install_pyodide() {
 
     // Install via `pyodide@<version>`
     uv_snapshot!(context.filters(), context.python_install().arg("pyodide@3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
      + pyodide-3.13.2-emscripten-wasm32-musl (pyodide3.13)
@@ -4015,29 +3404,20 @@ fn python_install_pyodide() {
 
     // Find via `pyodide``
     uv_snapshot!(context.filters(), context.python_find().arg("pyodide"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/pyodide-3.13.2-emscripten-wasm32-musl/python
-
-    ----- stderr -----
     ");
 
     // Find without a request should fail
     uv_snapshot!(context.filters(), context.python_find(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found in virtual environments, managed installations, or search path
     ");
     // Find with "cpython" should also fail
     uv_snapshot!(context.filters(), context.python_find().arg("cpython"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for CPython in virtual environments, managed installations, or search path
     ");
@@ -4045,10 +3425,7 @@ fn python_install_pyodide() {
     // Install a CPython interpreter
     let context = context.with_filtered_python_keys();
     uv_snapshot!(context.filters(), context.python_install().arg("cpython"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -4056,22 +3433,16 @@ fn python_install_pyodide() {
 
     // Now, we should prefer that
     uv_snapshot!(context.filters(), context.python_find().arg("any"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/bin/python3.14
-
-    ----- stderr -----
     ");
 
     // Unless we request pyodide
     uv_snapshot!(context.filters(), context.python_find().arg("pyodide"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/pyodide-3.13.2-emscripten-wasm32-musl/python
-
-    ----- stderr -----
     ");
 }
 
@@ -4091,10 +3462,7 @@ fn python_install_build_version() {
     uv_snapshot!(context.filters(), context.python_install()
         .arg("3.12")
         .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20240814"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.5 in [TIME]
      + cpython-3.12.5-[PLATFORM] (python3.12)
@@ -4113,22 +3481,16 @@ fn python_install_build_version() {
     uv_snapshot!(context.filters(), context.python_find()
         .arg("3.12")
         .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20240814"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     // If the build number does not match, we should ignore the installation
     uv_snapshot!(context.filters(), context.python_find()
         .arg("3.12")
         .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "99999999"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
     ");
@@ -4137,10 +3499,7 @@ fn python_install_build_version() {
     uv_snapshot!(context.filters(), context.python_install()
         .arg("3.12")
         .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "99999999"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No download found for request: cpython-3.12-[PLATFORM]
     ");
@@ -4149,10 +3508,7 @@ fn python_install_build_version() {
     uv_snapshot!(context.filters(), context.python_install()
         .arg("3.12.10")
         .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20250814"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No download found for request: cpython-3.12.10-[PLATFORM]
     ");
@@ -4174,10 +3530,7 @@ fn python_install_build_version_pypy() {
     uv_snapshot!(context.filters(), context.python_install()
         .arg("pypy3.10")
         .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.16 in [TIME]
      + pypy-3.10.16-[PLATFORM] (pypy3.10)
@@ -4196,22 +3549,16 @@ fn python_install_build_version_pypy() {
     uv_snapshot!(context.filters(), context.python_find()
         .arg("pypy3.10")
         .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/pypy-3.10.16-[PLATFORM]/[INSTALL-BIN]/[PYPY]
-
-    ----- stderr -----
     ");
 
     // If the build number does not match, we should ignore the installation
     uv_snapshot!(context.filters(), context.python_find()
         .arg("pypy3.10")
         .env(EnvVars::UV_PYTHON_PYPY_BUILD, "99.99.99"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for PyPy 3.10 in [PYTHON SOURCES]
     ");
@@ -4220,10 +3567,7 @@ fn python_install_build_version_pypy() {
     uv_snapshot!(context.filters(), context.python_install()
         .arg("pypy3.10")
         .env(EnvVars::UV_PYTHON_PYPY_BUILD, "99.99.99"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No download found for request: pypy-3.10-[PLATFORM]
     ");
@@ -4240,10 +3584,7 @@ fn python_install_upgrade() {
 
     // Provide `--upgrade` as an `install` option without any versions
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -4251,20 +3592,14 @@ fn python_install_upgrade() {
 
     // Provide `--upgrade` as an `install` option without any versions again!
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     The default Python installation is already on the latest supported patch release. Use `uv python install <request>` to install another version.
     ");
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.17 in [TIME]
      + cpython-3.10.17-[PLATFORM] (python3.10)
@@ -4272,10 +3607,7 @@ fn python_install_upgrade() {
 
     // Ask for an `--upgrade`
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
      + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
@@ -4283,20 +3615,14 @@ fn python_install_upgrade() {
 
     // Request a patch version with `--upgrade`
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.11.4"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: `uv python install --upgrade` only accepts minor versions, got: 3.11.4
     ");
 
     // Request a version that isn't installed yet
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.11.[LATEST] in [TIME]
      + cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
@@ -4304,20 +3630,14 @@ fn python_install_upgrade() {
 
     // Ask for it again
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.11 is already on the latest supported patch release
     ");
 
     // Install an outdated version
     uv_snapshot!(context.filters(), context.python_install().arg("3.9.5"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.9.5 in [TIME]
      + cpython-3.9.5-[PLATFORM] (python3.9)
@@ -4325,30 +3645,21 @@ fn python_install_upgrade() {
 
     // We shouldn't update it when not relevant
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.11 is already on the latest supported patch release
     ");
 
     // Ask for multiple already satisfied versions
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.10").arg("3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     All requested versions already on latest supported patch release
     ");
 
     // Mix in an unsatisfied version and a missing one
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.9").arg("3.10").arg("3.11").arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
      + cpython-3.9.25-[PLATFORM] (python3.9)
@@ -4370,10 +3681,7 @@ fn python_install_upgrade_version_file() {
 
     // Provide `--upgrade` as an `install` option without any versions
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
@@ -4381,10 +3689,7 @@ fn python_install_upgrade_version_file() {
 
     // Provide `--upgrade` as an `install` option without any versions again!
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.13 is already on the latest supported patch release
     ");
@@ -4394,10 +3699,7 @@ fn python_install_upgrade_version_file() {
 
     // Provide `--upgrade` as an `install` option without any versions
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: `uv python install --upgrade` only accepts minor versions, got: 3.12.4
 
@@ -4418,20 +3720,14 @@ fn python_install_armv7() {
 
     // Explicitly request a musl build for armv7l
     uv_snapshot!(context.filters(), context.python_install().arg("cpython-3.12.12-linux-armv7-musl"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: uv does not yet provide musl Python distributions on armv7.
     ");
 
     // Explicitly request a gnuabi build for armv7l
     uv_snapshot!(context.filters(), context.python_install().arg("cpython-3.12.12-linux-armv7-gnueabi"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.12 in [TIME]
      + cpython-3.12.12-[PLATFORM] (python3.12)
@@ -4464,10 +3760,7 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
 
     // Install 3.14 and compile its bytecode
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -4501,10 +3794,7 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
     // Attempting to install with --compile-bytecode should (currently)
     // unconditionally re-run the bytecode compiler
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.14 is already installed
     Bytecode compiled [COUNT] files in [TIME]
@@ -4512,10 +3802,7 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
 
     // Reinstalling with --compile-bytecode should compile bytecode.
     uv_snapshot!(context.filters(), context.python_install().arg("--reinstall").arg("--compile-bytecode").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      ~ cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -4538,20 +3825,14 @@ fn python_install_compile_bytecode_existing() {
 
     // A fresh install should be able to be compiled later
     uv_snapshot!(context.filters(), context.python_install().arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.14 is already installed
     Bytecode compiled [COUNT] files in [TIME]
@@ -4571,20 +3852,14 @@ fn python_install_compile_bytecode_upgrade() {
 
     // An upgrade should also compile bytecode
     uv_snapshot!(context.filters(), context.python_install().arg("3.14.0"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.0 in [TIME]
      + cpython-3.14.0-[PLATFORM] (python3.14)
     ");
 
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("--compile-bytecode").arg("3.14"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -4603,10 +3878,7 @@ fn python_install_upgrade_build_version() {
 
     // Install Python 3.12
     uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.[LATEST] in [TIME]
      + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
@@ -4614,10 +3886,7 @@ fn python_install_upgrade_build_version() {
 
     // Should be a no-op when already installed at latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.12 is already on the latest supported patch release
     ");
@@ -4633,10 +3902,7 @@ fn python_install_upgrade_build_version() {
 
     // Now upgrade should detect the outdated build version and reinstall
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.[LATEST] in [TIME]
      ~ cpython-3.12.[LATEST]-[PLATFORM]
@@ -4644,10 +3910,7 @@ fn python_install_upgrade_build_version() {
 
     // Should be a no-op again after upgrade
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.12 is already on the latest supported patch release
     ");
@@ -4666,10 +3929,7 @@ fn python_install_compile_bytecode_multiple() {
 
     // Should handle installing and compiling multiple versions correctly
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14").arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
      + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
@@ -4691,10 +3951,7 @@ fn python_install_compile_bytecode_pyodide() {
 
     // Should warn on explicit pyodide installation
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("cpython-3.13.2-emscripten-wasm32-musl"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
      + pyodide-3.13.2-emscripten-wasm32-musl (pyodide3.13)
@@ -4719,10 +3976,7 @@ fn python_install_compile_bytecode_graalpy() {
 
     // Should work for graalpy
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.0 in [TIME]
      + graalpy-3.12.0-[PLATFORM] (graalpy3.12)
@@ -4742,10 +3996,7 @@ fn python_install_compile_bytecode_pypy() {
 
     // Should work for pypy
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.11.15 in [TIME]
      + pypy-3.11.15-[PLATFORM] (pypy3.11)

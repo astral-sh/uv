@@ -40,8 +40,7 @@ fn tree_reuses_settings_workspace_discovery() -> Result<()> {
         .arg("--frozen")
         .arg("--universal")
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     root v0.1.0
     member v0.1.0
@@ -77,8 +76,7 @@ fn tree_centralized_environment_no_cache() -> Result<()> {
         .arg("--no-cache")
         .arg("--preview-features")
         .arg("centralized-project-envs"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
 
@@ -111,8 +109,7 @@ fn nested_dependencies() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── scikit-learn v1.4.1.post1
@@ -146,8 +143,7 @@ fn json_output() -> Result<()> {
         .arg("--format")
         .arg("json")
         .arg("--universal"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -322,8 +318,7 @@ fn json_output_depth() -> Result<()> {
         .arg("--universal")
         .arg("--depth")
         .arg("1"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -454,8 +449,7 @@ fn json_output_inverted_depth() -> Result<()> {
         .arg("--invert")
         .arg("--depth")
         .arg("1"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -783,8 +777,7 @@ fn json_output_virtual_root() -> Result<()> {
         .arg("0")
         .arg("--only-group")
         .arg("dev"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -856,8 +849,7 @@ fn json_output_virtual_root() -> Result<()> {
         .arg("--only-group")
         .arg("dev")
         .arg("--invert"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -961,8 +953,7 @@ fn virtual_workspace_members() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     package-b v1.0.0
     package-a v1.0.0
@@ -978,8 +969,7 @@ fn virtual_workspace_members() -> Result<()> {
         .arg("--format")
         .arg("json")
         .arg("--universal"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1081,8 +1071,7 @@ fn virtual_workspace_dependency_groups_only() -> Result<()> {
         .arg("--universal")
         .arg("--only-group")
         .arg("dev"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     group-dependency v1.0.0 (group: dev)
 
@@ -1099,8 +1088,7 @@ fn virtual_workspace_dependency_groups_only() -> Result<()> {
         .arg("--universal")
         .arg("--only-group")
         .arg("dev"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1226,8 +1214,7 @@ fn json_output_frozen_missing_members() -> Result<()> {
         .arg("json-output")
         .arg("--format")
         .arg("json"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1294,8 +1281,6 @@ fn json_output_frozen_missing_members() -> Result<()> {
         }
       }
     }
-
-    ----- stderr -----
     "#);
 
     Ok(())
@@ -1426,8 +1411,7 @@ fn nested_platform_dependencies() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("linux"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── jupyter-client v8.6.1
@@ -1446,8 +1430,7 @@ fn nested_platform_dependencies() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── jupyter-client v8.6.1
@@ -1493,8 +1476,7 @@ fn invert() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--invert"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     joblib v1.3.2
     └── scikit-learn v1.4.1.post1
@@ -1513,8 +1495,7 @@ fn invert() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--no-dedupe"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     joblib v1.3.2
     └── scikit-learn v1.4.1.post1
@@ -1554,8 +1535,7 @@ fn frozen() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── anyio v4.3.0
@@ -1585,15 +1565,12 @@ fn frozen() -> Result<()> {
 
     // Running with `--frozen` should show the stale tree.
     uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── anyio v4.3.0
         ├── idna v3.6
         └── sniffio v1.3.1
-
-    ----- stderr -----
     "
     );
 
@@ -1617,8 +1594,7 @@ fn outdated() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--outdated").arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── anyio v3.0.0 (latest: v4.3.0)
@@ -1681,10 +1657,7 @@ fn outdated_exclude_newer_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-05-01T00:00:00Z")
         .arg("--exclude-newer")
         .arg("3 weeks"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
@@ -1700,8 +1673,7 @@ fn outdated_exclude_newer_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-06-01T00:00:00Z")
         .arg("--exclude-newer")
         .arg("3 weeks"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── idna v3.6 (latest: v3.7)
@@ -1740,10 +1712,7 @@ fn scoped_exclude_dependencies() -> Result<()> {
 
     // The structured exclusion is persisted in the lockfile manifest.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -1751,8 +1720,7 @@ fn scoped_exclude_dependencies() -> Result<()> {
     // The exact-version entry takes precedence over the all-versions entry, removing AnyIO's edge
     // to Sniffio without removing the direct requirement while retaining the edge to IDNA.
     uv_snapshot!(context.filters(), context.tree(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── anyio v3.7.0
@@ -1780,8 +1748,7 @@ fn scoped_exclude_dependencies() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── anyio v3.7.0
@@ -1817,8 +1784,7 @@ fn platform_dependencies() -> Result<()> {
     // When `--universal` is _not_ provided, `colorama` should _not_ be included.
     #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.tree(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── black v24.3.0
@@ -1834,8 +1800,7 @@ fn platform_dependencies() -> Result<()> {
 
     // Unless `--python-platform` is set to `windows`, in which case it should be included.
     uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("windows"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── black v24.3.0
@@ -1853,8 +1818,7 @@ fn platform_dependencies() -> Result<()> {
     // When `--universal` is provided, should include `colorama`, even though it's only included on
     // Windows.
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── black v24.3.0
@@ -1896,8 +1860,7 @@ fn platform_dependencies_inverted() -> Result<()> {
 
     // When `--universal` is _not_ provided, `colorama` should _not_ be included.
     uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--python-platform").arg("linux"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     click v8.1.7
     └── project v0.1.0
@@ -1908,8 +1871,7 @@ fn platform_dependencies_inverted() -> Result<()> {
 
     // Unless `--python-platform` is set to `windows`, in which case it should be included.
     uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--python-platform").arg("windows"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     colorama v0.4.6
     └── click v8.1.7
@@ -1943,8 +1905,7 @@ fn repeated_dependencies() -> Result<()> {
 
     // Should include both versions of `anyio`, which have different dependencies.
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── anyio v1.4.0
@@ -2109,8 +2070,7 @@ fn repeated_version() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── dependency v0.0.1
@@ -2153,8 +2113,7 @@ fn dev_dependencies() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── iniconfig v2.0.0
@@ -2169,8 +2128,7 @@ fn dev_dependencies() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.tree().arg("--no-dev"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── iniconfig v2.0.0
@@ -2208,8 +2166,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     idna v3.6
     └── anyio v4.3.0
@@ -2227,8 +2184,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--no-dev"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     iniconfig v2.0.0
     └── project v0.1.0
@@ -2266,8 +2222,7 @@ fn optional_dependencies() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── flask[dotenv] v3.0.2
@@ -2317,8 +2272,7 @@ fn optional_dependencies_inverted() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     blinker v1.7.0
     └── flask v3.0.2
@@ -2385,8 +2339,7 @@ fn dep_and_group_extras() -> Result<()> {
     // Plain `flask` should not show `python-dotenv` (which belongs to the `dotenv` extra),
     // but the `flask[dotenv]` occurrence should still be expanded in its own extra context.
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── flask v3.0.2
@@ -2415,8 +2368,7 @@ fn dep_and_group_extras() -> Result<()> {
     // With `--no-dedupe`, `flask[dotenv]` is expanded and shows `python-dotenv` as an extra dep,
     // while plain `flask` still does not show it.
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--no-dedupe"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── flask v3.0.2
@@ -2498,8 +2450,7 @@ fn dep_and_group_extras_with_extra_only_dependency() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.tree(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── child v0.1.0
@@ -2577,8 +2528,7 @@ fn dep_and_group_extras_with_different_extras_in_path() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.tree(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── b[extra1] v0.1.0
@@ -2609,8 +2559,7 @@ fn package() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── pandas v2.2.1
@@ -2632,8 +2581,7 @@ fn package() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.tree().arg("--package").arg("scipy"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     scipy v1.12.0
     └── numpy v1.26.4
@@ -2644,8 +2592,7 @@ fn package() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.tree().arg("--package").arg("numpy").arg("--invert"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     numpy v1.26.4
     ├── pandas v2.2.1
@@ -2691,8 +2638,7 @@ fn group() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.tree(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── typing-extensions v4.10.0
@@ -2703,8 +2649,7 @@ fn group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.tree().arg("--only-group").arg("bar"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── iniconfig v2.0.0 (group: bar)
@@ -2714,8 +2659,7 @@ fn group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.tree().arg("--group").arg("foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── typing-extensions v4.10.0
@@ -2729,8 +2673,7 @@ fn group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.tree().arg("--group").arg("foo").arg("--group").arg("bar"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── typing-extensions v4.10.0
@@ -2745,8 +2688,7 @@ fn group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.tree().arg("--all-groups"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── typing-extensions v4.10.0
@@ -2761,8 +2703,7 @@ fn group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.tree().arg("--all-groups").arg("--no-group").arg("bar"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── typing-extensions v4.10.0
@@ -2795,8 +2736,7 @@ fn cycle() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── fixtures v3.0.0
@@ -2823,8 +2763,7 @@ fn cycle() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.tree().arg("--package").arg("traceback2").arg("--package").arg("six"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     six v1.16.0
     traceback2 v1.4.0
@@ -2836,8 +2775,7 @@ fn cycle() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.tree().arg("--package").arg("traceback2").arg("--package").arg("six").arg("--invert"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     six v1.16.0
     ├── fixtures v3.0.0
@@ -2884,8 +2822,7 @@ fn cycle_no_orphaned_roots() -> Result<()> {
     // With --depth 1, only "project" should appear as a root — transitive deps
     // involved in cycles (e.g. testtools <-> fixtures) must not be promoted to roots.
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--depth").arg("1"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── fixtures v3.0.0
@@ -2916,8 +2853,7 @@ fn cycle_no_infinite_loop() -> Result<()> {
 
     // This should complete without hanging, and cycles should be marked with (*)
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--depth").arg("2"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── fixtures v3.0.0
@@ -2961,8 +2897,7 @@ fn cycle_invert() -> Result<()> {
     // With --invert, leaf packages should be roots and the tree should show
     // reverse dependencies without orphaned roots from cycle-breaking.
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--depth").arg("1"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     argparse v1.4.0
     └── unittest2 v1.1.0
@@ -3009,8 +2944,7 @@ fn cycle_depth_boundary_no_premature_dedupe() -> Result<()> {
     // like `pbr` (no children in this graph) appear without (*) even when visited,
     // since there is nothing to deduplicate.
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--depth").arg("3"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── fixtures v3.0.0
@@ -3053,8 +2987,7 @@ fn cycle_invert_deep() -> Result<()> {
     // With --invert and --depth 2, cycles in the reversed graph should be
     // detected and marked with (*) without causing infinite loops.
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--depth").arg("2"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     argparse v1.4.0
     └── unittest2 v1.1.0
@@ -3106,8 +3039,7 @@ fn cycle_depth_no_dedupe() -> Result<()> {
     // With --no-dedupe and --depth 2, packages should be expanded each time they
     // appear (up to the depth limit), and cycles should still be marked with (*).
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--no-dedupe").arg("--depth").arg("2"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── fixtures v3.0.0
@@ -3168,8 +3100,7 @@ fn workspace_dev() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── anyio v4.3.0
@@ -3188,8 +3119,7 @@ fn workspace_dev() -> Result<()> {
     // Under `--no-dev`, the member should still be included, since we show the entire workspace.
     // But it shouldn't be considered a dependency of the root.
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--no-dev"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── anyio v4.3.0
@@ -3278,8 +3208,7 @@ fn invert_preserves_extra_attribution() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--package").arg("package-x"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     package-x v0.1.0
     └── package-p v0.1.0 (extra: feature)
@@ -3364,8 +3293,7 @@ fn invert_preserves_dependency_group_attribution() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--package").arg("package-x"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     package-x v0.1.0
     └── package-a v0.1.0 (group: dev)
@@ -3460,8 +3388,7 @@ fn invert_preserves_marker_attribution() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--package").arg("package-x"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     package-x v0.1.0
     └── package-p v0.1.0
@@ -3561,17 +3488,13 @@ fn invert_preserves_marker_split_versions() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--universal").arg("--invert").arg("--package").arg("baz"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     baz v1.0.0
     ├── bar v1.0.0
     │   └── foo v1.0.0
     └── bar v2.0.0
         └── foo v1.0.0
-
-    ----- stderr -----
-
     ");
 
     Ok(())
@@ -3687,14 +3610,10 @@ fn invert_preserves_conflict_marker_attribution() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--universal").arg("--invert").arg("--package").arg("x"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     x v0.1.0
     └── p v0.1.0 (extra: foo)
-
-    ----- stderr -----
-
     ");
 
     Ok(())
@@ -3717,8 +3636,7 @@ fn non_project() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--group").arg("async"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio v4.3.0 (group: async)
     ├── idna v3.6
@@ -3753,8 +3671,7 @@ fn dependency_groups_only() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--group").arg("async"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio v4.3.0 (group: async)
     ├── idna v3.6
@@ -3832,8 +3749,7 @@ fn non_project_group_selection_with_extras() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--only-group").arg("dev"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     child[feature] v0.1.0 (group: dev)
     └── leaf v0.1.0 (extra: feature)
@@ -3852,8 +3768,7 @@ fn non_project_group_selection_with_extras() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--script").arg(script.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     child[feature] v0.1.0
     └── leaf v0.1.0 (extra: feature)
@@ -3873,8 +3788,7 @@ fn non_project_group_selection_with_extras() -> Result<()> {
         // the script itself as a root node.
         .arg("--depth")
         .arg("0"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -3973,8 +3887,7 @@ fn non_project_member() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--group").arg("async"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio v4.3.0 (group: async)
     ├── idna v3.6
@@ -3991,8 +3904,7 @@ fn non_project_member() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--group").arg("async"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     idna v3.6
     └── anyio v4.3.0
@@ -4039,8 +3951,7 @@ fn script() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--script").arg(script.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     rich v13.7.1
     ├── markdown-it-py v3.0.0
@@ -4061,10 +3972,7 @@ fn script() -> Result<()> {
 
     // Explicitly lock the script.
     uv_snapshot!(context.filters(), context.lock().arg("--script").arg(script.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 9 packages in [TIME]
     ");
@@ -4237,8 +4145,7 @@ fn script() -> Result<()> {
 
     // `uv tree` should update the lockfile.
     uv_snapshot!(context.filters(), context.tree().arg("--script").arg(script.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     rich v13.7.1
     ├── markdown-it-py v3.0.0
@@ -4444,8 +4351,7 @@ fn only_group() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── iniconfig v2.0.0
@@ -4461,8 +4367,7 @@ fn only_group() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--only-group").arg("dev"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     ├── pip v24.0 (group: dev)
@@ -4476,8 +4381,7 @@ fn only_group() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--only-group").arg("test"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── pytest v8.1.1 (group: test)
@@ -4515,8 +4419,7 @@ fn show_sizes() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--show-sizes").arg("--universal"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
     └── iniconfig v2.0.0 ([SIZE])
@@ -4532,8 +4435,7 @@ fn show_sizes() -> Result<()> {
         .arg("--format")
         .arg("json")
         .arg("--universal"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -4657,8 +4559,7 @@ fn workspace_circular_dependencies() -> Result<()> {
 
     // Test that package-a is at the root when requested
     uv_snapshot!(context.filters(), context.tree().arg("--package").arg("package-a"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     package-a v0.1.0
     └── package-b v0.1.0
@@ -4672,8 +4573,7 @@ fn workspace_circular_dependencies() -> Result<()> {
 
     // Test that package-b is at the root when requested
     uv_snapshot!(context.filters(), context.tree().arg("--package").arg("package-b"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     package-b v0.1.0
     └── package-a v0.1.0
@@ -4687,8 +4587,7 @@ fn workspace_circular_dependencies() -> Result<()> {
 
     // Test that both packages are shown as roots when both are requested
     uv_snapshot!(context.filters(), context.tree().arg("--package").arg("package-a").arg("--package").arg("package-b"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     package-a v0.1.0
     └── package-b v0.1.0

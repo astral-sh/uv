@@ -41,10 +41,7 @@ fn sync_centralized_env() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
@@ -68,10 +65,7 @@ fn sync_centralized_env() -> Result<()> {
         .arg("--dry-run")
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Would use project environment at: [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]
     Resolved 2 packages in [TIME]
@@ -122,10 +116,7 @@ fn sync_centralized_env_switch_python() -> Result<()> {
         .arg("centralized-project-envs")
         .arg("--python")
         .arg("3.12"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
@@ -206,12 +197,9 @@ fn sync_centralized_env_survives_python_patch_upgrade() -> Result<()> {
     };
     context.python_install().arg("3.12.11").assert().success();
     uv_snapshot!(context.filters(), Command::new(&python).arg("--version"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.11
-
-    ----- stderr -----
     "#);
 
     // Should reuse the same environment without re-creating after the transparent upgrade.
@@ -220,10 +208,7 @@ fn sync_centralized_env_survives_python_patch_upgrade() -> Result<()> {
         .arg("centralized-project-envs")
         .arg("--python")
         .arg("3.12"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
@@ -359,10 +344,7 @@ fn sync_centralized_env_respects_active_default_environment() -> Result<()> {
         .arg("centralized-project-envs")
         .arg("--active")
         .env(EnvVars::VIRTUAL_ENV, environment.path()), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
@@ -436,10 +418,7 @@ fn sync_centralized_env_dry_run() -> Result<()> {
         .arg("--dry-run")
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Would create project environment at: [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]
@@ -545,10 +524,7 @@ fn sync_centralized_env_no_cache_uses_dot_venv() -> Result<()> {
         .arg("--no-cache")
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `centralized-project-envs` feature has no effect when `--no-cache` is enabled
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -564,10 +540,7 @@ fn sync_centralized_env_no_cache_uses_dot_venv() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
@@ -586,10 +559,7 @@ fn sync_centralized_env_no_cache_uses_dot_venv() -> Result<()> {
         .arg("--no-cache")
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The `centralized-project-envs` feature has no effect when `--no-cache` is enabled
     Resolved 1 package in [TIME]
@@ -639,10 +609,7 @@ fn sync_centralized_env_with_existing_file() -> Result<()> {
         .arg("centralized-project-envs");
 
     uv_snapshot!(context.filters(), command, @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
@@ -721,10 +688,7 @@ fn run_and_sync_link_failure_reporting() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
@@ -747,10 +711,7 @@ fn run_and_sync_link_failure_reporting() -> Result<()> {
     cfg_select! {
         unix => {
             uv_snapshot!(context.filters(), command, @r#"
-            success: true
-            exit_code: 0
-            ----- stdout -----
-
+            exit_code: 0 (success)
             ----- stderr -----
             warning: Failed to write the environment path: failed to rename file from [TEMP_DIR]/[TMP] to [VENV]/: Is a directory (os error 21)
             Resolved 2 packages in [TIME]
@@ -759,10 +720,7 @@ fn run_and_sync_link_failure_reporting() -> Result<()> {
         },
         windows => {
             uv_snapshot!(context.filters(), command, @r#"
-            success: true
-            exit_code: 0
-            ----- stdout -----
-
+            exit_code: 0 (success)
             ----- stderr -----
             warning: Failed to create link to project environment: failed to remove directory `[VENV]/`: The directory is not empty. (os error 145)
             Resolved 2 packages in [TIME]
@@ -791,10 +749,7 @@ fn sync_centralized_env_local_environment_removal_failure_is_not_fatal() -> Resu
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
@@ -829,10 +784,7 @@ fn sync_centralized_env_link_creation_failure_preserves_cached_target() -> Resul
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
         .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to write the environment path: Permission denied (os error 13) at path "[TEMP_DIR]/[TMP]"
     Resolved 1 package in [TIME]
@@ -884,10 +836,7 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
         .sync()
         .arg("--python")
         .arg("3.11"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Removed link to project environment at: .venv
@@ -907,10 +856,7 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
     uv_snapshot!(context.filters(), context.sync()
         .arg("--python")
         .arg("3.12"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: .venv
@@ -927,12 +873,9 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
         target.join("bin/python")
     };
     uv_snapshot!(context.filters(), Command::new(python).arg("--version"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     "#);
 
     // uv reuses the cached environment without recreating it.
@@ -941,10 +884,7 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
         .arg("centralized-project-envs")
         .arg("--python")
         .arg("3.12"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]

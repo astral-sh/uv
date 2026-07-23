@@ -25,10 +25,7 @@ fn get_requires_for_build_returns_error() {
             "get-requires-for-build-editable",
         ] {
             uv_snapshot!(context.build_backend().arg(command), @"
-            success: false
-            exit_code: 2
-            ----- stdout -----
-
+            exit_code: 2 (failure)
             ----- stderr -----
             error: uv does not support extra requires
             ");
@@ -71,12 +68,9 @@ fn built_by_uv_direct_wheel() -> Result<()> {
         .arg("build-wheel")
         .arg(temp_dir.path())
         .current_dir(built_by_uv), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     built_by_uv-0.1.0-py3-none-any.whl
-
-    ----- stderr -----
     ");
 
     context
@@ -88,23 +82,17 @@ fn built_by_uv_direct_wheel() -> Result<()> {
     uv_snapshot!(context.python_command()
         .arg("-c")
         .arg(BUILT_BY_UV_TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello 👋
     Area of a circle with r=2: 12.56636
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(Command::new("say-hi")
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hi from a script!
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -127,12 +115,9 @@ fn built_by_uv_direct() -> Result<()> {
         .arg("build-sdist")
         .arg(sdist_dir.path())
         .current_dir(built_by_uv), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     built_by_uv-0.1.0.tar.gz
-
-    ----- stderr -----
     ");
 
     let sdist_tree = TempDir::new()?;
@@ -151,12 +136,9 @@ fn built_by_uv_direct() -> Result<()> {
         .arg("build-wheel")
         .arg(wheel_dir.path())
         .current_dir(sdist_tree.path().join("built_by_uv-0.1.0")), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     built_by_uv-0.1.0-py3-none-any.whl
-
-    ----- stderr -----
     ");
 
     drop(sdist_tree);
@@ -172,13 +154,10 @@ fn built_by_uv_direct() -> Result<()> {
     uv_snapshot!(context.python_command()
         .arg("-c")
         .arg(BUILT_BY_UV_TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello 👋
     Area of a circle with r=2: 12.56636
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -212,12 +191,9 @@ fn built_by_uv_editable() -> Result<()> {
         .arg("build-wheel")
         .arg(wheel_dir.path())
         .current_dir(built_by_uv), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     built_by_uv-0.1.0-py3-none-any.whl
-
-    ----- stderr -----
     ");
     context
         .pip_install()
@@ -235,13 +211,10 @@ fn built_by_uv_editable() -> Result<()> {
         .arg("--quiet")
         .arg("--capture=no")
         .current_dir(built_by_uv), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     ..
     2 passed in [TIME]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -298,12 +271,9 @@ fn preserve_executable_bit() -> Result<()> {
 
     uv_snapshot!(Command::new("greet.sh")
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hi from the shell
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -350,12 +320,9 @@ fn rename_module() -> Result<()> {
         .build_backend()
         .arg("build-wheel")
         .arg(temp_dir.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     foo-1.0.0-py3-none-any.whl
-
-    ----- stderr -----
     ");
 
     context
@@ -368,22 +335,16 @@ fn rename_module() -> Result<()> {
     uv_snapshot!(context.python_command()
         .arg("-c")
         .arg("import bar"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hi from bar
-
-    ----- stderr -----
     ");
 
     // Importing the package name fails, it was overridden by `module-name`.
     uv_snapshot!(context.python_command()
         .arg("-c")
         .arg("import foo"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
@@ -424,12 +385,9 @@ fn rename_module_editable_build() -> Result<()> {
         .build_backend()
         .arg("build-editable")
         .arg(temp_dir.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     foo-1.0.0-py3-none-any.whl
-
-    ----- stderr -----
     ");
 
     context
@@ -442,12 +400,9 @@ fn rename_module_editable_build() -> Result<()> {
     uv_snapshot!(context.python_command()
         .arg("-c")
         .arg("import bar"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hi from bar
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -483,10 +438,7 @@ fn build_module_name_normalization() -> Result<()> {
         .build_backend()
         .arg("build-wheel")
         .arg(&wheel_dir), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Expected a Python module at: src/Django_plugin/__init__.py
     ");
@@ -497,10 +449,7 @@ fn build_module_name_normalization() -> Result<()> {
         .build_backend()
         .arg("build-wheel")
         .arg(&wheel_dir), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Expected a Python module at: src/Django_plugin/__init__.py
     ");
@@ -515,12 +464,9 @@ fn build_module_name_normalization() -> Result<()> {
         .build_backend()
         .arg("build-wheel")
         .arg(&wheel_dir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     django_plugin-1.0.0-py3-none-any.whl
-
-    ----- stderr -----
     ");
 
     context
@@ -535,12 +481,9 @@ fn build_module_name_normalization() -> Result<()> {
     uv_snapshot!(context.python_command()
         .arg("-c")
         .arg("import Django_plugin"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hi from bar
-
-    ----- stderr -----
     ");
 
     // Former error case 3, now accepted: Multiple modules a matching name.
@@ -556,12 +499,9 @@ fn build_module_name_normalization() -> Result<()> {
             .build_backend()
             .arg("build-wheel")
             .arg(&wheel_dir), @"
-        success: true
-        exit_code: 0
+        exit_code: 0 (success)
         ----- stdout -----
         django_plugin-1.0.0-py3-none-any.whl
-
-        ----- stderr -----
         ");
     }
 
@@ -600,12 +540,9 @@ fn build_sdist_with_long_path() -> Result<()> {
         .build_backend()
         .arg("build-sdist")
         .arg(temp_dir.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     foo-1.0.0.tar.gz
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -633,10 +570,7 @@ fn sdist_error_without_module() -> Result<()> {
         .build_backend()
         .arg("build-sdist")
         .arg(temp_dir.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Expected a Python module at: src/foo/__init__.py
     ");
@@ -647,10 +581,7 @@ fn sdist_error_without_module() -> Result<()> {
         .build_backend()
         .arg("build-sdist")
         .arg(temp_dir.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Expected a Python module at: src/foo/__init__.py
     ");
@@ -727,10 +658,7 @@ fn complex_namespace_packages() -> Result<()> {
             .arg("--find-links")
             .arg(dist.path()),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -744,12 +672,9 @@ fn complex_namespace_packages() -> Result<()> {
         .arg("-c")
         .arg("from complex_project.part_b import two; print(two())"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     2
-
-    ----- stderr -----
     "
     );
 
@@ -764,10 +689,7 @@ fn complex_namespace_packages() -> Result<()> {
             .arg("complex-project-part_b")
             .arg("--offline"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -784,12 +706,9 @@ fn complex_namespace_packages() -> Result<()> {
         .arg("-c")
         .arg("from complex_project.part_b import two; print(two())"),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     2
-
-    ----- stderr -----
     "
     );
     Ok(())
@@ -828,10 +747,7 @@ fn license_glob_without_matches_errors() -> Result<()> {
         .arg("build-wheel")
         .arg(context.temp_dir.path())
         .current_dir(project.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Invalid project metadata
       Caused by: `project.license-files` glob `abc` did not match any files
@@ -871,10 +787,7 @@ fn license_file_must_be_utf8() -> Result<()> {
         .arg("build-wheel")
         .arg(context.temp_dir.path())
         .current_dir(project.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Invalid project metadata
       Caused by: License file `LICENSE.bin` must be UTF-8 encoded
@@ -921,12 +834,9 @@ fn symlinked_file() -> Result<()> {
         .arg("build-sdist")
         .arg(context.temp_dir.path())
         .current_dir(project.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project-1.0.0.tar.gz
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context
@@ -934,19 +844,13 @@ fn symlinked_file() -> Result<()> {
         .arg("build-wheel")
         .arg(context.temp_dir.path())
         .current_dir(project.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     project-1.0.0-py3-none-any.whl
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg("project-1.0.0-py3-none-any.whl"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -997,10 +901,7 @@ fn invalid_build_backend_settings_are_ignored() -> Result<()> {
     // Since we are not building, this must pass without complaining about the error in
     // `tool.uv.build-backend`.
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
@@ -1032,10 +933,7 @@ fn error_on_relative_module_root_outside_project_root() -> Result<()> {
     context.temp_dir.child("__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.build(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution (uv build backend)...
     error: Failed to build `[TEMP_DIR]/`
@@ -1043,10 +941,7 @@ fn error_on_relative_module_root_outside_project_root() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Building wheel (uv build backend)...
     error: Failed to build `[TEMP_DIR]/`
@@ -1087,10 +982,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
     context.temp_dir.child("headers").create_dir_all()?;
 
     uv_snapshot!(context.filters(), context.build().arg("project"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution (uv build backend)...
     error: Failed to build `[TEMP_DIR]/project`
@@ -1098,10 +990,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Building wheel (uv build backend)...
     error: Failed to build `[TEMP_DIR]/project`
@@ -1128,10 +1017,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
         .write_str("not for distribution")?;
 
     uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Building wheel (uv build backend)...
     error: Failed to build `[TEMP_DIR]/project`
@@ -1178,16 +1064,13 @@ fn wheel_data_respects_excludes() -> Result<()> {
     context.temp_dir.child("assets/generated.pyc").touch()?;
 
     uv_snapshot!(context.build().arg("--wheel").arg("--list"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Building project-0.1.0-py3-none-any.whl will include the following files:
     project/__init__.py (src/project/__init__.py)
     project-0.1.0.data/data/public.txt (assets/public.txt)
     project-0.1.0.dist-info/WHEEL (generated)
     project-0.1.0.dist-info/METADATA (generated)
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -1226,10 +1109,7 @@ fn wheel_data_symlink_containment() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel").arg("--list"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/project`
       Caused by: The path for the data directory data must be inside the project: external-assets
@@ -1258,16 +1138,13 @@ fn wheel_data_symlink_containment() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.build().arg("project").arg("--wheel").arg("--list"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Building project-0.1.0-py3-none-any.whl will include the following files:
     project/__init__.py (src/project/__init__.py)
     project-0.1.0.data/data/public.txt (internal-assets/public.txt)
     project-0.1.0.dist-info/WHEEL (generated)
     project-0.1.0.dist-info/METADATA (generated)
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -1293,10 +1170,7 @@ fn venv_in_source_tree() {
         .success();
 
     uv_snapshot!(context.filters(), context.build(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution (uv build backend)...
     error: Failed to build `[TEMP_DIR]/`
@@ -1304,10 +1178,7 @@ fn venv_in_source_tree() {
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Building wheel (uv build backend)...
     error: Failed to build `[TEMP_DIR]/`
@@ -1353,10 +1224,7 @@ fn warn_on_redundant_module_names() -> Result<()> {
 
     // Warnings should be printed when invoking `uv build`
     uv_snapshot!(context.filters(), context.build(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Building source distribution (uv build backend)...
     warning: Ignoring redundant module names in `tool.uv.build-backend.module-name`: `foo.bar`, `foo`, `foo.bar.baz`, `foobar.baz`
@@ -1369,10 +1237,7 @@ fn warn_on_redundant_module_names() -> Result<()> {
     // control the thing being built. Sources being enabled is a workable proxy
     // for this.
     uv_snapshot!(context.filters(), context.build().arg("--no-sources"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Building source distribution (uv build backend)...
     Building wheel from source distribution (uv build backend)...
@@ -1402,10 +1267,7 @@ fn invalid_pyproject_toml() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.build().arg("child"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution (uv build backend)...
     error: Failed to build `[TEMP_DIR]/child`
@@ -1505,12 +1367,9 @@ fn build_with_all_metadata() -> Result<()> {
         .arg("--preview-features")
         .arg("metadata-json")
         .arg(temp_dir.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     foo-1.0.0-py3-none-any.whl
-
-    ----- stderr -----
     ");
 
     context
@@ -1666,10 +1525,7 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but the `build-system` table is missing
@@ -1679,10 +1535,7 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but the `build-system` table is missing
@@ -1693,10 +1546,7 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
 
     // Ensure that the warning isn't shown for registry dependencies.
     uv_snapshot!(context.filters(), context.pip_install().arg("--find-links").arg("dist").arg("--reinstall").arg("project"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1736,10 +1586,7 @@ fn tool_uv_build_backend_wrong_build_backend() -> Result<()> {
     project.child("src/project/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.build().arg("--no-build-logs").arg(project.path()), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but uses `hatchling.build` as build backend instead
@@ -1749,10 +1596,7 @@ fn tool_uv_build_backend_wrong_build_backend() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(project.path()), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but uses `hatchling.build` as build backend instead
@@ -1795,10 +1639,7 @@ fn tool_uv_build_backend_in_tree_backend() -> Result<()> {
         .write_str("from uv_build import *\n")?;
 
     uv_snapshot!(context.filters(), context.build().arg("--no-build-logs").arg(project.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
@@ -1830,10 +1671,7 @@ fn warn_on_license_classifier() -> Result<()> {
     context.temp_dir.child("src/foo/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.build(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Building source distribution (uv build backend)...
     warning: Found license classifier `License :: OSI Approved :: MIT License`. License classifiers are ambiguous and deprecated per PEP 639; projects should use `project.license` and `project.license-files` instead.
@@ -1869,10 +1707,7 @@ fn warn_on_toml_1_1_auto_detected() -> Result<()> {
 
     // Without the preview flag: auto-detection fires and a warning is shown.
     uv_snapshot!(context.filters(), context.build(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Building source distribution (uv build backend)...
     warning: `pyproject.toml` uses TOML 1.1 features; rewriting to TOML 1.0 for compatibility with older build tools. Use `--preview-feature toml-backwards-compatibility` to suppress this warning.
@@ -1883,10 +1718,7 @@ fn warn_on_toml_1_1_auto_detected() -> Result<()> {
 
     // With the preview flag set explicitly: rewrite still happens, but no warning.
     uv_snapshot!(context.filters(), context.build().arg("--preview-feature").arg("toml-backwards-compatibility"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Building source distribution (uv build backend)...
     Building wheel from source distribution (uv build backend)...
