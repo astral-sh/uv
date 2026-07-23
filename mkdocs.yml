@@ -59,6 +59,9 @@ markdown_extensions:
       custom_checkbox: true
   - pymdownx.highlight:
       anchor_linenums: true
+      extend_pygments_lang:
+        - name: requirements
+          lang: python
   - pymdownx.tabbed:
       alternate_style: true
 plugins:

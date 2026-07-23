@@ -74,8 +74,7 @@ fn check_workspace_member_selection() -> Result<()> {
 
     let member_a = context.temp_dir.child("packages").child("member-a");
     uv_snapshot!(context.filters(), workspace_check(&context).current_dir(&member_a), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
     Found 1 diagnostic
@@ -85,8 +84,7 @@ fn check_workspace_member_selection() -> Result<()> {
     "#);
 
     uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("member-a"), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
     Found 1 diagnostic
@@ -114,8 +112,7 @@ fn check_virtual_workspace_checks_all_members_by_default() -> Result<()> {
     write_workspace_member(&context, "member-b", "value: int = 'selected-b'\n")?;
 
     uv_snapshot!(context.filters(), workspace_check(&context), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
     packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-b"]` is not assignable to `int`
@@ -147,8 +144,7 @@ fn check_virtual_workspace_only_checks_declared_members() -> Result<()> {
     write_workspace_member(&context, "member", "value: int = 'selected'\n")?;
 
     uv_snapshot!(context.filters(), workspace_check(&context), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     packages/member/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
     Found 1 diagnostic
@@ -158,8 +154,7 @@ fn check_virtual_workspace_only_checks_declared_members() -> Result<()> {
     "#);
 
     uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     packages/member/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
     Found 1 diagnostic
@@ -202,8 +197,7 @@ fn check_workspace_all_packages_includes_external_members() -> Result<()> {
             .current_dir(&workspace)
             .arg("--all-packages"),
         @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     [TEMP_DIR]/external-package/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
     Found 1 diagnostic
@@ -256,8 +250,7 @@ fn check_external_workspace_member_inherits_workspace_configuration() -> Result<
             .arg("--package")
             .arg("external-package"),
         @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     [TEMP_DIR]/external-package/main.py:4:12: error[invalid-return-type] Return type does not match returned value: expected `int`, found `Literal["reported"]`
     Found 1 diagnostic
@@ -298,8 +291,7 @@ fn check_virtual_workspace_member_excludes_nested_members() -> Result<()> {
     child.child("main.py").write_str("value: int = 'child'\n")?;
 
     uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("parent"), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     main.py:1:14: error[invalid-assignment] Object of type `Literal["parent"]` is not assignable to `int`
     Found 1 diagnostic
@@ -309,8 +301,7 @@ fn check_virtual_workspace_member_excludes_nested_members() -> Result<()> {
     "#);
 
     uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     packages/parent/child/main.py:1:14: error[invalid-assignment] Object of type `Literal["child"]` is not assignable to `int`
     packages/parent/main.py:1:14: error[invalid-assignment] Object of type `Literal["parent"]` is not assignable to `int`
@@ -375,8 +366,7 @@ fn check_virtual_workspace_member_resolves_excluded_nested_dependency() -> Resul
     "#})?;
 
     uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("parent"), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     main.py:3:14: error[invalid-assignment] Object of type `str` is not assignable to `int`
     Found 1 diagnostic
@@ -416,8 +406,7 @@ fn check_workspace_member_inherits_workspace_configuration() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("member"), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     main.py:4:12: error[invalid-return-type] Return type does not match returned value: expected `int`, found `Literal["reported"]`
     Found 1 diagnostic
@@ -443,10 +432,7 @@ fn check_workspace_missing_package() -> Result<()> {
     write_workspace_member(&context, "member", "value: int = 1\n")?;
 
     uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("missing"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Package `missing` not found in workspace
@@ -480,8 +466,7 @@ fn check_workspace_root_excludes_nested_members() -> Result<()> {
     write_workspace_member(&context, "member", "value: int = 'excluded'\n")?;
 
     uv_snapshot!(context.filters(), workspace_check(&context), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
     Found 1 diagnostic
@@ -491,8 +476,7 @@ fn check_workspace_root_excludes_nested_members() -> Result<()> {
     "#);
 
     uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
     packages/member/main.py:1:14: error[invalid-assignment] Object of type `Literal["excluded"]` is not assignable to `int`
@@ -529,8 +513,7 @@ fn check_workspace_multiple_packages() -> Result<()> {
             .arg("--package")
             .arg("member-b"),
         @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
     packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-b"]` is not assignable to `int`
@@ -542,8 +525,7 @@ fn check_workspace_multiple_packages() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
     packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-b"]` is not assignable to `int`
