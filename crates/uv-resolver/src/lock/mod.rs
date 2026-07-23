@@ -6744,7 +6744,7 @@ fn canonical_marker_trees(
 ///
 /// Returns `true` if the wheel is definitely unreachable, and `false` if it may be reachable,
 /// including if the wheel tag isn't recognized.
-fn is_wheel_unreachable_for_marker(
+pub(crate) fn is_wheel_unreachable_for_marker(
     filename: &WheelFilename,
     requires_python: &RequiresPython,
     marker: &UniversalMarker,
@@ -6954,9 +6954,10 @@ pub(crate) fn is_wheel_unreachable(
 
 #[cfg(test)]
 mod tests {
-    use uv_distribution_types::{IndexReference, ProxyIndex};
+    use uv_distribution_types::{ArtifactUrlMap, IndexReference, ProxyIndex};
     use uv_pep440::VersionSpecifiers;
     use uv_pep508::MarkerEnvironmentBuilder;
+    use uv_redacted::DisplaySafeUrl;
     use uv_warnings::anstream;
 
     use super::*;
@@ -7136,6 +7137,10 @@ source = { registry = "https://example.com/simple" }
         let locations = IndexLocations::default().with_proxy_indexes(vec![ProxyIndex {
             index: IndexReference::Url(canonical.clone()),
             url: IndexUrl::from_str("https://proxy.example.com/simple")?,
+            artifact_url_map: ArtifactUrlMap::single(
+                DisplaySafeUrl::parse("https://proxy.example/files")?,
+                DisplaySafeUrl::parse("https://canonical.example/files")?,
+            ),
         }]);
 
         assert!(

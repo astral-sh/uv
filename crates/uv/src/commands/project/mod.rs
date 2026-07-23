@@ -326,6 +326,9 @@ pub(crate) enum ProjectError {
     Lock(#[from] uv_resolver::LockError),
 
     #[error(transparent)]
+    ProxyCanonicalization(#[from] uv_resolver::ProxyCanonicalizationError),
+
+    #[error(transparent)]
     Operation(#[from] pip::operations::Error),
 
     #[error(transparent)]

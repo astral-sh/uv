@@ -700,7 +700,7 @@ pub(crate) async fn install(
                 )?;
                 (resolution, tool_lock)
             } else {
-                let resolution = match resolve_environment(
+                let mut resolution = match resolve_environment(
                     tool_environment_spec(
                         spec.clone(),
                         existing_tool_lock
@@ -733,6 +733,10 @@ pub(crate) async fn install(
                     }
                     Err(err) => return Err(err.into()),
                 };
+                resolution.canonicalize_proxy_artifact_urls_for_lock(
+                    &settings.resolver.index_locations,
+                    &[],
+                )?;
                 let tool_lock = ToolLock::from_resolution(
                     &tool_dir,
                     &resolution,
@@ -930,7 +934,7 @@ pub(crate) async fn install(
             .await;
 
             // If the resolution failed, retry with the inferred `requires-python` constraint.
-            let (resolution, interpreter) = match resolution {
+            let (mut resolution, interpreter) = match resolution {
                 Ok(resolution) => (resolution, interpreter),
                 Err(err) => match err {
                     ProjectError::Operation(err) => {
@@ -1000,6 +1004,10 @@ pub(crate) async fn install(
             };
 
             if tool_locks {
+                resolution.canonicalize_proxy_artifact_urls_for_lock(
+                    &settings.resolver.index_locations,
+                    &[],
+                )?;
                 let tool_lock = ToolLock::from_resolution(
                     &tool_dir,
                     &resolution,

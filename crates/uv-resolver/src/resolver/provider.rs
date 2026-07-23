@@ -418,10 +418,11 @@ mod tests {
 
     use uv_distribution_filename::WheelFilename;
     use uv_distribution_types::{
-        File, FileLocation, Index, IndexReference, IndexUrl, ProxyIndex, RegistryBuiltDist,
-        RegistryBuiltWheel, SerializableStatusCode,
+        ArtifactUrlMap, File, FileLocation, Index, IndexReference, IndexUrl, ProxyIndex,
+        RegistryBuiltDist, RegistryBuiltWheel, SerializableStatusCode,
     };
     use uv_pypi_types::HashDigests;
+    use uv_redacted::DisplaySafeUrl;
     use uv_small_str::SmallString;
 
     use super::*;
@@ -444,6 +445,10 @@ mod tests {
                 .with_proxy_indexes(vec![ProxyIndex {
                     index: IndexReference::Url(canonical.clone()),
                     url: proxy.clone(),
+                    artifact_url_map: ArtifactUrlMap::single(
+                        DisplaySafeUrl::parse("https://proxy.example.com/files")?,
+                        DisplaySafeUrl::parse("https://canonical.example.com/files")?,
+                    ),
                 }]);
         let index_routes = IndexRoutes::try_from(&index_locations)?;
 

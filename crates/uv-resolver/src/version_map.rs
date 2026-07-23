@@ -928,8 +928,10 @@ mod tests {
     use uv_cache::Cache;
     use uv_client::{BaseClientBuilder, MetadataFormat, RegistryClientBuilder};
     use uv_distribution_types::{
-        Index, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexReference, ProxyIndex,
+        ArtifactUrlMap, Index, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexReference,
+        ProxyIndex,
     };
+    use uv_redacted::DisplaySafeUrl;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -971,6 +973,10 @@ mod tests {
                 .with_proxy_indexes(vec![ProxyIndex {
                     index: IndexReference::Url(canonical.clone()),
                     url: proxy.clone(),
+                    artifact_url_map: ArtifactUrlMap::single(
+                        DisplaySafeUrl::parse("https://proxy.example/files")?,
+                        DisplaySafeUrl::parse("https://canonical.example/files")?,
+                    ),
                 }]);
         let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
             .index_locations(locations)
