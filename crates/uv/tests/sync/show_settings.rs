@@ -3262,6 +3262,25 @@ fn preview_features() {
     "
     );
 
+    let canonical_command_features = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview-features")
+            .arg("format-command,audit-command,check-command")
+    );
+
+    // Preview feature aliases select the same settings as their canonical names.
+    diff_uv_snapshot!(
+        context.filters(),
+        &canonical_command_features,
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview-features")
+            .arg("format,audit,check"),
+        @""
+    );
+
     diff_uv_snapshot!(
         context.filters(),
         &preview_features,

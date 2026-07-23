@@ -49,11 +49,11 @@ pub(crate) fn main(args: &Args) -> Result<()> {
 
 fn generate() -> String {
     let mut features = PreviewFeature::metadata().to_vec();
-    features.sort_unstable_by_key(|(feature, _)| feature.to_string());
+    features.sort_unstable_by_key(|(feature, _, _)| feature.to_string());
 
     features
         .into_iter()
-        .map(|(feature, description)| render(feature, description))
+        .map(|(feature, description, _)| render(feature, description))
         .collect()
 }
 
