@@ -709,6 +709,133 @@ fn lock_baseline() {
     windows,
     ignore = "Configuration tests are not yet supported on Windows"
 )]
+fn proxy_index_lock_settings() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.lock()).arg("--show-settings")
+    );
+
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(indoc::indoc! {r#"
+            [[proxy-index]]
+            index = "https://pypi.org/simple"
+            url = "https://proxy.example/simple"
+            artifact-url-map = { "https://proxy.example/files" = "https://files.pythonhosted.org/packages" }
+        "#})?;
+
+    diff_uv_snapshot!(
+        context.filters(),
+        &baseline,
+        add_shared_args(context.lock()).arg("--show-settings"),
+        @r#"
+    ...
+             fork_strategy: RequiresPython,
+             index_locations: IndexLocations {
+                 indexes: [],
+    +            proxy_indexes: [
+    +                ProxyIndex {
+    +                    index: Url(
+    +                        Pypi(
+    +                            VerbatimUrl {
+    +                                url: DisplaySafeUrl {
+    +                                    scheme: "https",
+    +                                    cannot_be_a_base: false,
+    +                                    username: "",
+    +                                    password: None,
+    +                                    host: Some(
+    +                                        Domain(
+    +                                            "pypi.org",
+    +                                        ),
+    +                                    ),
+    +                                    port: None,
+    +                                    path: "/simple",
+    +                                    query: None,
+    +                                    fragment: None,
+    +                                },
+    +                                given: Some(
+    +                                    "https://pypi.org/simple",
+    +                                ),
+    +                                expanded: false,
+    +                            },
+    +                        ),
+    +                    ),
+    +                    url: Url(
+    +                        VerbatimUrl {
+    +                            url: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "proxy.example",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/simple",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                            given: Some(
+    +                                "https://proxy.example/simple",
+    +                            ),
+    +                            expanded: false,
+    +                        },
+    +                    ),
+    +                    artifact_url_map: ArtifactUrlMap(
+    +                        {
+    +                            DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "proxy.example",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/files",
+    +                                query: None,
+    +                                fragment: None,
+    +                            }: DisplaySafeUrl {
+    +                                scheme: "https",
+    +                                cannot_be_a_base: false,
+    +                                username: "",
+    +                                password: None,
+    +                                host: Some(
+    +                                    Domain(
+    +                                        "files.pythonhosted.org",
+    +                                    ),
+    +                                ),
+    +                                port: None,
+    +                                path: "/packages",
+    +                                query: None,
+    +                                fragment: None,
+    +                            },
+    +                        },
+    +                    ),
+    +                },
+    +            ],
+                 flat_index: [],
+                 no_index: false,
+             },
+    ...
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
 fn version_baseline() {
     let context = uv_test::test_context!("3.12");
 
@@ -917,6 +1044,7 @@ fn tool_install_baseline() {
         ),
         options: ResolverInstallerOptions {
             index: None,
+            proxy_index: None,
             index_url: None,
             extra_index_url: None,
             no_index: None,
@@ -2692,7 +2820,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
           |
         1 | [project]
           |  ^^^^^^^
-        unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+        unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `proxy-index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 

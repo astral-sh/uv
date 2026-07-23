@@ -1,10 +1,13 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::assert::OutputAssertExt;
+use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use fs_err as fs;
+use indoc::formatdoc;
 use insta::assert_snapshot;
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
+use wiremock::MockServer;
 
 #[test]
 fn tool_list() {
@@ -163,6 +166,95 @@ fn tool_list_outdated() {
 
     ----- stderr -----
     ");
+}
+
+#[tokio::test]
+async fn tool_list_outdated_reuses_filesystem_proxy_configuration() -> Result<()> {
+    let proxy = crate::pypi_proxy::start().await;
+    let canonical = MockServer::start().await;
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(&formatdoc! {r#"
+        [[index]]
+        name = "canonical"
+        url = "{canonical}/simple"
+        default = true
+
+        [[proxy-index]]
+        index = "canonical"
+        url = "{proxy_index}"
+        artifact-url-map = {{ "{physical_artifacts}" = "{canonical}/files" }}
+        "#,
+        canonical = canonical.uri(),
+        proxy_index = proxy.authenticated_url("public", "heron", "/basic-auth/simple"),
+        physical_artifacts = proxy.url("/basic-auth/files"),
+    })?;
+
+    context
+        .tool_install()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let receipt_path = tool_dir
+        .join("executable-application")
+        .join("uv-receipt.toml");
+    let receipt = fs_err::read_to_string(&receipt_path)?;
+    assert!(receipt.contains("proxy-index"));
+    assert!(!receipt.contains("public"));
+    assert!(!receipt.contains("heron"));
+
+    // The current filesystem declaration restores credentials omitted from the receipt.
+    uv_snapshot!(context.filters(), context.tool_list()
+        .arg("--outdated")
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Legacy receipts have no persisted options, so they must use the filesystem route too.
+    let mut receipt: toml::Value = toml::from_str(&receipt)?;
+    receipt
+        .get_mut("tool")
+        .and_then(toml::Value::as_table_mut)
+        .context("tool receipt is missing its tool table")?
+        .remove("options");
+    fs::write(&receipt_path, toml::to_string(&receipt)?)?;
+
+    context
+        .tool_list()
+        .arg("--outdated")
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    assert!(
+        canonical
+            .received_requests()
+            .await
+            .context("failed to read canonical requests")?
+            .is_empty()
+    );
+    Ok(())
 }
 
 #[test]

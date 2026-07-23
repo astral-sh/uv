@@ -447,6 +447,13 @@
         }
       ]
     },
+    "proxy-index": {
+      "description": "Proxy indexes to use when accessing canonical package indexes.\n\nA proxy index is directional: the `index` identifies the canonical index by name or URL,\nwhile `url` provides the physical endpoint uv should use for resolution and artifact\naccess. `artifact-url-map` is required and maps physical proxy artifact URL prefixes (keys)\nto canonical lock artifact URL prefixes (values).\n\nThe artifact map is used only to rewrite selected artifact URLs while constructing a new\nlock. It is never reversed, never contacted, and is ignored for requests, downloads,\nexisting-lock installation, and `uv pip`. Declaring the same canonical index more than once\nis an error, including across project, user, and system configuration files.",
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/definitions/ProxyIndex"
+      }
+    },
     "publish-url": {
       "description": "The URL for publishing packages to the Python package index (by default:\n<https://upload.pypi.org/legacy/>).",
       "anyOf": [
@@ -636,6 +643,18 @@
           "const": "split"
         }
       ]
+    },
+    "ArtifactUrlMap": {
+      "description": "One-way physical proxy artifact URL prefixes (keys) to canonical lock artifact URL prefixes (values).",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "format": "uri"
+      },
+      "minProperties": 1,
+      "propertyNames": {
+        "format": "uri"
+      }
     },
     "AuditOptions": {
       "type": "object",
@@ -1129,6 +1148,10 @@
     },
     "IndexName": {
       "description": "The normalized name of an index.\n\nIndex names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
+      "type": "string"
+    },
+    "IndexReference": {
+      "description": "The name or URL of a package index.",
       "type": "string"
     },
     "IndexStrategy": {
@@ -1824,6 +1847,37 @@
           }
         }
       ]
+    },
+    "ProxyIndex": {
+      "description": "A proxy endpoint used to access a canonical package index.",
+      "type": "object",
+      "properties": {
+        "artifact-url-map": {
+          "description": "One-way physical-to-canonical URL prefixes for artifacts emitted in a new lock.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ArtifactUrlMap"
+            }
+          ]
+        },
+        "index": {
+          "description": "The canonical index, identified by name or URL.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IndexReference"
+            }
+          ]
+        },
+        "url": {
+          "description": "The proxy index URL.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IndexUrl"
+            }
+          ]
+        }
+      },
+      "required": ["index", "url", "artifact-url-map"]
     },
     "ProxyUrl": {
       "description": "A proxy URL (e.g., `http://proxy.example.com:8080`).",

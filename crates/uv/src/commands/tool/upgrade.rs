@@ -10,7 +10,10 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{ExtraBuildRequires, Name, Requirement, RequirementSource};
+use uv_distribution_types::{
+    ExtraBuildRequires, IndexRoute, IndexRoutes, IndexUrl, Name, ProxyArtifactRoutes,
+    ProxyIndexError, Requirement, RequirementSource,
+};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::CWD;
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
@@ -319,11 +322,13 @@ async fn upgrade_tool(
     };
 
     // Resolve the appropriate settings, preferring: CLI > receipt > user.
-    let options = args.clone().combine(
-        ResolverInstallerOptions::from(existing_tool_receipt.options().clone())
-            .combine(filesystem.clone()),
-    );
+    let options = merge_receipt_and_filesystem_options(
+        args.clone(),
+        ResolverInstallerOptions::from(existing_tool_receipt.options().clone()),
+        filesystem.clone(),
+    )?;
     let settings = ResolverInstallerSettings::from(options.clone());
+    ProxyArtifactRoutes::try_from(&settings.resolver.index_locations)?;
 
     let build_constraint_requirements = existing_tool_receipt.build_constraints().to_vec();
     let build_constraints =
@@ -625,6 +630,75 @@ async fn upgrade_tool(
         outcome,
         constraint,
     })
+}
+
+/// Combine a tool receipt with the current filesystem configuration.
+///
+/// Receipts include the proxy indexes from installation. When the same canonical index exists in
+/// both, keep the receipt route and append any new filesystem routes. Validate the filesystem
+/// declarations first so invalid or duplicate entries still fail.
+pub(super) fn merge_receipt_and_filesystem_options(
+    args: ResolverInstallerOptions,
+    mut receipt: ResolverInstallerOptions,
+    mut filesystem: ResolverInstallerOptions,
+) -> Result<ResolverInstallerOptions, ProxyIndexError> {
+    let receipt_proxy_indexes = receipt.proxy_index.take().unwrap_or_default();
+    let filesystem_proxy_indexes = filesystem.proxy_index.take().unwrap_or_default();
+    let mut combined = args.combine(receipt.combine(filesystem));
+
+    let mut filesystem_options = combined.clone();
+    filesystem_options.proxy_index = Some(filesystem_proxy_indexes.clone());
+    let filesystem_locations = ResolverInstallerSettings::from(filesystem_options)
+        .resolver
+        .index_locations;
+    let filesystem_routes = IndexRoutes::try_from(&filesystem_locations)?;
+    ProxyArtifactRoutes::try_from(&filesystem_locations)?;
+
+    let mut receipt_options = combined.clone();
+    receipt_options.proxy_index = Some(receipt_proxy_indexes.clone());
+    let receipt_locations = ResolverInstallerSettings::from(receipt_options)
+        .resolver
+        .index_locations;
+    let receipt_routes = IndexRoutes::try_from(&receipt_locations)?;
+    let same_index = |left: &IndexUrl, right: &IndexUrl| {
+        !IndexRoute {
+            canonical: left,
+            physical: right,
+        }
+        .is_proxy()
+    };
+
+    let mut proxy_indexes = receipt_proxy_indexes;
+    for (proxy_index, filesystem_route) in filesystem_proxy_indexes
+        .into_iter()
+        .zip(filesystem_routes.proxy_routes())
+    {
+        if let Some((position, receipt_route)) =
+            receipt_routes
+                .proxy_routes()
+                .enumerate()
+                .find(|(_, receipt_route)| {
+                    same_index(receipt_route.canonical, filesystem_route.canonical)
+                })
+        {
+            if same_index(receipt_route.physical, filesystem_route.physical)
+                && let Some(receipt_proxy) = proxy_indexes.get_mut(position)
+            {
+                // Receipt URLs omit credentials. Restore them from the current filesystem
+                // declaration when it describes the same route, while retaining the receipt's
+                // higher-precedence canonical reference and artifact map.
+                receipt_proxy.url = proxy_index.url;
+            }
+        } else {
+            proxy_indexes.push(proxy_index);
+        }
+    }
+    combined.proxy_index = (!proxy_indexes.is_empty()).then_some(proxy_indexes);
+    let combined_locations = ResolverInstallerSettings::from(combined.clone())
+        .resolver
+        .index_locations;
+    IndexRoutes::try_from(&combined_locations)?;
+    Ok(combined)
 }
 
 fn pinned_requirement_version(tool: &Tool, name: &PackageName) -> Option<Version> {

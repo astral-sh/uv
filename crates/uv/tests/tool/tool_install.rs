@@ -6038,6 +6038,46 @@ async fn tool_install_default_credentials() -> Result<()> {
     Ok(())
 }
 
+/// Tool receipts must not persist an artifact URL map before its URLs are validated.
+#[test]
+fn tool_install_rejects_unsafe_proxy_artifact_url_map_before_writing_receipt() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+        [[index]]
+        name = "canonical"
+        url = "https://canonical.example/simple"
+
+        [[proxy-index]]
+        index = "canonical"
+        url = "https://proxy.example/simple"
+        artifact-url-map = { "https://username-token:password-token@proxy.example/files" = "https://canonical.example/packages" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid artifact URL map for proxy index `https://proxy.example/simple`
+      Caused by: Artifact URL `https://proxy.example/files` must not contain credentials
+    "#);
+
+    tool_dir
+        .child("executable-application")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
 /// Test installing a tool with `--with-executables-from`.
 #[test]
 fn tool_install_with_executables_from() {
