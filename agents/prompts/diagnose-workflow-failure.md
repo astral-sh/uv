@@ -46,5 +46,7 @@ exactly one label: use `ci-flake` for flaky tests or CI infrastructure, and `bug
 deterministic repository or workflow defect. The body must include the failed run or job URL, the
 decisive error excerpt, the affected workflow, job, platform, and attempt where relevant, why the
 failure appears unrelated or actionable, and any closely related issues. Avoid pasting large logs or
-exposing sensitive values, and do not include `@mentions`. For `duplicate` or `ignore`, leave
+exposing sensitive values, and do not include `@mentions`. The issue will be created in
+`astral-sh/uv-dev`, so use fully qualified references for every linked issue or pull request (for
+example, `astral-sh/uv#123`); `uv#123` does not create a link. For `duplicate` or `ignore`, leave
 `issue.title` and `issue.body` empty and use `bug` as the placeholder label.
