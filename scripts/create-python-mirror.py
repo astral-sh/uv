@@ -169,10 +169,9 @@ async def download_file(
     try:
         async with client.stream("GET", url) as response:
             response.raise_for_status()
-            loop = asyncio.get_running_loop()
-            with await loop.run_in_executor(None, dest.open, "wb") as f:
+            with open(dest, "wb") as f:  # noqa: ASYNC230
                 async for chunk in response.aiter_bytes():
-                    await loop.run_in_executor(None, f.write, chunk)
+                    f.write(chunk)
 
         if expected_sha256 and sha256_checksum(dest) != expected_sha256:
             error_msg = f"SHA-256 mismatch for {dest}. Deleting corrupted file."
