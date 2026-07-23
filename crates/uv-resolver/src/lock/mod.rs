@@ -390,6 +390,14 @@ impl<'lock> DependencySelectionContext<'lock> {
     }
 }
 
+/// The dependency section in which a locked edge is stored.
+#[derive(Clone, Copy, Debug)]
+enum DependencyContext<'a> {
+    Production,
+    Extra(&'a ExtraName),
+    Group(&'a GroupName),
+}
+
 /// Direct dependency selections from a [`Lock`] for a named package.
 ///
 /// The dependency can come from the lock manifest, a dependency group, the production packages,
@@ -493,20 +501,14 @@ impl Lock {
                 )
             });
 
-            // Add all dependencies
-            for edge in resolution.graph.edges(node_index) {
-                let ResolutionGraphNode::Dist(dependency_dist) = &resolution.graph[edge.target()]
-                else {
-                    continue;
-                };
-                let marker = simplify_dependency_marker(
-                    &requires_python,
-                    environment,
-                    dist.marker,
-                    *edge.weight(),
-                );
-                package.add_dependency(&requires_python, dependency_dist, marker, root)?;
-            }
+            package.add_dependencies(
+                DependencyContext::Production,
+                &requires_python,
+                resolution,
+                node_index,
+                environment,
+                root,
+            )?;
 
             let id = package.id.clone();
             if let Some(locked_dist) = packages.insert(id, package) {
@@ -531,26 +533,14 @@ impl Lock {
                     }
                     .into());
                 };
-                for edge in resolution.graph.edges(node_index) {
-                    let ResolutionGraphNode::Dist(dependency_dist) =
-                        &resolution.graph[edge.target()]
-                    else {
-                        continue;
-                    };
-                    let marker = simplify_dependency_marker(
-                        &requires_python,
-                        environment,
-                        dist.marker,
-                        *edge.weight(),
-                    );
-                    package.add_optional_dependency(
-                        &requires_python,
-                        extra.clone(),
-                        dependency_dist,
-                        marker,
-                        root,
-                    )?;
-                }
+                package.add_dependencies(
+                    DependencyContext::Extra(extra),
+                    &requires_python,
+                    resolution,
+                    node_index,
+                    environment,
+                    root,
+                )?;
             }
             if let Some(group) = dist.group.as_ref() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
@@ -561,26 +551,14 @@ impl Lock {
                     }
                     .into());
                 };
-                for edge in resolution.graph.edges(node_index) {
-                    let ResolutionGraphNode::Dist(dependency_dist) =
-                        &resolution.graph[edge.target()]
-                    else {
-                        continue;
-                    };
-                    let marker = simplify_dependency_marker(
-                        &requires_python,
-                        environment,
-                        dist.marker,
-                        *edge.weight(),
-                    );
-                    package.add_group_dependency(
-                        &requires_python,
-                        group.clone(),
-                        dependency_dist,
-                        marker,
-                        root,
-                    )?;
-                }
+                package.add_dependencies(
+                    DependencyContext::Group(group),
+                    &requires_python,
+                    resolution,
+                    node_index,
+                    environment,
+                    root,
+                )?;
             }
         }
 
@@ -2930,18 +2908,55 @@ impl Package {
         })
     }
 
-    /// Add the [`AnnotatedDist`] as a dependency of the [`Package`].
+    /// Add the dependencies of a resolution node to the [`Package`] in the given context.
+    fn add_dependencies(
+        &mut self,
+        context: DependencyContext<'_>,
+        requires_python: &RequiresPython,
+        resolution: &ResolverOutput,
+        node_index: NodeIndex,
+        environment: SimplifiedMarkerTree,
+        root: &Path,
+    ) -> Result<(), LockError> {
+        let parent_marker = *resolution.graph[node_index].marker();
+        for edge in resolution.graph.edges(node_index) {
+            let ResolutionGraphNode::Dist(dependency_dist) = &resolution.graph[edge.target()]
+            else {
+                continue;
+            };
+            let marker = simplify_dependency_marker(
+                requires_python,
+                environment,
+                parent_marker,
+                *edge.weight(),
+            );
+            self.add_dependency(context, requires_python, dependency_dist, marker, root)?;
+        }
+        Ok(())
+    }
+
+    /// Add the [`AnnotatedDist`] as a dependency of the [`Package`] in the given context.
     fn add_dependency(
         &mut self,
+        context: DependencyContext<'_>,
         requires_python: &RequiresPython,
         annotated_dist: &AnnotatedDist,
         marker: UniversalMarker,
         root: &Path,
     ) -> Result<(), LockError> {
-        let new_dep =
+        let new_dependency =
             Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
-        for existing_dep in &mut self.dependencies {
-            if existing_dep.package_id == new_dep.package_id
+        let dependencies = match context {
+            DependencyContext::Production => &mut self.dependencies,
+            DependencyContext::Extra(extra) => {
+                self.optional_dependencies.entry(extra.clone()).or_default()
+            }
+            DependencyContext::Group(group) => {
+                self.dependency_groups.entry(group.clone()).or_default()
+            }
+        };
+        for existing_dependency in &mut *dependencies {
+            if existing_dependency.package_id == new_dependency.package_id
                 // It's important that we do a comparison on
                 // *simplified* markers here. In particular, when
                 // we write markers out to the lock file, we use
@@ -2964,66 +2979,14 @@ impl Package {
                 // how to do that. I think `pep508` would need to
                 // grow a concept of "requires python" and provide an
                 // operation specifically for that.
-                && existing_dep.simplified_marker == new_dep.simplified_marker
+                && existing_dependency.simplified_marker == new_dependency.simplified_marker
             {
-                existing_dep.extra.extend(new_dep.extra);
+                existing_dependency.extra.extend(new_dependency.extra);
                 return Ok(());
             }
         }
 
-        self.dependencies.push(new_dep);
-        Ok(())
-    }
-
-    /// Add the [`AnnotatedDist`] as an optional dependency of the [`Package`].
-    fn add_optional_dependency(
-        &mut self,
-        requires_python: &RequiresPython,
-        extra: ExtraName,
-        annotated_dist: &AnnotatedDist,
-        marker: UniversalMarker,
-        root: &Path,
-    ) -> Result<(), LockError> {
-        let dep = Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
-        let optional_deps = self.optional_dependencies.entry(extra).or_default();
-        for existing_dep in &mut *optional_deps {
-            if existing_dep.package_id == dep.package_id
-                // See note in add_dependency for why we use
-                // simplified markers here.
-                && existing_dep.simplified_marker == dep.simplified_marker
-            {
-                existing_dep.extra.extend(dep.extra);
-                return Ok(());
-            }
-        }
-
-        optional_deps.push(dep);
-        Ok(())
-    }
-
-    /// Add the [`AnnotatedDist`] to a dependency group of the [`Package`].
-    fn add_group_dependency(
-        &mut self,
-        requires_python: &RequiresPython,
-        group: GroupName,
-        annotated_dist: &AnnotatedDist,
-        marker: UniversalMarker,
-        root: &Path,
-    ) -> Result<(), LockError> {
-        let dep = Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
-        let deps = self.dependency_groups.entry(group).or_default();
-        for existing_dep in &mut *deps {
-            if existing_dep.package_id == dep.package_id
-                // See note in add_dependency for why we use
-                // simplified markers here.
-                && existing_dep.simplified_marker == dep.simplified_marker
-            {
-                existing_dep.extra.extend(dep.extra);
-                return Ok(());
-            }
-        }
-
-        deps.push(dep);
+        dependencies.push(new_dependency);
         Ok(())
     }
 
