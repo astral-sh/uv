@@ -51,7 +51,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::{
-    ExitStatus, ParsedRunCommand, RunCommand, ScriptPath, ToolRunCommand, UvError,
+    ExitStatus, ParsedRunCommand, ProjectError, RunCommand, ScriptPath, ToolRunCommand, UvError,
 };
 use crate::printer::Printer;
 use crate::settings::{
@@ -3078,6 +3078,14 @@ where
             let error = match err.downcast::<UvError>() {
                 Ok(error) => error,
                 Err(err) if err.is::<ArgumentError>() => UvError::argument(err),
+                Err(err)
+                    if matches!(
+                        err.downcast_ref::<ProjectError>(),
+                        Some(ProjectError::LockFormat(..))
+                    ) =>
+                {
+                    UvError::User(err)
+                }
                 Err(err) => UvError::unexpected(err),
             };
             match error {

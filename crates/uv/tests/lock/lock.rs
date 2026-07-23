@@ -15561,6 +15561,36 @@ fn check_unformatted_lock() -> Result<()> {
     error: The lockfile at `uv.lock` is not canonically formatted at line 13, but `--locked` was provided.
     ");
 
+    uv_snapshot!(context.filters(), context.export().arg("--locked").arg("--offline").arg("--preview-features").arg("lockfile-format-check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` is not canonically formatted at line 13, but `--locked` was provided.
+    ");
+
+    uv_snapshot!(context.filters(), context.tree().arg("--locked").arg("--offline").arg("--preview-features").arg("lockfile-format-check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` is not canonically formatted at line 13, but `--locked` was provided.
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--offline").arg("--preview-features").arg("lockfile-format-check").arg("python").arg("--version"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` is not canonically formatted at line 13, but `--locked` was provided.
+    ");
+
+    uv_snapshot!(context.filters(), context.audit().arg("--locked").arg("--offline").arg("--preview-features").arg("audit,lockfile-format-check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` is not canonically formatted at line 13, but `--locked` was provided.
+    ");
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--locked").arg("--offline").arg("--preview-features").arg("workspace-metadata,lockfile-format-check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` is not canonically formatted at line 13, but `--locked` was provided.
+    ");
+
     assert_eq!(context.read("uv.lock"), unformatted);
 
     Ok(())
