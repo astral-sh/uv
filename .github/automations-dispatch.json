@@ -16,7 +16,10 @@
       "on": {
         "pull_request": ["ready_for_review"]
       },
-      "workflow": "promote-pull-request.yml"
+      "workflow": "promote-pull-request.yml",
+      "inputs": {
+        "promoter": "/sender/login"
+      }
     },
     {
       "repository": "uv-dev",

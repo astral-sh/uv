@@ -11,6 +11,10 @@ on:
         description: "The uv-dev pull request head SHA at dispatch time"
         required: false
         type: string
+      promoter:
+        description: "The person who promoted the uv-dev pull request"
+        required: false
+        type: string
 
 permissions: {}
 
@@ -78,6 +82,7 @@ jobs:
           BASE_REF: ${{ steps.verify.outputs.base_ref }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_REF: ${{ steps.verify.outputs.head_ref }}
+          PROMOTER: ${{ inputs.promoter || github.actor }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
         run: |
           source_pull_request=$(gh api --method GET "repos/astral-sh/uv-dev/pulls/$PULL_REQUEST_NUMBER")
@@ -148,6 +153,13 @@ jobs:
           fi
 
           upstream_number=$(jq --exit-status --raw-output '.number | select(type == "number")' <<< "$upstream_pull_request")
+
+          gh api \
+            --method POST \
+            "repos/astral-sh/uv/issues/$upstream_number/assignees" \
+            --raw-field "assignees[]=$PROMOTER" \
+            --silent
+
           echo "number=$upstream_number" >> "$GITHUB_OUTPUT"
 
       - name: Close uv-dev pull request
