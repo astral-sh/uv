@@ -219,8 +219,10 @@ pub(crate) async fn lock(
             preview,
         )
         .with_refresh(&refresh)
-        // We only want to check the contents with `--refresh` specifically.
-        .with_lockfile_contents_check(matches!(&refresh, Refresh::All(..)))
+        .with_lockfile_contents_check(
+            matches!(&refresh, Refresh::All(..))
+                && preview.is_enabled(PreviewFeature::LockfileFormatCheck),
+        )
         .execute(target),
     )
     .await
