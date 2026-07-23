@@ -362,7 +362,7 @@ impl<'env> LockOperation<'env> {
 
     /// Compare the serialized lock against the existing lockfile contents.
     #[must_use]
-    pub(crate) fn with_lockfile_contents_check(mut self, enabled: bool) -> Self {
+    fn with_lockfile_contents_check(mut self, enabled: bool) -> Self {
         self.check_lockfile_contents = enabled;
         self
     }
