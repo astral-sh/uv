@@ -115,9 +115,9 @@ something like:
 ```python
 to_analyze = []
 for member_name in ["package1", "package2"]:
-  member = find_by_name(metadata.members, member_name)
-  member_node = metadata.resolution[member.id]
-  to_analyze.append(member_node)
+    member = find_by_name(metadata.members, member_name)
+    member_node = metadata.resolution[member.id]
+    to_analyze.append(member_node)
 visit(metadata, to_analyze)
 ```
 
@@ -132,25 +132,25 @@ Where `visit` is your favourite graph traversal algorithm like depth-first-searc
 
 ```python
 def visit(metadata: UvMetadata, to_analyze: list[Node]):
-  visited = set()
-  while len(to_analyze) > 0:
-    node = to_analyze.pop()
+    visited = set()
+    while len(to_analyze) > 0:
+        node = to_analyze.pop()
 
-    # Handle cycles by avoiding revisiting nodes
-    if node.id in visited:
-      continue
-    visited.add(node.id)
+        # Handle cycles by avoiding revisiting nodes
+        if node.id in visited:
+            continue
+        visited.add(node.id)
 
-    # We also need to analyze its dependencies
-    for dependency in node.dependencies:
-      # Only follow edges if they satisfy the desired platform's markers
-      if dependency.marker and not satisfies(platform, dependency.marker):
-        continue
-      to_analyze.append(metadata.resolution[dependency.id])
+        # We also need to analyze its dependencies
+        for dependency in node.dependencies:
+            # Only follow edges if they satisfy the desired platform's markers
+            if dependency.marker and not satisfies(platform, dependency.marker):
+                continue
+            to_analyze.append(metadata.resolution[dependency.id])
 
-    # Analyze any package node we encounter
-    if node.kind == "package":
-      print(node.name, node.version, node.source)
+        # Analyze any package node we encounter
+        if node.kind == "package":
+            print(node.name, node.version, node.source)
 ```
 
 ## Schema

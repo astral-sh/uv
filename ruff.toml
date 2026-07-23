@@ -8,6 +8,7 @@ exclude = [
 ]
 
 [lint]
+select = ["E4", "E7", "E9", "F"]
 extend-select = ["I", "B"]
 
 [lint.per-file-ignores]
