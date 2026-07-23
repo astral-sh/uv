@@ -2926,7 +2926,7 @@ struct PreviewOptionsDefinition {
         example = r#"
             preview-features = true
             # or
-            preview-features = ["python-upgrade"]
+            preview-features = ["json-output"]
         "#
     )]
     preview_features: Option<PreviewFeaturesOption>,

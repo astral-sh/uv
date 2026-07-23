@@ -225,7 +225,6 @@ pub mod test {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewFeature {
     PythonInstallDefault = 1 << 0,
-    PythonUpgrade = 1 << 1,
     JsonOutput = 1 << 2,
     Pylock = 1 << 3,
     AddBounds = 1 << 4,
@@ -272,7 +271,6 @@ impl PreviewFeature {
     fn as_str(self) -> &'static str {
         match self {
             Self::PythonInstallDefault => "python-install-default",
-            Self::PythonUpgrade => "python-upgrade",
             Self::JsonOutput => "json-output",
             Self::Pylock => "pylock",
             Self::AddBounds => "add-bounds",
@@ -332,7 +330,6 @@ impl FromStr for PreviewFeature {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "python-install-default" => Self::PythonInstallDefault,
-            "python-upgrade" => Self::PythonUpgrade,
             "json-output" => Self::JsonOutput,
             "pylock" => Self::Pylock,
             "add-bounds" => Self::AddBounds,
@@ -547,9 +544,9 @@ mod tests {
         assert_eq!(preview.flags, PreviewFeature::PythonInstallDefault);
 
         // Test multiple features
-        let preview = Preview::from_str("python-upgrade,json-output").unwrap();
-        assert!(preview.is_enabled(PreviewFeature::PythonUpgrade));
+        let preview = Preview::from_str("json-output,pylock").unwrap();
         assert!(preview.is_enabled(PreviewFeature::JsonOutput));
+        assert!(preview.is_enabled(PreviewFeature::Pylock));
         assert_eq!(preview.flags.bits().count_ones(), 2);
 
         let preview = Preview::from_str("tool-install-locks").unwrap();
@@ -588,8 +585,8 @@ mod tests {
         assert_eq!(preview.to_string(), "python-install-default");
 
         // Test multiple features
-        let preview = Preview::new(&[PreviewFeature::PythonUpgrade, PreviewFeature::Pylock]);
-        assert_eq!(preview.to_string(), "python-upgrade,pylock");
+        let preview = Preview::new(&[PreviewFeature::JsonOutput, PreviewFeature::Pylock]);
+        assert_eq!(preview.to_string(), "json-output,pylock");
     }
 
     #[test]
@@ -598,7 +595,6 @@ mod tests {
             PreviewFeature::PythonInstallDefault.as_str(),
             "python-install-default"
         );
-        assert_eq!(PreviewFeature::PythonUpgrade.as_str(), "python-upgrade");
         assert_eq!(PreviewFeature::JsonOutput.as_str(), "json-output");
         assert_eq!(PreviewFeature::Pylock.as_str(), "pylock");
         assert_eq!(
