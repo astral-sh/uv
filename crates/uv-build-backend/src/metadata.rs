@@ -433,7 +433,7 @@ impl PyProjectToml {
     /// <https://packaging.python.org/en/latest/specifications/core-metadata/>
     pub(crate) fn to_metadata(&self, root: &Path) -> Result<Metadata23, Error> {
         let summary = if let Some(description) = &self.project.description {
-            if description.contains('\n') {
+            if description.contains(['\r', '\n']) {
                 return Err(ValidationError::DescriptionNewlines.into());
             }
             Some(description.clone())
