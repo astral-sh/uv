@@ -29,6 +29,11 @@ path = "benches/workspace_discovery.rs"
 harness = false
 
 [[bench]]
+name = "lock_parsing"
+path = "benches/lock_parsing.rs"
+harness = false
+
+[[bench]]
 name = "uv_pep440"
 path = "benches/uv_pep440.rs"
 harness = false

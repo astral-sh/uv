@@ -309,8 +309,8 @@ impl<'lock> LockTarget<'lock> {
         let lock_path = self.lock_path();
         match fs_err::tokio::read_to_string(&lock_path).await {
             Ok(encoded) => {
-                let result = info_span!("toml::from_str lock", path = %lock_path.display())
-                    .in_scope(|| toml::from_str::<Lock>(&encoded));
+                let result = info_span!("parse uv lock", path = %lock_path.display())
+                    .in_scope(|| Lock::from_toml(&encoded));
                 match result {
                     Ok(lock) => {
                         // If the lockfile uses an unsupported version, raise an error.
