@@ -6966,6 +6966,7 @@ dependencies = [
  "schemars",
  "serde",
  "thiserror",
+ "uv-macros",
  "uv-preview",
  "uv-warnings",
 ]
