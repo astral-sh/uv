@@ -401,6 +401,37 @@ enum DependencyContext<'a> {
     Group(&'a GroupName),
 }
 
+impl DependencyContext<'_> {
+    /// Returns the locked dependencies stored in this context.
+    fn dependencies(self, package: &Package) -> &[Dependency] {
+        match self {
+            Self::Production => &package.dependencies,
+            Self::Extra(extra) => package
+                .optional_dependencies
+                .get(extra)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+            Self::Group(group) => package
+                .dependency_groups
+                .get(group)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+        }
+    }
+
+    /// Returns the locked dependencies stored in this context, creating the section if needed.
+    fn dependencies_mut(self, package: &mut Package) -> &mut Vec<Dependency> {
+        match self {
+            Self::Production => &mut package.dependencies,
+            Self::Extra(extra) => package
+                .optional_dependencies
+                .entry(extra.clone())
+                .or_default(),
+            Self::Group(group) => package.dependency_groups.entry(group.clone()).or_default(),
+        }
+    }
+}
+
 /// Direct dependency selections from a [`Lock`] for a named package.
 ///
 /// The dependency can come from the lock manifest, a dependency group, the production packages,
@@ -1848,7 +1879,7 @@ impl Lock {
                 && self
                     .root()
                     .is_some_and(|workspace_root| workspace_root.id == package.id);
-        let sections = iter::once((None, None, package.dependencies.as_slice()))
+        let contexts = iter::once(DependencyContext::Production)
             // Registry/direct dependencies expose all their extras in distribution metadata but
             // only contain lockfile edges for selected extras. Checking every advertised extra
             // would incorrectly demand dependencies for unselected features.
@@ -1858,32 +1889,18 @@ impl Lock {
                     .filter(|extra| {
                         is_workspace_package || package.optional_dependencies.contains_key(*extra)
                     })
-                    .map(|extra| {
-                        (
-                            Some(extra),
-                            None,
-                            package
-                                .optional_dependencies
-                                .get(extra)
-                                .map(Vec::as_slice)
-                                .unwrap_or_default(),
-                        )
-                    }),
+                    .map(DependencyContext::Extra),
             )
-            .chain(groups.into_iter().map(|group| {
-                (
-                    None,
-                    Some(group),
-                    package
-                        .dependency_groups
-                        .get(group)
-                        .map(Vec::as_slice)
-                        .unwrap_or_default(),
-                )
-            }));
+            .chain(groups.into_iter().map(DependencyContext::Group));
         let requires_python_marker = self.requires_python.to_marker_tree();
 
-        for (active_extra, active_group, actual_dependencies) in sections {
+        for context in contexts {
+            let (active_extra, active_group) = match context {
+                DependencyContext::Production => (None, None),
+                DependencyContext::Extra(extra) => (Some(extra), None),
+                DependencyContext::Group(group) => (None, Some(group)),
+            };
+            let actual_dependencies = context.dependencies(package);
             let declarations = active_group
                 .and_then(|group| expected_groups.get(group))
                 .unwrap_or(if active_group.is_some() {
@@ -3576,7 +3593,8 @@ impl Package {
         root: &Path,
     ) -> Result<(), LockError> {
         let parent_marker = *resolution.graph[node_index].marker();
-        for edge in resolution.graph.edges(node_index) {
+        let dependencies = context.dependencies_mut(self);
+        'edges: for edge in resolution.graph.edges(node_index) {
             let ResolutionGraphNode::Dist(dependency_dist) = &resolution.graph[edge.target()]
             else {
                 continue;
@@ -3587,63 +3605,34 @@ impl Package {
                 parent_marker,
                 *edge.weight(),
             );
-            self.add_dependency(context, requires_python, dependency_dist, marker, root)?;
-        }
-        Ok(())
-    }
+            let new_dependency =
+                Dependency::from_annotated_dist(requires_python, dependency_dist, marker, root)?;
+            // It's important that we do a comparison on *simplified* markers here. In
+            // particular, when we write markers out to the lock file, we use "simplified"
+            // markers, or markers that are simplified *given* that `requires-python` is
+            // satisfied. So if we don't do equality based on what the simplified marker is,
+            // we might wind up not merging dependencies that ought to be merged and thus
+            // writing out extra entries.
+            //
+            // For example, if `requires-python = '>=3.8'` and we have `foo==1` and
+            // `foo==1 ; python_version >= '3.8'` dependencies, then they don't have equivalent
+            // complexified markers, but their simplified markers are identical.
+            //
+            // NOTE: It does seem like perhaps this should be implemented
+            // semantically/algebraically on `MarkerTree` itself, but it wasn't totally clear
+            // how to do that. I think `pep508` would need to grow a concept of "requires
+            // python" and provide an operation specifically for that.
+            for existing_dependency in &mut *dependencies {
+                if existing_dependency.package_id == new_dependency.package_id
+                    && existing_dependency.simplified_marker == new_dependency.simplified_marker
+                {
+                    existing_dependency.extra.extend(new_dependency.extra);
+                    continue 'edges;
+                }
+            }
 
-    /// Add the [`AnnotatedDist`] as a dependency of the [`Package`] in the given context.
-    fn add_dependency(
-        &mut self,
-        context: DependencyContext<'_>,
-        requires_python: &RequiresPython,
-        annotated_dist: &AnnotatedDist,
-        marker: UniversalMarker,
-        root: &Path,
-    ) -> Result<(), LockError> {
-        let new_dependency =
-            Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
-        let dependencies = match context {
-            DependencyContext::Production => &mut self.dependencies,
-            DependencyContext::Extra(extra) => {
-                self.optional_dependencies.entry(extra.clone()).or_default()
-            }
-            DependencyContext::Group(group) => {
-                self.dependency_groups.entry(group.clone()).or_default()
-            }
-        };
-        for existing_dependency in &mut *dependencies {
-            if existing_dependency.package_id == new_dependency.package_id
-                // It's important that we do a comparison on
-                // *simplified* markers here. In particular, when
-                // we write markers out to the lock file, we use
-                // "simplified" markers, or markers that are simplified
-                // *given* that `requires-python` is satisfied. So if
-                // we don't do equality based on what the simplified
-                // marker is, we might wind up not merging dependencies
-                // that ought to be merged and thus writing out extra
-                // entries.
-                //
-                // For example, if `requires-python = '>=3.8'` and we
-                // have `foo==1` and
-                // `foo==1 ; python_version >= '3.8'` dependencies,
-                // then they don't have equivalent complexified
-                // markers, but their simplified markers are identical.
-                //
-                // NOTE: It does seem like perhaps this should
-                // be implemented semantically/algebraically on
-                // `MarkerTree` itself, but it wasn't totally clear
-                // how to do that. I think `pep508` would need to
-                // grow a concept of "requires python" and provide an
-                // operation specifically for that.
-                && existing_dependency.simplified_marker == new_dependency.simplified_marker
-            {
-                existing_dependency.extra.extend(new_dependency.extra);
-                return Ok(());
-            }
+            dependencies.push(new_dependency);
         }
-
-        dependencies.push(new_dependency);
         Ok(())
     }
 
