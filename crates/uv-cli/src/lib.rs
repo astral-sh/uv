@@ -7062,14 +7062,11 @@ pub struct AuthLogoutArgs {
     #[arg(long, short, value_hint = ValueHint::Other)]
     pub username: Option<String>,
 
-    /// The keyring provider to use for storage of credentials.
-    ///
-    /// Only `--keyring-provider native` is supported for `logout`, which uses the system keyring
-    /// via an integration built into uv.
     #[arg(
         long,
         value_enum,
         env = EnvVars::UV_KEYRING_PROVIDER,
+        hide = true,
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 }
@@ -7098,14 +7095,11 @@ pub struct AuthLoginArgs {
     #[arg(long, short, conflicts_with = "username", conflicts_with = "password", value_hint = ValueHint::Other)]
     pub token: Option<String>,
 
-    /// The keyring provider to use for storage of credentials.
-    ///
-    /// Only `--keyring-provider native` is supported for `login`, which uses the system keyring via
-    /// an integration built into uv.
     #[arg(
         long,
         value_enum,
         env = EnvVars::UV_KEYRING_PROVIDER,
+        hide = true,
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 }
@@ -8458,4 +8452,72 @@ pub enum BuildBackendCommand {
     GetRequiresForBuildEditable,
     /// PEP 660 hook `prepare_metadata_for_build_editable`.
     PrepareMetadataForBuildEditable { wheel_directory: PathBuf },
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::{CommandFactory, Parser};
+
+    use super::{AuthCommand, Cli, Commands};
+
+    #[test]
+    fn auth_keyring_provider_hidden_from_login_logout_help() {
+        let mut command = Cli::command();
+        let auth = command
+            .find_subcommand_mut("auth")
+            .expect("auth subcommand should exist");
+
+        let login_help = auth
+            .find_subcommand_mut("login")
+            .expect("auth login subcommand should exist")
+            .render_help()
+            .to_string();
+        assert!(!login_help.contains("--keyring-provider"));
+
+        let logout_help = auth
+            .find_subcommand_mut("logout")
+            .expect("auth logout subcommand should exist")
+            .render_help()
+            .to_string();
+        assert!(!logout_help.contains("--keyring-provider"));
+    }
+
+    #[test]
+    fn auth_login_logout_still_accept_keyring_provider() {
+        let login = Cli::try_parse_from([
+            "uv",
+            "auth",
+            "login",
+            "https://example.com",
+            "--username",
+            "user",
+            "--password",
+            "password",
+            "--keyring-provider",
+            "disabled",
+        ])
+        .expect("auth login should accept hidden keyring provider");
+
+        assert!(matches!(
+            *login.command,
+            Commands::Auth(ref auth)
+                if matches!(auth.command, AuthCommand::Login(ref login) if login.keyring_provider.is_some())
+        ));
+
+        let logout = Cli::try_parse_from([
+            "uv",
+            "auth",
+            "logout",
+            "https://example.com",
+            "--keyring-provider",
+            "disabled",
+        ])
+        .expect("auth logout should accept hidden keyring provider");
+
+        assert!(matches!(
+            *logout.command,
+            Commands::Auth(ref auth)
+                if matches!(auth.command, AuthCommand::Logout(ref logout) if logout.keyring_provider.is_some())
+        ));
+    }
 }
