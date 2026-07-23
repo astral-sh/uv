@@ -6,9 +6,9 @@ use futures::{StreamExt as _, stream};
 use tokio::sync::Semaphore;
 use tracing::trace;
 
-use uv_client::{MetadataFormat, RegistryClient};
+use uv_client::RegistryClient;
 use uv_configuration::Concurrency;
-use uv_distribution_types::{IndexCapabilities, IndexMetadataRef, IndexUrl};
+use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_normalize::PackageName;
 use uv_pypi_types::{ProjectStatus as PypiProjectStatus, Status};
 
@@ -64,32 +64,17 @@ impl<'a> ProjectStatusAudit<'a> {
         index: &IndexUrl,
         semaphore: &Semaphore,
     ) -> Option<Finding> {
-        let results = match self
+        let archive = match self
             .client
-            .simple_detail(
-                name,
-                Some(IndexMetadataRef::from(index)),
-                self.capabilities,
-                semaphore,
-            )
+            .simple_detail_for_index(name, index, self.capabilities, semaphore)
             .await
         {
-            Ok(results) => results,
+            Ok(archive) => archive,
             Err(err) => {
                 trace!("Skipping project-status check for `{name}`: {err}");
                 return None;
             }
         };
-
-        let archive = results
-            .into_iter()
-            .map(|(_, format)| match format {
-                MetadataFormat::Simple(archive) => archive,
-                MetadataFormat::Flat(_) => {
-                    unreachable!("Flat metadata should not be returned by `simple_detail`")
-                }
-            })
-            .next()?;
 
         let project_status: PypiProjectStatus =
             match rkyv::deserialize::<PypiProjectStatus, rkyv::rancor::Error>(
