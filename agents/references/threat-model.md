@@ -132,6 +132,10 @@ outside that trust set, and artifacts passed from untrusted jobs. The protected 
 history, release artifacts, publishing credentials and OIDC tokens, repository writes, and
 downstream users.
 
+First-party repositories used by uv automation, including `astral-sh/uv-dev` and
+`astral-sh/crates-policies`, are trusted sources when their relevant branches and workflow
+dispatches are restricted to trusted uv maintainers.
+
 - **CI and releases:** Privileged workflows do not execute attacker-controlled code or promote
   attacker-controlled artifacts before review or explicit authorization. Untrusted code or refs must
   not run with privileged permissions or influence artifacts or other output consumed by a
