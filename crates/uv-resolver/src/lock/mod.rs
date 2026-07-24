@@ -4314,19 +4314,13 @@ impl Package {
     }
 
     /// Returns the extras the package provides, if any.
-    pub fn provides_extras(&self) -> impl Iterator<Item = &ExtraName> {
-        self.metadata
-            .provides_extra
-            .iter()
-            .chain(self.optional_dependencies.keys())
+    pub fn provides_extras(&self) -> &[ExtraName] {
+        &self.metadata.provides_extra
     }
 
     /// Returns the dependency groups the package provides, if any.
-    pub fn dependency_groups(&self) -> impl Iterator<Item = &GroupName> {
-        self.metadata
-            .dependency_groups
-            .keys()
-            .chain(self.dependency_groups.keys())
+    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
+        &self.metadata.dependency_groups
     }
 
     /// Returns the dependencies of the package.
