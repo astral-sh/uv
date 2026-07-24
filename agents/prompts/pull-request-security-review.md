@@ -22,8 +22,11 @@ numbers, repository-name shorthand, Markdown link syntax, or backticks around re
 Complete the security diff scan, including finding discovery, validation, and attack-path analysis,
 then translate the reportable findings into the review schema. Report only actionable security
 regressions introduced by this pull request. Do not report pre-existing problems, speculative
-concerns, or style nits. Use the authenticated `gh` CLI for linked issues, earlier reviews,
-comments, and other context that is not available locally.
+concerns, or style nits. Before reporting a finding, inspect `.pull-request-review-comments.json`
+for existing inline review comments, including comments on earlier commits and outdated diff
+positions. Do not repeat a defect already identified in an existing comment, even if its wording,
+line number, or commit differs. Use the authenticated `gh` CLI for linked issues, earlier reviews,
+and other context that is not available locally.
 
 For each finding, provide a concise title without a priority prefix, a clear one-paragraph
 explanation of the defect and its impact, and a priority from 0 (highest) to 3 (lowest). Map

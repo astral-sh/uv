@@ -50,6 +50,11 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             > .pull-request-review.diff
 
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments?per_page=100" \
+            | jq '[.[][] | {author: .user.login, body, path, line, original_line, side, start_line, original_start_line, start_side, commit_id, original_commit_id, in_reply_to_id, created_at, html_url}]' \
+            > .pull-request-review-comments.json
+
           {
             printf 'Pull request security review for #%s: %s\n\n' \
               "$(jq -r '.number' .pull-request-review-event.json)" \
