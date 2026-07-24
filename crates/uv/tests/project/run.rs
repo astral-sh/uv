@@ -1603,6 +1603,7 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
     implementation = CPython
     uv = [UV_VERSION]
     version_info = 3.12.[X]
+    python-version = 3.12
     include-system-site-packages = false
     extends-environment = [PARENT_VENV]/
 

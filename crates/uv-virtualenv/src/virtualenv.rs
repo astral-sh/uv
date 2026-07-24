@@ -542,6 +542,10 @@ pub(crate) fn create(
             },
         ),
         (
+            "python-version".to_string(),
+            interpreter.python_minor_version().to_string(),
+        ),
+        (
             "include-system-site-packages".to_string(),
             if system_site_packages {
                 "true".to_string()

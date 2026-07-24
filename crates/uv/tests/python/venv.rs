@@ -4,6 +4,7 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use insta::assert_snapshot;
 use predicates::prelude::*;
 use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, LockedFileMode};
@@ -1666,8 +1667,8 @@ fn windows_shims() -> Result<()> {
 }
 
 #[test]
-fn verify_pyvenv_cfg() {
-    let context = uv_test::test_context!("3.12");
+fn verify_pyvenv_cfg() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_pyvenv_cfg_filters();
     let pyvenv_cfg = context.venv.child("pyvenv.cfg");
 
     context.venv.assert(predicates::path::is_dir());
@@ -1675,13 +1676,19 @@ fn verify_pyvenv_cfg() {
     // Check pyvenv.cfg exists
     pyvenv_cfg.assert(predicates::path::is_file());
 
-    // Check if "uv = version" is present in the file
-    let version = env!("CARGO_PKG_VERSION").to_string();
-    let search_string = format!("uv = {version}");
-    pyvenv_cfg.assert(predicates::str::contains(search_string));
+    let pyvenv_cfg = fs_err::read_to_string(pyvenv_cfg.path())?;
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(pyvenv_cfg, @r"
+        home = [PYTHON_HOME]
+        implementation = CPython
+        uv = [UV_VERSION]
+        version_info = 3.12
+        python-version = 3.12
+        include-system-site-packages = false
+        ");
+    });
 
-    // Not relocatable by default.
-    pyvenv_cfg.assert(predicates::str::contains("relocatable").not());
+    Ok(())
 }
 
 #[test]
