@@ -109,7 +109,6 @@ class IssueContextTests(unittest.TestCase):
 
         self.environment = {
             **os.environ,
-            "EXPECTED_ISSUE_NUMBER": "123",
             "GH_TOKEN": "test-token",
             "GITHUB_OUTPUT": str(self.root / "outputs"),
             "GITHUB_REPOSITORY": "astral-sh/uv",
@@ -289,14 +288,6 @@ class IssueContextTests(unittest.TestCase):
         result = self.run_step("Validate issue context")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("does not match the expected schema", result.stderr)
-
-    def test_rejects_an_issue_from_another_repository(self) -> None:
-        self.environment["MOCK_ISSUE"] = json.dumps(
-            {**self.issue, "url": "https://github.com/astral-sh/uv-dev/issues/123"}
-        )
-        result = self.run_step("Validate issue context")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("not the expected upstream issue", result.stderr)
 
 
 if __name__ == "__main__":

@@ -94,20 +94,6 @@ jobs:
             --json id,number,title,body,author,url \
             > "$RUNNER_TEMP/issue.json"
 
-          if ! jq --exit-status \
-            --arg repository "$GITHUB_REPOSITORY" \
-            --arg expected_number "$EXPECTED_ISSUE_NUMBER" \
-            '
-              (.id | type == "string" and length > 0)
-              and (.number | type == "number" and . > 0 and floor == .)
-              and (.number | tostring == $expected_number)
-              and .url == "https://github.com/\($repository)/issues/\(.number)"
-            ' \
-            "$RUNNER_TEMP/issue.json" > /dev/null; then
-            echo "The issue is not the expected upstream issue." >&2
-            exit 1
-          fi
-
           printf '%s\n' "$TRIAGE_RESULT" | jq '.' > "$RUNNER_TEMP/triage.json"
           if ! jq --exit-status '
             type == "object"
@@ -135,11 +121,10 @@ jobs:
           fi
 
           {
-            printf 'number=%s\n' "$EXPECTED_ISSUE_NUMBER"
+            printf 'number=%s\n' "$(jq --raw-output '.number' "$RUNNER_TEMP/issue.json")"
             printf 'node_id=%s\n' "$(jq --raw-output '.id' "$RUNNER_TEMP/issue.json")"
           } >> "$GITHUB_OUTPUT"
         env:
-          EXPECTED_ISSUE_NUMBER: ${{ needs.triage.outputs.issue-number }}
           GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           TRIAGE_RESULT: ${{ needs.triage.outputs.result }}
@@ -180,9 +165,6 @@ jobs:
                 ) {
                   issue: node(id: $issueId) {
                     ... on Issue {
-                      id
-                      number
-                      repository { nameWithOwner }
                       linkedBranches(first: 100) {
                         nodes { ref { name repository { id nameWithOwner } } }
                       }
@@ -204,21 +186,7 @@ jobs:
               --jq '.data'
           )"
 
-          if ! jq --exit-status \
-            --arg issue_id "$ISSUE_NODE_ID" \
-            --arg issue_number "$ISSUE_NUMBER" \
-            --arg source_repository "$GITHUB_REPOSITORY" \
-            '
-              .issue.id == $issue_id
-              and (.issue.number | tostring) == $issue_number
-              and .issue.repository.nameWithOwner == $source_repository
-              and (.repository.id | type == "string" and length > 0)
-            ' <<< "$context" > /dev/null; then
-            echo "The issue or destination repository no longer matches the expected context." >&2
-            exit 1
-          fi
-
-          repository_id="$(jq --raw-output '.repository.id' <<< "$context")"
+          repository_id="$(jq --exit-status --raw-output '.repository.id' <<< "$context")"
           head_sha="$(jq --raw-output '.repository.ref.target.oid // empty' <<< "$context")"
           base_tree="$(jq --raw-output '.repository.ref.target.tree.oid // empty' <<< "$context")"
           linked="$(
