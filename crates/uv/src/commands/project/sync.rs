@@ -20,7 +20,9 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist};
+use uv_distribution_types::{
+    Dist, Index, IndexUrl, Name, Requirement, Resolution, ResolvedDist, SourceDist,
+};
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
@@ -37,7 +39,7 @@ use uv_resolver::{
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
@@ -634,7 +636,7 @@ impl Deref for SyncEnvironment {
 }
 
 /// Sync a lockfile with an environment.
-pub(crate) async fn do_sync(
+pub(crate) async fn do_sync<'a>(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,
@@ -654,8 +656,10 @@ pub(crate) async fn do_sync(
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
-    malware_settings: &MalwareCheckSettings,
+    malware_settings: impl Into<MalwareCheckContext<'a>>,
 ) -> Result<Changelog, ProjectError> {
+    let malware_context = malware_settings.into();
+
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
@@ -836,7 +840,7 @@ pub(crate) async fn do_sync(
             concurrency,
             cache,
             preview,
-            malware_settings,
+            &malware_context,
         )
         .await?;
 
@@ -918,7 +922,7 @@ pub(crate) async fn do_sync(
         concurrency,
         cache,
         preview,
-        malware_settings,
+        &malware_context,
     )
     .await?;
 
@@ -949,6 +953,81 @@ pub(crate) async fn do_sync(
     Ok(changelog)
 }
 
+/// Carries dependencies checked during a locked-tool preflight into a following project sync.
+///
+/// The locked tool and project resolutions can overlap, so the later sync skips dependencies that
+/// were already checked instead of querying OSV twice.
+pub(crate) struct MalwareCheckContext<'a> {
+    settings: &'a MalwareCheckSettings,
+    checked_dependencies: FxHashSet<Dependency>,
+}
+
+impl MalwareCheckContext<'_> {
+    pub(super) fn record_resolution(&mut self, resolution: &Resolution) {
+        if self.settings.enabled {
+            self.checked_dependencies
+                .extend(malware_dependencies_from_resolution(resolution));
+        }
+    }
+}
+
+impl<'a> From<&'a MalwareCheckSettings> for MalwareCheckContext<'a> {
+    fn from(settings: &'a MalwareCheckSettings) -> Self {
+        Self {
+            settings,
+            checked_dependencies: FxHashSet::default(),
+        }
+    }
+}
+
+/// Run a malware check against OSV before reusing or materializing a locked [`Resolution`].
+pub(super) async fn check_resolution_malware(
+    resolution: &Resolution,
+    client_builder: &BaseClientBuilder<'_>,
+    concurrency: &Concurrency,
+    malware_settings: &MalwareCheckSettings,
+    cache: &Cache,
+    preview: Preview,
+) -> Result<(), ProjectError> {
+    if !malware_settings.enabled {
+        return Ok(());
+    }
+    warn_malware_check_preview(preview);
+
+    let dependencies = malware_dependencies_from_resolution(resolution);
+    let installed_dependencies = dependencies.iter().cloned().collect();
+
+    check_malware_dependencies(
+        &dependencies,
+        &installed_dependencies,
+        client_builder,
+        concurrency,
+        malware_settings.malware_check_url.clone(),
+        cache,
+    )
+    .await
+}
+
+fn malware_dependencies_from_resolution(resolution: &Resolution) -> Vec<Dependency> {
+    resolution
+        .distributions()
+        .filter(|dist| matches!(dist.index(), Some(IndexUrl::Pypi(_))))
+        .filter_map(|dist| {
+            dist.version()
+                .map(|version| Dependency::new(dist.name().clone(), version.clone()))
+        })
+        .collect()
+}
+
+fn warn_malware_check_preview(preview: Preview) {
+    if !preview.is_enabled(PreviewFeature::MalwareCheck) {
+        warn_user_once!(
+            "Malware checks are experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MalwareCheck
+        );
+    }
+}
+
 /// Run a malware check against OSV if malware checking is enabled.
 async fn maybe_check_malware(
     target: &InstallTarget<'_>,
@@ -957,24 +1036,20 @@ async fn maybe_check_malware(
     concurrency: &Concurrency,
     cache: &Cache,
     preview: Preview,
-    malware_settings: &MalwareCheckSettings,
+    malware_context: &MalwareCheckContext<'_>,
 ) -> Result<(), ProjectError> {
-    if !malware_settings.enabled {
+    if !malware_context.settings.enabled {
         return Ok(());
     }
 
-    if !preview.is_enabled(PreviewFeature::MalwareCheck) {
-        warn_user!(
-            "Malware checks are experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::MalwareCheck
-        );
-    }
+    warn_malware_check_preview(preview);
     check_malware(
         target,
         resolution,
+        &malware_context.checked_dependencies,
         client_builder,
         concurrency,
-        malware_settings.malware_check_url.clone(),
+        malware_context.settings.malware_check_url.clone(),
         cache,
     )
     .await
@@ -988,6 +1063,7 @@ async fn maybe_check_malware(
 async fn check_malware(
     target: &InstallTarget<'_>,
     resolution: &Resolution,
+    checked_dependencies: &FxHashSet<Dependency>,
     client_builder: &BaseClientBuilder<'_>,
     concurrency: &Concurrency,
     malware_check_url: Option<DisplaySafeUrl>,
@@ -995,7 +1071,10 @@ async fn check_malware(
 ) -> Result<(), ProjectError> {
     let installed_dependencies: FxHashSet<_> = resolution
         .distributions()
-        .filter_map(|dist| dist.version().map(|version| (dist.name(), version)))
+        .filter_map(|dist| {
+            dist.version()
+                .map(|version| Dependency::new(dist.name().clone(), version.clone()))
+        })
         .collect();
 
     let all_extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::All);
@@ -1021,8 +1100,28 @@ async fn check_malware(
     let dependencies: Vec<Dependency> = auditable
         .packages()
         .map(|(name, version)| Dependency::new((*name).clone(), (*version).clone()))
+        .filter(|dependency| !checked_dependencies.contains(dependency))
         .collect();
 
+    check_malware_dependencies(
+        &dependencies,
+        &installed_dependencies,
+        client_builder,
+        concurrency,
+        malware_check_url,
+        cache,
+    )
+    .await
+}
+
+async fn check_malware_dependencies(
+    dependencies: &[Dependency],
+    installed_dependencies: &FxHashSet<Dependency>,
+    client_builder: &BaseClientBuilder<'_>,
+    concurrency: &Concurrency,
+    malware_check_url: Option<DisplaySafeUrl>,
+    cache: &Cache,
+) -> Result<(), ProjectError> {
     let osv_url = malware_check_url.unwrap_or_else(|| osv::API_BASE.clone());
 
     let base_client = client_builder.build()?;
@@ -1039,7 +1138,7 @@ async fn check_malware(
     // seems fine while we're in preview since it'll help us shake out
     // any reliability risks with OSV.
     let identifiers = service
-        .query_identifiers(&dependencies, Filter::Malware)
+        .query_identifiers(dependencies, Filter::Malware)
         .await?;
 
     let malware_findings: Vec<_> = identifiers
@@ -1056,9 +1155,9 @@ async fn check_malware(
             MalwareFindings(malware_findings.clone())
         );
 
-        let has_installed_malware = malware_findings.iter().any(|(dependency, _)| {
-            installed_dependencies.contains(&(dependency.name(), dependency.version()))
-        });
+        let has_installed_malware = malware_findings
+            .iter()
+            .any(|(dependency, _)| installed_dependencies.contains(dependency));
 
         if has_installed_malware {
             Err(ProjectError::MalwareFound)
