@@ -347,9 +347,11 @@ impl CachedEnvironment {
         let path = match dist {
             ResolvedDist::Installed { .. } => return Ok(None),
             ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
-                Dist::Built(BuiltDist::Path(wheel)) => wheel.install_path.as_ref(),
-                Dist::Source(SourceDist::Path(sdist)) => sdist.install_path.as_ref(),
-                Dist::Source(SourceDist::Directory(directory)) => directory.install_path.as_ref(),
+                Dist::Built(BuiltDist::Path(wheel)) => wheel.source.install_path.as_ref(),
+                Dist::Source(SourceDist::Path(sdist)) => sdist.source.install_path.as_ref(),
+                Dist::Source(SourceDist::Directory(directory)) => {
+                    directory.source.install_path.as_ref()
+                }
                 _ => return Ok(None),
             },
         };

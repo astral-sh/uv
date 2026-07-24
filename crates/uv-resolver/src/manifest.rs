@@ -154,11 +154,39 @@ impl Manifest {
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        self.requirements_no_overrides_with_lookaheads(env, mode, self.lookaheads.iter())
+    }
+
+    /// Return requirements for URL selection, preferring root lookaheads over recursive ones.
+    pub(crate) fn url_requirements_no_overrides<'a>(
+        &'a self,
+        env: &'a ResolverEnvironment,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        self.requirements_no_overrides_with_lookaheads(
+            env,
+            mode,
+            self.lookaheads
+                .iter()
+                .filter(|lookahead| !lookahead.is_root())
+                .chain(
+                    self.lookaheads
+                        .iter()
+                        .filter(|lookahead| lookahead.is_root()),
+                ),
+        )
+    }
+
+    fn requirements_no_overrides_with_lookaheads<'a>(
+        &'a self,
+        env: &'a ResolverEnvironment,
+        mode: DependencyMode,
+        lookaheads: impl Iterator<Item = &'a RequestedRequirements> + 'a,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         match mode {
             // Include all direct and transitive requirements, with constraints and overrides applied.
             DependencyMode::Transitive => Either::Left(
-                self.lookaheads
-                    .iter()
+                lookaheads
                     .flat_map(move |lookahead| {
                         self.overrides
                             .apply_for(

@@ -98,14 +98,14 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| !self.excludes.contains(&requirement.name))
             .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
-            .map(|requirement| (*requirement).clone())
+            .map(|requirement| ((*requirement).clone(), true))
             .collect();
 
         while !queue.is_empty() || !futures.is_empty() {
-            while let Some(requirement) = queue.pop_front() {
+            while let Some((requirement, is_root)) = queue.pop_front() {
                 if !matches!(requirement.source, RequirementSource::Registry { .. }) {
                     if seen.insert(requirement.clone()) {
-                        futures.push(self.lookahead(requirement, hasher.clone()));
+                        futures.push(self.lookahead(requirement, hasher.clone(), is_root));
                     }
                 }
             }
@@ -133,7 +133,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         ) && requirement
                             .evaluate_markers(env.marker_environment(), lookahead.extras())
                         {
-                            queue.push_back((*requirement).clone());
+                            queue.push_back(((*requirement).clone(), false));
                         }
                     }
                     results.push(lookahead);
@@ -149,6 +149,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         &self,
         requirement: Requirement,
         hasher: HashStrategy,
+        is_root: bool,
     ) -> Result<Option<RequestedRequirements>, Error> {
         trace!("Performing lookahead for {requirement}");
 
@@ -228,6 +229,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             requirement.extras,
             requires_dist,
             direct,
+            is_root,
         )))
     }
 }

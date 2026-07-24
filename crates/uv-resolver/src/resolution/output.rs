@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -9,12 +9,13 @@ use petgraph::{
     graph::{Graph, NodeIndex},
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use same_file::is_same_file;
 
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement, RequiresPython,
-    ResolutionDiagnostic, ResolvedDist,
+    BuiltDist, Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement,
+    RequirementSource, RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -124,6 +125,7 @@ impl ResolverOutput {
     pub(crate) fn from_state(
         resolutions: &[Resolution],
         requirements: Vec<Requirement>,
+        workspace_members: &BTreeSet<PackageName>,
         constraints: Constraints,
         overrides: Overrides,
         preferences: &Preferences,
@@ -220,6 +222,16 @@ impl ResolverOutput {
         // Discard any unreachable nodes.
         graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
+        // Give every local package and requirement the path policy selected by the active
+        // project or workspace, before the resolution is exposed to lockfile exporters.
+        Self::normalize_local_sources(
+            &mut graph,
+            workspace_members,
+            &requirements,
+            &constraints,
+            &overrides,
+        );
+
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
             report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &overrides);
         }
@@ -274,6 +286,122 @@ impl ResolverOutput {
             }
         }
         Ok(output)
+    }
+
+    /// Apply a selected local source to its distribution and every matching metadata requirement.
+    fn normalize_local_sources(
+        graph: &mut Graph<ResolutionGraphNode, UniversalMarker, Directed>,
+        workspace_members: &BTreeSet<PackageName>,
+        requirements: &[Requirement],
+        constraints: &Constraints,
+        overrides: &Overrides,
+    ) {
+        let absolute_sources = requirements
+            .iter()
+            .chain(constraints.requirements())
+            .chain(overrides.global_requirements())
+            .chain(
+                overrides
+                    .scoped_requirements()
+                    .map(|(_, _, requirement)| requirement),
+            )
+            .chain(
+                graph
+                    .node_weights()
+                    .filter_map(|node| match node {
+                        ResolutionGraphNode::Dist(dist)
+                            if workspace_members.contains(&dist.name) =>
+                        {
+                            dist.metadata.as_ref()
+                        }
+                        ResolutionGraphNode::Root | ResolutionGraphNode::Dist(_) => None,
+                    })
+                    .flat_map(|metadata| {
+                        metadata.requires_dist.iter().chain(
+                            metadata
+                                .dependency_groups
+                                .values()
+                                .flat_map(|requirements| requirements.iter()),
+                        )
+                    }),
+            )
+            .filter_map(|requirement| {
+                let (RequirementSource::Path { source, .. }
+                | RequirementSource::Directory { source, .. }) = &requirement.source
+                else {
+                    return None;
+                };
+
+                source
+                    .url
+                    .was_given_absolute()
+                    .then(|| (requirement.name.clone(), source.install_path.clone()))
+            })
+            .collect::<FxHashSet<_>>();
+
+        let mut selected_sources = FxHashMap::default();
+        for node in graph.node_weights_mut() {
+            let ResolutionGraphNode::Dist(annotated_dist) = node else {
+                continue;
+            };
+            let ResolvedDist::Installable { dist, .. } = &mut annotated_dist.dist else {
+                continue;
+            };
+            let source = match Arc::make_mut(dist) {
+                Dist::Built(BuiltDist::Path(dist)) => &mut dist.source,
+                Dist::Source(SourceDist::Path(dist)) => &mut dist.source,
+                Dist::Source(SourceDist::Directory(dist)) => &mut dist.source,
+                _ => continue,
+            };
+
+            source.preserve_absolute = absolute_sources.iter().any(|(name, path)| {
+                name == &annotated_dist.name
+                    && (path == &source.install_path
+                        || is_same_file(path, &source.install_path).unwrap_or(false))
+            });
+
+            selected_sources
+                .entry((annotated_dist.name.clone(), source.install_path.clone()))
+                .or_insert_with(|| source.clone());
+        }
+
+        for node in graph.node_weights_mut() {
+            let ResolutionGraphNode::Dist(annotated_dist) = node else {
+                continue;
+            };
+            let Some(metadata) = annotated_dist.metadata.as_mut() else {
+                continue;
+            };
+
+            for requirement in metadata.requires_dist.iter_mut().chain(
+                metadata
+                    .dependency_groups
+                    .values_mut()
+                    .flat_map(|requirements| requirements.iter_mut()),
+            ) {
+                let (RequirementSource::Path { source, .. }
+                | RequirementSource::Directory { source, .. }) = &mut requirement.source
+                else {
+                    continue;
+                };
+
+                let selected = selected_sources
+                    .get(&(requirement.name.clone(), source.install_path.clone()))
+                    .or_else(|| {
+                        selected_sources
+                            .iter()
+                            .find_map(|((name, path), selected)| {
+                                (name == &requirement.name
+                                    && is_same_file(path, &source.install_path).unwrap_or(false))
+                                .then_some(selected)
+                            })
+                    });
+
+                if let Some(selected) = selected {
+                    *source = selected.clone();
+                }
+            }
+        }
     }
 
     fn add_edge(

@@ -72,7 +72,7 @@ impl CachedDist {
                 filename,
                 url: VerbatimParsedUrl {
                     parsed_url: dist.to_parsed_url(),
-                    verbatim: dist.url,
+                    verbatim: dist.source.url,
                 },
                 hashes,
                 cache_info,
@@ -134,7 +134,7 @@ impl CachedDist {
                 filename,
                 url: VerbatimParsedUrl {
                     parsed_url: dist.to_parsed_url(),
-                    verbatim: dist.url,
+                    verbatim: dist.source.url,
                 },
                 hashes,
                 cache_info,
@@ -145,7 +145,7 @@ impl CachedDist {
                 filename,
                 url: VerbatimParsedUrl {
                     parsed_url: dist.to_parsed_url(),
-                    verbatim: dist.url,
+                    verbatim: dist.source.url,
                 },
                 hashes,
                 cache_info,

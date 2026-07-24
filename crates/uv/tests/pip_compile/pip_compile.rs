@@ -8,6 +8,8 @@ use std::process::Command;
 use std::str::FromStr;
 
 use anyhow::Result;
+#[cfg(feature = "test-universal")]
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use flate2::write::GzEncoder;
 use fs_err::File;
@@ -28,6 +30,8 @@ use uv_pep440::Version;
 use uv_pep508::Requirement;
 use uv_static::EnvVars;
 
+#[cfg(feature = "test-universal")]
+use uv_test::diff_snapshot;
 use uv_test::packse::PackseServer;
 use uv_test::packse::scenario::{Package, PackageMetadata, Scenario};
 use uv_test::{DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, uv_snapshot};
@@ -17257,6 +17261,92 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     "#);
+
+    Ok(())
+}
+
+/// Keep backend-only local paths portable without changing explicitly absolute requirements.
+#[cfg(feature = "test-universal")]
+#[test]
+fn pep_751_compile_backend_only_relative_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("child");
+    child.child("child/__init__.py").touch()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let child_url = Url::from_file_path(child.path())
+        .map_err(|()| anyhow::anyhow!("child path is not a valid file URL"))?;
+
+    let parent = context.temp_dir.child("parent");
+    parent.child("parent/__init__.py").touch()?;
+    parent.child("pyproject.toml").write_str(&formatdoc! {r#"
+            [project]
+            name = "parent"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["child @ {child_url}"]
+
+            [build-system]
+            requires = ["uv_build>=0.7,<10000"]
+            build-backend = "uv_build"
+        "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("./parent\n")?;
+
+    context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+    let backend_only_lock = context.read("pylock.toml");
+
+    requirements_txt.write_str(&formatdoc! {"
+        ./parent
+        child @ {child_url}
+    "})?;
+
+    context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+    let user_requested_lock = context.read("pylock.toml");
+
+    // The metadata-only path stays relative; explicitly requesting the same path preserves it.
+    let diff = diff_snapshot(&backend_only_lock, &user_requested_lock, 3);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        insta::assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -6,7 +6,7 @@
+
+         [[packages]]
+         name = "child"
+        -directory = { path = "child" }
+        +directory = { path = "[TEMP_DIR]/child" }
+
+         [[packages]]
+         name = "parent"
+        "#);
+    });
 
     Ok(())
 }

@@ -10,8 +10,8 @@ use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
-    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
-    RequirementSource,
+    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, LocalSourcePath,
+    Origin, Requirement, RequirementSource,
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
@@ -944,10 +944,9 @@ fn path_source(
 
         if editable == Some(true) {
             Ok(RequirementSource::Directory {
-                install_path: install_path.into_boxed_path(),
-                url,
                 editable,
                 r#virtual: Some(false),
+                source: LocalSourcePath::new(install_path.into_boxed_path(), url),
             })
         } else {
             // Determine whether the project is a package or virtual.
@@ -966,10 +965,9 @@ fn path_source(
             let r#virtual = !is_package;
 
             Ok(RequirementSource::Directory {
-                install_path: install_path.into_boxed_path(),
-                url,
                 editable: Some(false),
                 r#virtual: Some(r#virtual),
+                source: LocalSourcePath::new(install_path.into_boxed_path(), url),
             })
         }
     } else {
@@ -985,8 +983,7 @@ fn path_source(
         Ok(RequirementSource::Path {
             ext: DistExtension::from_path(&install_path)
                 .map_err(|err| ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err))?,
-            install_path: install_path.into_boxed_path(),
-            url,
+            source: LocalSourcePath::new(install_path.into_boxed_path(), url),
         })
     }
 }

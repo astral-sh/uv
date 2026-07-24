@@ -106,7 +106,7 @@ impl<'a> BuiltWheelIndex<'a> {
     pub fn path(&self, source_dist: &PathSourceDist) -> Result<Option<CachedWheel>, Error> {
         let cache_shard = self.cache.shard(
             CacheBucket::SourceDistributions,
-            WheelCache::Path(&source_dist.url).root(),
+            WheelCache::Path(&source_dist.source.url).root(),
         );
 
         // Read the revision from the cache.
@@ -117,7 +117,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If the distribution is stale, omit it from the index.
         let cache_info =
-            CacheInfo::from_file(&source_dist.install_path).map_err(Error::CacheRead)?;
+            CacheInfo::from_file(&source_dist.source.install_path).map_err(Error::CacheRead)?;
         if cache_info != *pointer.cache_info() {
             return Ok(None);
         }
@@ -158,9 +158,9 @@ impl<'a> BuiltWheelIndex<'a> {
         let cache_shard = self.cache.shard(
             CacheBucket::SourceDistributions,
             if source_dist.editable.unwrap_or(false) {
-                WheelCache::Editable(&source_dist.url).root()
+                WheelCache::Editable(&source_dist.source.url).root()
             } else {
-                WheelCache::Path(&source_dist.url).root()
+                WheelCache::Path(&source_dist.source.url).root()
             },
         );
 
@@ -171,7 +171,7 @@ impl<'a> BuiltWheelIndex<'a> {
         };
 
         // If the distribution is stale, omit it from the index.
-        let cache_info = CacheInfo::from_directory(&source_dist.install_path)?;
+        let cache_info = CacheInfo::from_directory(&source_dist.source.install_path)?;
         if cache_info != *pointer.cache_info() {
             return Ok(None);
         }

@@ -6,7 +6,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_distribution_filename::DistExtension;
-use uv_fs::{CWD, PortablePath, PortablePathBuf, normalize_path, try_relative_to_if};
+use uv_fs::{CWD, PortablePath, PortablePathBuf, normalize_path};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
@@ -15,7 +15,7 @@ use uv_pep508::{
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
-use crate::{IndexMetadata, IndexUrl};
+use crate::{IndexMetadata, IndexUrl, LocalSourcePath};
 
 use uv_pypi_types::{
     ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
@@ -92,10 +92,10 @@ impl Requirement {
 
     /// Return the hashes of the requirement, as specified in the URL fragment.
     pub fn hashes(&self) -> Option<Hashes> {
-        let (RequirementSource::Url { ref url, .. } | RequirementSource::Path { ref url, .. }) =
-            self.source
-        else {
-            return None;
+        let url = match &self.source {
+            RequirementSource::Url { url, .. } => url,
+            RequirementSource::Path { source, .. } => &source.url,
+            _ => return None,
         };
         let fragment = url.fragment()?;
         fragment
@@ -205,9 +205,11 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimUrl> {
                 }
                 RequirementSource::Url { url, .. }
                 | RequirementSource::GitPath { url, .. }
-                | RequirementSource::GitDirectory { url, .. }
-                | RequirementSource::Path { url, .. }
-                | RequirementSource::Directory { url, .. } => Some(VersionOrUrl::Url(url)),
+                | RequirementSource::GitDirectory { url, .. } => Some(VersionOrUrl::Url(url)),
+                RequirementSource::Path { source, .. }
+                | RequirementSource::Directory { source, .. } => {
+                    Some(VersionOrUrl::Url(source.url))
+                }
             },
         }
     }
@@ -262,31 +264,28 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
                     }),
                     verbatim: url,
                 })),
-                RequirementSource::Path {
-                    install_path,
-                    ext,
-                    url,
-                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                    parsed_url: ParsedUrl::Path(ParsedPathUrl {
-                        url: url.to_url(),
-                        install_path,
-                        ext,
-                    }),
-                    verbatim: url,
-                })),
+                RequirementSource::Path { source, ext } => {
+                    Some(VersionOrUrl::Url(VerbatimParsedUrl {
+                        parsed_url: ParsedUrl::Path(ParsedPathUrl {
+                            url: source.url.to_url(),
+                            install_path: source.install_path,
+                            ext,
+                        }),
+                        verbatim: source.url,
+                    }))
+                }
                 RequirementSource::Directory {
-                    install_path,
+                    source,
                     editable,
                     r#virtual,
-                    url,
                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
                     parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
-                        url: url.to_url(),
-                        install_path,
+                        url: source.url.to_url(),
+                        install_path: source.install_path,
                         editable,
                         r#virtual,
                     }),
-                    verbatim: url,
+                    verbatim: source.url,
                 })),
             },
         }
@@ -387,11 +386,9 @@ impl Display for Requirement {
                 }
                 writeln!(f)?;
             }
-            RequirementSource::Path { url, .. } => {
-                write!(f, " @ {url}")?;
-            }
-            RequirementSource::Directory { url, .. } => {
-                write!(f, " @ {url}")?;
+            RequirementSource::Path { source, .. }
+            | RequirementSource::Directory { source, .. } => {
+                write!(f, " @ {}", source.url)?;
             }
         }
         if let Some(marker) = self.marker.contents() {
@@ -492,27 +489,22 @@ impl CacheKey for Requirement {
                 }
                 url.cache_key(state);
             }
-            RequirementSource::Path {
-                install_path,
-                ext,
-                url,
-            } => {
+            RequirementSource::Path { source, ext } => {
                 3u8.cache_key(state);
-                install_path.cache_key(state);
+                source.install_path.cache_key(state);
                 ext.name().cache_key(state);
-                url.cache_key(state);
+                source.url.cache_key(state);
             }
             RequirementSource::Directory {
-                install_path,
+                source,
                 editable,
                 r#virtual,
-                url,
             } => {
                 4u8.cache_key(state);
-                install_path.cache_key(state);
+                source.install_path.cache_key(state);
                 editable.cache_key(state);
                 r#virtual.cache_key(state);
-                url.cache_key(state);
+                source.url.cache_key(state);
             }
         }
 
@@ -582,26 +574,20 @@ pub enum RequirementSource {
     /// be a binary distribution (a `.whl` file) or a source distribution archive (a `.zip` or
     /// `.tar.gz` file).
     Path {
-        /// The absolute path to the distribution which we use for installing.
-        install_path: Box<Path>,
+        /// The local archive, original URL, and path disposition.
+        source: LocalSourcePath,
         /// The file extension, e.g. `tar.gz`, `zip`, etc.
         ext: DistExtension,
-        /// The PEP 508 style URL in the format
-        /// `file:///<path>#subdirectory=<subdirectory>`.
-        url: VerbatimUrl,
     },
     /// A local source tree (a directory with a pyproject.toml in, or a legacy
     /// source distribution with only a setup.py but non pyproject.toml in it).
     Directory {
-        /// The absolute path to the distribution which we use for installing.
-        install_path: Box<Path>,
+        /// The local directory, original URL, and path disposition.
+        source: LocalSourcePath,
         /// For a source tree (a directory), whether to install as an editable.
         editable: Option<bool>,
         /// For a source tree (a directory), whether the project should be built and installed.
         r#virtual: Option<bool>,
-        /// The PEP 508 style URL in the format
-        /// `file:///<path>#subdirectory=<subdirectory>`.
-        url: VerbatimUrl,
     },
 }
 
@@ -611,15 +597,13 @@ impl RequirementSource {
     pub(crate) fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
         match parsed_url {
             ParsedUrl::Path(local_file) => Self::Path {
-                install_path: local_file.install_path.clone(),
                 ext: local_file.ext,
-                url,
+                source: LocalSourcePath::new(local_file.install_path.clone(), url),
             },
             ParsedUrl::Directory(directory) => Self::Directory {
-                install_path: directory.install_path.clone(),
                 editable: directory.editable,
                 r#virtual: directory.r#virtual,
-                url,
+                source: LocalSourcePath::new(directory.install_path.clone(), url),
             },
             ParsedUrl::GitDirectory(git) => Self::GitDirectory {
                 url,
@@ -658,31 +642,26 @@ impl RequirementSource {
                 )),
                 verbatim: url.clone(),
             }),
-            Self::Path {
-                install_path,
-                ext,
-                url,
-            } => Some(VerbatimParsedUrl {
+            Self::Path { source, ext } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Path(ParsedPathUrl::from_source(
-                    install_path.clone(),
+                    source.install_path.clone(),
                     *ext,
-                    url.to_url(),
+                    source.url.to_url(),
                 )),
-                verbatim: url.clone(),
+                verbatim: source.url.clone(),
             }),
             Self::Directory {
-                install_path,
+                source,
                 editable,
                 r#virtual,
-                url,
             } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
-                    install_path.clone(),
+                    source.install_path.clone(),
                     *editable,
                     *r#virtual,
-                    url.to_url(),
+                    source.url.to_url(),
                 )),
-                verbatim: url.clone(),
+                verbatim: source.url.clone(),
             }),
             Self::GitDirectory {
                 git,
@@ -742,29 +721,22 @@ impl RequirementSource {
             | Self::Url { .. }
             | Self::GitPath { .. }
             | Self::GitDirectory { .. } => Ok(self),
-            Self::Path {
-                install_path,
-                ext,
-                url,
-            } => Ok(Self::Path {
-                install_path: try_relative_to_if(&install_path, path, !url.was_given_absolute())?
-                    .into_boxed_path(),
-                ext,
-                url,
-            }),
+            Self::Path { mut source, ext } => {
+                source.install_path = source.relative_to(path)?.into_boxed_path();
+                Ok(Self::Path { source, ext })
+            }
             Self::Directory {
-                install_path,
+                mut source,
                 editable,
                 r#virtual,
-                url,
-                ..
-            } => Ok(Self::Directory {
-                install_path: try_relative_to_if(&install_path, path, !url.was_given_absolute())?
-                    .into_boxed_path(),
-                editable,
-                r#virtual,
-                url,
-            }),
+            } => {
+                source.install_path = source.relative_to(path)?.into_boxed_path();
+                Ok(Self::Directory {
+                    source,
+                    editable,
+                    r#virtual,
+                })
+            }
         }
     }
 
@@ -776,31 +748,26 @@ impl RequirementSource {
             | Self::Url { .. }
             | Self::GitPath { .. }
             | Self::GitDirectory { .. } => self,
-            Self::Path {
-                install_path,
-                ext,
-                url,
-            } => Self::Path {
-                install_path: normalize_path(root.join(install_path))
+            Self::Path { mut source, ext } => {
+                source.install_path = normalize_path(root.join(&source.install_path))
                     .into_owned()
-                    .into_boxed_path(),
-                ext,
-                url,
-            },
+                    .into_boxed_path();
+                Self::Path { source, ext }
+            }
             Self::Directory {
-                install_path,
+                mut source,
                 editable,
                 r#virtual,
-                url,
-                ..
-            } => Self::Directory {
-                install_path: normalize_path(root.join(install_path))
+            } => {
+                source.install_path = normalize_path(root.join(&source.install_path))
                     .into_owned()
-                    .into_boxed_path(),
-                editable,
-                r#virtual,
-                url,
-            },
+                    .into_boxed_path();
+                Self::Directory {
+                    source,
+                    editable,
+                    r#virtual,
+                }
+            }
         }
     }
 }
@@ -857,11 +824,8 @@ impl Display for RequirementSource {
                 }
                 writeln!(f)?;
             }
-            Self::Path { url, .. } => {
-                write!(f, "{url}")?;
-            }
-            Self::Directory { url, .. } => {
-                write!(f, "{url}")?;
+            Self::Path { source, .. } | Self::Directory { source, .. } => {
+                write!(f, "{}", source.url)?;
             }
         }
         Ok(())
@@ -1027,30 +991,25 @@ impl From<RequirementSource> for RequirementSourceWire {
                     git: url.to_string(),
                 }
             }
-            RequirementSource::Path {
-                install_path,
-                ext: _,
-                url: _,
-            } => Self::Path {
-                path: PortablePathBuf::from(install_path),
+            RequirementSource::Path { source, ext: _ } => Self::Path {
+                path: PortablePathBuf::from(source.install_path),
             },
             RequirementSource::Directory {
-                install_path,
+                source,
                 editable,
                 r#virtual,
-                url: _,
             } => {
                 if editable.unwrap_or(false) {
                     Self::Editable {
-                        editable: PortablePathBuf::from(install_path),
+                        editable: PortablePathBuf::from(source.install_path),
                     }
                 } else if r#virtual.unwrap_or(false) {
                     Self::Virtual {
-                        r#virtual: PortablePathBuf::from(install_path),
+                        r#virtual: PortablePathBuf::from(source.install_path),
                     }
                 } else {
                     Self::Directory {
-                        directory: PortablePathBuf::from(install_path),
+                        directory: PortablePathBuf::from(source.install_path),
                     }
                 }
             }
@@ -1173,38 +1132,34 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                     ext: DistExtension::from_path(&path).map_err(|err| {
                         ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err)
                     })?,
-                    install_path: path,
-                    url,
+                    source: LocalSourcePath::new(path, url),
                 })
             }
             RequirementSourceWire::Directory { directory } => {
                 let directory = Box::<Path>::from(directory);
                 let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&directory)))?;
                 Ok(Self::Directory {
-                    install_path: directory,
                     editable: Some(false),
                     r#virtual: Some(false),
-                    url,
+                    source: LocalSourcePath::new(directory, url),
                 })
             }
             RequirementSourceWire::Editable { editable } => {
                 let editable = Box::<Path>::from(editable);
                 let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&editable)))?;
                 Ok(Self::Directory {
-                    install_path: editable,
                     editable: Some(true),
                     r#virtual: Some(false),
-                    url,
+                    source: LocalSourcePath::new(editable, url),
                 })
             }
             RequirementSourceWire::Virtual { r#virtual } => {
                 let r#virtual = Box::<Path>::from(r#virtual);
                 let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&r#virtual)))?;
                 Ok(Self::Directory {
-                    install_path: r#virtual,
                     editable: Some(false),
                     r#virtual: Some(true),
-                    url,
+                    source: LocalSourcePath::new(r#virtual, url),
                 })
             }
         }
@@ -1217,7 +1172,7 @@ mod tests {
 
     use uv_pep508::{MarkerTree, VerbatimUrl};
 
-    use crate::{Requirement, RequirementSource};
+    use crate::{LocalSourcePath, Requirement, RequirementSource};
 
     #[test]
     fn roundtrip() {
@@ -1249,10 +1204,12 @@ mod tests {
             groups: Box::new([]),
             marker: MarkerTree::TRUE,
             source: RequirementSource::Directory {
-                install_path: PathBuf::from(path).into_boxed_path(),
                 editable: Some(false),
                 r#virtual: Some(false),
-                url: VerbatimUrl::from_absolute_path(path).unwrap(),
+                source: LocalSourcePath::new(
+                    PathBuf::from(path).into_boxed_path(),
+                    VerbatimUrl::from_absolute_path(path).unwrap(),
+                ),
             },
             origin: None,
         };

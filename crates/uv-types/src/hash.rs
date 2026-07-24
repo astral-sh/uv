@@ -389,11 +389,11 @@ impl HashStrategy {
             RequirementSource::GitPath {
                 git, install_path, ..
             } => Some(VersionId::from_git(git, Some(install_path))),
-            RequirementSource::Path { install_path, .. } => {
-                Some(VersionId::from_path(install_path))
+            RequirementSource::Path { source, .. } => {
+                Some(VersionId::from_path(&source.install_path))
             }
-            RequirementSource::Directory { install_path, .. } => {
-                Some(VersionId::from_directory(install_path))
+            RequirementSource::Directory { source, .. } => {
+                Some(VersionId::from_directory(&source.install_path))
             }
         }
     }

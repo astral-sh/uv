@@ -827,6 +827,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         ResolverOutput::from_state(
             &resolutions,
             self.requirements.clone(),
+            &self.workspace_members,
             self.constraints.clone(),
             self.overrides.clone(),
             &self.preferences,
