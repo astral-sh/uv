@@ -935,7 +935,14 @@ impl ToolRunSettings {
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
         let options = resolver_installer_options_with_environment(
-            resolver_installer_options(installer, build)?,
+            resolver_installer_options(
+                installer,
+                build,
+                filesystem_options
+                    .as_ref()
+                    .and_then(|options| options.top_level.index.as_deref())
+                    .unwrap_or_default(),
+            )?,
             &environment,
         )
         .combine(ResolverInstallerOptions::from(
@@ -1060,7 +1067,14 @@ impl ToolInstallSettings {
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
         let options = resolver_installer_options_with_environment(
-            resolver_installer_options(installer, build)?,
+            resolver_installer_options(
+                installer,
+                build,
+                filesystem_options
+                    .as_ref()
+                    .and_then(|options| options.top_level.index.as_deref())
+                    .unwrap_or_default(),
+            )?,
             &environment,
         )
         .combine(ResolverInstallerOptions::from(
@@ -1196,7 +1210,7 @@ impl ToolUpgradeSettings {
         };
 
         let args = resolver_installer_options_with_environment(
-            resolver_installer_options(installer, build)?,
+            resolver_installer_options(installer, build, configured_indexes(filesystem.as_ref()))?,
             environment,
         );
         let filesystem = filesystem.map(FilesystemOptions::into_options);
@@ -2279,19 +2293,6 @@ impl AddSettings {
             DependencyType::Production
         };
 
-        // Warn user if an ambiguous relative path was passed as a value for
-        // `--index` or `--default-index`.
-        for index in installer
-            .index_args
-            .default_index
-            .iter()
-            .chain(installer.index_args.index.iter().flatten().flatten())
-        {
-            if let Maybe::Some(index) = index {
-                index.url().warn_on_disambiguated_relative_path();
-            }
-        }
-
         // If the user passed an `--index-url` or `--extra-index-url`, warn.
         if installer
             .index_args
@@ -2386,8 +2387,15 @@ impl AddSettings {
             no_editable_package,
         );
         let refresh = Refresh::try_from(refresh)?;
-        let options = resolver_installer_options(installer, build)?;
+        let options =
+            resolver_installer_options(installer, build, configured_indexes(filesystem.as_ref()))?;
         let indexes = options.indexes.index.clone().unwrap_or_default();
+
+        // Warn user if an ambiguous relative path was passed as a value for
+        // `--index` or `--default-index`.
+        for index in &indexes {
+            index.url().warn_on_disambiguated_relative_path();
+        }
 
         Ok(Self {
             lock_check: resolve_lock_check(locked),
@@ -3439,7 +3447,7 @@ impl PipCompileSettings {
                     )?,
                     annotation_style,
                     torch_backend,
-                    ..resolver.into_pip_options()?
+                    ..resolver.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
                 filesystem,
                 environment,
@@ -3545,7 +3553,7 @@ impl PipSyncSettings {
                     all_extras: flag(all_extras, no_all_extras, "all-extras")?,
                     group: Some(group),
                     torch_backend,
-                    ..installer.into_pip_options()?
+                    ..installer.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
                 filesystem,
                 environment,
@@ -3731,7 +3739,7 @@ impl PipInstallSettings {
                     require_hashes: flag(require_hashes, no_require_hashes, "require-hashes")?,
                     verify_hashes: flag(verify_hashes, no_verify_hashes, "verify-hashes")?,
                     torch_backend,
-                    ..installer.into_pip_options()?
+                    ..installer.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
                 filesystem,
                 environment,
@@ -3893,7 +3901,7 @@ impl PipListSettings {
                     strict: flag(strict, no_strict, "strict")?,
                     target,
                     prefix,
-                    ..fetch.into_pip_options()?
+                    ..fetch.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
                 filesystem,
                 environment,
@@ -3994,7 +4002,7 @@ impl PipTreeSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system")?,
                     strict: flag(strict, no_strict, "strict")?,
-                    ..fetch.into_pip_options()?
+                    ..fetch.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
                 filesystem,
                 environment,
@@ -4245,7 +4253,7 @@ impl VenvSettings {
                     exclude_newer_package: exclude_newer_package
                         .map(ExcludeNewerPackage::from_iter),
                     link_mode,
-                    ..index_args.into_pip_options()?
+                    ..index_args.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
                 filesystem,
                 environment,
@@ -4328,6 +4336,13 @@ fn resolve_prerelease(global: PrereleaseMode, mut package: PrereleasePackage) ->
     }
 }
 
+/// Return the indexes from the effective filesystem configuration.
+fn configured_indexes(filesystem: Option<&FilesystemOptions>) -> &[Index] {
+    filesystem
+        .and_then(|options| options.top_level.index.as_deref())
+        .unwrap_or_default()
+}
+
 impl ResolverSettings {
     /// Resolve the [`ResolverSettings`] from the CLI, environment, and filesystem configuration.
     fn resolve(
@@ -4336,7 +4351,7 @@ impl ResolverSettings {
         filesystem: Option<FilesystemOptions>,
         environment: &EnvironmentOptions,
     ) -> Result<Self> {
-        let args = resolver_options(args, build)?;
+        let args = resolver_options(args, build, configured_indexes(filesystem.as_ref()))?;
 
         Ok(Self::combine(args, filesystem, environment))
     }
@@ -4440,7 +4455,8 @@ impl ResolverInstallerSettings {
         filesystem: Option<FilesystemOptions>,
         environment: &EnvironmentOptions,
     ) -> Result<Self> {
-        let args = resolver_installer_options(args, build)?;
+        let args =
+            resolver_installer_options(args, build, configured_indexes(filesystem.as_ref()))?;
 
         Ok(Self::combine(args, filesystem, environment))
     }
