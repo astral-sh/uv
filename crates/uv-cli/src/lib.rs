@@ -6203,31 +6203,8 @@ pub struct ToolUpgradeArgs {
     )]
     pub config_setting_package: Option<Vec<ConfigSettingPackageEntry>>,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        overrides_with("build_isolation"),
-        help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_ISOLATION,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub no_build_isolation: bool,
-
-    /// Disable isolation when building source distributions for a specific package.
-    ///
-    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
-    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
-    pub no_build_isolation_package: Vec<PackageName>,
-
-    #[arg(
-        long,
-        overrides_with("no_build_isolation"),
-        hide = true,
-        help_heading = "Build options"
-    )]
-    pub build_isolation: bool,
+    #[command(flatten)]
+    pub build_isolation: PackageBuildIsolationArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -7258,6 +7235,45 @@ pub struct BuildOptionsArgs {
     no_binary_package: Vec<PackageName>,
 }
 
+/// Arguments that configure build isolation for source distributions.
+#[derive(Args)]
+#[group(skip)]
+pub struct BuildIsolationArgs {
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    #[arg(
+        long,
+        overrides_with("build_isolation"),
+        help_heading = "Build options",
+        env = EnvVars::UV_NO_BUILD_ISOLATION,
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    no_build_isolation: bool,
+
+    #[arg(
+        long,
+        overrides_with("no_build_isolation"),
+        hide = true,
+        help_heading = "Build options"
+    )]
+    build_isolation: bool,
+}
+
+/// Arguments that configure global and package-specific build isolation.
+#[derive(Args)]
+#[group(skip)]
+pub struct PackageBuildIsolationArgs {
+    #[command(flatten)]
+    build_isolation: BuildIsolationArgs,
+
+    /// Disable isolation when building source distributions for a specific package.
+    ///
+    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
+    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
+    no_build_isolation_package: Vec<PackageName>,
+}
+
 #[derive(Args)]
 #[group(skip)]
 pub struct ReinstallArgs {
@@ -7348,25 +7364,8 @@ pub struct InstallerArgs {
     )]
     config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        overrides_with("build_isolation"),
-        help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_ISOLATION,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    no_build_isolation: bool,
-
-    #[arg(
-        long,
-        overrides_with("no_build_isolation"),
-        hide = true,
-        help_heading = "Build options"
-    )]
-    build_isolation: bool,
+    #[command(flatten)]
+    build_isolation: BuildIsolationArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -7540,31 +7539,8 @@ pub struct ResolverArgs {
     )]
     config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        overrides_with("build_isolation"),
-        help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_ISOLATION,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    no_build_isolation: bool,
-
-    /// Disable isolation when building source distributions for a specific package.
-    ///
-    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
-    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
-    no_build_isolation_package: Vec<PackageName>,
-
-    #[arg(
-        long,
-        overrides_with("no_build_isolation"),
-        hide = true,
-        help_heading = "Build options"
-    )]
-    build_isolation: bool,
+    #[command(flatten)]
+    build_isolation: PackageBuildIsolationArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -7742,31 +7718,8 @@ pub struct ResolverInstallerArgs {
     )]
     pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        overrides_with("build_isolation"),
-        help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_ISOLATION,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub no_build_isolation: bool,
-
-    /// Disable isolation when building source distributions for a specific package.
-    ///
-    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
-    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
-    pub no_build_isolation_package: Vec<PackageName>,
-
-    #[arg(
-        long,
-        overrides_with("no_build_isolation"),
-        hide = true,
-        help_heading = "Build options"
-    )]
-    pub build_isolation: bool,
+    #[command(flatten)]
+    pub build_isolation: PackageBuildIsolationArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///

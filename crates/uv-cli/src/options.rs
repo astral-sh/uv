@@ -11,8 +11,9 @@ use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, Resolv
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
-    BuildOptionsArgs, CompileBytecodeArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs,
-    RegistryClientArgs, ReinstallArgs, ResolverArgs, ResolverInstallerArgs,
+    BuildIsolationArgs, BuildOptionsArgs, CompileBytecodeArgs, FetchArgs, IndexArgs, InstallerArgs,
+    Maybe, PackageBuildIsolationArgs, RefreshArgs, RegistryClientArgs, ReinstallArgs, ResolverArgs,
+    ResolverInstallerArgs,
 };
 
 /// An error caused by an invalid combination of command-line arguments.
@@ -272,9 +273,15 @@ impl TryFrom<ResolverArgs> for PipOptions {
             fork_strategy,
             config_setting,
             config_settings_package,
-            no_build_isolation,
-            no_build_isolation_package,
-            build_isolation,
+            build_isolation:
+                PackageBuildIsolationArgs {
+                    build_isolation:
+                        BuildIsolationArgs {
+                            no_build_isolation,
+                            build_isolation,
+                        },
+                    no_build_isolation_package,
+                },
             exclude_newer,
             link_mode,
             no_sources,
@@ -343,8 +350,11 @@ impl TryFrom<InstallerArgs> for PipOptions {
                 },
             config_setting,
             config_settings_package,
-            no_build_isolation,
-            build_isolation,
+            build_isolation:
+                BuildIsolationArgs {
+                    no_build_isolation,
+                    build_isolation,
+                },
             exclude_newer,
             link_mode,
             compile_bytecode:
@@ -412,9 +422,15 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
             fork_strategy,
             config_setting,
             config_settings_package,
-            no_build_isolation,
-            no_build_isolation_package,
-            build_isolation,
+            build_isolation:
+                PackageBuildIsolationArgs {
+                    build_isolation:
+                        BuildIsolationArgs {
+                            no_build_isolation,
+                            build_isolation,
+                        },
+                    no_build_isolation_package,
+                },
             exclude_newer,
             link_mode,
             compile_bytecode:
@@ -547,9 +563,15 @@ pub fn resolver_options(
         fork_strategy,
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
-        build_isolation,
+        build_isolation:
+            PackageBuildIsolationArgs {
+                build_isolation:
+                    BuildIsolationArgs {
+                        no_build_isolation,
+                        build_isolation,
+                    },
+                no_build_isolation_package,
+            },
         exclude_newer,
         link_mode,
         no_sources,
@@ -683,9 +705,15 @@ pub fn resolver_installer_options_with_indexes(
         fork_strategy,
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
-        build_isolation,
+        build_isolation:
+            PackageBuildIsolationArgs {
+                build_isolation:
+                    BuildIsolationArgs {
+                        no_build_isolation,
+                        build_isolation,
+                    },
+                no_build_isolation_package,
+            },
         exclude_newer,
         exclude_newer_package,
         link_mode,
