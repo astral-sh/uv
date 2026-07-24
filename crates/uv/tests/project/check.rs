@@ -60,6 +60,92 @@ fn check_project() -> Result<()> {
     Ok(())
 }
 
+/// Check PEP 723 scripts only when explicitly selected, not as part of a workspace member.
+#[test]
+fn check_workspace_excludes_pep723_scripts() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("value: int = 'project'\n")?;
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        value: int = "script"
+    "#})?;
+
+    write_workspace_member(&context, "member", "value: int = 'member'\n")?;
+    context
+        .temp_dir
+        .child("packages/member/script.py")
+        .write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.12"
+            # dependencies = []
+            # ///
+            value: int = "member-script"
+        "#})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["project"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("member"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["member"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["project"]` is not assignable to `int`
+    packages/member/main.py:1:14: error[invalid-assignment] Object of type `Literal["member"]` is not assignable to `int`
+    Found 2 diagnostics
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--script").arg("script.py"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    script.py:5:14: error[invalid-assignment] Object of type `Literal["script"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
 /// Check only the selected workspace member, whether selected implicitly or explicitly.
 #[test]
 fn check_workspace_member_selection() -> Result<()> {

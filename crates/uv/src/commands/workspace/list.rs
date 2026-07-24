@@ -70,7 +70,7 @@ pub(crate) async fn list(
 ///
 /// Respects ignore files and excludes repository internals, virtual environments, and the uv cache
 /// from traversal.
-fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
+pub(crate) fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
     // Avoid descending into the cache when it is inside the workspace. If the workspace itself is
     // inside the cache, it is still the requested search root and must not be excluded.
     let cache_root = if cache.root().is_absolute() {
