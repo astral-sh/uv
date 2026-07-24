@@ -693,39 +693,13 @@ impl Lock {
         // it implies we somehow have a dependency with no corresponding locked
         // package.
         for dist in &packages {
-            for dep in &dist.dependencies {
-                if !by_id.contains_key(&dep.package_id) {
+            for dependency in dist.all_dependencies() {
+                if !by_id.contains_key(&dependency.package_id) {
                     return Err(LockErrorKind::UnrecognizedDependency {
                         id: dist.id.clone(),
-                        dependency: dep.clone(),
+                        dependency: dependency.clone(),
                     }
                     .into());
-                }
-            }
-
-            // Perform the same validation for optional dependencies.
-            for dependencies in dist.optional_dependencies.values() {
-                for dep in dependencies {
-                    if !by_id.contains_key(&dep.package_id) {
-                        return Err(LockErrorKind::UnrecognizedDependency {
-                            id: dist.id.clone(),
-                            dependency: dep.clone(),
-                        }
-                        .into());
-                    }
-                }
-            }
-
-            // Perform the same validation for dev dependencies.
-            for dependencies in dist.dependency_groups.values() {
-                for dep in dependencies {
-                    if !by_id.contains_key(&dep.package_id) {
-                        return Err(LockErrorKind::UnrecognizedDependency {
-                            id: dist.id.clone(),
-                            dependency: dep.clone(),
-                        }
-                        .into());
-                    }
                 }
             }
 
@@ -2292,28 +2266,10 @@ impl Lock {
             }
 
             // Recurse.
-            for dep in &package.dependencies {
-                if seen.insert(&dep.package_id) {
-                    let dep_dist = self.find_by_id(&dep.package_id);
-                    queue.push_back(dep_dist);
-                }
-            }
-
-            for dependencies in package.optional_dependencies.values() {
-                for dep in dependencies {
-                    if seen.insert(&dep.package_id) {
-                        let dep_dist = self.find_by_id(&dep.package_id);
-                        queue.push_back(dep_dist);
-                    }
-                }
-            }
-
-            for dependencies in package.dependency_groups.values() {
-                for dep in dependencies {
-                    if seen.insert(&dep.package_id) {
-                        let dep_dist = self.find_by_id(&dep.package_id);
-                        queue.push_back(dep_dist);
-                    }
+            for dependency in package.all_dependencies() {
+                if seen.insert(&dependency.package_id) {
+                    let dependency_package = self.find_by_id(&dependency.package_id);
+                    queue.push_back(dependency_package);
                 }
             }
         }
@@ -3621,6 +3577,14 @@ impl Package {
     /// Returns the dependencies of the package.
     pub fn dependencies(&self) -> &[Dependency] {
         &self.dependencies
+    }
+
+    /// Returns all production, optional, and development dependencies of the [`Package`].
+    fn all_dependencies(&self) -> impl Iterator<Item = &Dependency> {
+        self.dependencies
+            .iter()
+            .chain(self.optional_dependencies.values().flatten())
+            .chain(self.dependency_groups.values().flatten())
     }
 
     /// Returns the optional dependencies of the package.
