@@ -11,8 +11,8 @@ use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, Resolv
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
-    BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
-    ResolverInstallerArgs,
+    BuildOptionsArgs, CompileBytecodeArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs,
+    RegistryClientArgs, ReinstallArgs, ResolverArgs, ResolverInstallerArgs,
 };
 
 /// An error caused by an invalid combination of command-line arguments.
@@ -261,8 +261,11 @@ impl TryFrom<ResolverArgs> for PipOptions {
             no_upgrade,
             upgrade_package,
             upgrade_group,
-            index_strategy,
-            keyring_provider,
+            registry_client:
+                RegistryClientArgs {
+                    index_strategy,
+                    keyring_provider,
+                },
             resolution,
             prerelease,
             pre,
@@ -327,19 +330,28 @@ impl TryFrom<InstallerArgs> for PipOptions {
     fn try_from(args: InstallerArgs) -> anyhow::Result<Self> {
         let InstallerArgs {
             index_args,
-            reinstall,
-            no_reinstall,
-            reinstall_package,
-            index_strategy,
-            keyring_provider,
+            reinstall:
+                ReinstallArgs {
+                    reinstall,
+                    no_reinstall,
+                    reinstall_package,
+                },
+            registry_client:
+                RegistryClientArgs {
+                    index_strategy,
+                    keyring_provider,
+                },
             config_setting,
             config_settings_package,
             no_build_isolation,
             build_isolation,
             exclude_newer,
             link_mode,
-            compile_bytecode,
-            no_compile_bytecode,
+            compile_bytecode:
+                CompileBytecodeArgs {
+                    compile_bytecode,
+                    no_compile_bytecode,
+                },
             no_sources,
             no_sources_package,
             exclude_newer_package,
@@ -383,11 +395,17 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
             no_upgrade,
             upgrade_package,
             upgrade_group,
-            reinstall,
-            no_reinstall,
-            reinstall_package,
-            index_strategy,
-            keyring_provider,
+            reinstall:
+                ReinstallArgs {
+                    reinstall,
+                    no_reinstall,
+                    reinstall_package,
+                },
+            registry_client:
+                RegistryClientArgs {
+                    index_strategy,
+                    keyring_provider,
+                },
             resolution,
             prerelease,
             pre,
@@ -399,8 +417,11 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
             build_isolation,
             exclude_newer,
             link_mode,
-            compile_bytecode,
-            no_compile_bytecode,
+            compile_bytecode:
+                CompileBytecodeArgs {
+                    compile_bytecode,
+                    no_compile_bytecode,
+                },
             no_sources,
             no_sources_package,
             exclude_newer_package,
@@ -455,8 +476,11 @@ impl From<FetchArgs> for PipOptions {
     fn from(args: FetchArgs) -> Self {
         let FetchArgs {
             index_args,
-            index_strategy,
-            keyring_provider,
+            registry_client:
+                RegistryClientArgs {
+                    index_strategy,
+                    keyring_provider,
+                },
             exclude_newer,
         } = args;
 
@@ -512,8 +536,11 @@ pub fn resolver_options(
         no_upgrade,
         upgrade_package,
         upgrade_group,
-        index_strategy,
-        keyring_provider,
+        registry_client:
+            RegistryClientArgs {
+                index_strategy,
+                keyring_provider,
+            },
         resolution,
         prerelease,
         pre,
@@ -639,11 +666,17 @@ pub fn resolver_installer_options_with_indexes(
         no_upgrade,
         upgrade_package,
         upgrade_group,
-        reinstall,
-        no_reinstall,
-        reinstall_package,
-        index_strategy,
-        keyring_provider,
+        reinstall:
+            ReinstallArgs {
+                reinstall,
+                no_reinstall,
+                reinstall_package,
+            },
+        registry_client:
+            RegistryClientArgs {
+                index_strategy,
+                keyring_provider,
+            },
         resolution,
         prerelease,
         pre,
@@ -656,8 +689,11 @@ pub fn resolver_installer_options_with_indexes(
         exclude_newer,
         exclude_newer_package,
         link_mode,
-        compile_bytecode,
-        no_compile_bytecode,
+        compile_bytecode:
+            CompileBytecodeArgs {
+                compile_bytecode,
+                no_compile_bytecode,
+            },
         no_sources,
         no_sources_package,
     } = resolver_installer_args;

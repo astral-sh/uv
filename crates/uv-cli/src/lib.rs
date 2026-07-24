@@ -3264,23 +3264,8 @@ pub struct VenvArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-index`). This prevents
-    /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
-    /// same name to an alternate index.
-    #[arg(long, value_enum, env = EnvVars::UV_INDEX_STRATEGY)]
-    pub index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
-    pub keyring_provider: Option<KeyringProviderType>,
+    #[command(flatten)]
+    pub registry_client: RegistryClientArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -6269,56 +6254,11 @@ pub struct ToolUpgradeArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// Reinstall all packages, regardless of whether they're already installed. Implies
-    /// `--refresh`.
-    #[arg(
-        long,
-        alias = "force-reinstall",
-        overrides_with("no_reinstall"),
-        help_heading = "Installer options"
-    )]
-    pub reinstall: bool,
+    #[command(flatten)]
+    pub reinstall: ReinstallArgs,
 
-    #[arg(
-        long,
-        overrides_with("reinstall"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_reinstall: bool,
-
-    /// Reinstall a specific package, regardless of whether it's already installed. Implies
-    /// `--refresh-package`.
-    #[arg(long, help_heading = "Installer options", value_hint = ValueHint::Other)]
-    pub reinstall_package: Vec<PackageName>,
-
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    pub index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    pub keyring_provider: Option<KeyringProviderType>,
+    #[command(flatten)]
+    pub registry_client: RegistryClientArgs,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -6462,35 +6402,8 @@ pub struct ToolUpgradeArgs {
     )]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Compile Python files to bytecode after installation.
-    ///
-    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
-    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
-    /// in which start time is critical, such as CLI applications and Docker containers, this option
-    /// can be enabled to trade longer installation times for faster start times.
-    ///
-    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
-    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
-    /// run`) will process the entire site-packages directory including packages that are not being
-    /// modified.
-    #[arg(
-        long,
-        alias = "compile",
-        overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options",
-        env = EnvVars::UV_COMPILE_BYTECODE,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub compile_bytecode: bool,
-
-    #[arg(
-        long,
-        alias = "no-compile",
-        overrides_with("compile_bytecode"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_compile_bytecode: bool,
+    #[command(flatten)]
+    pub compile_bytecode: CompileBytecodeArgs,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
@@ -7302,6 +7215,39 @@ pub struct IndexArgs {
     pub no_index: bool,
 }
 
+/// Arguments that configure the package registry client.
+#[derive(Args)]
+#[group(skip)]
+pub struct RegistryClientArgs {
+    /// The strategy to use when resolving against multiple index URLs.
+    ///
+    /// By default, uv will stop at the first index on which a given package is available, and limit
+    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
+    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
+    /// to an alternate index.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_INDEX_STRATEGY,
+        help_heading = "Index options"
+    )]
+    pub index_strategy: Option<IndexStrategy>,
+
+    /// Attempt to use `keyring` for authentication for index URLs.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
+    /// the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+        help_heading = "Index options"
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
 #[derive(Args)]
 pub struct RefreshArgs {
     /// Refresh all cached data.
@@ -7385,12 +7331,9 @@ pub struct BuildOptionsArgs {
     no_binary_package: Vec<PackageName>,
 }
 
-/// Arguments that are used by commands that need to install (but not resolve) packages.
 #[derive(Args)]
-pub struct InstallerArgs {
-    #[command(flatten)]
-    index_args: IndexArgs,
-
+#[group(skip)]
+pub struct ReinstallArgs {
     /// Reinstall all packages, regardless of whether they're already installed. Implies
     /// `--refresh`.
     #[arg(
@@ -7399,7 +7342,7 @@ pub struct InstallerArgs {
         overrides_with("no_reinstall"),
         help_heading = "Installer options"
     )]
-    reinstall: bool,
+    pub reinstall: bool,
 
     #[arg(
         long,
@@ -7407,40 +7350,59 @@ pub struct InstallerArgs {
         hide = true,
         help_heading = "Installer options"
     )]
-    no_reinstall: bool,
+    pub no_reinstall: bool,
 
     /// Reinstall a specific package, regardless of whether it's already installed. Implies
     /// `--refresh-package`.
     #[arg(long, help_heading = "Installer options", value_hint = ValueHint::Other)]
-    reinstall_package: Vec<PackageName>,
+    pub reinstall_package: Vec<PackageName>,
+}
 
-    /// The strategy to use when resolving against multiple index URLs.
+#[derive(Args)]
+#[group(skip)]
+pub struct CompileBytecodeArgs {
+    /// Compile Python files to bytecode after installation.
     ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
+    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
+    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
+    /// in which start time is critical, such as CLI applications and Docker containers, this option
+    /// can be enabled to trade longer installation times for faster start times.
+    ///
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
+        alias = "compile",
+        overrides_with("no_compile_bytecode"),
+        help_heading = "Installer options",
+        env = EnvVars::UV_COMPILE_BYTECODE,
+        value_parser = clap::builder::BoolishValueParser::new(),
     )]
-    index_strategy: Option<IndexStrategy>,
+    compile_bytecode: bool,
 
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
     #[arg(
         long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
+        alias = "no-compile",
+        overrides_with("compile_bytecode"),
+        hide = true,
+        help_heading = "Installer options"
     )]
-    keyring_provider: Option<KeyringProviderType>,
+    no_compile_bytecode: bool,
+}
+
+/// Arguments that are used by commands that need to install (but not resolve) packages.
+#[derive(Args)]
+pub struct InstallerArgs {
+    #[command(flatten)]
+    index_args: IndexArgs,
+
+    #[command(flatten)]
+    reinstall: ReinstallArgs,
+
+    #[command(flatten)]
+    registry_client: RegistryClientArgs,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -7532,35 +7494,8 @@ pub struct InstallerArgs {
     )]
     link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Compile Python files to bytecode after installation.
-    ///
-    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
-    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
-    /// in which start time is critical, such as CLI applications and Docker containers, this option
-    /// can be enabled to trade longer installation times for faster start times.
-    ///
-    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
-    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
-    /// run`) will process the entire site-packages directory including packages that are not being
-    /// modified.
-    #[arg(
-        long,
-        alias = "compile",
-        overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options",
-        env = EnvVars::UV_COMPILE_BYTECODE,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    compile_bytecode: bool,
-
-    #[arg(
-        long,
-        alias = "no-compile",
-        overrides_with("compile_bytecode"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    no_compile_bytecode: bool,
+    #[command(flatten)]
+    compile_bytecode: CompileBytecodeArgs,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
@@ -7612,33 +7547,8 @@ pub struct ResolverArgs {
     #[arg(long, help_heading = "Resolver options")]
     upgrade_group: Vec<GroupName>,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    keyring_provider: Option<KeyringProviderType>,
+    #[command(flatten)]
+    registry_client: RegistryClientArgs,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -7834,56 +7744,11 @@ pub struct ResolverInstallerArgs {
     #[arg(long, help_heading = "Resolver options")]
     pub upgrade_group: Vec<GroupName>,
 
-    /// Reinstall all packages, regardless of whether they're already installed. Implies
-    /// `--refresh`.
-    #[arg(
-        long,
-        alias = "force-reinstall",
-        overrides_with("no_reinstall"),
-        help_heading = "Installer options"
-    )]
-    pub reinstall: bool,
+    #[command(flatten)]
+    pub reinstall: ReinstallArgs,
 
-    #[arg(
-        long,
-        overrides_with("reinstall"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_reinstall: bool,
-
-    /// Reinstall a specific package, regardless of whether it's already installed. Implies
-    /// `--refresh-package`.
-    #[arg(long, help_heading = "Installer options", value_hint = ValueHint::Other)]
-    pub reinstall_package: Vec<PackageName>,
-
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    pub index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    pub keyring_provider: Option<KeyringProviderType>,
+    #[command(flatten)]
+    pub registry_client: RegistryClientArgs,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -8034,35 +7899,8 @@ pub struct ResolverInstallerArgs {
     )]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Compile Python files to bytecode after installation.
-    ///
-    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
-    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
-    /// in which start time is critical, such as CLI applications and Docker containers, this option
-    /// can be enabled to trade longer installation times for faster start times.
-    ///
-    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
-    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
-    /// run`) will process the entire site-packages directory including packages that are not being
-    /// modified.
-    #[arg(
-        long,
-        alias = "compile",
-        overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options",
-        env = EnvVars::UV_COMPILE_BYTECODE,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub compile_bytecode: bool,
-
-    #[arg(
-        long,
-        alias = "no-compile",
-        overrides_with("compile_bytecode"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_compile_bytecode: bool,
+    #[command(flatten)]
+    pub compile_bytecode: CompileBytecodeArgs,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
@@ -8086,33 +7924,8 @@ pub struct FetchArgs {
     #[command(flatten)]
     index_args: IndexArgs,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    keyring_provider: Option<KeyringProviderType>,
+    #[command(flatten)]
+    registry_client: RegistryClientArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///

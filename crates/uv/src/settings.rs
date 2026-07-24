@@ -25,7 +25,7 @@ use uv_cli::{
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, CheckArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
-    ResolverInstallerArgs, ToolUpgradeArgs,
+    RegistryClientArgs, ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
         Flag, FlagSource, check_conflicts, flag, indexes_from_args, resolve_flag,
         resolve_flag_pair, resolver_installer_options, resolver_installer_options_with_indexes,
@@ -936,7 +936,7 @@ impl ToolRunSettings {
         }
 
         // If `--reinstall` was passed explicitly, warn.
-        if installer.reinstall || !installer.reinstall_package.is_empty() {
+        if installer.reinstall.reinstall || !installer.reinstall.reinstall_package.is_empty() {
             if with.is_empty() && with_requirements.is_empty() {
                 warn_user_once!(
                     "Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `uv cache prune` to clear any cached tool environments."
@@ -1173,10 +1173,7 @@ impl ToolUpgradeSettings {
             index_args,
             all,
             reinstall,
-            no_reinstall,
-            reinstall_package,
-            index_strategy,
-            keyring_provider,
+            registry_client,
             resolution,
             prerelease,
             pre,
@@ -1189,7 +1186,6 @@ impl ToolUpgradeSettings {
             exclude_newer,
             link_mode,
             compile_bytecode,
-            no_compile_bytecode,
             no_sources,
             no_sources_package,
             exclude_newer_package,
@@ -1211,10 +1207,7 @@ impl ToolUpgradeSettings {
             upgrade_package,
             upgrade_group,
             reinstall,
-            no_reinstall,
-            reinstall_package,
-            index_strategy,
-            keyring_provider,
+            registry_client,
             resolution,
             prerelease,
             pre,
@@ -1228,7 +1221,6 @@ impl ToolUpgradeSettings {
             exclude_newer_package,
             link_mode,
             compile_bytecode,
-            no_compile_bytecode,
             no_sources,
             no_sources_package,
         };
@@ -4207,8 +4199,11 @@ impl VenvSettings {
             relocatable,
             no_relocatable,
             index_args,
-            index_strategy,
-            keyring_provider,
+            registry_client:
+                RegistryClientArgs {
+                    index_strategy,
+                    keyring_provider,
+                },
             exclude_newer,
             no_project,
             link_mode,
