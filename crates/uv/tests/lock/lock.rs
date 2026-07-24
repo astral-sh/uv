@@ -35455,3 +35455,134 @@ fn lock_frozen_warning() -> Result<()> {
 
     Ok(())
 }
+
+/// A _directory_ named `pyproject.toml` in a parent directory should be skipped during settings
+/// discovery, rather than causing a failure.
+///
+/// See: <https://github.com/astral-sh/uv/issues/14584>
+#[test]
+fn lock_pyproject_toml_directory_in_parent() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a *directory* named `pyproject.toml` in the parent directory.
+    context.temp_dir.child("pyproject.toml").create_dir_all()?;
+
+    // Create a real project in a subdirectory.
+    let project_dir = context.temp_dir.child("project");
+    project_dir.create_dir_all()?;
+    project_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    // Locking from the subdirectory should succeed, ignoring the parent `pyproject.toml` directory.
+    uv_snapshot!(context.filters(), context.lock().current_dir(&project_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A _directory_ named `pyproject.toml` in the current directory should produce a clear error,
+/// rather than a raw OS error.
+///
+/// See: <https://github.com/astral-sh/uv/issues/14584>
+#[test]
+fn lock_pyproject_toml_directory_in_cwd() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a *directory* named `pyproject.toml` in the current directory.
+    context.temp_dir.child("pyproject.toml").create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `pyproject.toml` is a directory, expected a file
+    ");
+
+    Ok(())
+}
+
+/// A _directory_ named `uv.toml` in a parent directory should be skipped during settings
+/// discovery, rather than causing a failure.
+///
+/// See: <https://github.com/astral-sh/uv/issues/14584>
+#[test]
+fn lock_uv_toml_directory_in_parent() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a *directory* named `uv.toml` in the parent directory.
+    context.temp_dir.child("uv.toml").create_dir_all()?;
+
+    // Create a real project in a subdirectory.
+    let project_dir = context.temp_dir.child("project");
+    project_dir.create_dir_all()?;
+    project_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    // Locking from the subdirectory should succeed, ignoring the parent `uv.toml` directory.
+    uv_snapshot!(context.filters(), context.lock().current_dir(&project_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A _directory_ named `uv.toml` in the current directory should produce a clear error, rather
+/// than a raw OS error, even if the project itself is valid.
+///
+/// See: <https://github.com/astral-sh/uv/issues/14584>
+#[test]
+fn lock_uv_toml_directory_in_cwd() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a *directory* named `uv.toml` alongside a valid project.
+    context.temp_dir.child("uv.toml").create_dir_all()?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `uv.toml` is a directory, expected a file
+    ");
+
+    Ok(())
+}
