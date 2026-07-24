@@ -41,7 +41,7 @@ use uv_git::{Fetch, GIT_LFS, GitError, GitHttpSettings, GitResolver};
 use uv_git_types::{GitHubRepository, GitOid, GitUrl};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
-use uv_pep440::{Version, release_specifiers_to_ranges};
+use uv_pep440::{Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_redacted::DisplaySafeUrl;
@@ -2964,6 +2964,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         no_sources: NoSources,
     ) -> Result<(String, WheelFilename, ResolutionMetadata), Error> {
+        let result = self
+            .build_distribution_inner(source, source_root, subdirectory, cache_shard, no_sources)
+            .await;
+        self.annotate_build_failure(result, source, source_root, subdirectory)
+            .await
+    }
+
+    async fn build_distribution_inner(
+        &self,
+        source: &BuildableSource<'_>,
+        source_root: &Path,
+        subdirectory: Option<&Path>,
+        cache_shard: &CacheShard,
+        no_sources: NoSources,
+    ) -> Result<(String, WheelFilename, ResolutionMetadata), Error> {
         debug!("Building: {source}");
 
         // Guard against build of source distributions when disabled.
@@ -3116,9 +3131,84 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok((disk_filename, filename, metadata))
     }
 
+    /// Resolve the `requires-python` specifier for a buildable source, for all distribution types.
+    ///
+    /// Registry distributions carry `requires-python` in their file metadata. For source trees
+    /// (path, Git, directory, direct URL) it isn't available there, so we read it statically from
+    /// the `pyproject.toml` at `source_root` instead. Returns `None` if it can't be determined
+    /// (e.g. no `pyproject.toml`, or a dynamic `requires-python`).
+    async fn build_requires_python(
+        &self,
+        source: &BuildableSource<'_>,
+        source_root: &Path,
+        subdirectory: Option<&Path>,
+    ) -> Option<VersionSpecifiers> {
+        if let Some(requires_python) = source.requires_python() {
+            return Some(requires_python.clone());
+        }
+
+        let pyproject_toml = read_pyproject_toml(source_root, subdirectory).await.ok()?;
+        match pyproject_toml.requires_python() {
+            Ok(requires_python) => requires_python,
+            Err(err) => {
+                debug!("Ignoring `requires-python` in `{source}`: {err}");
+                None
+            }
+        }
+    }
+
+    /// If `result` is a build failure and the source's `requires-python` doesn't include the build
+    /// environment's interpreter, attach a hint pointing at the mismatch as a likely cause. Other
+    /// errors and successes pass through unchanged.
+    async fn annotate_build_failure<R>(
+        &self,
+        result: Result<R, Error>,
+        source: &BuildableSource<'_>,
+        source_root: &Path,
+        subdirectory: Option<&Path>,
+    ) -> Result<R, Error> {
+        let Err(Error::Build(err)) = result else {
+            return result;
+        };
+        let Some(requires_python) = self
+            .build_requires_python(source, source_root, subdirectory)
+            .await
+        else {
+            return Err(Error::Build(err));
+        };
+        let python_version = self.build_context.interpreter().await.python_version();
+        if requires_python.contains(python_version) {
+            return Err(Error::Build(err));
+        }
+        // Report the minor version (e.g. `3.12`), since `requires-python` is expressed in minor
+        // versions and the patch component is both irrelevant here and unstable across
+        // environments (which would make snapshot tests depend on the exact patch release).
+        let python_version = python_version
+            .only_release_at_precision(2)
+            .unwrap_or_else(|| python_version.clone());
+        let hint = format!(
+            "The build requires Python {requires_python}, but Python {python_version} is used."
+        );
+        Err(Error::Build(err.with_requires_python_hint(hint)))
+    }
+
     /// Build the metadata for a source distribution.
     #[instrument(skip_all, fields(dist = %source))]
     async fn build_metadata(
+        &self,
+        source: &BuildableSource<'_>,
+        source_root: &Path,
+        subdirectory: Option<&Path>,
+        no_sources: NoSources,
+    ) -> Result<Option<ResolutionMetadata>, Error> {
+        let result = self
+            .build_metadata_inner(source, source_root, subdirectory, no_sources)
+            .await;
+        self.annotate_build_failure(result, source, source_root, subdirectory)
+            .await
+    }
+
+    async fn build_metadata_inner(
         &self,
         source: &BuildableSource<'_>,
         source_root: &Path,
@@ -3144,8 +3234,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Ensure that the _installed_ Python version is compatible with the `requires-python`
-        // specifier.
-        if let Some(requires_python) = source.requires_python() {
+        // specifier. This applies to all distribution types: registry distributions carry
+        // `requires-python` in their file metadata, while source trees declare it in
+        // `pyproject.toml`.
+        if let Some(requires_python) = self
+            .build_requires_python(source, source_root, subdirectory)
+            .await
+        {
             let installed = self.build_context.interpreter().await.python_version();
             let target = release_specifiers_to_ranges(requires_python.clone())
                 .bounding_range()
@@ -3157,10 +3252,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Bound::Unbounded => true,
             };
             if !is_compatible {
-                return Err(Error::RequiresPython(
-                    requires_python.clone(),
-                    installed.clone(),
-                ));
+                return Err(Error::RequiresPython(requires_python, installed.clone()));
             }
         }
 

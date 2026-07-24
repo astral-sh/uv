@@ -4338,6 +4338,48 @@ fn build_prerelease_hint() -> Result<()> {
     Ok(())
 }
 
+/// A build failure for a source tree whose `requires-python` excludes the interpreter should hint
+/// at the `requires-python` mismatch, even though it's a path dependency (not a registry
+/// distribution). The build is only attempted because the upper bound isn't enforced during
+/// resolution.
+#[test]
+fn build_requires_python_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // `requires-python = "<3.0"` excludes the 3.12 interpreter, but the build is still attempted.
+    // The build then fails because `build-system.requires` can't be satisfied.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "<3.0"
+
+        [build-system]
+        requires = ["this-package-does-not-exist-anywhere"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("."), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `this-package-does-not-exist-anywhere`
+      ╰─▶ Because this-package-does-not-exist-anywhere was not found in the package registry and you require this-package-does-not-exist-anywhere, we can conclude that your requirements are unsatisfiable.
+
+    hint: The build requires Python <3.0, but Python 3.12 is used.
+    "
+    );
+
+    Ok(())
+}
+
 /// Test that constraint markers are respected when validating the current environment (i.e., we
 /// skip resolution entirely).
 #[test]

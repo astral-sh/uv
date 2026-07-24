@@ -37,6 +37,11 @@ impl Hints<'_> {
         self.0.push(Cow::Owned(hint));
     }
 
+    /// Insert a single owned hint at the front of the collection.
+    pub fn prepend(&mut self, hint: String) {
+        self.0.insert(0, Cow::Owned(hint));
+    }
+
     /// Convert all borrowed hints to owned, extending the lifetime to `'static`.
     pub fn into_owned(self) -> Hints<'static> {
         Hints(
