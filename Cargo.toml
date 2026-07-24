@@ -102,7 +102,7 @@ arcstr = { version = "1.2.0" }
 arrayvec = { version = "0.7.6" }
 astral-tokio-tar = { version = "0.6.3" }
 async-channel = { version = "2.3.1" }
-async-compression = { version = "0.4.12", features = [
+async-compression = { version = "0.4.33", features = [
   "bzip2",
   "gzip",
   "xz",
@@ -176,6 +176,7 @@ indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
 jiff = { version = "0.2.0", features = ["serde"] }
 junction = { version = "2.0.0" }
+liblzma = { version = "0.4.4", default-features = false, features = ["static"] }
 mailparse = { version = "0.16.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
@@ -317,7 +318,6 @@ windows = { version = "0.61.0", features = [
 windows-registry = { version = "0.5.0" }
 windows-version = { version = "0.1.6" }
 wiremock = { version = "0.6.4" }
-xz2 = { version = "0.1.7", features = ["static"] }
 zeroize = { version = "1.8.1" }
 
 # dev-dependencies
