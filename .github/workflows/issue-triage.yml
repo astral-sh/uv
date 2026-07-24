@@ -23,6 +23,8 @@ jobs:
       contents: read
       issues: read
     outputs:
+      issue-context: ${{ steps.issue.outputs.context }}
+      issue-node-id: ${{ steps.issue.outputs.node-id }}
       issue-number: ${{ steps.issue.outputs.number }}
       result: ${{ steps.triage.outputs.final-message }}
     steps:
@@ -35,11 +37,12 @@ jobs:
         run: |
           gh issue view "$ISSUE" \
             --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,author \
+            --json id,number,title,body,author,url \
             > .issue-triage-event.json
 
-          issue_number="$(jq --exit-status --raw-output '.number | select(type == "number" and . > 0 and floor == .)' .issue-triage-event.json)"
-          echo "number=$issue_number" >> "$GITHUB_OUTPUT"
+          jq --raw-output \
+            '"number=\(.number)\nnode-id=\(.id)\ncontext=\(tojson)"' \
+            .issue-triage-event.json >> "$GITHUB_OUTPUT"
 
           {
             printf 'Issue triage for #%s: %s\n\n' \
@@ -84,49 +87,13 @@ jobs:
       cancel-in-progress: false
     permissions:
       id-token: write # for the cross-repository issue-context credential broker
-      issues: read
     steps:
-      - name: "Validate issue context"
-        id: issue
+      - name: "Prepare issue context"
         run: |
-          gh issue view "$ISSUE" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json id,number,title,body,author,url \
-            > "$RUNNER_TEMP/issue.json"
-
+          printf '%s\n' "$ISSUE_CONTEXT" > "$RUNNER_TEMP/issue.json"
           printf '%s\n' "$TRIAGE_RESULT" | jq '.' > "$RUNNER_TEMP/triage.json"
-          if ! jq --exit-status '
-            type == "object"
-            and (keys | sort == ["related", "summary", "type", "type_reason"])
-            and (.type | IN("bug", "enhancement", "duplicate", "question"))
-            and (.summary | type == "string")
-            and (.type_reason | type == "string")
-            and (.related | type == "object")
-            and (.related | keys | sort == ["items", "search_scope"])
-            and (.related.search_scope | type == "string")
-            and (.related.items | type == "array")
-            and all(.related.items[];
-              type == "object"
-              and (keys | sort == ["kind", "number", "reason", "state", "title", "url"])
-              and (.kind | IN("issue", "pull_request"))
-              and (.number | type == "number" and . > 0 and floor == .)
-              and (.reason | type == "string")
-              and (.state | IN("open", "closed", "merged"))
-              and (.title | type == "string")
-              and (.url | type == "string")
-            )
-          ' "$RUNNER_TEMP/triage.json" > /dev/null; then
-            echo "The triage result does not match the expected schema." >&2
-            exit 1
-          fi
-
-          {
-            printf 'number=%s\n' "$(jq --raw-output '.number' "$RUNNER_TEMP/issue.json")"
-            printf 'node_id=%s\n' "$(jq --raw-output '.id' "$RUNNER_TEMP/issue.json")"
-          } >> "$GITHUB_OUTPUT"
         env:
-          GH_TOKEN: ${{ github.token }}
-          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          ISSUE_CONTEXT: ${{ needs.triage.outputs.issue-context }}
           TRIAGE_RESULT: ${{ needs.triage.outputs.result }}
 
       - name: "Get issue context token"
@@ -145,67 +112,28 @@ jobs:
 
       - name: "Persist issue context"
         run: |
-          if ! [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
-            echo "The issue number must be a positive integer." >&2
-            exit 1
-          fi
-
           branch="issue/$ISSUE_NUMBER"
-          git check-ref-format "refs/heads/$branch"
 
           # shellcheck disable=SC2016 # GraphQL variable declarations must remain literal.
-          context="$(
+          repository="$(
             gh api graphql \
               --raw-field query='
-                query(
-                  $issueId: ID!,
-                  $repositoryOwner: String!,
-                  $repositoryName: String!,
-                  $qualifiedName: String!
-                ) {
-                  issue: node(id: $issueId) {
-                    ... on Issue {
-                      linkedBranches(first: 100) {
-                        nodes { ref { name repository { id nameWithOwner } } }
-                      }
-                    }
-                  }
-                  repository(owner: $repositoryOwner, name: $repositoryName) {
+                query($ref: String!) {
+                  repository(owner: "astral-sh", name: "uv-dev") {
                     id
-                    ref(qualifiedName: $qualifiedName) {
-                      name
+                    ref(qualifiedName: $ref) {
                       target { ... on Commit { oid tree { oid } } }
                     }
                   }
                 }
               ' \
-              --raw-field issueId="$ISSUE_NODE_ID" \
-              --raw-field repositoryOwner=astral-sh \
-              --raw-field repositoryName=uv-dev \
-              --raw-field qualifiedName="refs/heads/$branch" \
-              --jq '.data'
+              --raw-field ref="refs/heads/$branch" \
+              --jq '.data.repository'
           )"
 
-          repository_id="$(jq --exit-status --raw-output '.repository.id' <<< "$context")"
-          head_sha="$(jq --raw-output '.repository.ref.target.oid // empty' <<< "$context")"
-          base_tree="$(jq --raw-output '.repository.ref.target.tree.oid // empty' <<< "$context")"
-          linked="$(
-            jq --raw-output \
-              --arg branch "$branch" \
-              --arg repository_id "$repository_id" \
-              'any(.issue.linkedBranches.nodes[]; .ref != null and .ref.name == $branch and .ref.repository.id == $repository_id)' \
-              <<< "$context"
-          )"
-
-          if [ -n "$head_sha" ] && [ "$linked" != true ]; then
-            echo "The existing uv-dev branch is not linked to the expected issue." >&2
-            exit 1
-          fi
-
-          if [ -z "$head_sha" ] && [ "$linked" = true ]; then
-            echo "The issue links to a context branch that does not exist." >&2
-            exit 1
-          fi
+          repository_id="$(jq --raw-output '.id' <<< "$repository")"
+          head_sha="$(jq --raw-output '.ref.target.oid // empty' <<< "$repository")"
+          base_tree="$(jq --raw-output '.ref.target.tree.oid // empty' <<< "$repository")"
 
           tree_sha="$(
             jq --null-input \
@@ -248,34 +176,24 @@ jobs:
 
           if [ -z "$head_sha" ]; then
             # shellcheck disable=SC2016 # GraphQL variable declarations must remain literal.
-            linked_branch="$(
-              gh api graphql \
-                --raw-field query='
-                  mutation($issueId: ID!, $repositoryId: ID!, $name: String!, $oid: GitObjectID!) {
-                    createLinkedBranch(input: {
-                      issueId: $issueId,
-                      repositoryId: $repositoryId,
-                      name: $name,
-                      oid: $oid
-                    }) {
-                      linkedBranch { ref { name repository { nameWithOwner } } }
-                    }
+            gh api graphql \
+              --raw-field query='
+                mutation($issueId: ID!, $repositoryId: ID!, $name: String!, $oid: GitObjectID!) {
+                  createLinkedBranch(input: {
+                    issueId: $issueId,
+                    repositoryId: $repositoryId,
+                    name: $name,
+                    oid: $oid
+                  }) {
+                    linkedBranch { ref { name } }
                   }
-                ' \
-                --raw-field issueId="$ISSUE_NODE_ID" \
-                --raw-field repositoryId="$repository_id" \
-                --raw-field name="$branch" \
-                --raw-field oid="$commit_sha" \
-                --jq '.data.createLinkedBranch.linkedBranch.ref'
-            )"
-
-            if ! jq --exit-status \
-              --arg branch "$branch" \
-              '.name == $branch and .repository.nameWithOwner == "astral-sh/uv-dev"' \
-              <<< "$linked_branch" > /dev/null; then
-              echo "The issue context branch was created in an unexpected repository." >&2
-              exit 1
-            fi
+                }
+              ' \
+              --raw-field issueId="$ISSUE_NODE_ID" \
+              --raw-field repositoryId="$repository_id" \
+              --raw-field name="$branch" \
+              --raw-field oid="$commit_sha" \
+              --silent
           else
             jq --null-input --arg sha "$commit_sha" '{sha: $sha, force: false}' |
               gh api \
@@ -289,8 +207,8 @@ jobs:
             >> "$GITHUB_STEP_SUMMARY"
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          ISSUE_NODE_ID: ${{ steps.issue.outputs.node_id }}
-          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          ISSUE_NODE_ID: ${{ needs.triage.outputs.issue-node-id }}
+          ISSUE_NUMBER: ${{ needs.triage.outputs.issue-number }}
 
   reproduce-bug:
     needs: triage
