@@ -337,3 +337,8 @@ item = "virtualenv::PyVenvConfiguration::set"
 kind = "inherent_method"
 level = "expect"
 reason = "retained as a public pyvenv.cfg editing helper"
+
+[[exclude]]
+crate = "uv_extract"
+module = "dirhash"
+reason = "intentionally public"
