@@ -1561,7 +1561,7 @@ impl Lock {
     /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
     fn satisfies_provides_extra<'lock>(
         &self,
-        provides_extra: Box<[ExtraName]>,
+        provides_extra: &[ExtraName],
         package: &'lock Package,
     ) -> SatisfiesResult<'lock> {
         if !self.supports_provides_extra() {
@@ -1572,7 +1572,7 @@ impl Lock {
         let actual: BTreeSet<_> = package.metadata.provides_extra.iter().collect();
 
         if expected != actual {
-            let expected = Box::into_iter(provides_extra).collect();
+            let expected = provides_extra.iter().cloned().collect();
             return SatisfiesResult::MismatchedPackageProvidesExtra(
                 &package.id.name,
                 package.id.version.as_ref(),
@@ -2108,7 +2108,7 @@ impl Lock {
                         }
 
                         // Validate the static `provides-extras` metadata.
-                        match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                        match self.satisfies_provides_extra(&metadata.provides_extra, package) {
                             SatisfiesResult::Satisfied => {}
                             result => return Ok(result),
                         }
@@ -2194,7 +2194,7 @@ impl Lock {
                     }
 
                     // Validate the `provides-extras` metadata.
-                    match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                    match self.satisfies_provides_extra(&metadata.provides_extra, package) {
                         SatisfiesResult::Satisfied => {}
                         result => return Ok(result),
                     }
@@ -2233,7 +2233,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extra, package, ) {
+                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(&metadata.provides_extra, package, ) {
                         debug!("Static `provides-extra` for `{}` is up-to-date", package.id);
                     } else {
                         debug!("Static `provides-extra` for `{}` is out-of-date; falling back to distribution database", package.id);
@@ -2315,7 +2315,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                    match self.satisfies_provides_extra(&metadata.provides_extra, package) {
                         SatisfiesResult::Satisfied => {}
                         result => return Ok(result),
                     }
