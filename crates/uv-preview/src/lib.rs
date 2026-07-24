@@ -222,6 +222,10 @@ pub mod test {
 }
 
 #[bitflags]
+#[expect(
+    clippy::use_self,
+    reason = "enumflags2 refers to the enum by name when inferring bits"
+)]
 #[repr(u64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PreviewMetadata)]
 pub enum PreviewFeature {
