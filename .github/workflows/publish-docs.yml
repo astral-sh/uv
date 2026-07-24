@@ -44,6 +44,7 @@ jobs:
           cargo dev generate-options-reference
           cargo dev generate-cli-reference
           cargo dev generate-env-vars-reference
+          cargo dev generate-preview-features-reference
 
       - name: "Set docs display name"
         run: |
