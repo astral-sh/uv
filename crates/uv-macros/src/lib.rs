@@ -33,6 +33,20 @@ fn impl_preview_metadata(input: &DeriveInput) -> syn::Result<proc_macro2::TokenS
         ));
     };
 
+    let names = data.variants.iter().map(|variant| {
+        let variant_name = &variant.ident;
+        let mut feature_name = String::new();
+
+        for (index, character) in variant_name.to_string().chars().enumerate() {
+            if index > 0 && character.is_uppercase() {
+                feature_name.push('-');
+            }
+            feature_name.extend(character.to_lowercase());
+        }
+
+        quote! { Self::#variant_name => #feature_name }
+    });
+
     let entries = data
         .variants
         .iter()
@@ -68,6 +82,13 @@ fn impl_preview_metadata(input: &DeriveInput) -> syn::Result<proc_macro2::TokenS
 
     Ok(quote! {
         impl #name {
+            /// Returns the canonical name of a single preview feature.
+            fn as_str(self) -> &'static str {
+                match self {
+                    #(#names),*
+                }
+            }
+
             /// Returns each enum variant, its documentation, and its aliases.
             pub const fn metadata() -> &'static [(Self, &'static str, &'static [&'static str])] {
                 &[#(#entries),*]

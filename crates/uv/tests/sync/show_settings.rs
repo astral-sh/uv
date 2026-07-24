@@ -3193,7 +3193,7 @@ fn preview_features() {
     +            PackageConflicts,
     +            ExtraBuildDependencies,
     +            DetectModuleConflicts,
-    +            Format,
+    +            FormatCommand,
     +            NativeAuth,
     +            S3Endpoint,
     +            CacheSize,
@@ -3211,14 +3211,14 @@ fn preview_features() {
     +            SpecialCondaEnvNames,
     +            RelocatableEnvsDefault,
     +            PublishRequireNormalized,
-    +            Audit,
+    +            AuditCommand,
     +            ProjectDirectoryMustExist,
     +            IndexExcludeNewer,
     +            AzureEndpoint,
     +            TomlBackwardsCompatibility,
     +            MalwareCheck,
     +            VenvSafeClear,
-    +            Check,
+    +            CheckCommand,
     +            PackagedInit,
     +            CentralizedProjectEnvs,
     +            ToolInstallLocks,
@@ -3501,7 +3501,7 @@ fn preview_precedence() -> anyhow::Result<()> {
          preview: Preview {
     -        flags: [],
     +        flags: [
-    +            Format,
+    +            FormatCommand,
     +        ],
          },
          python_preference: Managed,
@@ -3552,7 +3552,7 @@ fn preview_precedence() -> anyhow::Result<()> {
          show_settings: true,
          preview: Preview {
              flags: [
-    -            Format,
+    -            FormatCommand,
     +            Pylock,
              ],
          },
@@ -3671,7 +3671,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
          preview: Preview {
     -        flags: [],
     +        flags: [
-    +            Format,
+    +            FormatCommand,
     +        ],
          },
          python_preference: Managed,
@@ -3811,7 +3811,7 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
          preview: Preview {
     -        flags: [],
     +        flags: [
-    +            Format,
+    +            FormatCommand,
     +        ],
          },
          python_preference: Managed,
@@ -3943,7 +3943,7 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
          preview: Preview {
     -        flags: [],
     +        flags: [
-    +            Format,
+    +            FormatCommand,
     +        ],
          },
          python_preference: Managed,
