@@ -470,13 +470,15 @@ impl<'a> Planner<'a> {
                 }
                 Dist::Built(BuiltDist::Path(wheel)) => {
                     // Validate that the path exists.
-                    if !wheel.install_path.exists() {
-                        return Err(Error::NotFound(wheel.url.to_url()).into());
+                    if !wheel.source.install_path.exists() {
+                        return Err(Error::NotFound(wheel.source.url.to_url()).into());
                     }
 
                     if !wheel.filename.is_compatible(tags) {
                         return Err(IncompatibleWheelError {
-                            kind: IncompatibleWheelKind::Path(wheel.install_path.to_path_buf()),
+                            kind: IncompatibleWheelKind::Path(
+                                wheel.source.install_path.to_path_buf(),
+                            ),
                             compatibility_hint: generate_wheel_compatibility_hint(
                                 &wheel.filename,
                                 tags,
@@ -488,7 +490,7 @@ impl<'a> Planner<'a> {
                     if no_binary {
                         bail!(
                             "A path dependency points to a wheel which conflicts with `--no-binary`: {}",
-                            wheel.url
+                            wheel.source.url
                         );
                     }
 
@@ -497,12 +499,13 @@ impl<'a> Planner<'a> {
                     let cache_entry = cache
                         .shard(
                             CacheBucket::Wheels,
-                            WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
+                            WheelCache::Url(&wheel.source.url).wheel_dir(wheel.name().as_ref()),
                         )
                         .entry(format!("{}.rev", wheel.filename.cache_key()));
 
                     match PathArchivePointer::read_from(&cache_entry) {
-                        Ok(Some(pointer)) => match Timestamp::from_path(&wheel.install_path) {
+                        Ok(Some(pointer)) => match Timestamp::from_path(&wheel.source.install_path)
+                        {
                             Ok(timestamp) => {
                                 if pointer.is_up_to_date(timestamp) {
                                     let cache_info = pointer.to_cache_info();
@@ -513,7 +516,7 @@ impl<'a> Planner<'a> {
                                             filename: wheel.filename.clone(),
                                             url: VerbatimParsedUrl::from_parts(
                                                 wheel.to_parsed_url(),
-                                                wheel.url.clone(),
+                                                wheel.source.url.clone(),
                                             ),
                                             hashes: archive.hashes,
                                             cache_info,
@@ -673,8 +676,8 @@ impl<'a> Planner<'a> {
                 }
                 Dist::Source(SourceDist::Path(sdist)) => {
                     // Validate that the path exists.
-                    if !sdist.install_path.exists() {
-                        return Err(Error::NotFound(sdist.url.to_url()).into());
+                    if !sdist.source.install_path.exists() {
+                        return Err(Error::NotFound(sdist.source.url.to_url()).into());
                     }
 
                     // Find the most-compatible wheel from the cache, since we don't know
@@ -685,7 +688,7 @@ impl<'a> Planner<'a> {
                                 let cached_dist =
                                     wheel.into_url_dist(VerbatimParsedUrl::from_parts(
                                         sdist.to_parsed_url(),
-                                        sdist.url.clone(),
+                                        sdist.source.url.clone(),
                                     ));
                                 debug!("Path source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
@@ -708,8 +711,8 @@ impl<'a> Planner<'a> {
                 }
                 Dist::Source(SourceDist::Directory(sdist)) => {
                     // Validate that the path exists.
-                    if !sdist.install_path.exists() {
-                        return Err(Error::NotFound(sdist.url.to_url()).into());
+                    if !sdist.source.install_path.exists() {
+                        return Err(Error::NotFound(sdist.source.url.to_url()).into());
                     }
 
                     // Find the most-compatible wheel from the cache, since we don't know
@@ -720,7 +723,7 @@ impl<'a> Planner<'a> {
                                 let cached_dist =
                                     wheel.into_url_dist(VerbatimParsedUrl::from_parts(
                                         sdist.to_parsed_url(),
-                                        sdist.url.clone(),
+                                        sdist.source.url.clone(),
                                     ));
                                 debug!(
                                     "Directory source requirement already cached: {cached_dist}"

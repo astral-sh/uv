@@ -103,8 +103,8 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
         source: &RequirementSource,
     ) -> Result<Option<MaterializedSourceTree>, Error> {
         match source {
-            RequirementSource::Directory { install_path, .. } => Ok(Some(MaterializedSourceTree(
-                install_path.to_path_buf().into_boxed_path(),
+            RequirementSource::Directory { source, .. } => Ok(Some(MaterializedSourceTree(
+                source.install_path.to_path_buf().into_boxed_path(),
             ))),
             RequirementSource::GitDirectory {
                 git,
@@ -357,7 +357,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildableSource::Dist(SourceDist::Path(dist)) => {
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Path(&dist.url).root(),
+                    WheelCache::Path(&dist.source.url).root(),
                 );
                 self.archive(
                     source,
@@ -522,7 +522,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildableSource::Dist(SourceDist::Path(dist)) => {
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Path(&dist.url).root(),
+                    WheelCache::Path(&dist.source.url).root(),
                 );
                 self.archive_metadata(source, &PathSourceUrl::from(dist), &cache_shard, hashes)
                     .boxed_local()

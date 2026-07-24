@@ -28,10 +28,10 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist, Identifier,
-    IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement,
-    RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
-    ToUrlError, UrlString,
+    IndexLocations, IndexMetadata, IndexUrl, LocalSourcePath, Name, PYPI_URL, PathBuiltDist,
+    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
+    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
+    StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{
     PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
@@ -2976,10 +2976,13 @@ impl Package {
                         let filename: WheelFilename =
                             self.wheels[best_wheel_index].filename.clone();
                         let install_path = absolute_path(workspace_root, path)?;
+                        let url = verbatim_url(&install_path, &self.id)?;
                         let path_dist = PathBuiltDist {
                             filename,
-                            url: verbatim_url(&install_path, &self.id)?,
-                            install_path: absolute_path(workspace_root, path)?.into_boxed_path(),
+                            source: LocalSourcePath::new_preserving_absolute(
+                                install_path.into_boxed_path(),
+                                url,
+                            ),
                         };
                         let built_dist = BuiltDist::Path(path_dist);
                         Dist::Built(built_dist)
@@ -3161,11 +3164,14 @@ impl Package {
                 };
                 let install_path = absolute_path(workspace_root, path)?;
                 let given = path.to_str().expect("lock file paths must be UTF-8");
+                let url = verbatim_url(&install_path, &self.id)?.with_given(given);
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
-                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
-                    install_path: install_path.into_boxed_path(),
+                    source: LocalSourcePath::new_preserving_absolute(
+                        install_path.into_boxed_path(),
+                        url,
+                    ),
                     ext,
                 };
                 uv_distribution_types::SourceDist::Path(path_dist)
@@ -3173,10 +3179,13 @@ impl Package {
             Source::Directory(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
                 let given = path.to_str().expect("lock file paths must be UTF-8");
+                let url = verbatim_url(&install_path, &self.id)?.with_given(given);
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
-                    install_path: install_path.into_boxed_path(),
+                    source: LocalSourcePath::new_preserving_absolute(
+                        install_path.into_boxed_path(),
+                        url,
+                    ),
                     editable: Some(false),
                     r#virtual: Some(false),
                 };
@@ -3185,10 +3194,13 @@ impl Package {
             Source::Editable(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
                 let given = path.to_str().expect("lock file paths must be UTF-8");
+                let url = verbatim_url(&install_path, &self.id)?.with_given(given);
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
-                    install_path: install_path.into_boxed_path(),
+                    source: LocalSourcePath::new_preserving_absolute(
+                        install_path.into_boxed_path(),
+                        url,
+                    ),
                     editable: Some(true),
                     r#virtual: Some(false),
                 };
@@ -3197,10 +3209,13 @@ impl Package {
             Source::Virtual(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
                 let given = path.to_str().expect("lock file paths must be UTF-8");
+                let url = verbatim_url(&install_path, &self.id)?.with_given(given);
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
-                    install_path: install_path.into_boxed_path(),
+                    source: LocalSourcePath::new_preserving_absolute(
+                        install_path.into_boxed_path(),
+                        url,
+                    ),
                     editable: Some(false),
                     r#virtual: Some(true),
                 };
@@ -3928,22 +3943,18 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist, root: &Path) -> Result<Self, LockError> {
-        let path = try_relative_to_if(
-            &path_dist.install_path,
-            root,
-            !path_dist.url.was_given_absolute(),
-        )
-        .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = path_dist
+            .source
+            .relative_to(root)
+            .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Self, LockError> {
-        let path = try_relative_to_if(
-            &path_dist.install_path,
-            root,
-            !path_dist.url.was_given_absolute(),
-        )
-        .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = path_dist
+            .source
+            .relative_to(root)
+            .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
@@ -3951,12 +3962,10 @@ impl Source {
         directory_dist: &DirectorySourceDist,
         root: &Path,
     ) -> Result<Self, LockError> {
-        let path = try_relative_to_if(
-            &directory_dist.install_path,
-            root,
-            !directory_dist.url.was_given_absolute(),
-        )
-        .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = directory_dist
+            .source
+            .relative_to(root)
+            .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable.unwrap_or(false) {
             Ok(Self::Editable(path.into_boxed_path()))
         } else if directory_dist.r#virtual.unwrap_or(false) {
@@ -5617,14 +5626,10 @@ fn normalize_requirement(
                 origin: None,
             })
         }
-        RequirementSource::Path {
-            install_path,
-            ext,
-            url: _,
-        } => {
-            let path = root.join(&install_path);
-            let install_path = normalize_path(path).into_owned().into_boxed_path();
-            let url = VerbatimUrl::from_normalized_path(&install_path)
+        RequirementSource::Path { mut source, ext } => {
+            let path = root.join(&source.install_path);
+            source.install_path = normalize_path(path).into_owned().into_boxed_path();
+            source.url = VerbatimUrl::from_normalized_path(&source.install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
             Ok(Requirement {
@@ -5632,23 +5637,18 @@ fn normalize_requirement(
                 extras: requirement.extras,
                 groups: requirement.groups,
                 marker: requires_python.simplify_markers(requirement.marker),
-                source: RequirementSource::Path {
-                    install_path,
-                    ext,
-                    url,
-                },
+                source: RequirementSource::Path { source, ext },
                 origin: None,
             })
         }
         RequirementSource::Directory {
-            install_path,
+            mut source,
             editable,
             r#virtual,
-            url: _,
         } => {
-            let path = root.join(&install_path);
-            let install_path = normalize_path(path).into_owned().into_boxed_path();
-            let url = VerbatimUrl::from_normalized_path(&install_path)
+            let path = root.join(&source.install_path);
+            source.install_path = normalize_path(path).into_owned().into_boxed_path();
+            source.url = VerbatimUrl::from_normalized_path(&source.install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
             Ok(Requirement {
@@ -5657,10 +5657,9 @@ fn normalize_requirement(
                 groups: requirement.groups,
                 marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Directory {
-                    install_path,
+                    source,
                     editable: Some(editable.unwrap_or(false)),
                     r#virtual: Some(r#virtual.unwrap_or(false)),
-                    url,
                 },
                 origin: None,
             })

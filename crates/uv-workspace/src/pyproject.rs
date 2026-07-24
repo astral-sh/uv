@@ -1773,12 +1773,12 @@ impl Source {
                 }
             }
             RequirementSource::Registry { index: None, .. } => return Ok(None),
-            RequirementSource::Path { install_path, .. } => Self::Path {
+            RequirementSource::Path { source, .. } => Self::Path {
                 editable: None,
                 package: None,
                 path: PortablePathBuf::from(
-                    relative_to(&install_path, root)
-                        .or_else(|_| std::path::absolute(&install_path))
+                    relative_to(&source.install_path, root)
+                        .or_else(|_| std::path::absolute(&source.install_path))
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),
@@ -1787,15 +1787,15 @@ impl Source {
                 group: None,
             },
             RequirementSource::Directory {
-                install_path,
+                source,
                 editable: is_editable,
                 ..
             } => Self::Path {
                 editable: editable.or(is_editable),
                 package: None,
                 path: PortablePathBuf::from(
-                    relative_to(&install_path, root)
-                        .or_else(|_| std::path::absolute(&install_path))
+                    relative_to(&source.install_path, root)
+                        .or_else(|_| std::path::absolute(&source.install_path))
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),

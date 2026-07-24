@@ -95,20 +95,16 @@ pub(crate) fn required_dist(
             install_path.clone(),
             *ext,
         )?,
-        RequirementSource::Path {
-            install_path,
-            ext,
-            url,
-        } => Dist::from_file_url(requirement.name.clone(), url.clone(), install_path, *ext)?,
+        RequirementSource::Path { source, ext } => {
+            Dist::from_file_url(requirement.name.clone(), source.clone(), *ext)?
+        }
         RequirementSource::Directory {
-            install_path,
+            source,
             r#virtual,
-            url,
             editable,
         } => Dist::from_directory_url(
             requirement.name.clone(),
-            url.clone(),
-            install_path,
+            source.clone(),
             *editable,
             *r#virtual,
         )?,

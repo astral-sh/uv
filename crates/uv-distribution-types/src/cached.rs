@@ -67,7 +67,7 @@ impl CachedDist {
             }),
             Dist::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.url),
+                url: VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.source.url),
                 hashes,
                 cache_info,
                 build_info,
@@ -114,7 +114,7 @@ impl CachedDist {
             }),
             Dist::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.url),
+                url: VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.source.url),
                 hashes,
                 cache_info,
                 build_info,
@@ -122,7 +122,7 @@ impl CachedDist {
             }),
             Dist::Source(SourceDist::Directory(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.url),
+                url: VerbatimParsedUrl::from_parts(dist.to_parsed_url(), dist.source.url),
                 hashes,
                 cache_info,
                 build_info,

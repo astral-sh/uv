@@ -294,10 +294,10 @@ impl RequirementSatisfaction {
                 }
             }
             RequirementSource::Path {
-                install_path: requested_path,
+                source: requested_source,
                 ext: _,
-                url: _,
             } => {
+                let requested_path = &requested_source.install_path;
                 let InstalledDistKind::Url(InstalledDirectUrlDist {
                     direct_url,
                     cache_info,
@@ -348,11 +348,11 @@ impl RequirementSatisfaction {
                 }
             }
             RequirementSource::Directory {
-                install_path: requested_path,
+                source: requested_source,
                 editable: requested_editable,
                 r#virtual: _,
-                url: _,
             } => {
+                let requested_path = &requested_source.install_path;
                 let InstalledDistKind::Url(InstalledDirectUrlDist {
                     direct_url,
                     cache_info,
