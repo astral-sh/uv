@@ -328,8 +328,7 @@ pub struct GlobalArgs {
     ///
     /// Use comma-separated values or pass multiple times to enable multiple features.
     ///
-    /// The following features are available: `python-install-default`, `json-output`, `pylock`,
-    /// `add-bounds`.
+    /// See <https://docs.astral.sh/uv/concepts/preview/> for the available features.
     #[arg(
         global = true,
         long = "preview-features",
