@@ -189,10 +189,9 @@ impl UnresolvedRequirement {
     pub fn source(&self) -> Cow<'_, RequirementSource> {
         match self {
             Self::Named(requirement) => Cow::Borrowed(&requirement.source),
-            Self::Unnamed(requirement) => Cow::Owned(RequirementSource::from_parsed_url(
-                requirement.url.parsed_url.clone(),
-                requirement.url.verbatim.clone(),
-            )),
+            Self::Unnamed(requirement) => {
+                Cow::Owned(RequirementSource::from_parsed_url(requirement.url.clone()))
+            }
         }
     }
 

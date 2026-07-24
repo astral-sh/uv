@@ -308,9 +308,7 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
                 index: None,
                 conflict: None,
             },
-            Some(VersionOrUrl::Url(url)) => {
-                RequirementSource::from_parsed_url(url.parsed_url, url.verbatim)
-            }
+            Some(VersionOrUrl::Url(url)) => RequirementSource::from_parsed_url(url),
         };
         Self {
             name: requirement.name,
@@ -606,34 +604,33 @@ pub enum RequirementSource {
 }
 
 impl RequirementSource {
-    /// Construct a [`RequirementSource`] for a URL source, given a URL parsed into components and
-    /// the PEP 508 string (after the `@`) as [`VerbatimUrl`].
-    pub(crate) fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
-        match parsed_url {
+    /// Construct a [`RequirementSource`] from a parsed URL and its original spelling.
+    pub(crate) fn from_parsed_url(url: VerbatimParsedUrl) -> Self {
+        match url.parsed_url {
             ParsedUrl::Path(local_file) => Self::Path {
                 install_path: local_file.install_path.clone(),
                 ext: local_file.ext,
-                url,
+                url: url.verbatim,
             },
             ParsedUrl::Directory(directory) => Self::Directory {
                 install_path: directory.install_path.clone(),
                 editable: directory.editable,
                 r#virtual: directory.r#virtual,
-                url,
+                url: url.verbatim,
             },
             ParsedUrl::GitDirectory(git) => Self::GitDirectory {
-                url,
+                url: url.verbatim,
                 git: git.url,
                 subdirectory: git.subdirectory,
             },
             ParsedUrl::GitPath(git) => Self::GitPath {
-                url,
+                url: url.verbatim,
                 git: git.url,
                 install_path: git.install_path.clone(),
                 ext: git.ext,
             },
             ParsedUrl::Archive(archive) => Self::Url {
-                url,
+                url: url.verbatim,
                 location: archive.url,
                 subdirectory: archive.subdirectory,
                 ext: archive.ext,
