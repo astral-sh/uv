@@ -226,101 +226,101 @@ pub mod test {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PreviewMetadata)]
 pub enum PreviewFeature {
     /// Allows [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
-    PythonInstallDefault = 1 << 0,
+    PythonInstallDefault,
     /// Allows `--output-format json` for various uv commands.
-    JsonOutput = 1 << 2,
+    JsonOutput,
     /// Allows installing from `pylock.toml` files.
-    Pylock = 1 << 3,
+    Pylock,
     /// Allows configuring the [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
-    AddBounds = 1 << 4,
+    AddBounds,
     /// Allows defining workspace conflicts at the package level.
-    PackageConflicts = 1 << 5,
+    PackageConflicts,
     /// Allows specifying additional dependencies for package builds.
-    ExtraBuildDependencies = 1 << 6,
+    ExtraBuildDependencies,
     /// Warns when multiple packages would install conflicting Python modules into the same
     /// environment.
-    DetectModuleConflicts = 1 << 7,
+    DetectModuleConflicts,
     /// Allows using `uv format`.
     #[preview(alias = "format")]
-    FormatCommand = 1 << 8,
+    FormatCommand,
     /// Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
-    NativeAuth = 1 << 9,
+    NativeAuth,
     /// Allows signing requests to configured S3-compatible endpoints.
-    S3Endpoint = 1 << 10,
+    S3Endpoint,
     /// Allows using `uv cache size`.
-    CacheSize = 1 << 11,
+    CacheSize,
     /// Rejects the deprecated `--project` option in `uv init`.
-    InitProjectFlag = 1 << 12,
+    InitProjectFlag,
     /// Allows using `uv workspace metadata`.
-    WorkspaceMetadata = 1 << 13,
+    WorkspaceMetadata,
     /// Allows using `uv workspace dir`.
-    WorkspaceDir = 1 << 14,
+    WorkspaceDir,
     /// Allows using `uv workspace list`.
-    WorkspaceList = 1 << 15,
+    WorkspaceList,
     /// Allows using `uv export --format=cyclonedx1.5`.
-    SbomExport = 1 << 16,
+    SbomExport,
     /// Allows using `uv auth helper` as a credential helper for external tools.
-    AuthHelper = 1 << 17,
+    AuthHelper,
     /// Allows publishing directly to a package index.
-    DirectPublish = 1 << 18,
+    DirectPublish,
     /// Uses the directory containing a local `uv run` target, rather than the current working
     /// directory, as the starting point for project and workspace discovery. This feature takes
     /// effect before configuration is loaded.
-    TargetWorkspaceDiscovery = 1 << 19,
+    TargetWorkspaceDiscovery,
     /// Includes JSON metadata files in built wheels.
-    MetadataJson = 1 << 20,
+    MetadataJson,
     /// Allows signing requests to configured Google Cloud Storage endpoints.
-    GcsEndpoint = 1 << 21,
+    GcsEndpoint,
     /// On Unix, raises the process's soft open-file limit at startup, up to the hard limit.
-    AdjustUlimit = 1 << 22,
+    AdjustUlimit,
     /// Stops treating Conda environments named `base` or `root` as special.
-    SpecialCondaEnvNames = 1 << 23,
+    SpecialCondaEnvNames,
     /// Creates relocatable virtual environments by default.
-    RelocatableEnvsDefault = 1 << 24,
+    RelocatableEnvsDefault,
     /// Requires normalized distribution filenames when publishing, skipping files whose names are
     /// not normalized.
-    PublishRequireNormalized = 1 << 25,
+    PublishRequireNormalized,
     /// Allows using `uv audit`.
     #[preview(alias = "audit")]
-    AuditCommand = 1 << 26,
+    AuditCommand,
     /// Rejects an invalid `--project` path instead of warning and continuing. Except for `uv init`,
     /// the path must already exist as a directory or point to a `pyproject.toml` file. This feature
     /// takes effect before configuration is loaded.
-    ProjectDirectoryMustExist = 1 << 27,
+    ProjectDirectoryMustExist,
     /// Allows setting `exclude-newer` on configured package indexes.
-    IndexExcludeNewer = 1 << 28,
+    IndexExcludeNewer,
     /// Allows signing requests to Azure Blob Storage endpoints with Azure credentials.
-    AzureEndpoint = 1 << 29,
+    AzureEndpoint,
     /// Rewrites `pyproject.toml` as TOML 1.0 when building source distributions, preserving the
     /// original as `pyproject.toml.orig` to ensure compatibility with older build tools.
-    TomlBackwardsCompatibility = 1 << 30,
+    TomlBackwardsCompatibility,
     /// Allows `uv sync` and other commands to check for malware using [OSV](https://osv.dev) before
     /// installing packages.
-    MalwareCheck = 1 << 31,
+    MalwareCheck,
     /// Prevents `uv venv --clear` from clearing a directory that does not contain a `pyvenv.cfg` file
     /// unless `--force` is provided.
-    VenvSafeClear = 1 << 32,
+    VenvSafeClear,
     /// Allows using `uv check`.
     #[preview(alias = "check")]
-    CheckCommand = 1 << 33,
+    CheckCommand,
     /// Makes `uv init` create a packaged application with a `src/` layout, build system, and script
     /// entry point by default.
-    PackagedInit = 1 << 34,
+    PackagedInit,
     /// Stores [project virtual environments](./projects/layout.md#centralized-project-environments)
     /// in the uv cache.
-    CentralizedProjectEnvs = 1 << 35,
+    CentralizedProjectEnvs,
     /// Stores a `uv.lock` alongside each installed tool and reuses it for reproducible installations
     /// and upgrades.
-    ToolInstallLocks = 1 << 36,
+    ToolInstallLocks,
     /// Allows using `uv workspace list --scripts`.
-    WorkspaceListScripts = 1 << 37,
+    WorkspaceListScripts,
     /// Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils configuration monkeypatch
     /// in virtual environments for Python 3.10 and later.
-    NoDistutilsPatch = 1 << 38,
+    NoDistutilsPatch,
     /// Allows requiring a hash algorithm for configured package indexes.
-    IndexHashAlgorithm = 1 << 39,
+    IndexHashAlgorithm,
     /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
-    LockfileFormatCheck = 1 << 40,
+    LockfileFormatCheck,
 }
 
 impl Display for PreviewFeature {
