@@ -27,9 +27,8 @@ use uv_cli::{
     AuthorFrom, BuildArgs, CheckArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
     RegistryClientArgs, ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
-        Flag, FlagSource, check_conflicts, flag, indexes_from_args, resolve_flag,
-        resolve_flag_pair, resolver_installer_options, resolver_installer_options_with_indexes,
-        resolver_options,
+        Flag, FlagSource, check_conflicts, flag, resolve_flag, resolve_flag_pair,
+        resolver_installer_options, resolver_options,
     },
 };
 use uv_client::Connectivity;
@@ -2268,17 +2267,17 @@ impl AddSettings {
             DependencyType::Production
         };
 
-        // Track the `--index` and `--default-index` arguments from the command-line.
-        let index = indexes_from_args(
-            installer.index_args.default_index.as_ref(),
-            installer.index_args.index.as_deref(),
-        );
-        let indexes = index.clone().unwrap_or_default();
-
         // Warn user if an ambiguous relative path was passed as a value for
         // `--index` or `--default-index`.
-        for index in &indexes {
-            index.url().warn_on_disambiguated_relative_path();
+        for index in installer
+            .index_args
+            .default_index
+            .iter()
+            .chain(installer.index_args.index.iter().flatten().flatten())
+        {
+            if let Maybe::Some(index) = index {
+                index.url().warn_on_disambiguated_relative_path();
+            }
         }
 
         // If the user passed an `--index-url` or `--extra-index-url`, warn.
@@ -2368,11 +2367,20 @@ impl AddSettings {
         let only_install_local = only_install_local.is_enabled();
 
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
+        let active = flag(active, no_active, "active")?;
+        let workspace = flag(workspace, no_workspace, "workspace")?;
+        let editable = EditableMode::from_args(
+            flag(editable.into(), no_editable.into(), "editable")?,
+            no_editable_package,
+        );
+        let refresh = Refresh::try_from(refresh)?;
+        let options = resolver_installer_options(installer, build)?;
+        let indexes = options.index.clone().unwrap_or_default();
 
         Ok(Self {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
-            active: flag(active, no_active, "active")?,
+            active,
             no_sync: no_sync.is_enabled(),
             packages,
             requirements,
@@ -2391,7 +2399,7 @@ impl AddSettings {
             package,
             script,
             python: python.and_then(Maybe::into_option),
-            workspace: flag(workspace, no_workspace, "workspace")?,
+            workspace,
             no_install_project,
             only_install_project,
             no_install_workspace,
@@ -2400,18 +2408,11 @@ impl AddSettings {
             only_install_local,
             no_install_package,
             only_install_package,
-            editable: EditableMode::from_args(
-                flag(editable.into(), no_editable.into(), "editable")?,
-                no_editable_package,
-            ),
+            editable,
             extras: extra.unwrap_or_default(),
-            refresh: Refresh::try_from(refresh)?,
+            refresh,
             indexes,
-            settings: ResolverInstallerSettings::combine(
-                resolver_installer_options_with_indexes(installer, build, index)?,
-                filesystem,
-                &environment,
-            ),
+            settings: ResolverInstallerSettings::combine(options, filesystem, &environment),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),

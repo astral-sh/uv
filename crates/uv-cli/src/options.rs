@@ -647,19 +647,6 @@ pub fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
 ) -> anyhow::Result<ResolverInstallerOptions> {
-    let index = indexes_from_args(
-        resolver_installer_args.index_args.default_index.as_ref(),
-        resolver_installer_args.index_args.index.as_deref(),
-    );
-    resolver_installer_options_with_indexes(resolver_installer_args, build_args, index)
-}
-
-/// Construct the [`ResolverInstallerOptions`] with a precomputed list of indexes.
-pub fn resolver_installer_options_with_indexes(
-    resolver_installer_args: ResolverInstallerArgs,
-    build_args: BuildOptionsArgs,
-    index: Option<Vec<Index>>,
-) -> anyhow::Result<ResolverInstallerOptions> {
     let ResolverInstallerArgs {
         index_args,
         upgrade,
@@ -708,7 +695,10 @@ pub fn resolver_installer_options_with_indexes(
     } = build_args;
 
     Ok(ResolverInstallerOptions {
-        index,
+        index: indexes_from_args(
+            index_args.default_index.as_ref(),
+            index_args.index.as_deref(),
+        ),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
