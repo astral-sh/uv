@@ -6,7 +6,7 @@ use anyhow::bail;
 
 use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
-use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
+use uv_distribution_types::{ConfigSettings, Index, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewerPackage, PrereleaseMode, PrereleasePackage};
 use uv_settings::{
     Combine, EnvFlag, IndexOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
@@ -242,13 +242,13 @@ impl TryFrom<RefreshArgs> for Refresh {
 
 /// Convert command-line arguments into [`PipOptions`].
 pub trait IntoPipOptions {
-    /// Convert command-line arguments into pip options.
-    fn into_pip_options(self) -> anyhow::Result<PipOptions>;
+    /// Convert command-line arguments into pip options using the effective configuration.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions>;
 }
 
 impl IntoPipOptions for ResolverArgs {
-    /// Convert resolver arguments into pip options.
-    fn into_pip_options(self) -> anyhow::Result<PipOptions> {
+    /// Convert resolver arguments into pip options using the effective configuration.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions> {
         let Self {
             index_args,
             upgrade,
@@ -330,14 +330,14 @@ impl IntoPipOptions for ResolverArgs {
             } else {
                 Some(no_sources_package)
             },
-            ..index_args.into_pip_options()?
+            ..index_args.into_pip_options(configured_indexes)?
         })
     }
 }
 
 impl IntoPipOptions for InstallerArgs {
-    /// Convert installer arguments into pip options.
-    fn into_pip_options(self) -> anyhow::Result<PipOptions> {
+    /// Convert installer arguments into pip options using the effective configuration.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions> {
         let Self {
             index_args,
             reinstall:
@@ -399,14 +399,14 @@ impl IntoPipOptions for InstallerArgs {
             } else {
                 Some(no_sources_package)
             },
-            ..index_args.into_pip_options()?
+            ..index_args.into_pip_options(configured_indexes)?
         })
     }
 }
 
 impl IntoPipOptions for ResolverInstallerArgs {
-    /// Convert resolver and installer arguments into pip options.
-    fn into_pip_options(self) -> anyhow::Result<PipOptions> {
+    /// Convert resolver and installer arguments into pip options using the effective configuration.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions> {
         let Self {
             index_args,
             upgrade,
@@ -502,14 +502,14 @@ impl IntoPipOptions for ResolverInstallerArgs {
             } else {
                 Some(no_sources_package)
             },
-            ..index_args.into_pip_options()?
+            ..index_args.into_pip_options(configured_indexes)?
         })
     }
 }
 
 impl IntoPipOptions for FetchArgs {
-    /// Convert package-fetch arguments into pip options.
-    fn into_pip_options(self) -> anyhow::Result<PipOptions> {
+    /// Convert package-fetch arguments into pip options using the effective configuration.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions> {
         let Self {
             index_args,
             registry_client:
@@ -529,14 +529,14 @@ impl IntoPipOptions for FetchArgs {
             keyring_provider,
             exclude_newer,
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
-            ..index_args.into_pip_options()?
+            ..index_args.into_pip_options(configured_indexes)?
         })
     }
 }
 
 impl IndexArgs {
     /// Resolve the index arguments shared by pip, resolver, and installer settings.
-    fn resolve(self) -> IndexOptions {
+    fn resolve(self, configured_indexes: &[Index]) -> anyhow::Result<IndexOptions> {
         let Self {
             default_index,
             index,
@@ -548,16 +548,21 @@ impl IndexArgs {
 
         let default_index = default_index
             .and_then(Maybe::into_option)
+            .map(|index| index.resolve(configured_indexes))
+            .transpose()?
             .map(|index| vec![index]);
-        let index = index.map(|indexes| {
-            indexes
-                .into_iter()
-                .flatten()
-                .filter_map(Maybe::into_option)
-                .collect()
-        });
+        let index = index
+            .map(|indexes| {
+                indexes
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Maybe::into_option)
+                    .map(|index| index.resolve(configured_indexes))
+                    .collect::<anyhow::Result<Vec<_>>>()
+            })
+            .transpose()?;
 
-        IndexOptions {
+        Ok(IndexOptions {
             index: default_index.combine(index),
             index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url
@@ -565,15 +570,16 @@ impl IndexArgs {
             no_index: no_index.then_some(true),
             find_links: find_links
                 .map(|links| links.into_iter().filter_map(Maybe::into_option).collect()),
-        }
+        })
     }
 }
 
 impl IntoPipOptions for IndexArgs {
-    /// Convert index arguments into pip options.
-    fn into_pip_options(self) -> anyhow::Result<PipOptions> {
+    /// Convert index arguments into pip options, resolving configured index names.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions> {
         Ok(PipOptions::from(
-            self.resolve().relative_to(&env::current_dir()?)?,
+            self.resolve(configured_indexes)?
+                .relative_to(&env::current_dir()?)?,
         ))
     }
 }
@@ -582,6 +588,7 @@ impl IntoPipOptions for IndexArgs {
 pub fn resolver_options(
     resolver_args: ResolverArgs,
     build_args: BuildOptionsArgs,
+    configured_indexes: &[Index],
 ) -> anyhow::Result<ResolverOptions> {
     let ResolverArgs {
         index_args,
@@ -635,7 +642,7 @@ pub fn resolver_options(
     } = build_args;
 
     ResolverOptions {
-        indexes: index_args.resolve(),
+        indexes: index_args.resolve(configured_indexes)?,
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package.into_iter().map(Requirement::from).collect(),
@@ -696,6 +703,7 @@ pub fn resolver_options(
 pub fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
+    configured_indexes: &[Index],
 ) -> anyhow::Result<ResolverInstallerOptions> {
     let ResolverInstallerArgs {
         index_args,
@@ -760,7 +768,7 @@ pub fn resolver_installer_options(
     } = build_args;
 
     ResolverInstallerOptions {
-        indexes: index_args.resolve(),
+        indexes: index_args.resolve(configured_indexes)?,
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package.into_iter().map(Requirement::from).collect(),

@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Deref, DerefMut};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
@@ -19,12 +19,12 @@ use uv_configuration::{
     ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
-    ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
-    PipFindLinks, PipIndex,
+    ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexName, IndexSourceError, IndexUrl,
+    Origin, PipExtraIndex, PipFindLinks, PipIndex,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
-use uv_pep508::{MarkerTree, Requirement};
-use uv_preview::MaybePreviewFeature;
+use uv_pep508::{MarkerTree, Requirement, VerbatimUrl};
+use uv_preview::{MaybePreviewFeature, PreviewFeature};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -35,6 +35,7 @@ use uv_resolver::{
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
+use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 pub mod comma;
@@ -1346,40 +1347,133 @@ fn parse_find_links(input: &str) -> Result<Maybe<PipFindLinks>, String> {
     }
 }
 
-/// Parse an `--index` argument into a [`Vec<Index>`], mapping the empty string to an empty Vec.
+/// An unresolved index passed by the user by its name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnresolvedIndex {
+    name: IndexName,
+    default: bool,
+}
+
+impl UnresolvedIndex {
+    /// Resolve an index name against the effective filesystem configuration.
+    fn resolve(self, indexes: &[Index], preview_enabled: bool) -> Result<Index> {
+        let Self { name, default } = self;
+        let path_exists = Path::new(name.as_ref()).exists();
+
+        // Outside preview, an existing path retains its current interpretation.
+        if preview_enabled || !path_exists {
+            if let Some(index) = indexes
+                .iter()
+                .find(|index| index.name.as_ref() == Some(&name))
+            {
+                if !preview_enabled {
+                    warn_user_once!(
+                        "Referencing an index by name is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                        PreviewFeature::IndexByName
+                    );
+                }
+
+                let mut index = index.clone();
+                // Keep relative paths anchored to their configuration file without marking them
+                // as absolute when CLI settings are rebased or written back to a project.
+                if let IndexUrl::Path(url) = index.url()
+                    && !url.was_given_absolute()
+                {
+                    index.url = IndexUrl::from(VerbatimUrl::from_url(index.raw_url().clone()));
+                }
+
+                return Ok(Index {
+                    default,
+                    explicit: false,
+                    origin: Some(Origin::Cli),
+                    ..index
+                });
+            }
+
+            if preview_enabled && !path_exists {
+                return Err(anyhow!("Could not find an index named `{name}`"));
+            }
+        }
+
+        Ok(Index {
+            default,
+            origin: Some(Origin::Cli),
+            ..Index::from_str(name.as_ref())?
+        })
+    }
+}
+
+/// A potentially unresolved index.
+#[expect(clippy::large_enum_variant)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexArg {
+    /// A usable index with a URL.
+    Resolved(Index),
+    /// An unresolved index specification.
+    Unresolved(UnresolvedIndex),
+}
+
+impl IndexArg {
+    fn new(value: &str, default: bool) -> Result<Self, IndexSourceError> {
+        if let Ok(name) = IndexName::from_str(value) {
+            return Ok(Self::Unresolved(UnresolvedIndex { name, default }));
+        }
+
+        let index = Index::from_str(value)?;
+        Ok(Self::Resolved(Index {
+            default,
+            origin: Some(Origin::Cli),
+            ..index
+        }))
+    }
+
+    /// Parse an index passed via `--index`.
+    fn from_index(value: &str) -> Result<Self, IndexSourceError> {
+        Self::new(value, false)
+    }
+
+    /// Parse an index passed via `--default-index`.
+    fn from_default_index(value: &str) -> Result<Self, IndexSourceError> {
+        Self::new(value, true)
+    }
+
+    /// Resolve the argument against indexes from the effective configuration.
+    fn resolve(self, indexes: &[Index]) -> Result<Index> {
+        match self {
+            Self::Resolved(index) => Ok(index),
+            Self::Unresolved(index) => {
+                index.resolve(indexes, uv_preview::is_enabled(PreviewFeature::IndexByName))
+            }
+        }
+    }
+}
+
+/// Parse an `--index` argument into a [`Vec<IndexArg>`], mapping the empty string to an empty Vec.
 ///
 /// This function splits the input on all whitespace characters rather than a single delimiter,
 /// which is necessary to parse environment variables like `PIP_EXTRA_INDEX_URL`.
 /// The standard `clap::Args` `value_delimiter` only supports single-character delimiters.
-fn parse_indices(input: &str) -> Result<Vec<Maybe<Index>>, String> {
+fn parse_indices(input: &str) -> Result<Vec<Maybe<IndexArg>>, String> {
     if input.trim().is_empty() {
         return Ok(Vec::new());
     }
     let mut indices = Vec::new();
     for token in input.split_whitespace() {
-        match Index::from_str(token) {
-            Ok(index) => indices.push(Maybe::Some(Index {
-                default: false,
-                origin: Some(Origin::Cli),
-                ..index
-            })),
+        match IndexArg::from_index(token) {
+            Ok(index) => indices.push(Maybe::Some(index)),
             Err(e) => return Err(e.to_string()),
         }
     }
     Ok(indices)
 }
 
-/// Parse a `--default-index` argument into an [`Index`], mapping the empty string to `None`.
-fn parse_default_index(input: &str) -> Result<Maybe<Index>, String> {
+/// Parse a `--default-index` argument into an [`IndexArg`], mapping the empty string to `None`.
+fn parse_default_index(input: &str) -> Result<Maybe<IndexArg>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
     } else {
-        match Index::from_str(input) {
-            Ok(index) => Ok(Maybe::Some(Index {
-                default: true,
-                origin: Some(Origin::Cli),
-                ..index
-            })),
+        match IndexArg::from_default_index(input) {
+            Ok(index) => Ok(Maybe::Some(index)),
             Err(err) => Err(err.to_string()),
         }
     }
@@ -6634,10 +6728,13 @@ pub struct IndexArgs {
     /// `--default-index` (which defaults to PyPI). When multiple `--index` flags are provided,
     /// earlier values take priority.
     ///
-    /// Index names are not supported as values. Relative paths must be disambiguated from index
-    /// names with `./` or `../` on Unix or `.\\`, `..\\`, `./` or `../` on Windows.
+    /// Indexes configured in `uv.toml` or `pyproject.toml` may be selected by name. Enable the
+    /// `index-by-name` preview feature to prefer index names over relative paths.
+    ///
+    /// Relative paths can be disambiguated from index names with `./` or `../` on Unix or `.\\`,
+    /// `..\\`, `./` or `../` on Windows.
     //
-    // The nested Vec structure (`Vec<Vec<Maybe<Index>>>`) is required for clap's
+    // The nested Vec structure (`Vec<Vec<Maybe<IndexArg>>>`) is required for clap's
     // value parsing mechanism, which processes one value at a time, in order to handle
     // `UV_INDEX` the same way pip handles `PIP_EXTRA_INDEX_URL`.
     #[arg(
@@ -6647,7 +6744,7 @@ pub struct IndexArgs {
         value_parser = parse_indices,
         help_heading = "Index options"
     )]
-    pub index: Option<Vec<Vec<Maybe<Index>>>>,
+    pub index: Option<Vec<Vec<Maybe<IndexArg>>>>,
 
     /// The URL of the default package index (by default: <https://pypi.org/simple>).
     ///
@@ -6656,6 +6753,9 @@ pub struct IndexArgs {
     ///
     /// The index given by this flag is given lower priority than all other indexes specified via
     /// the `--index` flag.
+    ///
+    /// Indexes configured in `uv.toml` or `pyproject.toml` may be selected by name. Enable the
+    /// `index-by-name` preview feature to prefer index names over relative paths.
     #[arg(
         long,
         env = EnvVars::UV_DEFAULT_INDEX,
@@ -6663,7 +6763,7 @@ pub struct IndexArgs {
         value_parser = parse_default_index,
         help_heading = "Index options"
     )]
-    pub default_index: Option<Maybe<Index>>,
+    pub default_index: Option<Maybe<IndexArg>>,
 
     /// (Deprecated: use `--default-index` instead) The URL of the Python package index (by default:
     /// <https://pypi.org/simple>).

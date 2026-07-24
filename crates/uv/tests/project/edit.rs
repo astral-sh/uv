@@ -10963,6 +10963,139 @@ async fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> 
     Ok(())
 }
 
+/// Add a dependency using a configured index selected by name.
+#[test]
+fn add_index_by_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let initial = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://test.pypi.org/simple"
+        explicit = true
+        default = true
+    "#};
+    pyproject_toml.write_str(initial)?;
+
+    // Without preview, a configured name is used only when no matching path exists.
+    uv_snapshot!(context.filters(), context.add()
+        .arg("iniconfig")
+        .arg("--index").arg("internal")
+        .arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Referencing an index by name is experimental and may change without warning. Pass `--preview-features index-by-name` to disable this warning.
+    ");
+
+    pyproject_toml.write_str(initial)?;
+
+    // Enabling preview suppresses the warning.
+    uv_snapshot!(context.filters(), context.add()
+        .arg("iniconfig")
+        .arg("--index").arg("internal")
+        .arg("--preview-features").arg("index-by-name")
+        .arg("--frozen"), @"
+    exit_code: 0 (success)
+    ");
+
+    // Preserve the existing index configuration and pin the dependency to it.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("pyproject.toml"), @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig",
+        ]
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://test.pypi.org/simple"
+        explicit = true
+        default = true
+
+        [tool.uv.sources]
+        iniconfig = { index = "internal" }
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Keep a configured local index relative when selecting it by name.
+#[test]
+fn add_index_by_name_with_relative_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.create_dir_all()?;
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "wheels"
+        format = "flat"
+    "#})?;
+
+    let packages = project.child("wheels");
+    packages.create_dir_all()?;
+    packages.child("placeholder").touch()?;
+
+    // Select the configured local index by name from outside the project directory.
+    uv_snapshot!(context.filters(), context.add()
+        .arg("iniconfig")
+        .arg("--index").arg("local")
+        .arg("--preview-features").arg("index-by-name")
+        .arg("--project").arg(project.path())
+        .arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(pyproject_toml.path())?;
+
+    // Preserve the relative index URL and pin the dependency to the configured index.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig",
+        ]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "wheels"
+        format = "flat"
+
+        [tool.uv.sources]
+        iniconfig = { index = "local" }
+        "#);
+    });
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn add_index_empty_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
