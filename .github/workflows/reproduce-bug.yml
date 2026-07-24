@@ -175,6 +175,8 @@ jobs:
       - name: "Commit integration test"
         id: commit-test
         run: |
+          # codex-action rewrites its tracked config to configure the Responses API proxy.
+          git restore -- agents/codex/config.toml
           git add -- crates/uv/tests/it crates/uv-client/tests/it
 
           if [ -n "$(git ls-files --others --exclude-standard)" ] || ! git diff --quiet; then

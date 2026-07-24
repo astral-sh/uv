@@ -54,6 +54,8 @@ profile.json.gz
 .vscode
 
 # Codex
+/agents/codex/*
+!/agents/codex/config.toml
 .codex/*
 !.codex/hooks.json
 !.codex/skills/
