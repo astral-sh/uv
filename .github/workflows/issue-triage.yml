@@ -26,6 +26,7 @@ jobs:
       issue-context: ${{ steps.issue.outputs.context }}
       issue-node-id: ${{ steps.issue.outputs.node-id }}
       issue-number: ${{ steps.issue.outputs.number }}
+      issue-repository: ${{ steps.issue.outputs.repository }}
       result: ${{ steps.triage.outputs.final-message }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -41,7 +42,7 @@ jobs:
             > .issue-triage-event.json
 
           jq --raw-output \
-            '"number=\(.number)\nnode-id=\(.id)\ncontext=\(tojson)"' \
+            '"number=\(.number)\nnode-id=\(.id)\nrepository=\(.url | split("/")[3:5] | join("/"))\ncontext=\(tojson)"' \
             .issue-triage-event.json >> "$GITHUB_OUTPUT"
 
           {
@@ -83,7 +84,7 @@ jobs:
     environment: automations
     timeout-minutes: 10
     concurrency:
-      group: issue-context-${{ needs.triage.outputs.issue-number }}
+      group: issue-context-${{ needs.triage.outputs.issue-repository }}-${{ needs.triage.outputs.issue-number }}
       cancel-in-progress: false
     permissions:
       id-token: write # for the cross-repository issue-context credential broker
@@ -112,7 +113,11 @@ jobs:
 
       - name: "Persist issue context"
         run: |
-          branch="issue/$ISSUE_NUMBER"
+          if [ "$ISSUE_REPOSITORY" = "$GITHUB_REPOSITORY" ]; then
+            branch="issue/$ISSUE_NUMBER"
+          else
+            branch="issue/${ISSUE_REPOSITORY#*/}/$ISSUE_NUMBER"
+          fi
 
           # shellcheck disable=SC2016 # GraphQL variable declarations must remain literal.
           repository="$(
@@ -164,9 +169,10 @@ jobs:
           commit_sha="$(
             jq --null-input \
               --arg issue_number "$ISSUE_NUMBER" \
+              --arg issue_repository "$ISSUE_REPOSITORY" \
               --arg tree "$tree_sha" \
               --arg parent "$head_sha" \
-              '{message: "Update issue context for astral-sh/uv#\($issue_number)", tree: $tree, parents: (if $parent == "" then [] else [$parent] end)}' |
+              '{message: "Update issue context for \($issue_repository)#\($issue_number)", tree: $tree, parents: (if $parent == "" then [] else [$parent] end)}' |
               gh api \
                 --method POST \
                 repos/astral-sh/uv-dev/git/commits \
@@ -209,6 +215,7 @@ jobs:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           ISSUE_NODE_ID: ${{ needs.triage.outputs.issue-node-id }}
           ISSUE_NUMBER: ${{ needs.triage.outputs.issue-number }}
+          ISSUE_REPOSITORY: ${{ needs.triage.outputs.issue-repository }}
 
   reproduce-bug:
     needs: triage
