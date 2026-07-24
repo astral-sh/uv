@@ -3380,6 +3380,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
         dependencies = ["sortedcontainers==2.3.0"]
 
         [tool.uv]
+        preview-features = ["package-conflicts"]
         conflicts = [
           [
             { group = "foo" },
@@ -3399,7 +3400,6 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 3 packages in [TIME]
     ");
 
@@ -3465,9 +3465,33 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 3 packages in [TIME]
     ");
+
+    let metadata_free_lock = metadata_free_lock(&lock)?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&metadata_free_lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let missing_conflict_marker = metadata_free_lock
+        .to_string()
+        .replace(", marker = \"extra == 'project-7-project'\"", "");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&missing_conflict_marker)?;
+    context.lock().arg("--locked").assert().failure();
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&metadata_free_lock.to_string())?;
 
     context
         .temp_dir
@@ -3772,6 +3796,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         members = ["subexample"]
 
         [tool.uv]
+        preview-features = ["package-conflicts"]
         conflicts = [
             [
                 { package = "example" },
@@ -3818,7 +3843,6 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 4 packages in [TIME]
     ");
 
@@ -3893,6 +3917,13 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         "#
         );
     });
+
+    let metadata_free_lock = metadata_free_lock(&lock)?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&metadata_free_lock.to_string())?;
+    context.lock().arg("--locked").assert().success();
 
     // Install from the lockfile
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
@@ -5122,6 +5153,13 @@ fn lock_check_refresh_workspace_conflicts() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
+
+    let metadata_free_lock = metadata_free_lock(&lock)?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&metadata_free_lock.to_string())?;
+    context.lock().arg("--locked").assert().success();
 
     Ok(())
 }
@@ -17540,11 +17578,37 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
         .assert()
         .success();
 
-    let lock = metadata_free_lock(&context.read("uv.lock"))?;
+    let original_pyproject = fs_err::read_to_string(pyproject_toml.path())?;
+    let lockfile = context.temp_dir.child("uv.lock");
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    let Some(project) = packages
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("project"))
+    else {
+        anyhow::bail!("lockfile did not contain the project package");
+    };
+    project.remove("metadata");
+
+    lockfile.write_str(&lock.to_string())?;
     context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(&lock.to_string())?;
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .failure();
+
+    lock["revision"] = toml_edit::value(4);
+    lockfile.write_str(&lock.to_string())?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    ");
 
     context
         .sync()
@@ -17561,6 +17625,325 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
         .arg(server.index_url())
         .assert()
         .success();
+
+    // Compatible declaration edits do not change the regenerated resolved dependency edges.
+    pyproject_toml.write_str(&original_pyproject.replace("tqdm>1", "tqdm>0"))?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    // An incompatible requirement can no longer generate the existing locked edge.
+    pyproject_toml.write_str(&original_pyproject.replace("tqdm>1", "tqdm>4"))?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .failure();
+
+    // Optional edges include the requested extras on their resolved targets.
+    pyproject_toml.write_str(&original_pyproject.replace(
+        "test = [\n            \"httpx[http2]\",",
+        "test = [\n            \"httpx\",",
+    ))?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .failure();
+
+    // Development groups are regenerated through the same dependency builder.
+    pyproject_toml.write_str(&original_pyproject.replace(
+        "dev = [\"httpx[http2]\", \"anyio\"]",
+        "dev = [\"httpx[http2]\"]",
+    ))?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .failure();
+
+    Ok(())
+}
+
+/// An activated empty extra must be refreshed if it gains dependencies.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_regenerates_activated_empty_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency", "z-activator"]
+
+        [tool.uv.sources]
+        dependency = { path = "dependency" }
+        z-activator = { path = "activator" }
+        "#,
+    )?;
+
+    let activator = context.temp_dir.child("activator");
+    activator.create_dir_all()?;
+    activator.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "z-activator"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency[feature]"]
+
+        [tool.uv.sources]
+        dependency = { path = "../dependency" }
+        "#,
+    )?;
+
+    let dependency = context.temp_dir.child("dependency");
+    dependency.create_dir_all()?;
+    let dependency_pyproject_toml = dependency.child("pyproject.toml");
+    dependency_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dependency"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = []
+        "#,
+    )?;
+
+    let leaf = context.temp_dir.child("leaf");
+    leaf.create_dir_all()?;
+    leaf.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    context.lock().arg("--offline").assert().success();
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    let Some(dependency) = packages
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("dependency"))
+    else {
+        anyhow::bail!("lockfile did not contain the dependency package");
+    };
+    dependency.remove("metadata");
+    lock["revision"] = toml_edit::value(4);
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    dependency_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dependency"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Preserve recursive extras, platform forks, and workspace-member dependency behavior.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_regenerates_complex_workspace_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg0"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "tqdm<10 ; sys_platform == 'win32'",
+            "tqdm>1 ; sys_platform != 'win32'",
+            "pkg1",
+            "pkg2",
+            "urllib3 ; extra == 'e1'",
+            "six ; sys_platform == 'win32' or extra == 'e2'",
+        ]
+
+        [project.optional-dependencies]
+        e1 = ["anyio"]
+        e2 = [
+            "packaging==26.0 ; sys_platform == 'win32'",
+            "packaging==26.1 ; sys_platform != 'win32'",
+        ]
+        e3 = ["pkg0[e1]"]
+
+        [dependency-groups]
+        g1 = ["anyio ; os_name != 'posix'"]
+        g2 = [{ include-group = "g1" }]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "pkg1", version = "0.1.0" }, dependencies = ["anyio==4.4.0 ; sys_platform == 'win32'"] },
+        ]
+
+        [tool.uv.workspace]
+        members = ["a", "b"]
+
+        [tool.uv.sources]
+        pkg1 = { workspace = true }
+        pkg2 = { workspace = true }
+        "#,
+    )?;
+
+    let member_a = context.temp_dir.child("a");
+    member_a.create_dir_all()?;
+    member_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==4.3.0 ; sys_platform == 'win32'"]
+        "#,
+    )?;
+
+    let member_b = context.temp_dir.child("b");
+    member_b.create_dir_all()?;
+    member_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg2"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["anyio==4.3.0 ; sys_platform != 'win32'"]
+        "#,
+    )?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    let lock = metadata_free_lock(&context.read("uv.lock"))?;
+    let lockfile = context.temp_dir.child("uv.lock");
+    lockfile.write_str(&lock.to_string())?;
+
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Requested target extras must cover the same marker environments as their declarations.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_regenerates_marker_specific_requested_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "httpx[http2] ; sys_platform != 'win32'",
+            "httpx ; sys_platform == 'win32'",
+        ]
+        "#,
+    )?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    let mut lock = metadata_free_lock(&context.read("uv.lock"))?;
+    let lockfile = context.temp_dir.child("uv.lock");
+    lockfile.write_str(&lock.to_string())?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    let Some(project) = packages
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("project"))
+    else {
+        anyhow::bail!("lockfile did not contain the project package");
+    };
+    let Some(dependencies) = project["dependencies"].as_array_mut() else {
+        anyhow::bail!("project did not contain production dependency edges");
+    };
+    let Some(dependency) = dependencies.iter_mut().find(|dependency| {
+        dependency
+            .as_inline_table()
+            .and_then(|dependency| dependency.get("extra"))
+            .is_some()
+    }) else {
+        anyhow::bail!("production dependencies did not request the http2 extra");
+    };
+    let Some(dependency) = dependency.as_inline_table_mut() else {
+        anyhow::bail!("httpx dependency was not an inline table");
+    };
+    dependency.insert("marker", toml_edit::Value::from("sys_platform == 'linux'"));
+    lockfile.write_str(&lock.to_string())?;
+
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .failure();
 
     Ok(())
 }
@@ -24822,6 +25205,20 @@ fn lock_multiple_sources_extra() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
+    // An extra-specific source can move a production declaration into that extra's locked edges.
+    let lock = metadata_free_lock(&context.read("uv.lock"))?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--offline")
+        .assert()
+        .success();
+
     Ok(())
 }
 
@@ -26723,6 +27120,24 @@ fn lock_dynamic_version_no_build() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+
+    let pyproject = fs_err::read_to_string(pyproject_toml.path())?;
+    pyproject_toml.write_str(&pyproject.replace(
+        "dependencies = []",
+        "dependencies = []\n\n[dependency-groups]\ndev = [\"project>=0.1.0\"]",
+    ))?;
+    let lock = context
+        .read("uv.lock")
+        .replace("revision = 2", "revision = 4");
+    context.temp_dir.child("uv.lock").write_str(&format!(
+        "{lock}\n[package.dev-dependencies]\ndev = [{{ name = \"project\" }}]\n"
+    ))?;
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--offline")
+        .assert()
+        .success();
 
     Ok(())
 }
@@ -30811,6 +31226,13 @@ fn lock_pytorch_cpu() -> Result<()> {
         );
     });
 
+    let metadata_free_lock = metadata_free_lock(&lock)?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&metadata_free_lock.to_string())?;
+    context.lock().arg("--locked").assert().success();
+
     Ok(())
 }
 
@@ -34166,6 +34588,18 @@ async fn lock_path_dependency_explicit_index() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
     ");
+
+    let lock = metadata_free_lock(&fs_err::read_to_string(pkg_b.join("uv.lock"))?)?;
+    fs_err::write(pkg_b.join("uv.lock"), lock.to_string())?;
+
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--default-index")
+        .arg("https://example.invalid/simple")
+        .current_dir(&pkg_b)
+        .assert()
+        .success();
 
     Ok(())
 }
