@@ -1647,6 +1647,37 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
+    fn record_index(
+        requirement: &Requirement,
+        remotes: &mut Option<BTreeSet<UrlString>>,
+        locals: &mut Option<BTreeSet<Box<Path>>>,
+        root: &Path,
+    ) {
+        let RequirementSource::Registry {
+            index: Some(index), ..
+        } = &requirement.source
+        else {
+            return;
+        };
+
+        match &index.url {
+            IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                if let Some(remotes) = remotes.as_mut() {
+                    remotes.insert(UrlString::from(index.url().without_credentials().as_ref()));
+                }
+            }
+            IndexUrl::Path(url) => {
+                if let Some(locals) = locals.as_mut()
+                    && let Some(path) = url.to_file_path().ok().and_then(|path| {
+                        try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
+                    })
+                {
+                    locals.insert(path.into_boxed_path());
+                }
+            }
+        }
+    }
+
     /// Check whether the lock matches the project structure, requirements and configuration.
     #[instrument(skip_all)]
     pub async fn satisfies<Context: BuildContext>(
@@ -1935,29 +1966,7 @@ impl Lock {
             .collect::<Vec<_>>();
 
         for requirement in &root_requirements {
-            if let RequirementSource::Registry {
-                index: Some(index), ..
-            } = &requirement.source
-            {
-                match &index.url {
-                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        if let Some(remotes) = remotes.as_mut() {
-                            remotes.insert(UrlString::from(
-                                index.url().without_credentials().as_ref(),
-                            ));
-                        }
-                    }
-                    IndexUrl::Path(url) => {
-                        if let Some(locals) = locals.as_mut() {
-                            if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
-                            }) {
-                                locals.insert(path.into_boxed_path());
-                            }
-                        }
-                    }
-                }
-            }
+            Self::record_index(requirement, &mut remotes, &mut locals, root);
         }
 
         if !root_requirements.is_empty() {
@@ -2319,29 +2328,7 @@ impl Lock {
                 .iter()
                 .chain(package.metadata.dependency_groups.values().flatten())
             {
-                if let RequirementSource::Registry {
-                    index: Some(index), ..
-                } = &requirement.source
-                {
-                    match &index.url {
-                        IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                            if let Some(remotes) = remotes.as_mut() {
-                                remotes.insert(UrlString::from(
-                                    index.url().without_credentials().as_ref(),
-                                ));
-                            }
-                        }
-                        IndexUrl::Path(url) => {
-                            if let Some(locals) = locals.as_mut() {
-                                if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                    try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
-                                }) {
-                                    locals.insert(path.into_boxed_path());
-                                }
-                            }
-                        }
-                    }
-                }
+                Self::record_index(requirement, &mut remotes, &mut locals, root);
             }
 
             // Recurse.
