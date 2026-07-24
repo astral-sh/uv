@@ -53,6 +53,21 @@ impl CacheKey for VerbatimParsedUrl {
 }
 
 impl VerbatimParsedUrl {
+    /// Parse a URL and retain its original spelling.
+    pub fn new(verbatim: VerbatimUrl) -> Result<Self, ParsedUrlError> {
+        let parsed_url = ParsedUrl::try_from(verbatim.to_url())?;
+        Ok(Self::from_parts(parsed_url, verbatim))
+    }
+
+    /// Construct a parsed URL from its existing parsed and verbatim representations.
+    #[must_use]
+    pub fn from_parts(parsed_url: ParsedUrl, verbatim: VerbatimUrl) -> Self {
+        Self {
+            parsed_url,
+            verbatim,
+        }
+    }
+
     /// Returns `true` if the URL is editable.
     pub fn is_editable(&self) -> bool {
         self.parsed_url.is_editable()
@@ -64,10 +79,7 @@ impl Pep508Url for VerbatimParsedUrl {
 
     fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err> {
         let verbatim = <VerbatimUrl as Pep508Url>::parse_url(url, working_dir)?;
-        Ok(Self {
-            parsed_url: ParsedUrl::try_from(verbatim.to_url())?,
-            verbatim,
-        })
+        Self::new(verbatim)
     }
 
     fn displayable_with_credentials(&self) -> impl Display {
@@ -105,10 +117,7 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
                 })?,
             })
         };
-        Ok(Self {
-            parsed_url,
-            verbatim,
-        })
+        Ok(Self::from_parts(parsed_url, verbatim))
     }
 
     fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err> {
@@ -137,18 +146,12 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
                 })?,
             })
         };
-        Ok(Self {
-            parsed_url,
-            verbatim,
-        })
+        Ok(Self::from_parts(parsed_url, verbatim))
     }
 
     fn parse_unnamed_url(url: impl AsRef<str>) -> Result<Self, Self::Err> {
         let verbatim = <VerbatimUrl as UnnamedRequirementUrl>::parse_unnamed_url(&url)?;
-        Ok(Self {
-            parsed_url: ParsedUrl::try_from(verbatim.to_url())?,
-            verbatim,
-        })
+        Self::new(verbatim)
     }
 
     fn with_given(self, given: impl AsRef<str>) -> Self {

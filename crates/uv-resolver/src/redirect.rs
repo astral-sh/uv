@@ -24,10 +24,7 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> Verba
             };
             let new_url = DisplaySafeUrl::from(new_parsed_url.clone());
             let new_verbatim_url = apply_redirect(&url.verbatim, new_url);
-            VerbatimParsedUrl {
-                parsed_url: ParsedUrl::GitDirectory(new_parsed_url),
-                verbatim: new_verbatim_url,
-            }
+            VerbatimParsedUrl::from_parts(ParsedUrl::GitDirectory(new_parsed_url), new_verbatim_url)
         }
         ParsedUrl::GitPath(ParsedGitPathUrl {
             url: git_url,
@@ -49,10 +46,7 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> Verba
             };
             let new_url = DisplaySafeUrl::from(new_parsed_url.clone());
             let new_verbatim_url = apply_redirect(&url.verbatim, new_url);
-            VerbatimParsedUrl {
-                parsed_url: ParsedUrl::GitPath(new_parsed_url),
-                verbatim: new_verbatim_url,
-            }
+            VerbatimParsedUrl::from_parts(ParsedUrl::GitPath(new_parsed_url), new_verbatim_url)
         }
         _ => url,
     }

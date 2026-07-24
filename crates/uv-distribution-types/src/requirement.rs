@@ -230,64 +230,64 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
                     subdirectory,
                     ext,
                     url,
-                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                    parsed_url: ParsedUrl::Archive(ParsedArchiveUrl {
+                } => Some(VersionOrUrl::Url(VerbatimParsedUrl::from_parts(
+                    ParsedUrl::Archive(ParsedArchiveUrl {
                         url: location,
                         subdirectory,
                         ext,
                     }),
-                    verbatim: url,
-                })),
+                    url,
+                ))),
                 RequirementSource::GitDirectory {
                     git,
                     subdirectory,
                     url,
-                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                    parsed_url: ParsedUrl::GitDirectory(ParsedGitDirectoryUrl {
+                } => Some(VersionOrUrl::Url(VerbatimParsedUrl::from_parts(
+                    ParsedUrl::GitDirectory(ParsedGitDirectoryUrl {
                         url: git,
                         subdirectory,
                     }),
-                    verbatim: url,
-                })),
+                    url,
+                ))),
                 RequirementSource::GitPath {
                     git,
                     install_path,
                     ext,
                     url,
-                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                    parsed_url: ParsedUrl::GitPath(ParsedGitPathUrl {
+                } => Some(VersionOrUrl::Url(VerbatimParsedUrl::from_parts(
+                    ParsedUrl::GitPath(ParsedGitPathUrl {
                         url: git,
                         install_path,
                         ext,
                     }),
-                    verbatim: url,
-                })),
+                    url,
+                ))),
                 RequirementSource::Path {
                     install_path,
                     ext,
                     url,
-                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                    parsed_url: ParsedUrl::Path(ParsedPathUrl {
+                } => Some(VersionOrUrl::Url(VerbatimParsedUrl::from_parts(
+                    ParsedUrl::Path(ParsedPathUrl {
                         url: url.to_url(),
                         install_path,
                         ext,
                     }),
-                    verbatim: url,
-                })),
+                    url,
+                ))),
                 RequirementSource::Directory {
                     install_path,
                     editable,
                     r#virtual,
                     url,
-                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                    parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
+                } => Some(VersionOrUrl::Url(VerbatimParsedUrl::from_parts(
+                    ParsedUrl::Directory(ParsedDirectoryUrl {
                         url: url.to_url(),
                         install_path,
                         editable,
                         r#virtual,
                     }),
-                    verbatim: url,
-                })),
+                    url,
+                ))),
             },
         }
     }
@@ -647,64 +647,64 @@ impl RequirementSource {
                 subdirectory,
                 ext,
                 url,
-            } => Some(VerbatimParsedUrl {
-                parsed_url: ParsedUrl::Archive(ParsedArchiveUrl::from_source(
+            } => Some(VerbatimParsedUrl::from_parts(
+                ParsedUrl::Archive(ParsedArchiveUrl::from_source(
                     location.clone(),
                     subdirectory.clone(),
                     *ext,
                 )),
-                verbatim: url.clone(),
-            }),
+                url.clone(),
+            )),
             Self::Path {
                 install_path,
                 ext,
                 url,
-            } => Some(VerbatimParsedUrl {
-                parsed_url: ParsedUrl::Path(ParsedPathUrl::from_source(
+            } => Some(VerbatimParsedUrl::from_parts(
+                ParsedUrl::Path(ParsedPathUrl::from_source(
                     install_path.clone(),
                     *ext,
                     url.to_url(),
                 )),
-                verbatim: url.clone(),
-            }),
+                url.clone(),
+            )),
             Self::Directory {
                 install_path,
                 editable,
                 r#virtual,
                 url,
-            } => Some(VerbatimParsedUrl {
-                parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
+            } => Some(VerbatimParsedUrl::from_parts(
+                ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
                     install_path.clone(),
                     *editable,
                     *r#virtual,
                     url.to_url(),
                 )),
-                verbatim: url.clone(),
-            }),
+                url.clone(),
+            )),
             Self::GitDirectory {
                 git,
                 subdirectory,
                 url,
-            } => Some(VerbatimParsedUrl {
-                parsed_url: ParsedUrl::GitDirectory(ParsedGitDirectoryUrl::from_source(
+            } => Some(VerbatimParsedUrl::from_parts(
+                ParsedUrl::GitDirectory(ParsedGitDirectoryUrl::from_source(
                     git.clone(),
                     subdirectory.clone(),
                 )),
-                verbatim: url.clone(),
-            }),
+                url.clone(),
+            )),
             Self::GitPath {
                 git,
                 install_path,
                 ext,
                 url,
-            } => Some(VerbatimParsedUrl {
-                parsed_url: ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
+            } => Some(VerbatimParsedUrl::from_parts(
+                ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
                     git.clone(),
                     install_path.clone(),
                     *ext,
                 )),
-                verbatim: url.clone(),
-            }),
+                url.clone(),
+            )),
         }
     }
 

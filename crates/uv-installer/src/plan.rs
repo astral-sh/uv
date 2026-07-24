@@ -442,10 +442,10 @@ impl<'a> Planner<'a> {
                             if archive.satisfies(hasher.get(dist.as_ref())) {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
-                                    url: VerbatimParsedUrl {
-                                        parsed_url: wheel.to_parsed_url(),
-                                        verbatim: wheel.url.clone(),
-                                    },
+                                    url: VerbatimParsedUrl::from_parts(
+                                        wheel.to_parsed_url(),
+                                        wheel.url.clone(),
+                                    ),
                                     hashes: archive.hashes,
                                     cache_info,
                                     build_info,
@@ -511,10 +511,10 @@ impl<'a> Planner<'a> {
                                     if archive.satisfies(hasher.get(dist.as_ref())) {
                                         let cached_dist = CachedDirectUrlDist {
                                             filename: wheel.filename.clone(),
-                                            url: VerbatimParsedUrl {
-                                                parsed_url: wheel.to_parsed_url(),
-                                                verbatim: wheel.url.clone(),
-                                            },
+                                            url: VerbatimParsedUrl::from_parts(
+                                                wheel.to_parsed_url(),
+                                                wheel.url.clone(),
+                                            ),
                                             hashes: archive.hashes,
                                             cache_info,
                                             build_info,
@@ -575,10 +575,10 @@ impl<'a> Planner<'a> {
                             if archive.satisfies(hasher.get(dist.as_ref())) {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
-                                    url: VerbatimParsedUrl {
-                                        parsed_url: wheel.to_parsed_url(),
-                                        verbatim: wheel.url.clone(),
-                                    },
+                                    url: VerbatimParsedUrl::from_parts(
+                                        wheel.to_parsed_url(),
+                                        wheel.url.clone(),
+                                    ),
                                     hashes: archive.hashes,
                                     cache_info,
                                     build_info,
@@ -605,10 +605,11 @@ impl<'a> Planner<'a> {
                     match built_index.url(sdist) {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
-                                let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
-                                    parsed_url: sdist.to_parsed_url(),
-                                    verbatim: sdist.url.clone(),
-                                });
+                                let cached_dist =
+                                    wheel.into_url_dist(VerbatimParsedUrl::from_parts(
+                                        sdist.to_parsed_url(),
+                                        sdist.url.clone(),
+                                    ));
                                 debug!("URL source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
@@ -633,10 +634,10 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     if let Some(wheel) = built_index.git_path(sdist)? {
                         if wheel.filename().name == sdist.name {
-                            let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
-                                parsed_url: sdist.to_parsed_url(),
-                                verbatim: sdist.url.clone(),
-                            });
+                            let cached_dist = wheel.into_url_dist(VerbatimParsedUrl::from_parts(
+                                sdist.to_parsed_url(),
+                                sdist.url.clone(),
+                            ));
                             debug!("Git source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
@@ -654,10 +655,10 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     if let Some(wheel) = built_index.git_directory(sdist) {
                         if wheel.filename().name == sdist.name {
-                            let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
-                                parsed_url: sdist.to_parsed_url(),
-                                verbatim: sdist.url.clone(),
-                            });
+                            let cached_dist = wheel.into_url_dist(VerbatimParsedUrl::from_parts(
+                                sdist.to_parsed_url(),
+                                sdist.url.clone(),
+                            ));
                             debug!("Git source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
@@ -681,10 +682,11 @@ impl<'a> Planner<'a> {
                     match built_index.path(sdist) {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
-                                let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
-                                    parsed_url: sdist.to_parsed_url(),
-                                    verbatim: sdist.url.clone(),
-                                });
+                                let cached_dist =
+                                    wheel.into_url_dist(VerbatimParsedUrl::from_parts(
+                                        sdist.to_parsed_url(),
+                                        sdist.url.clone(),
+                                    ));
                                 debug!("Path source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
@@ -715,10 +717,11 @@ impl<'a> Planner<'a> {
                     match built_index.directory(sdist) {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
-                                let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
-                                    parsed_url: sdist.to_parsed_url(),
-                                    verbatim: sdist.url.clone(),
-                                });
+                                let cached_dist =
+                                    wheel.into_url_dist(VerbatimParsedUrl::from_parts(
+                                        sdist.to_parsed_url(),
+                                        sdist.url.clone(),
+                                    ));
                                 debug!(
                                     "Directory source requirement already cached: {cached_dist}"
                                 );
