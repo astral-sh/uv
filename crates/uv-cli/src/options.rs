@@ -271,9 +271,9 @@ impl TryFrom<ResolverArgs> for PipOptions {
                 VersionSelectionArgs {
                     resolution,
                     prerelease,
+                    pre,
+                    fork_strategy,
                 },
-            pre,
-            fork_strategy,
             config_setting,
             config_settings_package,
             build_isolation:
@@ -429,9 +429,9 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
                 VersionSelectionArgs {
                     resolution,
                     prerelease,
+                    pre,
+                    fork_strategy,
                 },
-            pre,
-            fork_strategy,
             config_setting,
             config_settings_package,
             build_isolation:
@@ -576,9 +576,9 @@ pub fn resolver_options(
             VersionSelectionArgs {
                 resolution,
                 prerelease,
+                pre,
+                fork_strategy,
             },
-        pre,
-        fork_strategy,
         config_setting,
         config_settings_package,
         build_isolation:
@@ -723,9 +723,9 @@ pub fn resolver_installer_options_with_indexes(
             VersionSelectionArgs {
                 resolution,
                 prerelease,
+                pre,
+                fork_strategy,
             },
-        pre,
-        fork_strategy,
         config_setting,
         config_settings_package,
         build_isolation:

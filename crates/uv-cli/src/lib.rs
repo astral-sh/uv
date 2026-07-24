@@ -6143,27 +6143,6 @@ pub struct ToolUpgradeArgs {
     #[command(flatten)]
     pub version_selection: VersionSelectionArgs,
 
-    #[arg(long, hide = true)]
-    pub pre: bool,
-
-    /// The strategy to use when selecting multiple versions of a given package across Python
-    /// versions and platforms.
-    ///
-    /// By default, uv will optimize for selecting the latest version of each package for each
-    /// supported Python version (`requires-python`), while minimizing the number of selected
-    /// versions across platforms.
-    ///
-    /// Under `fewest`, uv will minimize the number of selected versions for each package,
-    /// preferring older versions that are compatible with a wider range of supported Python
-    /// versions or platforms.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_FORK_STRATEGY,
-        help_heading = "Resolver options"
-    )]
-    pub fork_strategy: Option<ForkStrategy>,
-
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
         long,
@@ -7119,6 +7098,27 @@ pub struct VersionSelectionArgs {
         help_heading = "Resolver options"
     )]
     prerelease: Option<PrereleaseMode>,
+
+    #[arg(long, hide = true, help_heading = "Resolver options")]
+    pre: bool,
+
+    /// The strategy to use when selecting multiple versions of a given package across Python
+    /// versions and platforms.
+    ///
+    /// By default, uv will optimize for selecting the latest version of each package for each
+    /// supported Python version (`requires-python`), while minimizing the number of selected
+    /// versions across platforms.
+    ///
+    /// Under `fewest`, uv will minimize the number of selected versions for each package,
+    /// preferring older versions that are compatible with a wider range of supported Python
+    /// versions or platforms.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_FORK_STRATEGY,
+        help_heading = "Resolver options"
+    )]
+    fork_strategy: Option<ForkStrategy>,
 }
 
 /// Arguments that configure requirement hash checking.
@@ -7483,27 +7483,6 @@ pub struct ResolverArgs {
     #[command(flatten)]
     version_selection: VersionSelectionArgs,
 
-    #[arg(long, hide = true, help_heading = "Resolver options")]
-    pre: bool,
-
-    /// The strategy to use when selecting multiple versions of a given package across Python
-    /// versions and platforms.
-    ///
-    /// By default, uv will optimize for selecting the latest version of each package for each
-    /// supported Python version (`requires-python`), while minimizing the number of selected
-    /// versions across platforms.
-    ///
-    /// Under `fewest`, uv will minimize the number of selected versions for each package,
-    /// preferring older versions that are compatible with a wider range of supported Python
-    /// versions or platforms.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_FORK_STRATEGY,
-        help_heading = "Resolver options"
-    )]
-    fork_strategy: Option<ForkStrategy>,
-
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
         long,
@@ -7625,27 +7604,6 @@ pub struct ResolverInstallerArgs {
 
     #[command(flatten)]
     pub version_selection: VersionSelectionArgs,
-
-    #[arg(long, hide = true)]
-    pub pre: bool,
-
-    /// The strategy to use when selecting multiple versions of a given package across Python
-    /// versions and platforms.
-    ///
-    /// By default, uv will optimize for selecting the latest version of each package for each
-    /// supported Python version (`requires-python`), while minimizing the number of selected
-    /// versions across platforms.
-    ///
-    /// Under `fewest`, uv will minimize the number of selected versions for each package,
-    /// preferring older versions that are compatible with a wider range of supported Python
-    /// versions or platforms.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_FORK_STRATEGY,
-        help_heading = "Resolver options"
-    )]
-    pub fork_strategy: Option<ForkStrategy>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
