@@ -390,6 +390,8 @@ large_stack_arrays = "allow"
 [profile.release]
 strip = true
 lto = "fat"
+# This will still show a panic message, we only skip the unwind.
+panic = "abort"
 
 # This profile is meant to mimic the `release` profile as closely as
 # possible, but using settings that are more beneficial for iterative
@@ -462,8 +464,6 @@ panic = "abort"
 [profile.minimal-size]
 inherits = "release"
 opt-level = "z"
-# This will still show a panic message, we only skip the unwind
-panic = "abort"
 codegen-units = 1
 
 # The profile that 'cargo dist' will build with.
