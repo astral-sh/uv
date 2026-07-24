@@ -628,14 +628,18 @@ async fn perform_install(
 
     let mut errors = vec![];
     let mut downloaded = Vec::with_capacity(downloads.len());
+    let mut not_finalized = Vec::new();
     let mut requests_by_new_installation = BTreeMap::new();
     while let Some((download, result)) = tasks.next().await {
         match result {
             Ok(download_result) => {
-                let path = match download_result {
-                    // We should only encounter already-available during concurrent installs
-                    DownloadResult::AlreadyAvailable(path) => path,
-                    DownloadResult::Fetched(path) => path,
+                // `Fetched` installations are already finalized in `downloads.rs`
+                // (externally-managed, sysconfig, executables, build-file, dylib,
+                // and minor-version-link). `AlreadyAvailable` installations skipped
+                // the download path and still need finalization here.
+                let (path, finalized_in_download) = match download_result {
+                    DownloadResult::AlreadyAvailable(path) => (path, false),
+                    DownloadResult::Fetched(path) => (path, true),
                 };
 
                 let installation = ManagedPythonInstallation::new(path, download);
@@ -657,6 +661,9 @@ async fn perform_install(
                 if changelog.existing.contains(installation.key()) {
                     changelog.uninstalled.insert(installation.key().clone());
                 }
+                if !finalized_in_download {
+                    not_finalized.push(installation.clone());
+                }
                 downloaded.push(installation.clone());
             }
             Err(err) => {
@@ -677,13 +684,24 @@ async fn perform_install(
 
     let installations: Vec<_> = downloaded.iter().chain(satisfied.iter().copied()).collect();
 
-    // Ensure that the installations are _complete_ for both downloaded installations and existing
-    // installations that match the request
-    for installation in &installations {
+    // Finalize installations that were not already finalized during download.
+    // `Fetched` installations are finalized in `downloads.rs` before the rename;
+    // `AlreadyAvailable` and pre-existing (`satisfied`) installations still need
+    // finalization here.
+    for installation in not_finalized.iter().chain(satisfied.iter().copied()) {
         installation.ensure_externally_managed()?;
         installation.ensure_sysconfig_patched()?;
         installation.ensure_canonical_executables()?;
         installation.ensure_build_file()?;
+        if let Err(e) = installation.ensure_dylib_patched() {
+            e.warn_user(installation);
+        }
+    }
+
+    for installation in &installations {
+        // Patch dylib install_name after rename (Fetched installations are finalized
+        // in downloads.rs before the atomic rename to the staging path, so the
+        // install_name is stale; idempotent, so safe for all installations).
         if let Err(e) = installation.ensure_dylib_patched() {
             e.warn_user(installation);
         }
