@@ -13292,6 +13292,25 @@ fn offline_refresh_conflict_verbose() {
     ");
 }
 
+/// Test that conflicting arguments remain visible with `-qq`.
+#[test]
+fn offline_refresh_conflict_silent() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--offline")
+        .arg("--refresh")
+        .arg("-qq"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument `--offline` cannot be used with `--refresh`
+    ");
+}
+
 /// Test that shebang arguments are stripped when installing scripts
 #[test]
 #[cfg(unix)]
