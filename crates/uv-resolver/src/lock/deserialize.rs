@@ -865,6 +865,7 @@ impl<'de> VariantAccess<'de> for InlineVariantAccess<'_, 'de> {
 #[cfg(test)]
 mod tests {
     use std::env;
+    use std::path::PathBuf;
 
     use fs_err as fs;
     use serde::Deserialize;
@@ -963,56 +964,97 @@ dependencies = [
         let Some(corpus) = env::var_os("UV_LOCK_ECOSYSTEM_CORPUS") else {
             return;
         };
+        let corpus = PathBuf::from(corpus);
+        let lockfiles: Vec<_> = if corpus.is_file() {
+            fs::read_to_string(&corpus)
+                .expect("ecosystem lock manifest is readable")
+                .lines()
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from)
+                .collect()
+        } else {
+            fs::read_dir(&corpus)
+                .expect("ecosystem lock corpus exists")
+                .map(|entry| {
+                    entry
+                        .expect("ecosystem corpus entry is readable")
+                        .path()
+                        .join("uv.lock")
+                })
+                .filter(|path| path.is_file())
+                .collect()
+        };
 
         let mut direct = 0;
         let mut fallback = 0;
+        let mut invalid = 0;
+        let mut fallback_paths = Vec::new();
+        let mut invalid_paths = Vec::new();
 
-        for entry in fs::read_dir(corpus).expect("ecosystem lock corpus exists") {
-            let entry = entry.expect("ecosystem corpus entry is readable");
-            let path = entry.path().join("uv.lock");
-            if !path.is_file() {
-                continue;
-            }
-
-            let project = entry.file_name();
-            let project = project.to_string_lossy();
-            let input = fs::read_to_string(path).expect("ecosystem lock is readable");
+        for path in lockfiles {
+            let project = path.display();
+            let input = fs::read_to_string(&path).expect("ecosystem lock is readable");
             let expected = toml::from_str::<Lock>(&input);
-            assert!(
-                expected.is_ok(),
-                "the {project} ecosystem lock is valid TOML"
-            );
-            let expected = expected.expect("validated ecosystem lock");
 
-            if let Ok(actual) = from_str(&input) {
-                assert_eq!(
-                    actual, expected,
-                    "the direct lock parser changed the {project} ecosystem lock"
-                );
-                direct += 1;
+            if let Ok(expected) = expected {
+                if let Ok(actual) = from_str(&input) {
+                    assert_eq!(
+                        actual, expected,
+                        "the direct lock parser changed the {project} ecosystem lock"
+                    );
+                    direct += 1;
+                } else {
+                    let actual =
+                        Lock::from_toml(&input).expect("ecosystem lock uses the TOML fallback");
+                    assert_eq!(
+                        actual, expected,
+                        "the TOML fallback changed the {project} ecosystem lock"
+                    );
+                    fallback += 1;
+                    fallback_paths.push(path);
+                }
             } else {
-                let actual =
-                    Lock::from_toml(&input).expect("ecosystem lock uses the TOML fallback");
-                assert_eq!(
-                    actual, expected,
-                    "the TOML fallback changed the {project} ecosystem lock"
+                assert!(
+                    from_str(&input).is_err(),
+                    "the direct lock parser accepted the invalid {project} ecosystem lock"
                 );
-                fallback += 1;
+                let expected =
+                    toml::from_str::<Lock>(&input).expect_err("the ecosystem lock is invalid TOML");
+                let actual =
+                    Lock::from_toml(&input).expect_err("the invalid ecosystem lock stays invalid");
+                assert_eq!(
+                    actual.to_string(),
+                    expected.to_string(),
+                    "the direct lock parser changed the {project} TOML error"
+                );
+                invalid += 1;
+                invalid_paths.push(path);
             }
         }
 
         assert_ne!(
-            direct + fallback,
+            direct + fallback + invalid,
             0,
             "the ecosystem corpus contains no lockfiles"
         );
 
         if let Some(summary) = env::var_os("UV_LOCK_ECOSYSTEM_SUMMARY") {
-            fs::write(
-                summary,
-                format!("direct={direct}\nfallback={fallback}\nmismatches=0\n"),
-            )
-            .expect("ecosystem summary is writable");
+            let mut report =
+                format!("direct={direct}\nfallback={fallback}\ninvalid={invalid}\nmismatches=0\n");
+
+            for path in fallback_paths {
+                report.push_str("fallback_file=");
+                report.push_str(&path.to_string_lossy());
+                report.push('\n');
+            }
+
+            for path in invalid_paths {
+                report.push_str("invalid_file=");
+                report.push_str(&path.to_string_lossy());
+                report.push('\n');
+            }
+
+            fs::write(summary, report).expect("ecosystem summary is writable");
         }
     }
 
