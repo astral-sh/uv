@@ -905,9 +905,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
                 let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
-                // Download the wheel to a temporary file.
-                let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
-                    .map_err(Error::CacheWrite)?;
+                // Download the wheel to a temporary file. Creating the file can block, so run it
+                // on a blocking thread to avoid stalling the async runtime.
+                let cache_root = self.build_context.cache().root().to_path_buf();
+                let temp_file =
+                    tokio::task::spawn_blocking(move || tempfile::tempfile_in(cache_root))
+                        .await
+                        .map_err(|err| Error::CacheWrite(std::io::Error::other(err)))?
+                        .map_err(Error::CacheWrite)?;
                 let mut writer = tokio::io::BufWriter::new(fs_err::tokio::File::from_std(
                     // It's an unnamed file on Linux so that's the best approximation.
                     fs_err::File::from_parts(temp_file, self.build_context.cache().root()),
