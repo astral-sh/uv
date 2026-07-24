@@ -20,6 +20,7 @@ use crate::list_packages::ListPackagesArgs;
 use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::validate_zip::ValidateZipArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
+use crate::wheel_replace::WheelReplaceArgs;
 
 mod clear_compile;
 mod compile;
@@ -34,6 +35,7 @@ mod list_packages;
 mod render_benchmarks;
 mod validate_zip;
 mod wheel_metadata;
+mod wheel_replace;
 
 const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
 
@@ -43,6 +45,8 @@ enum Cli {
     WheelMetadata(WheelMetadataArgs),
     /// Validate that a `.whl` or `.zip` file at a given URL is a valid ZIP file.
     ValidateZip(ValidateZipArgs),
+    /// Replace selected files in a wheel and regenerate its `RECORD` file.
+    WheelReplace(WheelReplaceArgs),
     /// Compile all `.py` to `.pyc` files in the tree.
     Compile(CompileArgs),
     /// Remove all `.pyc` in the tree.
@@ -78,6 +82,7 @@ pub async fn run() -> Result<()> {
     match cli {
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args, environment).await?,
         Cli::ValidateZip(args) => validate_zip::validate_zip(args, environment).await?,
+        Cli::WheelReplace(args) => wheel_replace::wheel_replace(args).await?,
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
         Cli::ListPackages(args) => list_packages::list_packages(args, environment).await?,

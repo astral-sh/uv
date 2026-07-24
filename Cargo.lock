@@ -6348,7 +6348,10 @@ version = "0.0.65"
 dependencies = [
  "anstream",
  "anyhow",
+ "astral_async_zip",
+ "base64",
  "clap",
+ "csv",
  "fs-err",
  "futures",
  "insta",
@@ -6362,6 +6365,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2 0.10.9",
  "tagu",
  "tempfile",
  "textwrap",
