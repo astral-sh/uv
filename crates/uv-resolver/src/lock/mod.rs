@@ -73,6 +73,7 @@ use crate::{
     InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
+mod deserialize;
 pub(crate) mod export;
 mod installable;
 mod map;
@@ -1416,6 +1417,17 @@ impl Lock {
             Err((fork_markers_union, new_requires_python))
         } else {
             Ok(())
+        }
+    }
+
+    /// Parses a lockfile, using the canonical fast path when possible.
+    ///
+    /// Lockfiles not written in uv's canonical layout fall back to the general
+    /// TOML parser, preserving its compatibility and error reporting.
+    pub fn from_toml(input: &str) -> Result<Self, toml::de::Error> {
+        match deserialize::from_str(input) {
+            Ok(lock) => Ok(lock),
+            Err(_) => toml::from_str(input),
         }
     }
 

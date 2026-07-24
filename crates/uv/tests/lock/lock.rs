@@ -27,6 +27,103 @@ use uv_test::{download_to_disk, venv_bin_path};
 
 #[cfg(feature = "test-universal")]
 #[test]
+fn lock_canonical_reader_preserves_noncanonical_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#
+    })?;
+
+    context.lock().arg("--offline").assert().success();
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--offline")
+        .assert()
+        .success();
+
+    let noncanonical_lock = indoc! {
+        r"
+        # Hand-edited lockfiles continue to use the general TOML parser.
+        version = 1
+        revision = 3
+        requires-python = '>=3.12'
+
+        [options]
+        exclude-newer = '2024-03-25T00:00:00Z'
+
+        [[package]]
+        name = 'project'
+        version = '0.1.0'
+        source = { virtual = '.' }
+        "
+    };
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(noncanonical_lock)?;
+
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--offline")
+        .assert()
+        .success();
+    assert_eq!(context.read("uv.lock"), noncanonical_lock);
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_canonical_reader_rejects_invalid_toml() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#
+    })?;
+
+    context.lock().arg("--offline").assert().success();
+
+    let invalid_lock = context
+        .read("uv.lock")
+        .replace("version = 1\n", "version = 01\n");
+    context.temp_dir.child("uv.lock").write_str(&invalid_lock)?;
+
+    let output = context
+        .lock()
+        .arg("--locked")
+        .arg("--offline")
+        .assert()
+        .failure()
+        .code(2);
+
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(String::from_utf8_lossy(&output.get_output().stderr), @r"
+        error: Failed to parse `uv.lock`
+          Caused by: TOML parse error at line 1, column 11
+              |
+            1 | version = 01
+              |           ^
+            unexpected leading zero, expected nothing
+        ");
+    });
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
 fn lock_wheel_registry() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
