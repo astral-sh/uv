@@ -4,6 +4,7 @@ use proc_macro::TokenStream;
 use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{Attribute, DeriveInput, ImplItem, ItemImpl, LitStr, parse_macro_input};
+use textwrap::dedent;
 
 #[proc_macro_derive(OptionsMetadata, attributes(option, option_group))]
 pub fn derive_options_metadata(input: TokenStream) -> TokenStream {
@@ -52,7 +53,7 @@ fn impl_combine(ast: &DeriveInput) -> TokenStream {
 }
 
 fn get_doc_comment(attrs: &[Attribute]) -> String {
-    attrs
+    let documentation = attrs
         .iter()
         .filter_map(|attr| {
             if attr.path().is_ident("doc")
@@ -60,12 +61,14 @@ fn get_doc_comment(attrs: &[Attribute]) -> String {
                 && let syn::Expr::Lit(expr) = &meta.value
                 && let syn::Lit::Str(str) = &expr.lit
             {
-                return Some(str.value().trim().to_string());
+                return Some(str.value());
             }
             None
         })
         .collect::<Vec<_>>()
-        .join("\n")
+        .join("\n");
+
+    dedent(&documentation).trim_matches('\n').to_string()
 }
 
 fn get_env_var_pattern_from_attr(attrs: &[Attribute]) -> Option<String> {
