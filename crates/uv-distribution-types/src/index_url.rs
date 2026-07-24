@@ -305,6 +305,14 @@ fn is_same_index(a: &IndexUrl, b: &IndexUrl) -> bool {
 }
 
 impl<'a> IndexLocations {
+    /// Return configured indexes in definition order, keeping the first index for each name.
+    fn configured_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        let mut seen = FxHashSet::default();
+        self.indexes
+            .iter()
+            .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+    }
+
     /// Return the default [`Index`] entry.
     ///
     /// If `--no-index` is set, return `None`.
@@ -314,10 +322,7 @@ impl<'a> IndexLocations {
         if self.no_index {
             None
         } else {
-            let mut seen = FxHashSet::default();
-            self.indexes
-                .iter()
-                .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+            self.configured_indexes()
                 .find(|index| index.default)
                 .or_else(|| Some(&DEFAULT_INDEX))
         }
@@ -330,11 +335,8 @@ impl<'a> IndexLocations {
         if self.no_index {
             Either::Left(std::iter::empty())
         } else {
-            let mut seen = FxHashSet::default();
             Either::Right(
-                self.indexes
-                    .iter()
-                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+                self.configured_indexes()
                     .filter(|index| !index.default && !index.explicit),
             )
         }
@@ -347,13 +349,7 @@ impl<'a> IndexLocations {
         if self.no_index {
             Either::Left(std::iter::empty())
         } else {
-            let mut seen = FxHashSet::default();
-            Either::Right(
-                self.indexes
-                    .iter()
-                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
-                    .filter(|index| index.explicit),
-            )
+            Either::Right(self.configured_indexes().filter(|index| index.explicit))
         }
     }
 
@@ -387,12 +383,7 @@ impl<'a> IndexLocations {
         if self.no_index {
             Either::Left(std::iter::empty())
         } else {
-            let mut seen = FxHashSet::default();
-            Either::Right(
-                self.indexes
-                    .iter()
-                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name))),
-            )
+            Either::Right(self.configured_indexes())
         }
     }
 
@@ -477,17 +468,8 @@ impl<'a> IndexLocations {
             return Either::Left(std::iter::empty());
         }
 
-        let mut seen = FxHashSet::default();
         let (non_default, default) = self
-            .indexes
-            .iter()
-            .filter(move |index| {
-                if let Some(name) = &index.name {
-                    seen.insert(name)
-                } else {
-                    true
-                }
-            })
+            .configured_indexes()
             .partition::<Vec<_>, _>(|index| !index.default);
 
         Either::Right(non_default.into_iter().chain(default))
@@ -638,9 +620,18 @@ impl IndexCapabilities {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
     use super::*;
     use crate::{IndexCacheControl, IndexFormat, IndexName};
     use http::HeaderValue;
+
+    fn index_urls<'a>(indexes: impl IntoIterator<Item = &'a Index>) -> Vec<&'a str> {
+        indexes
+            .into_iter()
+            .map(|index| index.url().url().as_str())
+            .collect()
+    }
 
     #[test]
     fn test_index_url_parse_valid_paths() {
@@ -673,6 +664,184 @@ mod tests {
         assert!(is_disambiguated_path(
             "git+https://github.com/example/repo.git"
         ));
+    }
+
+    #[test]
+    fn configured_indexes_keep_first_named_definition() -> Result<(), Box<dyn Error>> {
+        let first = Index::from_str("shared=https://first.example.com/simple")?;
+        let mut shadowed = Index::from_str("shared=https://shadowed.example.com/simple")?;
+        shadowed.explicit = true;
+        let mut explicit = Index::from_str("explicit=https://explicit.example.com/simple")?;
+        explicit.explicit = true;
+        let mut default = Index::from_str("default=https://default.example.com/simple")?;
+        default.default = true;
+
+        let locations =
+            IndexLocations::new(vec![first, shadowed, explicit, default], vec![], false);
+
+        assert_eq!(
+            index_urls(locations.simple_indexes()),
+            [
+                "https://first.example.com/simple",
+                "https://explicit.example.com/simple",
+                "https://default.example.com/simple",
+            ]
+        );
+        assert_eq!(
+            index_urls(locations.implicit_indexes()),
+            ["https://first.example.com/simple"]
+        );
+        assert_eq!(
+            index_urls(locations.explicit_indexes()),
+            ["https://explicit.example.com/simple"]
+        );
+        assert_eq!(
+            index_urls(locations.indexes()),
+            [
+                "https://first.example.com/simple",
+                "https://default.example.com/simple",
+            ]
+        );
+        assert_eq!(
+            index_urls(locations.defined_indexes()),
+            [
+                "https://first.example.com/simple",
+                "https://explicit.example.com/simple",
+                "https://default.example.com/simple",
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn configured_indexes_preserve_first_explicit_definition() -> Result<(), Box<dyn Error>> {
+        let mut explicit = Index::from_str("shared=https://explicit.example.com/simple")?;
+        explicit.explicit = true;
+        let shadowed = Index::from_str("shared=https://shadowed.example.com/simple")?;
+        let locations = IndexLocations::new(vec![explicit, shadowed], vec![], false);
+
+        assert_eq!(
+            index_urls(locations.explicit_indexes()),
+            ["https://explicit.example.com/simple"]
+        );
+        assert_eq!(index_urls(locations.implicit_indexes()), [] as [&str; 0]);
+        assert_eq!(index_urls(locations.indexes()), ["https://pypi.org/simple"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn configured_indexes_preserve_all_unnamed_indexes() -> Result<(), Box<dyn Error>> {
+        let first = Index::from_str("https://first.example.com/simple")?;
+        let repeated = Index::from_str("https://first.example.com/simple")?;
+        let last = Index::from_str("https://last.example.com/simple")?;
+        let locations = IndexLocations::new(vec![first, repeated, last], vec![], false);
+        let expected = [
+            "https://first.example.com/simple",
+            "https://first.example.com/simple",
+            "https://last.example.com/simple",
+        ];
+
+        assert_eq!(index_urls(locations.simple_indexes()), expected);
+        assert_eq!(index_urls(locations.implicit_indexes()), expected);
+        assert_eq!(index_urls(locations.defined_indexes()), expected);
+        assert_eq!(
+            index_urls(locations.fetch_indexes()),
+            [
+                "https://first.example.com/simple",
+                "https://last.example.com/simple",
+                "https://pypi.org/simple",
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn configured_indexes_preserve_first_default() -> Result<(), Box<dyn Error>> {
+        let mut first = Index::from_str("first=https://first.example.com/simple")?;
+        first.default = true;
+        let mut second = Index::from_str("second=https://second.example.com/simple")?;
+        second.default = true;
+        let locations = IndexLocations::new(vec![first, second], vec![], false);
+
+        assert_eq!(
+            index_urls(locations.default_index()),
+            ["https://first.example.com/simple"]
+        );
+        assert_eq!(
+            index_urls(locations.defined_indexes()),
+            [
+                "https://first.example.com/simple",
+                "https://second.example.com/simple",
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn configured_indexes_ignore_shadowed_default() -> Result<(), Box<dyn Error>> {
+        let first = Index::from_str("shared=https://first.example.com/simple")?;
+        let mut shadowed = Index::from_str("shared=https://shadowed.example.com/simple")?;
+        shadowed.default = true;
+        let locations = IndexLocations::new(vec![first, shadowed], vec![], false);
+
+        assert_eq!(
+            index_urls(locations.default_index()),
+            ["https://pypi.org/simple"]
+        );
+        assert_eq!(
+            index_urls(locations.indexes()),
+            [
+                "https://first.example.com/simple",
+                "https://pypi.org/simple",
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn disabled_indexes_preserve_flat_indexes() -> Result<(), Box<dyn Error>> {
+        let configured = Index::from_str("configured=https://configured.example.com/simple")?;
+        let first =
+            Index::from_find_links(IndexUrl::from_str("https://first.example.com/packages")?);
+        let second =
+            Index::from_find_links(IndexUrl::from_str("https://second.example.com/packages")?);
+        let locations = IndexLocations::new(vec![configured], vec![first, second], true);
+
+        assert!(locations.no_index());
+        assert!(locations.default_index().is_none());
+        assert_eq!(index_urls(locations.simple_indexes()), [] as [&str; 0]);
+        assert_eq!(index_urls(locations.implicit_indexes()), [] as [&str; 0]);
+        assert_eq!(index_urls(locations.explicit_indexes()), [] as [&str; 0]);
+        assert_eq!(index_urls(locations.indexes()), [] as [&str; 0]);
+        assert_eq!(index_urls(locations.defined_indexes()), [] as [&str; 0]);
+        assert_eq!(
+            index_urls(locations.flat_indexes()),
+            [
+                "https://first.example.com/packages",
+                "https://second.example.com/packages",
+            ]
+        );
+        assert_eq!(
+            index_urls(locations.allowed_indexes()),
+            [
+                "https://second.example.com/packages",
+                "https://first.example.com/packages",
+            ]
+        );
+        assert_eq!(
+            index_urls(locations.known_indexes()),
+            [
+                "https://second.example.com/packages",
+                "https://first.example.com/packages",
+            ]
+        );
+
+        Ok(())
     }
 
     #[test]
