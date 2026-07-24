@@ -17350,6 +17350,136 @@ fn lock_rename_project() -> Result<()> {
     Ok(())
 }
 
+/// Merge equivalent edges requesting extras in every dependency section.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_dependency_context_edges_merge() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "dependency",
+            "dependency[feature] ; python_version >= '3.12'",
+        ]
+
+        [project.optional-dependencies]
+        test = [
+            "dependency",
+            "dependency[feature] ; python_version >= '3.12'",
+        ]
+
+        [dependency-groups]
+        dev = [
+            "dependency",
+            "dependency[feature] ; python_version >= '3.12'",
+        ]
+
+        [tool.uv.sources]
+        dependency = { path = "dependency" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("dependency/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "dependency"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+
+            [project.optional-dependencies]
+            feature = ["leaf"]
+
+            [tool.uv.sources]
+            leaf = { path = "../leaf" }
+        "#})?;
+
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "leaf"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "dependency"
+    version = "1.0.0"
+    source = { directory = "dependency" }
+
+    [package.optional-dependencies]
+    feature = [
+        { name = "leaf" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "leaf", marker = "extra == 'feature'", directory = "leaf" }]
+    provides-extras = ["feature"]
+
+    [[package]]
+    name = "leaf"
+    version = "1.0.0"
+    source = { directory = "leaf" }
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "dependency", extra = ["feature"] },
+    ]
+
+    [package.optional-dependencies]
+    test = [
+        { name = "dependency", extra = ["feature"] },
+    ]
+
+    [package.dev-dependencies]
+    dev = [
+        { name = "dependency", extra = ["feature"] },
+    ]
+
+    [package.metadata]
+    requires-dist = [
+        { name = "dependency", directory = "dependency" },
+        { name = "dependency", marker = "extra == 'test'", directory = "dependency" },
+        { name = "dependency", extras = ["feature"], marker = "python_full_version >= '3.12'", directory = "dependency" },
+        { name = "dependency", extras = ["feature"], marker = "python_full_version >= '3.12' and extra == 'test'", directory = "dependency" },
+    ]
+    provides-extras = ["test"]
+
+    [package.metadata.requires-dev]
+    dev = [
+        { name = "dependency", directory = "dependency" },
+        { name = "dependency", extras = ["feature"], marker = "python_full_version >= '3.12'", directory = "dependency" },
+    ]
+    "#);
+
+    Ok(())
+}
+
 /// Test backwards compatibility for `[package.metadata]`.
 #[cfg(feature = "test-universal")]
 #[test]
