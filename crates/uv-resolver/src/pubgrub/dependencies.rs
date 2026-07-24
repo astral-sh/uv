@@ -7,10 +7,7 @@ use uv_distribution_types::{IndexMetadata, Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::RequirementOrigin;
-use uv_pypi_types::{
-    ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
-    ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
-};
+use uv_pypi_types::{ConflictItemRef, Conflicts, VerbatimParsedUrl};
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
 use crate::resolver::UnsatisfiableRequirement;
@@ -291,82 +288,14 @@ impl PubGrubRequirement {
         extra: Option<ExtraName>,
         group: Option<GroupName>,
     ) -> Self {
-        let (verbatim_url, parsed_url) = match &requirement.source {
-            RequirementSource::Registry { specifier, .. } => {
-                return Self::from_registry_requirement(specifier, extra, group, requirement);
-            }
-            RequirementSource::Url {
-                subdirectory,
-                location,
-                ext,
-                url,
-            } => {
-                let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl::from_source(
-                    location.clone(),
-                    subdirectory.clone(),
-                    *ext,
-                ));
-                (url, parsed_url)
-            }
-            RequirementSource::GitDirectory {
-                git,
-                url,
-                subdirectory,
-            } => {
-                let parsed_url = ParsedUrl::GitDirectory(ParsedGitDirectoryUrl::from_source(
-                    git.clone(),
-                    subdirectory.clone(),
-                ));
-                (url, parsed_url)
-            }
-            RequirementSource::GitPath {
-                git,
-                install_path,
-                ext,
-                url,
-            } => {
-                let parsed_url = ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
-                    git.clone(),
-                    install_path.clone(),
-                    *ext,
-                ));
-                (url, parsed_url)
-            }
-            RequirementSource::Path {
-                ext,
-                url,
-                install_path,
-            } => {
-                let parsed_url = ParsedUrl::Path(ParsedPathUrl::from_source(
-                    install_path.clone(),
-                    *ext,
-                    url.to_url(),
-                ));
-                (url, parsed_url)
-            }
-            RequirementSource::Directory {
-                editable,
-                r#virtual,
-                url,
-                install_path,
-            } => {
-                let parsed_url = ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
-                    install_path.clone(),
-                    *editable,
-                    *r#virtual,
-                    url.to_url(),
-                ));
-                (url, parsed_url)
-            }
-        };
+        if let RequirementSource::Registry { specifier, .. } = &requirement.source {
+            return Self::from_registry_requirement(specifier, extra, group, requirement);
+        }
 
         Self {
             package: Self::package_for_requirement(requirement, extra, group),
             version: Range::full(),
-            source: DependencySource::Url(Box::new(VerbatimParsedUrl {
-                parsed_url,
-                verbatim: verbatim_url.clone(),
-            })),
+            source: DependencySource::from_requirement(requirement),
         }
     }
 
