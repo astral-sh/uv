@@ -1215,11 +1215,7 @@ impl Lock {
 
         // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
         for requirement in self.requirements() {
-            for package in self
-                .packages
-                .iter()
-                .filter(|p| p.id.name == requirement.name)
-            {
+            for package in self.packages_for_name(&requirement.name) {
                 if seen.insert((&package.id, None)) {
                     queue.push_back((package, None));
                 }
@@ -1238,11 +1234,7 @@ impl Lock {
                 continue;
             }
             for requirement in requirements {
-                for package in self
-                    .packages
-                    .iter()
-                    .filter(|p| p.id.name == requirement.name)
-                {
+                for package in self.packages_for_name(&requirement.name) {
                     if seen.insert((&package.id, None)) {
                         queue.push_back((package, None));
                     }
@@ -1398,20 +1390,25 @@ impl Lock {
         serialize::to_toml(self)
     }
 
+    /// Returns all packages with the given name from the sorted lockfile package list.
+    fn packages_for_name(&self, name: &PackageName) -> &[Package] {
+        let first = self
+            .packages
+            .partition_point(|package| &package.id.name < name);
+        let candidates = &self.packages[first..];
+        let count = candidates.partition_point(|package| &package.id.name == name);
+        &candidates[..count]
+    }
+
     /// Returns the package with the given name. If there are multiple
     /// matching packages, then an error is returned. If there are no
     /// matching packages, then `Ok(None)` is returned.
     pub fn find_by_name(&self, name: &PackageName) -> Result<Option<&Package>, String> {
-        let mut found_dist = None;
-        for dist in &self.packages {
-            if &dist.id.name == name {
-                if found_dist.is_some() {
-                    return Err(format!("found multiple packages matching `{name}`"));
-                }
-                found_dist = Some(dist);
-            }
+        match self.packages_for_name(name) {
+            [] => Ok(None),
+            [package] => Ok(Some(package)),
+            _ => Err(format!("found multiple packages matching `{name}`")),
         }
-        Ok(found_dist)
     }
 
     /// Returns the package with the given name.
@@ -1429,19 +1426,17 @@ impl Lock {
         marker_env: &MarkerEnvironment,
     ) -> Result<Option<&Package>, String> {
         let mut found_dist = None;
-        for dist in &self.packages {
-            if &dist.id.name == name {
-                if dist.fork_markers.is_empty()
-                    || dist
-                        .fork_markers
-                        .iter()
-                        .any(|marker| marker.evaluate_no_extras(marker_env))
-                {
-                    if found_dist.is_some() {
-                        return Err(format!("found multiple packages matching `{name}`"));
-                    }
-                    found_dist = Some(dist);
+        for package in self.packages_for_name(name) {
+            if package.fork_markers.is_empty()
+                || package
+                    .fork_markers
+                    .iter()
+                    .any(|marker| marker.evaluate_no_extras(marker_env))
+            {
+                if found_dist.is_some() {
+                    return Err(format!("found multiple packages matching `{name}`"));
                 }
+                found_dist = Some(package);
             }
         }
         Ok(found_dist)
@@ -6848,7 +6843,7 @@ pub(crate) fn is_wheel_unreachable(
 
 #[cfg(test)]
 mod tests {
-    use uv_pep440::VersionSpecifiers;
+    use uv_pep440::{Version, VersionSpecifiers};
     use uv_pep508::MarkerEnvironmentBuilder;
     use uv_warnings::anstream;
 
@@ -6878,6 +6873,80 @@ mod tests {
             sys_platform: "darwin",
         })
         .expect("valid marker environment")
+    }
+
+    #[test]
+    fn package_name_lookup_preserves_boundaries_duplicates_and_markers() {
+        let lock: Lock = toml::from_str(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "alpha"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+
+[[package]]
+name = "middle"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+resolution-markers = ["sys_platform == 'darwin'"]
+
+[[package]]
+name = "middle"
+version = "2.0.0"
+source = { registry = "https://example.com/simple" }
+resolution-markers = ["sys_platform != 'darwin'"]
+
+[[package]]
+name = "omega"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+"#,
+        )
+        .expect("valid lock");
+
+        let first = PackageName::from_str("alpha").expect("valid package name");
+        let middle = PackageName::from_str("middle").expect("valid package name");
+        let last = PackageName::from_str("omega").expect("valid package name");
+        let missing = PackageName::from_str("missing").expect("valid package name");
+
+        assert_eq!(lock.packages_for_name(&first).len(), 1);
+        assert_eq!(lock.packages_for_name(&middle).len(), 2);
+        assert_eq!(lock.packages_for_name(&last).len(), 1);
+        assert!(lock.packages_for_name(&missing).is_empty());
+
+        assert_eq!(
+            lock.find_by_name(&first)
+                .expect("unique first package")
+                .map(Package::name),
+            Some(&first),
+        );
+        assert_eq!(
+            lock.find_by_name(&last)
+                .expect("unique last package")
+                .map(Package::name),
+            Some(&last),
+        );
+        assert!(
+            lock.find_by_name(&missing)
+                .expect("missing package lookup")
+                .is_none()
+        );
+
+        let error = lock
+            .find_by_name(&middle)
+            .expect_err("ambiguous package name");
+        insta::assert_snapshot!(error, @"found multiple packages matching `middle`");
+
+        let expected_version = Version::from_str("1.0.0").expect("valid version");
+        let package = lock
+            .find_by_markers(&middle, &marker_environment())
+            .expect("unique matching fork")
+            .expect("matching package");
+        assert_eq!(package.version(), Some(&expected_version));
     }
 
     #[test]
