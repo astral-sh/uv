@@ -1,0 +1,54 @@
+name = "lock-without-metadata"
+description = "A workspace with platform forks, recursive extras, development groups, and a lockfile without package metadata."
+
+[root]
+requires = ["tqdm", "httpx", "six"]
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+anyio = "4.4.0"
+h2 = "1.0.0"
+httpx = "1.0.0"
+idna = "1.0.0"
+packaging = "26.1"
+six = "1.0.0"
+sniffio = "1.0.0"
+tqdm = "4.0.0"
+urllib3 = "1.0.0"
+
+[packages.anyio.versions."4.3.0"]
+requires = ["idna", "sniffio"]
+
+[packages.anyio.versions."4.4.0"]
+requires = ["idna", "sniffio"]
+
+[packages.h2.versions."1.0.0"]
+
+[packages.httpx.versions."1.0.0".extras]
+http2 = ["h2"]
+
+[packages.idna.versions."1.0.0"]
+
+[packages.packaging.versions."26.0"]
+
+[packages.packaging.versions."26.1"]
+
+[packages.pandas.versions."1.0.0"]
+
+[packages.six.versions."1.0.0"]
+
+[packages.sniffio.versions."1.0.0"]
+
+[packages.tqdm.versions."4.0.0"]
+
+[packages.urllib3.versions."1.0.0"]
+
+[resolver_options]
+universal = true
+
+[testgen]
+# The handwritten lock test must edit the generated lockfile between commands, which generated
+# Packse scenarios cannot express.
+disable = true
