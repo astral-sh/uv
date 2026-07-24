@@ -41,6 +41,8 @@ jobs:
 
       - name: "Collect pull request context"
         run: |
+          set -o pipefail
+
           gh pr view "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,isDraft,labels,files,additions,deletions,changedFiles \
