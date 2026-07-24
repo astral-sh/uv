@@ -3333,6 +3333,32 @@ fn install_only_binary_comma_separated() {
     context.assert_command("import anyio").success();
 }
 
+/// Disable source distributions with an environment variable.
+#[test]
+fn install_only_binary_env() {
+    let context = uv_test::test_context!("3.12");
+
+    let mut command = context.pip_install();
+    command
+        .arg("django-allauth==0.51.0")
+        .env(EnvVars::UV_ONLY_BINARY, "django-allauth")
+        .arg("--strict");
+    uv_snapshot!(
+        command,
+        @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
+    "
+    );
+}
+
 /// Overlapping usage of `--no-binary` and `--only-binary`
 // TODO(zanieb): We should have a better error message here
 #[test]

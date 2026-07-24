@@ -13977,6 +13977,33 @@ fn file_url() -> Result<()> {
     Ok(())
 }
 
+/// Disable source distributions with an environment variable.
+#[test]
+fn only_binary_env() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("source-distribution<=0.0.1")?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .env(EnvVars::UV_ONLY_BINARY, ":all:"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only source-distribution>=0.0.1 is available and source-distribution==0.0.1 has no usable wheels, we can conclude that source-distribution<=0.0.1 cannot be used.
+          And because you require source-distribution<=0.0.1, we can conclude that your requirements are unsatisfiable.
+
+    hint: Wheels are required for `source-distribution` because building from source is disabled for all packages (i.e., with `--no-build`)
+    "
+    );
+
+    Ok(())
+}
+
 /// Allow `--no-binary` to override `--only-binary`, to allow select source distributions.
 #[test]
 fn no_binary_only_binary() -> Result<()> {

@@ -3392,6 +3392,34 @@ fn require_hashes_wheel_only_binary() -> Result<()> {
     Ok(())
 }
 
+/// Include the hash for _just_ the wheel with `UV_ONLY_BINARY`.
+#[test]
+fn require_hashes_wheel_only_binary_env() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .env(EnvVars::UV_ONLY_BINARY, ":all:")
+        .arg("--require-hashes"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Include the hash for _just_ the source distribution with `--no-binary`.
 #[test]
 fn require_hashes_source_no_binary() -> Result<()> {
