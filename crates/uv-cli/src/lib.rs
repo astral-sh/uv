@@ -3147,41 +3147,8 @@ pub struct VenvArgs {
     #[command(flatten)]
     pub registry_client: RegistryClientArgs,
 
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewerOverride>,
-
-    /// Limit candidate packages for a specific package to those that were uploaded prior to the
-    /// given date.
-    ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
-    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
-    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
-    /// (e.g., `24 hours`, `1 week`, `30 days`), or a ISO 8601 duration (e.g., `PT24H`, `P7D`,
-    /// `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Can be provided multiple times for different packages.
-    #[arg(long)]
-    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+    #[command(flatten)]
+    pub exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -5096,7 +5063,7 @@ pub struct FormatArgs {
     /// durations relative to "now" (e.g., `-1 week`).
     ///
     /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, value_hint = ValueHint::Other)]
     pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Additional arguments to pass to Ruff.
@@ -6013,20 +5980,8 @@ pub struct ToolListArgs {
     #[arg(long, overrides_with("outdated"), hide = true)]
     pub no_outdated: bool,
 
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerOverride>,
+    #[command(flatten)]
+    pub exclude_newer: PackageExcludeNewerArgs,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]
@@ -6163,41 +6118,8 @@ pub struct ToolUpgradeArgs {
     #[command(flatten)]
     pub build_isolation: PackageBuildIsolationArgs,
 
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerOverride>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the
-    /// given date.
-    ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
-    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
-    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
-    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
-    /// `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Can be provided multiple times for different packages.
-    #[arg(long, help_heading = "Resolver options")]
-    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+    #[command(flatten)]
+    pub exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -7168,6 +7090,60 @@ pub struct HashCheckingArgs {
     pub no_verify_hashes: bool,
 }
 
+/// Arguments that filter packages by upload date.
+#[derive(Args)]
+#[group(skip)]
+pub struct ExcludeNewerArgs {
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
+    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
+    /// `P7D`, `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
+    #[arg(
+        long,
+        env = EnvVars::UV_EXCLUDE_NEWER,
+        help_heading = "Resolver options",
+        value_hint = ValueHint::Other,
+    )]
+    pub exclude_newer: Option<ExcludeNewerOverride>,
+}
+
+/// Arguments that filter packages by global and package-specific upload dates.
+#[derive(Args)]
+#[group(skip)]
+pub struct PackageExcludeNewerArgs {
+    #[command(flatten)]
+    pub exclude_newer: ExcludeNewerArgs,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
+    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
+    /// `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long, help_heading = "Resolver options", value_hint = ValueHint::Other)]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+}
+
 #[derive(Args)]
 pub struct RefreshArgs {
     /// Refresh all cached data.
@@ -7383,41 +7359,8 @@ pub struct InstallerArgs {
     #[command(flatten)]
     build_isolation: BuildIsolationArgs,
 
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerOverride>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the
-    /// given date.
-    ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
-    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
-    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
-    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
-    /// `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Can be provided multiple times for different packages.
-    #[arg(long, help_heading = "Resolver options")]
-    exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+    #[command(flatten)]
+    exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -7503,41 +7446,8 @@ pub struct ResolverArgs {
     #[command(flatten)]
     build_isolation: PackageBuildIsolationArgs,
 
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerOverride>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the
-    /// given date.
-    ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
-    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
-    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
-    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
-    /// `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Can be provided multiple times for different packages.
-    #[arg(long, help_heading = "Resolver options")]
-    exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+    #[command(flatten)]
+    exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -7627,46 +7537,8 @@ pub struct ResolverInstallerArgs {
     #[command(flatten)]
     pub build_isolation: PackageBuildIsolationArgs,
 
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(
-        long,
-        env = EnvVars::UV_EXCLUDE_NEWER,
-        help_heading = "Resolver options",
-        value_hint = ValueHint::Other,
-    )]
-    pub exclude_newer: Option<ExcludeNewerOverride>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the
-    /// given date.
-    ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
-    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
-    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
-    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
-    /// `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Can be provided multiple times for different packages.
-    #[arg(long, help_heading = "Resolver options", value_hint = ValueHint::Other)]
-    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+    #[command(flatten)]
+    pub exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -7701,24 +7573,8 @@ pub struct FetchArgs {
     #[command(flatten)]
     registry_client: RegistryClientArgs,
 
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerOverride>,
+    #[command(flatten)]
+    exclude_newer: PackageExcludeNewerArgs,
 }
 
 #[derive(Args)]
