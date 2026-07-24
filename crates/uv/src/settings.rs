@@ -24,8 +24,8 @@ use uv_cli::{
     VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, CheckArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
-    RegistryClientArgs, ResolverInstallerArgs, ToolUpgradeArgs,
+    AuthorFrom, BuildArgs, CheckArgs, ExportArgs, FormatArgs, HashCheckingArgs, PublishArgs,
+    PythonDirArgs, RegistryClientArgs, ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
         Flag, FlagSource, check_conflicts, flag, indexes_from_args, resolve_flag,
         resolve_flag_pair, resolver_installer_options, resolver_installer_options_with_indexes,
@@ -3493,10 +3493,13 @@ impl PipSyncSettings {
             group,
             installer,
             refresh,
-            require_hashes,
-            no_require_hashes,
-            verify_hashes,
-            no_verify_hashes,
+            hash_checking:
+                HashCheckingArgs {
+                    require_hashes,
+                    no_require_hashes,
+                    verify_hashes,
+                    no_verify_hashes,
+                },
             python,
             system,
             no_system,
@@ -3614,10 +3617,13 @@ impl PipInstallSettings {
             no_deps,
             deps,
             group,
-            require_hashes,
-            no_require_hashes,
-            verify_hashes,
-            no_verify_hashes,
+            hash_checking:
+                HashCheckingArgs {
+                    require_hashes,
+                    no_require_hashes,
+                    verify_hashes,
+                    no_verify_hashes,
+                },
             python,
             system,
             no_system,
@@ -4092,10 +4098,13 @@ impl BuildSettings {
             force_pep517,
             clear,
             build_constraints,
-            require_hashes,
-            no_require_hashes,
-            verify_hashes,
-            no_verify_hashes,
+            hash_checking:
+                HashCheckingArgs {
+                    require_hashes,
+                    no_require_hashes,
+                    verify_hashes,
+                    no_verify_hashes,
+                },
             build_logs,
             no_build_logs,
             create_gitignore,

@@ -1871,47 +1871,8 @@ pub struct PipSyncArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Require a matching hash for each requirement.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash.
-    ///
-    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
-    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
-    /// specified via direct URL.
-    ///
-    /// Hash-checking mode introduces a number of additional constraints:
-    ///
-    /// - Git dependencies are not supported.
-    /// - Editable installations are not supported.
-    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
-    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(
-        long,
-        env = EnvVars::UV_REQUIRE_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_require_hashes"),
-    )]
-    pub require_hashes: bool,
-
-    #[arg(long, overrides_with("require_hashes"), hide = true)]
-    pub no_require_hashes: bool,
-
-    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
-    pub verify_hashes: bool,
-
-    /// Disable validation of hashes in the requirements file.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash. To enforce hash validation, use
-    /// `--require-hashes`.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("verify_hashes"),
-    )]
-    pub no_verify_hashes: bool,
+    #[command(flatten)]
+    pub hash_checking: HashCheckingArgs,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -2257,47 +2218,8 @@ pub struct PipInstallArgs {
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
 
-    /// Require a matching hash for each requirement.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash.
-    ///
-    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
-    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
-    /// specified via direct URL.
-    ///
-    /// Hash-checking mode introduces a number of additional constraints:
-    ///
-    /// - Git dependencies are not supported.
-    /// - Editable installations are not supported.
-    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
-    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(
-        long,
-        env = EnvVars::UV_REQUIRE_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_require_hashes"),
-    )]
-    pub require_hashes: bool,
-
-    #[arg(long, overrides_with("require_hashes"), hide = true)]
-    pub no_require_hashes: bool,
-
-    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
-    pub verify_hashes: bool,
-
-    /// Disable validation of hashes in the requirements file.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash. To enforce hash validation, use
-    /// `--require-hashes`.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("verify_hashes"),
-    )]
-    pub no_verify_hashes: bool,
+    #[command(flatten)]
+    pub hash_checking: HashCheckingArgs,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -3040,47 +2962,8 @@ pub struct BuildArgs {
     )]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
-    /// Require a matching hash for each requirement.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash.
-    ///
-    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
-    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
-    /// specified via direct URL.
-    ///
-    /// Hash-checking mode introduces a number of additional constraints:
-    ///
-    /// - Git dependencies are not supported.
-    /// - Editable installations are not supported.
-    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
-    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(
-        long,
-        env = EnvVars::UV_REQUIRE_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_require_hashes"),
-    )]
-    pub require_hashes: bool,
-
-    #[arg(long, overrides_with("require_hashes"), hide = true)]
-    pub no_require_hashes: bool,
-
-    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
-    pub verify_hashes: bool,
-
-    /// Disable validation of hashes in the requirements file.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash. To enforce hash validation, use
-    /// `--require-hashes`.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("verify_hashes"),
-    )]
-    pub no_verify_hashes: bool,
+    #[command(flatten)]
+    pub hash_checking: HashCheckingArgs,
 
     /// The Python interpreter to use for the build environment.
     ///
@@ -7243,6 +7126,53 @@ pub struct RegistryClientArgs {
         help_heading = "Index options"
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+}
+
+/// Arguments that configure requirement hash checking.
+#[derive(Args)]
+#[group(skip)]
+pub struct HashCheckingArgs {
+    /// Require a matching hash for each requirement.
+    ///
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash.
+    ///
+    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
+    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
+    /// specified via direct URL.
+    ///
+    /// Hash-checking mode introduces a number of additional constraints:
+    ///
+    /// - Git dependencies are not supported.
+    /// - Editable installations are not supported.
+    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
+    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
+    #[arg(
+        long,
+        env = EnvVars::UV_REQUIRE_HASHES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_require_hashes"),
+    )]
+    pub require_hashes: bool,
+
+    #[arg(long, overrides_with("require_hashes"), hide = true)]
+    pub no_require_hashes: bool,
+
+    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
+    pub verify_hashes: bool,
+
+    /// Disable validation of hashes in the requirements file.
+    ///
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash. To enforce hash validation, use
+    /// `--require-hashes`.
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_VERIFY_HASHES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("verify_hashes"),
+    )]
+    pub no_verify_hashes: bool,
 }
 
 #[derive(Args)]
