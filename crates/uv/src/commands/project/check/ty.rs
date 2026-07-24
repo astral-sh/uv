@@ -126,6 +126,9 @@ pub(super) async fn run(
     let mut command = Command::new(&ty_path);
     command.current_dir(target_dir);
     command.arg("check");
+    // PEP 723 scripts have independent environments and must be checked explicitly with
+    // `uv check --script`. This still allows explicitly selected script paths to be checked.
+    command.arg("--exclude-scripts");
     for excluded_target in excluded_targets {
         command.arg("--exclude");
         command.arg(
