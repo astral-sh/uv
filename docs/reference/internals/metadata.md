@@ -29,7 +29,7 @@ There are 5 kinds of node in the graph:
 - `{ "group": "groupname" }` -- a dependency group a package or workspace root defines
 
 (In the future we will add "build" nodes for the dependencies of
-[build environments](https://docs.astral.sh/uv/concepts/projects/config/#build-isolation).)
+[build environments](../../concepts/projects/config.md#build-isolation).)
 
 If you want to install `mypackage`, find its `"kind": "package"` node. This node will also include
 information on its sdist, its wheels, its extras (`optional_dependencies`), and dependency groups
@@ -56,15 +56,15 @@ The first way is for
 to have conflicting requirements that force different versions of a package to be used.
 
 The second way is when a workspace has
-[conflicts](https://docs.astral.sh/uv/concepts/resolution/#conflicting-dependencies), implying some
-workspace members or their extras are mutually exclusive, and only one of them can be installed at a
-time. Information about conflicts can be found in the top-level `conflicts` field.
+[conflicts](../../concepts/resolution.md#conflicting-dependencies), implying some workspace members
+or their extras are mutually exclusive, and only one of them can be installed at a time. Information
+about conflicts can be found in the top-level `conflicts` field.
 
 The specific guarantee we provide is that **for any concrete choice of
 [markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#dependency-specifiers),
 if you select a set of packages to install that has no
-[conflicts](https://docs.astral.sh/uv/concepts/resolution/#conflicting-dependencies), then the
-resulting set of packages to install will not have multiple versions of a package**.
+[conflicts](../../concepts/resolution.md#conflicting-dependencies), then the resulting set of
+packages to install will not have multiple versions of a package**.
 
 If you just want to get "every version of pydantic this workspace uses" you're free to iterate
 through the list of nodes and collect up every instance. If however you want to specifically analyze

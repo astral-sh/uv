@@ -46,11 +46,10 @@ the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has 
 re-installs than desired.
 
 To incorporate additional information into the cache key for a given package, you can add cache key
-entries under [`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys),
-which covers both file paths and Git commit hashes. Setting
-[`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys) will replace
-defaults, so any necessary files (like `pyproject.toml`) should still be included in the
-user-defined cache keys.
+entries under [`tool.uv.cache-keys`](../reference/settings.md#cache-keys), which covers both file
+paths and Git commit hashes. Setting [`tool.uv.cache-keys`](../reference/settings.md#cache-keys)
+will replace defaults, so any necessary files (like `pyproject.toml`) should still be included in
+the user-defined cache keys.
 
 For example, if a project specifies dependencies in `pyproject.toml` but uses
 [`setuptools-scm`](https://pypi.org/project/setuptools-scm/) to manage its version, and should thus
