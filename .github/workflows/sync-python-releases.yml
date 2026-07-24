@@ -13,9 +13,10 @@ jobs:
   sync:
     if: github.repository == 'astral-sh/uv'
     runs-on: ubuntu-latest
+    environment: automations
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      id-token: write # for the credential broker
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -34,7 +35,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sync Sysconfig Targets
-        run: ${GITHUB_WORKSPACE}/crates/uv-dev/sync_sysconfig_targets.sh
+        run: ./sync_sysconfig_targets.sh
         working-directory: ./crates/uv-dev
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -42,10 +43,24 @@ jobs:
       - name: "Update Python version constants"
         run: uv run --locked --python 3.12 --no-build --script scripts/sync-python-version-constants.py
 
+      - name: "Get uv token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@3c532a63c9ed6f457ec3e8d7357d1fd631385aa2 # v0.0.2
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv
+          permissions: |
+            contents: write
+            pull_requests: write
+
       - name: "Create Pull Request"
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
+          token: ${{ steps.token.outputs.token }}
           commit-message: "Sync latest Python releases"
+          committer: "astral-automations-bot[bot] <305554984+astral-automations-bot[bot]@users.noreply.github.com>"
+          author: "astral-automations-bot[bot] <305554984+astral-automations-bot[bot]@users.noreply.github.com>"
           add-paths: |
             crates/uv-python/download-metadata.json
             crates/uv-dev/src/generate_sysconfig_mappings.rs
