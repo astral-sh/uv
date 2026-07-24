@@ -13,7 +13,7 @@ use uv_warnings::owo_colors::OwoColorize;
 use crate::{
     BuildIsolationArgs, BuildOptionsArgs, CompileBytecodeArgs, FetchArgs, IndexArgs, InstallerArgs,
     Maybe, PackageBuildIsolationArgs, RefreshArgs, RegistryClientArgs, ReinstallArgs, ResolverArgs,
-    ResolverInstallerArgs, SourcesArgs,
+    ResolverInstallerArgs, SourcesArgs, VersionSelectionArgs,
 };
 
 /// An error caused by an invalid combination of command-line arguments.
@@ -267,8 +267,11 @@ impl TryFrom<ResolverArgs> for PipOptions {
                     index_strategy,
                     keyring_provider,
                 },
-            resolution,
-            prerelease,
+            version_selection:
+                VersionSelectionArgs {
+                    resolution,
+                    prerelease,
+                },
             pre,
             fork_strategy,
             config_setting,
@@ -422,8 +425,11 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
                     index_strategy,
                     keyring_provider,
                 },
-            resolution,
-            prerelease,
+            version_selection:
+                VersionSelectionArgs {
+                    resolution,
+                    prerelease,
+                },
             pre,
             fork_strategy,
             config_setting,
@@ -566,8 +572,11 @@ pub fn resolver_options(
                 index_strategy,
                 keyring_provider,
             },
-        resolution,
-        prerelease,
+        version_selection:
+            VersionSelectionArgs {
+                resolution,
+                prerelease,
+            },
         pre,
         fork_strategy,
         config_setting,
@@ -710,8 +719,11 @@ pub fn resolver_installer_options_with_indexes(
                 index_strategy,
                 keyring_provider,
             },
-        resolution,
-        prerelease,
+        version_selection:
+            VersionSelectionArgs {
+                resolution,
+                prerelease,
+            },
         pre,
         fork_strategy,
         config_setting,

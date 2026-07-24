@@ -6140,30 +6140,8 @@ pub struct ToolUpgradeArgs {
     #[command(flatten)]
     pub registry_client: RegistryClientArgs,
 
-    /// The strategy to use when selecting between the different compatible versions for a given
-    /// package requirement.
-    ///
-    /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_RESOLUTION,
-        help_heading = "Resolver options"
-    )]
-    pub resolution: Option<ResolutionMode>,
-
-    /// The strategy to use when considering pre-release versions.
-    ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_PRERELEASE,
-        help_heading = "Resolver options"
-    )]
-    pub prerelease: Option<PrereleaseMode>,
+    #[command(flatten)]
+    pub version_selection: VersionSelectionArgs,
 
     #[arg(long, hide = true)]
     pub pre: bool,
@@ -7113,6 +7091,36 @@ pub struct SourcesArgs {
     no_sources_package: Vec<PackageName>,
 }
 
+/// Arguments that configure package version selection.
+#[derive(Args)]
+#[group(skip)]
+pub struct VersionSelectionArgs {
+    /// The strategy to use when selecting between the different compatible versions for a given
+    /// package requirement.
+    ///
+    /// By default, uv will use the latest compatible version of each package (`highest`).
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_RESOLUTION,
+        help_heading = "Resolver options"
+    )]
+    resolution: Option<ResolutionMode>,
+
+    /// The strategy to use when considering pre-release versions.
+    ///
+    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
+    /// with first-party requirements that contain an explicit pre-release marker in the declared
+    /// specifiers (`if-necessary-or-explicit`).
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_PRERELEASE,
+        help_heading = "Resolver options"
+    )]
+    prerelease: Option<PrereleaseMode>,
+}
+
 /// Arguments that configure requirement hash checking.
 #[derive(Args)]
 #[group(skip)]
@@ -7472,30 +7480,8 @@ pub struct ResolverArgs {
     #[command(flatten)]
     registry_client: RegistryClientArgs,
 
-    /// The strategy to use when selecting between the different compatible versions for a given
-    /// package requirement.
-    ///
-    /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_RESOLUTION,
-        help_heading = "Resolver options"
-    )]
-    resolution: Option<ResolutionMode>,
-
-    /// The strategy to use when considering pre-release versions.
-    ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_PRERELEASE,
-        help_heading = "Resolver options"
-    )]
-    prerelease: Option<PrereleaseMode>,
+    #[command(flatten)]
+    version_selection: VersionSelectionArgs,
 
     #[arg(long, hide = true, help_heading = "Resolver options")]
     pre: bool,
@@ -7637,30 +7623,8 @@ pub struct ResolverInstallerArgs {
     #[command(flatten)]
     pub registry_client: RegistryClientArgs,
 
-    /// The strategy to use when selecting between the different compatible versions for a given
-    /// package requirement.
-    ///
-    /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_RESOLUTION,
-        help_heading = "Resolver options"
-    )]
-    pub resolution: Option<ResolutionMode>,
-
-    /// The strategy to use when considering pre-release versions.
-    ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_PRERELEASE,
-        help_heading = "Resolver options"
-    )]
-    pub prerelease: Option<PrereleaseMode>,
+    #[command(flatten)]
+    pub version_selection: VersionSelectionArgs,
 
     #[arg(long, hide = true)]
     pub pre: bool,
