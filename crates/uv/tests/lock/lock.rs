@@ -17350,6 +17350,75 @@ fn lock_rename_project() -> Result<()> {
     Ok(())
 }
 
+/// Frozen installs can select extras and groups without declaration metadata in the lockfile.
+#[cfg(feature = "test-universal")]
+#[test]
+fn sync_frozen_without_package_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        empty = []
+        test = ["dependency"]
+
+        [dependency-groups]
+        empty = []
+        dev = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = { path = "dependency", package = false }
+        "#,
+    )?;
+
+    let dependency = context.temp_dir.child("dependency");
+    dependency.create_dir_all()?;
+    dependency.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dependency"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    context.lock().arg("--offline").assert().success();
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    for package in packages.iter_mut() {
+        package.remove("metadata");
+    }
+    lock["revision"] = toml_edit::value(4);
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--offline")
+        .arg("--extra")
+        .arg("test")
+        .arg("--extra")
+        .arg("empty")
+        .arg("--group")
+        .arg("dev")
+        .arg("--group")
+        .arg("empty")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// Test backwards compatibility for `[package.metadata]`.
 #[cfg(feature = "test-universal")]
 #[test]

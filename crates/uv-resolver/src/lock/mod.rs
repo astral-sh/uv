@@ -790,6 +790,11 @@ impl Lock {
         (self.version(), self.revision()) >= (1, 1)
     }
 
+    /// Returns `true` if this [`Lock`] can validate packages without declaration metadata.
+    pub fn supports_missing_package_metadata(&self) -> bool {
+        (self.version(), self.revision()) >= (1, 4)
+    }
+
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
     fn includes_empty_groups(&self) -> bool {
         // Empty dependency groups are included as of https://github.com/astral-sh/uv/pull/8598,
