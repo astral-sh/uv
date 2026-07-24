@@ -1279,10 +1279,12 @@ impl ToolListSettings {
 
         let filesystem = filesystem
             .map(FilesystemOptions::into_options)
+            .map(|options| options.top_level)
             .unwrap_or_default();
         let filesystem = ResolverInstallerOptions {
-            exclude_newer: filesystem.top_level.exclude_newer,
-            exclude_newer_package: filesystem.top_level.exclude_newer_package,
+            index: filesystem.index,
+            exclude_newer: filesystem.exclude_newer,
+            exclude_newer_package: filesystem.exclude_newer_package,
             ..ResolverInstallerOptions::default()
         };
 
