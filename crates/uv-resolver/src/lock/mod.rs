@@ -843,6 +843,11 @@ impl Lock {
         (self.version(), self.revision()) >= (1, 1)
     }
 
+    /// Returns `true` if this [`Lock`] can validate packages without declaration metadata.
+    pub fn supports_missing_package_metadata(&self) -> bool {
+        (self.version(), self.revision()) >= (1, 4)
+    }
+
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
     fn includes_empty_groups(&self) -> bool {
         // Empty dependency groups are included as of https://github.com/astral-sh/uv/pull/8598,
@@ -3579,13 +3584,19 @@ impl Package {
     }
 
     /// Returns the extras the package provides, if any.
-    pub fn provides_extras(&self) -> &[ExtraName] {
-        &self.metadata.provides_extra
+    pub fn provides_extras(&self) -> impl Iterator<Item = &ExtraName> {
+        self.metadata
+            .provides_extra
+            .iter()
+            .chain(self.optional_dependencies.keys())
     }
 
     /// Returns the dependency groups the package provides, if any.
-    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
-        &self.metadata.dependency_groups
+    pub fn dependency_groups(&self) -> impl Iterator<Item = &GroupName> {
+        self.metadata
+            .dependency_groups
+            .keys()
+            .chain(self.dependency_groups.keys())
     }
 
     /// Returns the dependencies of the package.

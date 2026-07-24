@@ -11,7 +11,7 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::{Index, Resolution};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{
     DependencyGroupSpecifier, LenientRequirement, ResolverMarkerEnvironment, VerbatimParsedUrl,
@@ -326,16 +326,65 @@ impl<'lock> InstallTarget<'lock> {
         self.lock().build_constraints(self.install_path())
     }
 
+    /// Empty selections have no resolved edges, so recover them from workspace declarations.
+    fn empty_workspace_selections(
+        self,
+        workspace: &'lock Workspace,
+        roots: &FxHashSet<&PackageName>,
+    ) -> (FxHashSet<&'lock ExtraName>, FxHashSet<&'lock GroupName>) {
+        let mut extras = FxHashSet::default();
+        let mut groups = FxHashSet::default();
+        if !self.lock().supports_missing_package_metadata() {
+            return (extras, groups);
+        }
+
+        for (name, member) in workspace.packages() {
+            if !roots.contains(name) {
+                continue;
+            }
+
+            if let Some(optional_dependencies) = member
+                .pyproject_toml()
+                .project
+                .as_ref()
+                .and_then(|project| project.optional_dependencies.as_ref())
+            {
+                extras.extend(
+                    optional_dependencies
+                        .iter()
+                        .filter_map(|(extra, requirements)| {
+                            requirements.is_empty().then_some(extra)
+                        }),
+                );
+            }
+            if let Some(dependency_groups) = member.pyproject_toml().dependency_groups.as_ref() {
+                groups.extend(
+                    dependency_groups
+                        .into_iter()
+                        .filter_map(|(group, requirements)| {
+                            requirements.is_empty().then_some(group)
+                        }),
+                );
+            }
+        }
+
+        (extras, groups)
+    }
+
     /// Validate the extras requested by the [`ExtrasSpecification`].
     pub(crate) fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), ProjectError> {
         if extras.is_empty() {
             return Ok(());
         }
         match self {
-            Self::Project { lock, .. }
-            | Self::Projects { lock, .. }
-            | Self::Workspace { lock, .. }
-            | Self::NonProjectWorkspace { lock, .. } => {
+            Self::Project {
+                lock, workspace, ..
+            }
+            | Self::Projects {
+                lock, workspace, ..
+            }
+            | Self::Workspace { lock, workspace }
+            | Self::NonProjectWorkspace { lock, workspace } => {
                 if !lock.supports_provides_extra() {
                     return Ok(());
                 }
@@ -346,11 +395,13 @@ impl<'lock> InstallTarget<'lock> {
                     .iter()
                     .filter(|package| roots.contains(package.name()))
                     .collect();
+                let (empty_extras, _) = self.empty_workspace_selections(workspace, &roots);
 
                 // Collect all known extras from the member packages.
                 let known_extras = member_packages
                     .iter()
-                    .flat_map(|package| package.provides_extras().iter())
+                    .flat_map(|package| package.provides_extras())
+                    .chain(empty_extras)
                     .collect::<FxHashSet<_>>();
 
                 for extra in extras.explicit_names() {
@@ -400,11 +451,13 @@ impl<'lock> InstallTarget<'lock> {
                     .iter()
                     .filter(|package| roots.contains(package.name()))
                     .collect();
+                let (_, empty_groups) = self.empty_workspace_selections(workspace, &roots);
 
                 // Extract the dependency groups that are exclusive to the workspace root.
                 let known_groups = member_packages
                     .iter()
-                    .flat_map(|package| package.dependency_groups().keys().map(Cow::Borrowed))
+                    .flat_map(|package| package.dependency_groups().map(Cow::Borrowed))
+                    .chain(empty_groups.into_iter().map(Cow::Borrowed))
                     .chain(
                         workspace
                             .workspace_dependency_groups()
@@ -422,18 +475,25 @@ impl<'lock> InstallTarget<'lock> {
                     }
                 }
             }
-            Self::Project { lock, .. } | Self::Projects { lock, .. } => {
+            Self::Project {
+                lock, workspace, ..
+            }
+            | Self::Projects {
+                lock, workspace, ..
+            } => {
                 let roots = self.roots().collect::<FxHashSet<_>>();
                 let member_packages: Vec<&Package> = lock
                     .packages()
                     .iter()
                     .filter(|package| roots.contains(package.name()))
                     .collect();
+                let (_, empty_groups) = self.empty_workspace_selections(workspace, &roots);
 
                 // Extract the dependency groups defined in the relevant member(s).
                 let known_groups = member_packages
                     .iter()
-                    .flat_map(|package| package.dependency_groups().keys())
+                    .flat_map(|package| package.dependency_groups())
+                    .chain(empty_groups)
                     .collect::<FxHashSet<_>>();
 
                 for group in groups.explicit_names() {

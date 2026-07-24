@@ -26,6 +26,19 @@ use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{download_to_disk, venv_bin_path};
 
 #[cfg(feature = "test-universal")]
+fn metadata_free_lock(lock: &str) -> Result<toml_edit::DocumentMut> {
+    let mut lock = lock.parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    for package in packages.iter_mut() {
+        package.remove("metadata");
+    }
+    lock["revision"] = toml_edit::value(4);
+    Ok(lock)
+}
+
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_wheel_registry() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17476,6 +17489,78 @@ fn lock_dependency_context_edges_merge() -> Result<()> {
         { name = "dependency", extras = ["feature"], marker = "python_full_version >= '3.12'", directory = "dependency" },
     ]
     "#);
+
+    Ok(())
+}
+
+/// Regenerate production, optional, and development edges when declaration metadata is omitted.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "tqdm<10 ; sys_platform == 'win32'",
+            "tqdm>1 ; sys_platform != 'win32'",
+            "httpx",
+            "six>=2",
+            "urllib3",
+        ]
+
+        [project.optional-dependencies]
+        empty = []
+        test = [
+            "httpx[http2]",
+            "packaging==26.0 ; sys_platform == 'win32'",
+            "packaging==26.1 ; sys_platform != 'win32'",
+        ]
+
+        [dependency-groups]
+        empty = []
+        dev = ["httpx[http2]", "anyio"]
+
+        [tool.uv]
+        override-dependencies = ["six==1.0.0"]
+        exclude-dependencies = ["urllib3"]
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    let lock = metadata_free_lock(&context.read("uv.lock"))?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--extra")
+        .arg("test")
+        .arg("--extra")
+        .arg("empty")
+        .arg("--group")
+        .arg("dev")
+        .arg("--group")
+        .arg("empty")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
 
     Ok(())
 }
