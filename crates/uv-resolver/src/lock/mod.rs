@@ -1958,10 +1958,12 @@ impl Lock {
             if let Source::Registry(index) = &package.id.source {
                 match index {
                     RegistrySource::Url(url) => {
-                        if remotes
-                            .as_ref()
-                            .is_some_and(|remotes| !remotes.contains(url))
-                        {
+                        if remotes.as_ref().is_some_and(|remotes| {
+                            let url_trimmed = url.as_ref().trim_end_matches('/');
+                            !remotes
+                                .iter()
+                                .any(|remote| remote.as_ref().trim_end_matches('/') == url_trimmed)
+                        }) {
                             let name = &package.id.name;
                             let version = &package
                                 .id
@@ -4106,10 +4108,10 @@ impl Source {
 
     /// Returns `true` if the source is a registry entry pointing at PyPI (`https://pypi.org/simple`).
     fn is_pypi_registry(&self) -> bool {
-        matches!(
-            self,
-            Self::Registry(RegistrySource::Url(url)) if url.as_ref() == PYPI_URL.as_str()
-        )
+        let Self::Registry(RegistrySource::Url(url)) = self else {
+            return false;
+        };
+        url.as_ref().trim_end_matches('/') == PYPI_URL.as_str().trim_end_matches('/')
     }
 
     /// Returns `true` if the source should be considered immutable.
@@ -7420,5 +7422,46 @@ wheels = [
                 Path::new("C:/Users/user/links").into()
             ))
         );
+    }
+
+    #[test]
+    fn is_pypi_registry_trailing_slash() {
+        let url_with_slash =
+            uv_redacted::DisplaySafeUrl::parse("https://pypi.org/simple/").unwrap();
+        let url_without_slash =
+            uv_redacted::DisplaySafeUrl::parse("https://pypi.org/simple").unwrap();
+        let source_with_slash =
+            Source::Registry(RegistrySource::Url(UrlString::from(&url_with_slash)));
+        let source_without_slash =
+            Source::Registry(RegistrySource::Url(UrlString::from(&url_without_slash)));
+        assert!(source_with_slash.is_pypi_registry());
+        assert!(source_without_slash.is_pypi_registry());
+    }
+
+    #[test]
+    fn is_pypi_registry_custom_index() {
+        let url_with_slash =
+            uv_redacted::DisplaySafeUrl::parse("https://custom.index/simple/").unwrap();
+        let url_without_slash =
+            uv_redacted::DisplaySafeUrl::parse("https://custom.index/simple").unwrap();
+        let custom_with_slash =
+            Source::Registry(RegistrySource::Url(UrlString::from(&url_with_slash)));
+        let custom_without_slash =
+            Source::Registry(RegistrySource::Url(UrlString::from(&url_without_slash)));
+        assert!(!custom_with_slash.is_pypi_registry());
+        assert!(!custom_without_slash.is_pypi_registry());
+    }
+
+    #[test]
+    fn satisfies_remote_index_matching_trailing_slash() {
+        let url1 = uv_redacted::DisplaySafeUrl::parse("https://custom.index/simple/").unwrap();
+        let url2 = uv_redacted::DisplaySafeUrl::parse("https://custom.index/simple").unwrap();
+        let remotes = [UrlString::from(&url1)];
+        let locked_url = UrlString::from(&url2);
+        let url_trimmed = locked_url.as_ref().trim_end_matches('/');
+        let is_matched = remotes
+            .iter()
+            .any(|remote| remote.as_ref().trim_end_matches('/') == url_trimmed);
+        assert!(is_matched);
     }
 }
