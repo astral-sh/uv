@@ -166,7 +166,7 @@ jobs:
               --arg issue_number "$ISSUE_NUMBER" \
               --arg tree "$tree_sha" \
               --arg parent "$head_sha" \
-              '{message: "Update issue context for uv#\($issue_number)", tree: $tree, parents: (if $parent == "" then [] else [$parent] end)}' |
+              '{message: "Update issue context for astral-sh/uv#\($issue_number)", tree: $tree, parents: (if $parent == "" then [] else [$parent] end)}' |
               gh api \
                 --method POST \
                 repos/astral-sh/uv-dev/git/commits \
