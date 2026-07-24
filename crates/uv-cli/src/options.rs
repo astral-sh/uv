@@ -13,7 +13,7 @@ use uv_warnings::owo_colors::OwoColorize;
 use crate::{
     BuildIsolationArgs, BuildOptionsArgs, CompileBytecodeArgs, FetchArgs, IndexArgs, InstallerArgs,
     Maybe, PackageBuildIsolationArgs, RefreshArgs, RegistryClientArgs, ReinstallArgs, ResolverArgs,
-    ResolverInstallerArgs,
+    ResolverInstallerArgs, SourcesArgs,
 };
 
 /// An error caused by an invalid combination of command-line arguments.
@@ -284,8 +284,11 @@ impl TryFrom<ResolverArgs> for PipOptions {
                 },
             exclude_newer,
             link_mode,
-            no_sources,
-            no_sources_package,
+            sources:
+                SourcesArgs {
+                    no_sources,
+                    no_sources_package,
+                },
             exclude_newer_package,
         } = args;
 
@@ -362,8 +365,11 @@ impl TryFrom<InstallerArgs> for PipOptions {
                     compile_bytecode,
                     no_compile_bytecode,
                 },
-            no_sources,
-            no_sources_package,
+            sources:
+                SourcesArgs {
+                    no_sources,
+                    no_sources_package,
+                },
             exclude_newer_package,
         } = args;
 
@@ -438,8 +444,11 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
                     compile_bytecode,
                     no_compile_bytecode,
                 },
-            no_sources,
-            no_sources_package,
+            sources:
+                SourcesArgs {
+                    no_sources,
+                    no_sources_package,
+                },
             exclude_newer_package,
         } = args;
 
@@ -574,8 +583,10 @@ pub fn resolver_options(
             },
         exclude_newer,
         link_mode,
-        no_sources,
-        no_sources_package,
+        sources: SourcesArgs {
+            no_sources,
+            no_sources_package,
+        },
         exclude_newer_package,
     } = resolver_args;
 
@@ -722,8 +733,10 @@ pub fn resolver_installer_options_with_indexes(
                 compile_bytecode,
                 no_compile_bytecode,
             },
-        no_sources,
-        no_sources_package,
+        sources: SourcesArgs {
+            no_sources,
+            no_sources_package,
+        },
     } = resolver_installer_args;
 
     let BuildOptionsArgs {

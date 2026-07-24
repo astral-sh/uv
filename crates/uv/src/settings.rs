@@ -1184,8 +1184,7 @@ impl ToolUpgradeSettings {
             exclude_newer,
             link_mode,
             compile_bytecode,
-            no_sources,
-            no_sources_package,
+            sources,
             exclude_newer_package,
             build,
         } = args;
@@ -1217,8 +1216,7 @@ impl ToolUpgradeSettings {
             exclude_newer_package,
             link_mode,
             compile_bytecode,
-            no_sources,
-            no_sources_package,
+            sources,
         };
 
         let args = resolver_installer_options_with_environment(

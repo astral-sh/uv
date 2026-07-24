@@ -6262,20 +6262,8 @@ pub struct ToolUpgradeArgs {
     #[command(flatten)]
     pub compile_bytecode: CompileBytecodeArgs,
 
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options",
-    )]
-    pub no_sources: bool,
-
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    pub no_sources_package: Vec<PackageName>,
+    #[command(flatten)]
+    pub sources: SourcesArgs,
 
     #[command(flatten)]
     pub build: BuildOptionsArgs,
@@ -7105,6 +7093,26 @@ pub struct RegistryClientArgs {
     pub keyring_provider: Option<KeyringProviderType>,
 }
 
+/// Arguments that control dependency sources.
+#[derive(Args)]
+#[group(skip)]
+pub struct SourcesArgs {
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
+    /// URL, or local path sources.
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_SOURCES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Resolver options",
+    )]
+    no_sources: bool,
+
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
+    no_sources_package: Vec<PackageName>,
+}
+
 /// Arguments that configure requirement hash checking.
 #[derive(Args)]
 #[group(skip)]
@@ -7423,20 +7431,8 @@ pub struct InstallerArgs {
     #[command(flatten)]
     compile_bytecode: CompileBytecodeArgs,
 
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options"
-    )]
-    no_sources: bool,
-
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    no_sources_package: Vec<PackageName>,
+    #[command(flatten)]
+    sources: SourcesArgs,
 }
 
 /// Arguments that are used by commands that need to resolve (but not install) packages.
@@ -7597,20 +7593,8 @@ pub struct ResolverArgs {
     )]
     link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options",
-    )]
-    no_sources: bool,
-
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    no_sources_package: Vec<PackageName>,
+    #[command(flatten)]
+    sources: SourcesArgs,
 }
 
 /// Arguments that are used by commands that need to resolve and install packages.
@@ -7782,20 +7766,8 @@ pub struct ResolverInstallerArgs {
     #[command(flatten)]
     pub compile_bytecode: CompileBytecodeArgs,
 
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options",
-    )]
-    pub no_sources: bool,
-
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    pub no_sources_package: Vec<PackageName>,
+    #[command(flatten)]
+    pub sources: SourcesArgs,
 }
 
 /// Arguments that are used by commands that need to fetch from the Simple API.
