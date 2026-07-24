@@ -6280,6 +6280,7 @@ dependencies = [
  "uv-distribution-filename",
  "uv-distribution-types",
  "uv-errors",
+ "uv-extract",
  "uv-fs",
  "uv-git",
  "uv-metadata",
@@ -7225,6 +7226,7 @@ dependencies = [
  "toml_writer",
  "tracing",
  "url",
+ "uv-cache",
  "uv-cache-key",
  "uv-client",
  "uv-configuration",
@@ -7255,6 +7257,7 @@ dependencies = [
  "uv-version",
  "uv-warnings",
  "uv-workspace",
+ "wiremock",
 ]
 
 [[package]]

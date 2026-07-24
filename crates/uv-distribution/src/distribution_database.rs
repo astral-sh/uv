@@ -27,7 +27,7 @@ use uv_fs::write_atomic;
 use uv_git::{GIT_LFS, GitError};
 use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
@@ -185,16 +185,52 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
+                let filename = wheel.filename.to_string();
+                let proxy_artifact = if wheel.proxy.is_none() {
+                    self.client
+                        .managed(|client| {
+                            client.proxy_artifact(
+                                wheel.name(),
+                                &wheel.index,
+                                &filename,
+                                &wheel.file.hashes,
+                                self.build_context.capabilities(),
+                            )
+                        })
+                        .await?
+                } else {
+                    None
+                };
+                let proxied = wheel.proxy.is_some() || proxy_artifact.is_some();
+                let mut hashes = WheelHashPolicy::from(hashes);
+                if proxied {
+                    hashes.validation = if wheel.file.hashes.is_empty() {
+                        hashes.required
+                    } else {
+                        HashPolicy::Any(wheel.file.hashes.as_slice())
+                    };
+                }
+                let (target, physical_index) = if let Some(proxy) = &wheel.proxy {
+                    (WheelTarget::from_wheel(&wheel.file)?, proxy)
+                } else if let Some(proxy_artifact) = &proxy_artifact {
+                    (
+                        WheelTarget::from_wheel(&proxy_artifact.file)?,
+                        &proxy_artifact.physical_index,
+                    )
+                } else {
+                    (WheelTarget::try_from(&*wheel.file)?, &wheel.index)
+                };
                 let WheelTarget {
                     url,
                     extension,
                     size,
-                } = WheelTarget::try_from(&*wheel.file)?;
+                } = target;
+                validate_proxy_artifact_url(proxied, &filename, &url)?;
 
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
-                    WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
+                    WheelCache::Index(physical_index).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.cache_key(),
                 );
 
@@ -207,10 +243,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .load_wheel(
                             &path,
                             &wheel.filename,
-                            WheelExtension::Whl,
+                            extension,
                             wheel_entry,
                             dist,
-                            hashes,
+                            hashes.required,
                         )
                         .await;
                 }
@@ -219,7 +255,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 match self
                     .stream_wheel(
                         url.clone(),
-                        dist.index(),
+                        Some(physical_index),
                         &wheel.filename,
                         extension,
                         size,
@@ -257,7 +293,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let archive = self
                             .download_wheel(
                                 url,
-                                dist.index(),
+                                Some(physical_index),
                                 &wheel.filename,
                                 extension,
                                 size,
@@ -302,7 +338,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         None,
                         &wheel_entry,
                         dist,
-                        hashes,
+                        hashes.into(),
                     )
                     .await
                 {
@@ -340,7 +376,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                 None,
                                 &wheel_entry,
                                 dist,
-                                hashes,
+                                hashes.into(),
                             )
                             .await?;
                         Ok(LocalWheel {
@@ -702,7 +738,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
-        hashes: HashPolicy<'_>,
+        hashes: WheelHashPolicy<'_>,
     ) -> Result<Archive, Error> {
         // Acquire an advisory lock, to guard against concurrent writes.
         #[cfg(windows)]
@@ -731,7 +767,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .into_async_read();
 
                 // Create a hasher for each hash algorithm.
-                let algorithms = http_hash_algorithms(hashes);
+                let algorithms = hashes.http_algorithms();
                 let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
                 let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
@@ -770,6 +806,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 };
                 // Exhaust the reader to compute the hashes.
                 hasher.finish().await.map_err(Error::HashExhaustion)?;
+                let computed_hashes = validate_hashes(hashers, hashes.validation, dist)?;
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
@@ -788,11 +825,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(
-                    id,
-                    hashers.into_iter().map(HashDigest::from).collect(),
-                    filename.clone(),
-                ))
+                Ok(Archive::new(id, computed_hashes.into(), filename.clone()))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -838,7 +871,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
-            .filter(|archive| archive.has_digests(hashes))
+            .filter(|archive| hashes.is_reusable(archive))
             .filter(|archive| archive.exists(self.build_context.cache()));
 
         let archive = if let Some(archive) = archive {
@@ -876,7 +909,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
-        hashes: HashPolicy<'_>,
+        hashes: WheelHashPolicy<'_>,
     ) -> Result<Archive, Error> {
         // Acquire an advisory lock, to guard against concurrent writes.
         #[cfg(windows)]
@@ -901,7 +934,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .bytes_stream()
                     .map_err(|err| self.handle_response_errors(err))
                     .into_async_read();
-                let algorithms = http_hash_algorithms(hashes);
+                let algorithms = hashes.http_algorithms();
                 let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
                 let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
@@ -948,7 +981,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     WheelExtension::WhlZst => uv_extract::stream::untar_zst(file, &target).await,
                 }
                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                let hashes = hashers.into_iter().map(HashDigest::from).collect();
+                let computed_hashes = validate_hashes(hashers, hashes.validation, dist)?;
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
@@ -967,7 +1000,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(id, hashes, filename.clone()))
+                Ok(Archive::new(id, computed_hashes.into(), filename.clone()))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -1013,7 +1046,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
-            .filter(|archive| archive.has_digests(hashes))
+            .filter(|archive| hashes.is_reusable(archive))
             .filter(|archive| archive.exists(self.build_context.cache()));
 
         let archive = if let Some(archive) = archive {
@@ -1291,6 +1324,20 @@ fn content_length(response: &reqwest::Response) -> Option<u64> {
         .and_then(|val| val.parse::<u64>().ok())
 }
 
+pub(crate) fn validate_proxy_artifact_url(
+    proxied: bool,
+    filename: &str,
+    url: &DisplaySafeUrl,
+) -> Result<(), Error> {
+    if proxied && url.scheme() == "file" {
+        return Err(Error::ProxyArtifactLocalUrl {
+            filename: filename.to_string(),
+            url: url.clone(),
+        });
+    }
+    Ok(())
+}
+
 /// An asynchronous reader that reports progress as bytes are read.
 struct ProgressReader<'a, R> {
     reader: R,
@@ -1412,6 +1459,41 @@ impl PathArchivePointer {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct WheelHashPolicy<'a> {
+    /// The hashes that the physical artifact must match before cache admission.
+    validation: HashPolicy<'a>,
+    /// The hashes that the caller will require on the returned archive.
+    required: HashPolicy<'a>,
+}
+
+impl<'a> WheelHashPolicy<'a> {
+    fn new(validation: HashPolicy<'a>, required: HashPolicy<'a>) -> Self {
+        Self {
+            validation,
+            required,
+        }
+    }
+
+    fn http_algorithms(self) -> Vec<HashAlgorithm> {
+        let mut algorithms = http_hash_algorithms(self.validation);
+        algorithms.extend(self.required.algorithms());
+        algorithms.sort_unstable();
+        algorithms.dedup();
+        algorithms
+    }
+
+    fn is_reusable(self, archive: &impl Hashed) -> bool {
+        archive.satisfies(self.validation) && archive.has_digests(self.required)
+    }
+}
+
+impl<'a> From<HashPolicy<'a>> for WheelHashPolicy<'a> {
+    fn from(hashes: HashPolicy<'a>) -> Self {
+        Self::new(HashPolicy::None, hashes)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct WheelTarget {
     /// The URL from which the wheel can be downloaded.
@@ -1422,24 +1504,29 @@ struct WheelTarget {
     size: Option<u64>,
 }
 
+impl WheelTarget {
+    fn from_wheel(file: &File) -> Result<Self, ToUrlError> {
+        Ok(Self {
+            url: file.url.to_url()?,
+            extension: WheelExtension::Whl,
+            size: file.size,
+        })
+    }
+}
+
 impl TryFrom<&File> for WheelTarget {
     type Error = ToUrlError;
 
     /// Determine the [`WheelTarget`] from a [`File`].
     fn try_from(file: &File) -> Result<Self, Self::Error> {
-        let url = file.url.to_url()?;
         if let Some(zstd) = file.zstd.as_ref() {
             Ok(Self {
-                url: add_tar_zst_extension(url),
+                url: add_tar_zst_extension(file.url.to_url()?),
                 extension: WheelExtension::WhlZst,
                 size: zstd.size,
             })
         } else {
-            Ok(Self {
-                url,
-                extension: WheelExtension::Whl,
-                size: file.size,
-            })
+            Self::from_wheel(file)
         }
     }
 }
@@ -1450,6 +1537,25 @@ enum WheelExtension {
     Whl,
     /// A `.whl.tar.zst` file.
     WhlZst,
+}
+
+fn validate_hashes(
+    hashers: Vec<Hasher>,
+    hashes: HashPolicy<'_>,
+    dist: &BuiltDist,
+) -> Result<Vec<HashDigest>, Error> {
+    let computed_hashes = hashers
+        .into_iter()
+        .map(HashDigest::from)
+        .collect::<Vec<_>>();
+    if !hashes.matches(&computed_hashes) {
+        return Err(Error::hash_mismatch(
+            dist.to_string(),
+            hashes.digests(),
+            &computed_hashes,
+        ));
+    }
+    Ok(computed_hashes)
 }
 
 /// Add `.tar.zst` to the end of the URL path, if it doesn't already exist.
@@ -1468,6 +1574,54 @@ fn add_tar_zst_extension(mut url: DisplaySafeUrl) -> DisplaySafeUrl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn proxy_wheel_hash_policy_preserves_validation_algorithms()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let canonical_hashes = HashDigests::from(vec![
+            "sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                .parse()?,
+        ]);
+        let hashes = WheelHashPolicy::new(
+            HashPolicy::Any(canonical_hashes.as_slice()),
+            HashPolicy::None,
+        );
+
+        assert_eq!(
+            hashes.http_algorithms(),
+            vec![HashAlgorithm::Sha256, HashAlgorithm::Sha512]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_wheel_hash_policy_rejects_wrong_cached_digest()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let canonical_hashes = HashDigests::from(vec![
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".parse()?,
+        ]);
+        let cached_hashes = vec![
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".parse()?,
+        ];
+        let hashes = WheelHashPolicy::new(
+            HashPolicy::Any(canonical_hashes.as_slice()),
+            HashPolicy::None,
+        );
+
+        assert!(!hashes.is_reusable(&cached_hashes));
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_artifact_rejects_local_url() -> Result<(), Box<dyn std::error::Error>> {
+        let url = DisplaySafeUrl::parse("file:///tmp/example.whl")?;
+        assert!(matches!(
+            validate_proxy_artifact_url(true, "example.whl", &url),
+            Err(Error::ProxyArtifactLocalUrl { .. })
+        ));
+        assert!(validate_proxy_artifact_url(false, "example.whl", &url).is_ok());
+        Ok(())
+    }
 
     #[test]
     fn test_add_tar_zst_extension() {

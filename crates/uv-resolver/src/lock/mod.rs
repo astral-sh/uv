@@ -28,10 +28,10 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist, Identifier,
-    IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement,
-    RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
-    ToUrlError, UrlString,
+    IndexLocations, IndexMetadata, IndexRoutes, IndexUrl, Name, PYPI_URL, PathBuiltDist,
+    PathSourceDist, ProxyIndexError, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{
     PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
@@ -1828,18 +1828,7 @@ impl Lock {
         }
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
-        let mut remotes = indexes.map(|locations| {
-            locations
-                .allowed_indexes()
-                .into_iter()
-                .filter_map(|index| match index.url() {
-                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().without_credentials().as_ref()))
-                    }
-                    IndexUrl::Path(_) => None,
-                })
-                .collect::<BTreeSet<_>>()
-        });
+        let mut remotes = indexes.map(available_remote_indexes).transpose()?;
 
         let mut locals = indexes.map(|locations| {
             locations
@@ -2424,6 +2413,30 @@ impl<'tags> TagPolicy<'tags> {
             Self::Required(tags) | Self::Preferred(tags) => tags,
         }
     }
+}
+
+/// Collect the remote indexes that can satisfy an existing lock.
+fn available_remote_indexes(
+    locations: &IndexLocations,
+) -> Result<BTreeSet<UrlString>, ProxyIndexError> {
+    let routes = IndexRoutes::try_from(locations)?;
+    let mut remotes = locations
+        .allowed_indexes()
+        .into_iter()
+        .filter_map(|index| match index.url() {
+            IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                Some(UrlString::from(index.url().without_credentials().as_ref()))
+            }
+            IndexUrl::Path(_) => None,
+        })
+        .collect::<BTreeSet<_>>();
+
+    for route in routes.proxy_routes() {
+        remotes.insert(UrlString::from(
+            route.canonical.without_credentials().as_ref(),
+        ));
+    }
+    Ok(remotes)
 }
 
 /// The result of checking if a lockfile satisfies a set of requirements.
@@ -3397,6 +3410,7 @@ impl Package {
                     file,
                     ext,
                     index,
+                    proxy: None,
                     wheels: vec![],
                 };
                 uv_distribution_types::SourceDist::Registry(reg_dist)
@@ -3473,6 +3487,7 @@ impl Package {
                     file,
                     ext,
                     index,
+                    proxy: None,
                     wheels: vec![],
                 };
                 uv_distribution_types::SourceDist::Registry(reg_dist)
@@ -5119,6 +5134,7 @@ impl Wheel {
                     filename,
                     file,
                     index,
+                    proxy: None,
                 })
             }
             RegistrySource::Path(index_path) => {
@@ -5170,6 +5186,7 @@ impl Wheel {
                     filename,
                     file,
                     index,
+                    proxy: None,
                 })
             }
         }
@@ -6174,6 +6191,9 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    /// An error that occurs when proxy-index configuration is invalid.
+    #[error(transparent)]
+    ProxyIndex(#[from] ProxyIndexError),
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]
@@ -6897,6 +6917,7 @@ pub(crate) fn is_wheel_unreachable(
 
 #[cfg(test)]
 mod tests {
+    use uv_distribution_types::{IndexReference, ProxyIndex};
     use uv_pep440::VersionSpecifiers;
     use uv_pep508::MarkerEnvironmentBuilder;
     use uv_warnings::anstream;
@@ -7070,6 +7091,27 @@ source = { registry = "https://example.com/simple" }
             .dependency_selection(Some(&project_name), &dependency_name, &marker_environment)
             .expect_err("ambiguous production selection");
         insta::assert_snapshot!(error, @"found multiple packages matching production dependency `ty` for `project`");
+    }
+
+    #[test]
+    fn url_proxy_indexes_are_not_resolution_indexes() -> Result<(), Box<dyn Error>> {
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let locations = IndexLocations::default().with_proxy_indexes(vec![ProxyIndex {
+            index: IndexReference::Url(canonical.clone()),
+            url: IndexUrl::from_str("https://proxy.example.com/simple")?,
+        }]);
+
+        assert!(
+            locations
+                .allowed_indexes()
+                .iter()
+                .all(|index| index.url() != &canonical)
+        );
+        assert!(
+            available_remote_indexes(&locations)?
+                .contains(&UrlString::from(canonical.without_credentials().as_ref()))
+        );
+        Ok(())
     }
 
     #[test]

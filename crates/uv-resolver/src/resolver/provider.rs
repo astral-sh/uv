@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use reqwest::StatusCode;
 
-use uv_client::MetadataFormat;
+use uv_client::{IndexMetadataResponse, MetadataFormat};
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
-    RequestedDist, RequiresPython,
+    BuiltDist, Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef,
+    IndexRoutes, InstalledDist, RequestedDist, RequiresPython, SourceDist,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -129,6 +129,41 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     capabilities: &'a IndexCapabilities,
 }
 
+/// Return whether a failed metadata request should be ignored for the physical index that served
+/// the artifact.
+fn ignores_metadata_error(
+    dist: &Dist,
+    index_locations: &IndexLocations,
+    index_routes: &IndexRoutes,
+    status: StatusCode,
+) -> bool {
+    let physical_index = match dist {
+        Dist::Built(BuiltDist::Registry(dist)) => {
+            let wheel = dist.best_wheel();
+            Some(
+                wheel
+                    .proxy
+                    .as_ref()
+                    .unwrap_or_else(|| index_routes.route_for(&wheel.index).physical),
+            )
+        }
+        Dist::Source(SourceDist::Registry(dist)) => Some(
+            dist.proxy
+                .as_ref()
+                .unwrap_or_else(|| index_routes.route_for(&dist.index).physical),
+        ),
+        Dist::Built(BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_))
+        | Dist::Source(
+            SourceDist::DirectUrl(_)
+            | SourceDist::GitDirectory(_)
+            | SourceDist::GitPath(_)
+            | SourceDist::Path(_)
+            | SourceDist::Directory(_),
+        ) => None,
+    };
+    physical_index.is_some_and(|index| index_locations.ignores_error_code_for(index, status))
+}
+
 impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     /// Reads the flat index entries and builds the provider.
     pub fn new(
@@ -199,19 +234,24 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             Ok(results) => Ok(VersionsResponse::Found(
                 results
                     .into_iter()
-                    .map(|(index, metadata)| {
+                    .map(|response| {
+                        let IndexMetadataResponse {
+                            index_route,
+                            format,
+                        } = response;
                         let included_version_cutoff =
-                            self.effective_exclude_newer(package_name, index);
+                            self.effective_exclude_newer(package_name, index_route.canonical);
                         let available_version_cutoff = included_version_cutoff
                             .is_none()
                             .then_some(self.available_version_cutoff)
                             .flatten();
 
-                        match metadata {
+                        match format {
                             MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
                                 metadata,
                                 package_name,
-                                index.clone(),
+                                index_route.canonical.clone(),
+                                index_route.physical.clone(),
                                 self.tags.clone(),
                                 self.requires_python.clone(),
                                 self.allowed_yanks.clone(),
@@ -299,9 +339,12 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         }
                         uv_client::ErrorKind::WrappedReqwestError(url, err) => {
                             let Some(status) = err.status().filter(|status| {
-                                dist.index().is_some_and(|index| {
-                                    self.index_locations.ignores_error_code_for(index, *status)
-                                })
+                                ignores_metadata_error(
+                                    dist,
+                                    self.index_locations,
+                                    self.fetcher.client().unmanaged.index_routes(),
+                                    *status,
+                                )
                             }) else {
                                 return Err(uv_client::Error::new(
                                     uv_client::ErrorKind::WrappedReqwestError(url, err),
@@ -366,5 +409,98 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             fetcher: self.fetcher.with_reporter(reporter),
             ..self
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use uv_distribution_filename::WheelFilename;
+    use uv_distribution_types::{
+        File, FileLocation, Index, IndexReference, IndexUrl, ProxyIndex, RegistryBuiltDist,
+        RegistryBuiltWheel, SerializableStatusCode,
+    };
+    use uv_pypi_types::HashDigests;
+    use uv_small_str::SmallString;
+
+    use super::*;
+
+    #[test]
+    fn ignored_metadata_error_uses_physical_proxy_index() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let proxy = IndexUrl::from_str("https://proxy.example.com/simple")?;
+        let mut canonical_index = Index::from(canonical.clone());
+        canonical_index.ignore_error_codes = Some(vec![serde_json::from_value::<
+            SerializableStatusCode,
+        >(serde_json::json!(403))?]);
+        let mut proxy_index = Index::from(proxy.clone());
+        proxy_index.ignore_error_codes = Some(vec![serde_json::from_value::<
+            SerializableStatusCode,
+        >(serde_json::json!(401))?]);
+        let index_locations =
+            IndexLocations::new(vec![canonical_index, proxy_index], Vec::new(), false)
+                .with_proxy_indexes(vec![ProxyIndex {
+                    index: IndexReference::Url(canonical.clone()),
+                    url: proxy.clone(),
+                }]);
+        let index_routes = IndexRoutes::try_from(&index_locations)?;
+
+        let filename = WheelFilename::from_str("example-1.0.0-py3-none-any.whl")?;
+        let file_url =
+            SmallString::from("https://files.example.com/packages/example-1.0.0-py3-none-any.whl");
+        let dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
+            wheels: vec![RegistryBuiltWheel {
+                filename: filename.clone(),
+                file: Box::new(File {
+                    dist_info_metadata: false,
+                    filename: SmallString::from(filename.to_string()),
+                    hashes: HashDigests::empty(),
+                    requires_python: None,
+                    size: None,
+                    upload_time_utc_ms: None,
+                    url: FileLocation::new(file_url.clone(), &file_url),
+                    yanked: None,
+                    zstd: None,
+                }),
+                index: canonical,
+                proxy: Some(proxy),
+            }],
+            best_wheel_index: 0,
+            sdist: None,
+        }));
+        let mut locked_dist = dist.clone();
+        if let Dist::Built(BuiltDist::Registry(registry_dist)) = &mut locked_dist {
+            for wheel in &mut registry_dist.wheels {
+                wheel.proxy = None;
+            }
+        }
+
+        assert!(ignores_metadata_error(
+            &dist,
+            &index_locations,
+            &index_routes,
+            StatusCode::UNAUTHORIZED
+        ));
+        assert!(!ignores_metadata_error(
+            &dist,
+            &index_locations,
+            &index_routes,
+            StatusCode::FORBIDDEN
+        ));
+        assert!(ignores_metadata_error(
+            &locked_dist,
+            &index_locations,
+            &index_routes,
+            StatusCode::UNAUTHORIZED
+        ));
+        assert!(!ignores_metadata_error(
+            &locked_dist,
+            &index_locations,
+            &index_routes,
+            StatusCode::FORBIDDEN
+        ));
+        Ok(())
     }
 }

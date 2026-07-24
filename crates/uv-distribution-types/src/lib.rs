@@ -233,6 +233,15 @@ pub struct RegistryBuiltWheel {
     pub filename: WheelFilename,
     pub file: Box<File>,
     pub index: IndexUrl,
+    /// The physical proxy endpoint used to discover this wheel, if any.
+    pub proxy: Option<IndexUrl>,
+}
+
+impl RegistryBuiltWheel {
+    /// Return the physical index from which this wheel should be fetched.
+    pub fn physical_index(&self) -> &IndexUrl {
+        self.proxy.as_ref().unwrap_or(&self.index)
+    }
 }
 
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
@@ -308,6 +317,8 @@ pub struct RegistrySourceDist {
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
     pub ext: SourceDistExtension,
     pub index: IndexUrl,
+    /// The physical proxy endpoint used to discover this source distribution, if any.
+    pub proxy: Option<IndexUrl>,
     /// When an sdist is selected, it may be the case that there were
     /// available wheels too. There are many reasons why a wheel might not
     /// have been chosen (maybe none available are compatible with the
@@ -684,7 +695,7 @@ impl BuiltDist {
     }
 
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
-    pub fn index(&self) -> Option<&IndexUrl> {
+    fn index(&self) -> Option<&IndexUrl> {
         match self {
             Self::Registry(registry) => Some(&registry.best_wheel().index),
             Self::DirectUrl(_) => None,

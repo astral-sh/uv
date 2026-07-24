@@ -80,17 +80,16 @@ impl<'a> ProjectStatusAudit<'a> {
                 return None;
             }
         };
-
-        let archive = results
+        let Some(archive) = results
             .into_iter()
-            .map(|(_, format)| match format {
-                MetadataFormat::Simple(archive) => archive,
-                MetadataFormat::Flat(_) => {
-                    unreachable!("Flat metadata should not be returned by `simple_detail`")
-                }
+            .find_map(|response| match response.format {
+                MetadataFormat::Simple(archive) => Some(archive),
+                MetadataFormat::Flat(_) => None,
             })
-            .next()?;
-
+        else {
+            trace!("Skipping project-status check for `{name}`: no Simple API response");
+            return None;
+        };
         let project_status: PypiProjectStatus =
             match rkyv::deserialize::<PypiProjectStatus, rkyv::rancor::Error>(
                 archive.project_status(),

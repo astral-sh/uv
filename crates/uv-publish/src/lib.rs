@@ -26,8 +26,8 @@ use url::Url;
 use uv_auth::{Credentials, PyxTokenStore, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
-    BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive,
-    RegistryClientBuilder, RequestBuilder, RetryParsingError, RetryState,
+    BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, IndexMetadataResponse, MetadataFormat,
+    OwnedArchive, RegistryClientBuilder, RequestBuilder, RetryParsingError, RetryState,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -990,7 +990,13 @@ pub async fn check_url(
             };
         }
     };
-    let [(_, MetadataFormat::Simple(simple_metadata))] = response.as_slice() else {
+    let [
+        IndexMetadataResponse {
+            format: MetadataFormat::Simple(simple_metadata),
+            ..
+        },
+    ] = response.as_slice()
+    else {
         unreachable!("We queried a single index, we must get a single response");
     };
     let simple_metadata = OwnedArchive::deserialize(simple_metadata);

@@ -288,8 +288,9 @@ impl BatchPrefetcherRunner {
 
             // Avoid prefetching built distributions that don't support _either_ PEP 658 (`.metadata`)
             // or range requests.
+            let physical_index = wheel.physical_index();
             if !(wheel.file.dist_info_metadata
-                || self.capabilities.supports_range_requests(&wheel.index))
+                || self.capabilities.supports_range_requests(physical_index))
             {
                 debug!("Abandoning prefetch for {wheel} due to missing registry capabilities");
                 return Ok(());

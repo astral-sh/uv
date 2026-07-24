@@ -279,6 +279,57 @@ pub struct IndexCredentialsError {
     source: CredentialsFromUrlError,
 }
 
+/// A configured index name or URL.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize)]
+#[serde(untagged)]
+pub enum IndexReference {
+    /// The name of a configured index.
+    Name(IndexName),
+    /// The URL of an index.
+    Url(IndexUrl),
+}
+
+impl<'de> Deserialize<'de> for IndexReference {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        if let Ok(name) = IndexName::from_str(&value) {
+            Ok(Self::Name(name))
+        } else {
+            IndexUrl::from_str(&value)
+                .map(Self::Url)
+                .map_err(serde::de::Error::custom)
+        }
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for IndexReference {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("IndexReference")
+    }
+
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "The name or URL of a package index."
+        })
+    }
+}
+
+/// A proxy endpoint used to access a canonical package index.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub struct ProxyIndex {
+    /// The canonical index, identified by name or URL.
+    pub index: IndexReference,
+    /// The proxy index URL.
+    pub url: IndexUrl,
+}
+
 impl PartialEq for Index {
     fn eq(&self, other: &Self) -> bool {
         let Self {

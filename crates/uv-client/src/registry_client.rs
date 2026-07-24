@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
+use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,20 +11,24 @@ use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
 use rustc_hash::FxHashMap;
+use tokio::io::AsyncSeekExt;
 use tokio::sync::{Mutex, Semaphore};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
 use uv_auth::{CredentialsCache, Indexes, PyxTokenStore};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
+use uv_cache_key::cache_digest;
 use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
-    RegistryBuiltWheel, Zstd,
+    BuiltDist, File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexRoute, IndexRoutes, IndexStatusCodeDecision, IndexStatusCodeStrategy,
+    IndexUrl, Name, Zstd,
 };
+use uv_extract::hash::{HashReader, Hasher};
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -142,7 +147,7 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     /// Add all authenticated sources to the cache.
-    fn cache_index_credentials(&mut self) -> Result<(), ClientBuildError> {
+    fn cache_index_credentials(&self) -> Result<(), ClientBuildError> {
         for index in self.index_locations.known_indexes() {
             if let Some(credentials) = index.credentials()? {
                 trace!(
@@ -153,6 +158,18 @@ impl<'a> RegistryClientBuilder<'a> {
                         .map(ToString::to_string)
                         .unwrap_or_else(|| index.url.to_string())
                 );
+                if let Some(root_url) = index.root_url() {
+                    self.base_client_builder
+                        .store_credentials(&root_url, credentials.clone());
+                }
+                self.base_client_builder
+                    .store_credentials(index.raw_url(), credentials);
+            }
+        }
+        for proxy_index in self.index_locations.proxy_indexes() {
+            let index = Index::from(proxy_index.url.clone());
+            if let Some(credentials) = index.credentials()? {
+                trace!("Read credentials for proxy index {}", index.url);
                 if let Some(root_url) = index.root_url() {
                     self.base_client_builder
                         .store_credentials(&root_url, credentials.clone());
@@ -174,9 +191,10 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     fn build_inner(
-        mut self,
+        self,
         existing: Option<&BaseClient>,
     ) -> Result<RegistryClient, ClientBuildError> {
+        let routes = IndexRoutes::try_from(&self.index_locations)?;
         self.cache_index_credentials()?;
 
         // Wrap in any relevant middleware and handle connectivity.
@@ -197,6 +215,7 @@ impl<'a> RegistryClientBuilder<'a> {
 
         Ok(RegistryClient {
             indexes: self.index_locations,
+            routes,
             index_strategy: self.index_strategy,
             torch_backend: self.torch_backend,
             cache: self.cache,
@@ -214,6 +233,8 @@ impl<'a> RegistryClientBuilder<'a> {
 pub struct RegistryClient {
     /// The indexes to use for fetching packages.
     indexes: IndexLocations,
+    /// Validated routes from canonical indexes to physical metadata endpoints.
+    routes: IndexRoutes,
     /// The strategy to use when fetching across multiple indexes.
     index_strategy: IndexStrategy,
     /// The strategy to use when selecting a PyTorch backend, if any.
@@ -242,10 +263,35 @@ pub enum MetadataFormat {
     Flat(Vec<FlatIndexEntry>),
 }
 
+/// Package metadata returned for an index.
+#[derive(Debug)]
+pub struct IndexMetadataResponse<'index> {
+    /// The index route used to fetch this metadata.
+    pub index_route: IndexRoute<'index>,
+    pub format: MetadataFormat,
+}
+
+/// A locked artifact rediscovered through a proxy index.
+#[derive(Debug)]
+pub struct ProxyArtifact {
+    pub physical_index: IndexUrl,
+    pub file: File,
+    /// Whether the lockfile and proxy index advertise a shared digest.
+    ///
+    /// If false, the full artifact must be downloaded and validated against the locked digest
+    /// before its metadata can be trusted.
+    pub has_shared_hash: bool,
+}
+
 impl RegistryClient {
     /// Return the [`CachedClient`] used by this client.
     pub fn cached_client(&self) -> &CachedClient {
         &self.client
+    }
+
+    /// Return the validated [`IndexRoutes`] used by this client.
+    pub fn index_routes(&self) -> &IndexRoutes {
+        &self.routes
     }
 
     /// Return the [`BaseClient`] used by this client.
@@ -270,6 +316,129 @@ impl RegistryClient {
 
     pub fn credentials_cache(&self) -> &CredentialsCache {
         self.client.uncached().credentials_cache()
+    }
+
+    /// Rediscover a locked artifact through the proxy configured for its canonical index.
+    pub async fn proxy_artifact(
+        &self,
+        package_name: &PackageName,
+        canonical: &IndexUrl,
+        filename: &str,
+        locked_hashes: &HashDigests,
+        capabilities: &IndexCapabilities,
+    ) -> Result<Option<ProxyArtifact>, Error> {
+        let route = self.routes.route_for(canonical);
+        if !route.is_proxy() {
+            return Ok(None);
+        }
+        let proxy = route.physical.clone();
+        if locked_hashes.is_empty() {
+            return Err(ErrorKind::ProxyArtifactMissingDigest {
+                filename: filename.to_string(),
+                canonical: canonical.clone(),
+                proxy,
+            }
+            .into());
+        }
+
+        let response = match self
+            .simple_detail(
+                package_name,
+                Some(IndexMetadataRef::from(canonical)),
+                capabilities,
+                &Semaphore::new(1),
+            )
+            .await
+        {
+            Ok(mut responses) => {
+                responses
+                    .pop()
+                    .ok_or_else(|| ErrorKind::ProxyArtifactNotFound {
+                        filename: filename.to_string(),
+                        canonical: canonical.clone(),
+                        proxy: proxy.clone(),
+                    })?
+            }
+            Err(err) if matches!(err.kind(), ErrorKind::RemotePackageNotFound(_)) => {
+                return Err(ErrorKind::ProxyArtifactNotFound {
+                    filename: filename.to_string(),
+                    canonical: canonical.clone(),
+                    proxy,
+                }
+                .into());
+            }
+            Err(err) => return Err(err),
+        };
+        let proxy = response.index_route.physical.clone();
+        let metadata = match response.format {
+            MetadataFormat::Simple(metadata) => OwnedArchive::deserialize(&metadata),
+            MetadataFormat::Flat(_) => {
+                return Err(ErrorKind::ProxyArtifactNotFound {
+                    filename: filename.to_string(),
+                    canonical: canonical.clone(),
+                    proxy,
+                }
+                .into());
+            }
+        };
+        let mut hashless_candidate = None;
+        let mut found_filename = false;
+        for (_, file) in metadata
+            .into_iter()
+            .flat_map(|version| version.files.all(package_name))
+        {
+            if file.filename.as_ref() != filename {
+                continue;
+            }
+            validate_proxy_artifact_url(
+                filename,
+                &file.url.to_url().map_err(ErrorKind::InvalidUrl)?,
+                &proxy,
+            )?;
+            found_filename = true;
+            let comparable = file.hashes.iter().any(|proxy_hash| {
+                locked_hashes
+                    .iter()
+                    .any(|locked_hash| locked_hash.algorithm() == proxy_hash.algorithm())
+            });
+            let has_shared_hash = file.hashes.iter().any(|proxy_hash| {
+                locked_hashes
+                    .iter()
+                    .any(|locked_hash| locked_hash == proxy_hash)
+            });
+            if has_shared_hash {
+                return Ok(Some(ProxyArtifact {
+                    physical_index: proxy,
+                    file,
+                    has_shared_hash,
+                }));
+            }
+            if !comparable && hashless_candidate.is_none() {
+                hashless_candidate = Some(file);
+            }
+        }
+        if let Some(file) = hashless_candidate {
+            return Ok(Some(ProxyArtifact {
+                physical_index: proxy,
+                file,
+                has_shared_hash: false,
+            }));
+        }
+        if found_filename {
+            Err(ErrorKind::ProxyArtifactDigestMismatch {
+                filename: filename.to_string(),
+                canonical: canonical.clone(),
+                proxy,
+            }
+            .into())
+        } else {
+            Err(ErrorKind::ProxyArtifactNotFound {
+                filename: filename.to_string(),
+                canonical: canonical.clone(),
+                proxy,
+            }
+            .into())
+        }
     }
 
     /// Return the appropriate index URLs for the given [`PackageName`].
@@ -317,7 +486,7 @@ impl RegistryClient {
         index: Option<IndexMetadataRef<'index>>,
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
-    ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
+    ) -> Result<Vec<IndexMetadataResponse<'index>>, Error> {
         // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
         // explicit, etc.
         if self.indexes.no_index() {
@@ -339,19 +508,23 @@ impl RegistryClient {
                     let _permit = download_concurrency.acquire().await;
                     match index.format {
                         IndexFormat::Simple => {
+                            let index_route = self.routes.route_for(index.url);
                             let status_code_strategy =
-                                self.indexes.status_code_strategy_for(index.url);
+                                self.indexes.status_code_strategy_for(index_route.physical);
                             match self
                                 .simple_detail_single_index(
                                     package_name,
-                                    index.url,
+                                    index_route.physical,
                                     capabilities,
                                     &status_code_strategy,
                                 )
                                 .await?
                             {
                                 SimpleMetadataSearchOutcome::Found(metadata) => {
-                                    results.push((index.url, MetadataFormat::Simple(metadata)));
+                                    results.push(IndexMetadataResponse {
+                                        index_route,
+                                        format: MetadataFormat::Simple(metadata),
+                                    });
                                     break;
                                 }
                                 // Package not found, so we will continue on to the next index (if there is one)
@@ -369,7 +542,13 @@ impl RegistryClient {
                         IndexFormat::Flat => {
                             let entries = self.flat_single_index(package_name, index.url).await?;
                             if !entries.is_empty() {
-                                results.push((index.url, MetadataFormat::Flat(entries)));
+                                results.push(IndexMetadataResponse {
+                                    index_route: IndexRoute {
+                                        canonical: index.url,
+                                        physical: index.url,
+                                    },
+                                    format: MetadataFormat::Flat(entries),
+                                });
                                 break;
                             }
                         }
@@ -384,13 +563,14 @@ impl RegistryClient {
                         let _permit = download_concurrency.acquire().await;
                         match index.format {
                             IndexFormat::Simple => {
+                                let index_route = self.routes.route_for(index.url);
                                 // For unsafe matches, ignore authentication failures.
                                 let status_code_strategy =
                                     IndexStatusCodeStrategy::ignore_authentication_error_codes();
                                 let metadata = match self
                                     .simple_detail_single_index(
                                         package_name,
-                                        index.url,
+                                        index_route.physical,
                                         capabilities,
                                         &status_code_strategy,
                                     )
@@ -399,21 +579,26 @@ impl RegistryClient {
                                     SimpleMetadataSearchOutcome::Found(metadata) => Some(metadata),
                                     _ => None,
                                 };
-                                Ok((index.url, metadata.map(MetadataFormat::Simple)))
+                                Ok(metadata.map(|metadata| IndexMetadataResponse {
+                                    index_route,
+                                    format: MetadataFormat::Simple(metadata),
+                                }))
                             }
                             IndexFormat::Flat => {
                                 let entries =
                                     self.flat_single_index(package_name, index.url).await?;
-                                Ok((index.url, Some(MetadataFormat::Flat(entries))))
+                                Ok(Some(IndexMetadataResponse {
+                                    index_route: IndexRoute {
+                                        canonical: index.url,
+                                        physical: index.url,
+                                    },
+                                    format: MetadataFormat::Flat(entries),
+                                }))
                             }
                         }
                     })
                     .buffered(8)
-                    .filter_map(async |result: Result<_, Error>| match result {
-                        Ok((index, Some(metadata))) => Some(Ok((index, metadata))),
-                        Ok((_, None)) => None,
-                        Err(err) => Some(Err(err)),
-                    })
+                    .filter_map(async |result: Result<_, Error>| result.transpose())
                     .try_collect::<Vec<_>>()
                     .await?;
             }
@@ -757,6 +942,8 @@ impl RegistryClient {
         &self,
         index_url: &IndexUrl,
     ) -> Result<SimpleIndexMetadata, Error> {
+        let route = self.routes.route_for(index_url);
+        let index_url = route.physical;
         // Format the URL for PyPI.
         let mut url = index_url.url().clone();
         url.path_segments_mut()
@@ -957,8 +1144,31 @@ impl RegistryClient {
                 }
 
                 let wheel = wheels.best_wheel();
+                let proxy_artifact = if wheel.proxy.is_none() {
+                    self.proxy_artifact(
+                        &wheel.filename.name,
+                        &wheel.index,
+                        &wheel.file.filename,
+                        &wheel.file.hashes,
+                        capabilities,
+                    )
+                    .await?
+                } else {
+                    None
+                };
+                let (physical_index, file) = if let Some(proxy_artifact) = &proxy_artifact {
+                    (&proxy_artifact.physical_index, &proxy_artifact.file)
+                } else {
+                    (wheel.physical_index(), wheel.file.as_ref())
+                };
+                let requires_full_verification = proxy_artifact
+                    .as_ref()
+                    .is_some_and(|proxy_artifact| !proxy_artifact.has_shared_hash);
 
-                let url = wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+                let url = file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+                if wheel.proxy.is_some() || proxy_artifact.is_some() {
+                    validate_proxy_artifact_url(&wheel.filename.to_string(), &url, physical_index)?;
+                }
                 let location = if url.scheme() == "file" {
                     let path = url
                         .to_file_path()
@@ -988,8 +1198,25 @@ impl RegistryClient {
                         })?
                     }
                     WheelLocation::Url(url) => {
-                        self.wheel_metadata_registry(wheel, &url, capabilities)
+                        if requires_full_verification {
+                            self.wheel_metadata_verified_proxy(
+                                &wheel.filename,
+                                &url,
+                                &wheel.index,
+                                physical_index,
+                                &wheel.file.hashes,
+                            )
                             .await?
+                        } else {
+                            self.wheel_metadata_registry_at(
+                                &wheel.filename,
+                                physical_index,
+                                file,
+                                &url,
+                                capabilities,
+                            )
+                            .await?
+                        }
                     }
                 }
             }
@@ -1078,19 +1305,14 @@ impl RegistryClient {
         Ok(metadata)
     }
 
-    /// Fetch the metadata from a wheel file.
-    async fn wheel_metadata_registry(
+    async fn wheel_metadata_registry_at(
         &self,
-        wheel: &RegistryBuiltWheel,
+        filename: &WheelFilename,
+        index: &IndexUrl,
+        file: &File,
         url: &DisplaySafeUrl,
         capabilities: &IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
-        let RegistryBuiltWheel {
-            filename,
-            file,
-            index,
-        } = wheel;
-
         // If the metadata file is available at its own url (PEP 658), download it from there.
         if file.dist_info_metadata {
             let mut url = url.clone();
@@ -1162,6 +1384,119 @@ impl RegistryClient {
             )
             .await
         }
+    }
+
+    /// Download a proxy wheel and verify it against its locked hashes before reading metadata.
+    async fn wheel_metadata_verified_proxy(
+        &self,
+        filename: &WheelFilename,
+        url: &DisplaySafeUrl,
+        canonical: &IndexUrl,
+        proxy: &IndexUrl,
+        locked_hashes: &HashDigests,
+    ) -> Result<ResolutionMetadata, Error> {
+        let mut locked_hashes_cache_key = locked_hashes
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        locked_hashes_cache_key.sort_unstable();
+        let cache_entry = self.cache.entry(
+            CacheBucket::Wheels,
+            WheelCache::Index(proxy).wheel_dir(filename.name.as_ref()),
+            format!(
+                "{}-artifact-{}.msgpack",
+                filename.cache_key(),
+                cache_digest(&locked_hashes_cache_key)
+            ),
+        );
+        let cache_control = match self.connectivity {
+            Connectivity::Online => {
+                if let Some(header) = self.indexes.artifact_cache_control_for(proxy) {
+                    CacheControl::Override(header)
+                } else {
+                    CacheControl::from(
+                        self.cache
+                            .freshness(&cache_entry, Some(&filename.name), None)
+                            .map_err(ErrorKind::Io)?,
+                    )
+                }
+            }
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
+
+        // Acquire an advisory lock, to guard against concurrent writes.
+        #[cfg(windows)]
+        let _lock = {
+            let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
+            lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
+        };
+
+        let expected_hashes = locked_hashes.clone();
+        let response_callback = async |response: Response| {
+            let reader = response
+                .bytes_stream()
+                .map_err(|err| self.handle_response_errors(err))
+                .into_async_read();
+            let mut hashers = expected_hashes
+                .iter()
+                .map(|hash| Hasher::from(hash.algorithm()))
+                .collect::<Vec<_>>();
+            let mut reader = HashReader::new(reader.compat(), &mut hashers);
+
+            let temp_file = tempfile::tempfile_in(self.cache.root()).map_err(ErrorKind::Io)?;
+            let mut writer = tokio::io::BufWriter::new(fs_err::tokio::File::from_std(
+                fs_err::File::from_parts(temp_file, self.cache.root()),
+            ));
+            tokio::io::copy(&mut reader, &mut writer)
+                .await
+                .map_err(ErrorKind::Io)?;
+
+            let computed_hashes = hashers
+                .into_iter()
+                .map(HashDigest::from)
+                .collect::<Vec<_>>();
+            if !computed_hashes
+                .iter()
+                .any(|computed| expected_hashes.iter().any(|expected| expected == computed))
+            {
+                return Err(ErrorKind::ProxyArtifactDigestMismatch {
+                    filename: filename.to_string(),
+                    canonical: canonical.clone(),
+                    proxy: proxy.clone(),
+                }
+                .into());
+            }
+
+            let mut file = writer.into_inner();
+            file.seek(io::SeekFrom::Start(0))
+                .await
+                .map_err(ErrorKind::Io)?;
+            let contents = read_metadata_async_seek(filename, file)
+                .await
+                .map_err(|err| ErrorKind::Metadata(url.to_string(), err))?;
+            ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
+                Error::from(ErrorKind::MetadataParseError(
+                    filename.clone(),
+                    url.to_string(),
+                    Box::new(err),
+                ))
+            })
+        };
+        let req = self
+            .uncached_client(url)
+            .get(Url::from(url.clone()))
+            .header(
+                "accept-encoding",
+                http::HeaderValue::from_static("identity"),
+            )
+            .build()
+            .map_err(|err| {
+                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+            })?;
+        self.cached_client()
+            .get_serde_with_retry(req, &cache_entry, cache_control, response_callback)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// Get the wheel metadata if it isn't available in an index through PEP 658
@@ -1339,6 +1674,22 @@ impl RegistryClient {
             std::io::Error::other(err)
         }
     }
+}
+
+fn validate_proxy_artifact_url(
+    filename: &str,
+    url: &DisplaySafeUrl,
+    proxy: &IndexUrl,
+) -> Result<(), Error> {
+    if url.scheme() == "file" {
+        return Err(ErrorKind::ProxyArtifactLocalUrl {
+            filename: filename.to_string(),
+            proxy: proxy.clone(),
+            url: url.clone(),
+        }
+        .into());
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -1933,24 +2284,32 @@ impl Connectivity {
 mod tests {
     use std::str::FromStr;
 
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression as ZipCompression, ZipEntryBuilder};
+    use serde_json::{from_str as deserialize_json, json};
     use tokio::sync::Semaphore;
     use url::Url;
+    use uv_extract::hash::{HashReader, Hasher};
     use uv_normalize::PackageName;
-    use uv_pypi_types::PypiSimpleDetail;
+    use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PypiSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
     use crate::{
-        BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
-        SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
+        BaseClientBuilder, ClientBuildError, Connectivity, IndexMetadataResponse, MetadataFormat,
+        RegistryClient, RegistryClientBuilder, SimpleDetailMetadata, SimpleDetailMetadatum,
+        html::SimpleDetailHTML,
     };
-    use uv_cache::Cache;
+    use uv_cache::{Cache, CacheBucket, WheelCache};
+    use uv_distribution_filename::WheelFilename;
     use uv_distribution_types::{
-        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-        IndexUrl, ToUrlError,
+        BuiltDist, File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
+        IndexMetadataRef, IndexReference, IndexUrl, ProxyIndex, RegistryBuiltDist,
+        RegistryBuiltWheel, ToUrlError,
     };
+    use uv_git::GitResolver;
     use uv_small_str::SmallString;
-    use wiremock::matchers::{basic_auth, method, path_regex};
+    use wiremock::matchers::{basic_auth, method, path, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     type Error = Box<dyn std::error::Error>;
@@ -2010,6 +2369,40 @@ mod tests {
                 .expect("request recording should be enabled")
                 .is_empty()
         );
+    }
+
+    fn proxy_index_locations(canonical: &IndexUrl, proxy: &IndexUrl) -> IndexLocations {
+        IndexLocations::new(vec![Index::from(canonical.clone())], Vec::new(), false)
+            .with_proxy_indexes(vec![ProxyIndex {
+                index: IndexReference::Url(canonical.clone()),
+                url: proxy.clone(),
+            }])
+    }
+
+    fn proxy_registry_client(
+        canonical: &IndexUrl,
+        proxy: &IndexUrl,
+    ) -> Result<RegistryClient, Error> {
+        Ok(
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+                .index_locations(proxy_index_locations(canonical, proxy))
+                .build()?,
+        )
+    }
+
+    async fn fetch_simple_detail<'index>(
+        client: &'index RegistryClient,
+        index: &'index IndexUrl,
+        capabilities: &IndexCapabilities,
+    ) -> Result<Vec<IndexMetadataResponse<'index>>, crate::Error> {
+        client
+            .simple_detail(
+                &PackageName::from_str("example").expect("valid package name"),
+                Some(IndexMetadataRef::from(index)),
+                capabilities,
+                &Semaphore::new(1),
+            )
+            .await
     }
 
     #[tokio::test]
@@ -2081,6 +2474,738 @@ mod tests {
 
         assert_no_index(&registry_client, "validation", None).await?;
         assert_no_requests(&server).await;
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_proxy_index_rejected_by_all_build_paths() -> Result<(), Error> {
+        let index = IndexUrl::from_str("https://pypi.org/simple")?;
+        let locations = IndexLocations::default().with_proxy_indexes(vec![ProxyIndex {
+            index: IndexReference::Url(index.clone()),
+            url: index,
+        }]);
+        let builder = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(locations);
+
+        assert!(matches!(
+            builder.clone().build(),
+            Err(ClientBuildError::ProxyIndex(_))
+        ));
+        let base_client = BaseClientBuilder::default().build()?;
+        assert!(matches!(
+            builder.wrap_existing(&base_client),
+            Err(ClientBuildError::ProxyIndex(_))
+        ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_routes_through_proxy() -> Result<(), Error> {
+        let canonical_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(0)
+            .mount(&canonical_server)
+            .await;
+
+        let proxy_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/simple/example/"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(r#"{"files": []}"#, "application/vnd.pypi.simple.v1+json"),
+            )
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+
+        let canonical = IndexUrl::from_str(&format!("{}/simple", canonical_server.uri()))?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", proxy_server.uri()))?;
+        let client = proxy_registry_client(&canonical, &proxy)?;
+
+        let response = fetch_simple_detail(&client, &canonical, &IndexCapabilities::default())
+            .await?
+            .into_iter()
+            .next()
+            .ok_or("expected proxy metadata")?;
+        assert_eq!(response.index_route.canonical, &canonical);
+        assert_eq!(response.index_route.physical, &proxy);
+        assert!(matches!(response.format, MetadataFormat::Simple(_)));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_does_not_route_flat_index_through_proxy() -> Result<(), Error> {
+        let canonical_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                r#"<a href="example-1.0.0-py3-none-any.whl">example</a>"#,
+                "text/html",
+            ))
+            .expect(1)
+            .mount(&canonical_server)
+            .await;
+
+        let proxy_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(0)
+            .mount(&proxy_server)
+            .await;
+
+        let canonical = IndexUrl::from_str(&canonical_server.uri())?;
+        let proxy = IndexUrl::from_str(&proxy_server.uri())?;
+        let client = proxy_registry_client(&canonical, &proxy)?;
+
+        let response = client
+            .simple_detail(
+                &PackageName::from_str("example")?,
+                Some(IndexMetadataRef {
+                    url: &canonical,
+                    format: IndexFormat::Flat,
+                }),
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await?
+            .into_iter()
+            .next()
+            .ok_or("expected flat-index metadata")?;
+
+        assert_eq!(response.index_route.canonical, &canonical);
+        assert_eq!(response.index_route.physical, &canonical);
+        assert!(matches!(response.format, MetadataFormat::Flat(_)));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_authenticates_to_proxy() -> Result<(), Error> {
+        let proxy_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/simple/example/"))
+            .and(basic_auth("proxy-user", "proxy-secret"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(r#"{"files": []}"#, "application/vnd.pypi.simple.v1+json"),
+            )
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/simple/example/"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&proxy_server)
+            .await;
+        let proxy = IndexUrl::from_str(&format!(
+            "http://proxy-user:proxy-secret@{}/simple",
+            proxy_server.address()
+        ))?;
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let client = proxy_registry_client(&canonical, &proxy)?;
+
+        let response = fetch_simple_detail(&client, &canonical, &IndexCapabilities::default())
+            .await?
+            .into_iter()
+            .next()
+            .ok_or("expected authenticated proxy metadata")?;
+
+        assert_eq!(response.index_route.canonical, &canonical);
+        assert_eq!(response.index_route.physical, &proxy);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_uses_proxy_status_code_policy() -> Result<(), Error> {
+        let proxy_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/simple/example/"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", proxy_server.uri()))?;
+        let canonical_index = Index::from(canonical.clone());
+        let mut proxy_index = Index::from(proxy.clone());
+        proxy_index.explicit = true;
+        proxy_index.ignore_error_codes = Some(vec![deserialize_json("500")?]);
+        let locations = IndexLocations::new(vec![canonical_index, proxy_index], Vec::new(), false)
+            .with_proxy_indexes(vec![ProxyIndex {
+                index: IndexReference::Url(canonical.clone()),
+                url: proxy,
+            }]);
+        let client =
+            RegistryClientBuilder::new(BaseClientBuilder::default().retries(0), Cache::temp()?)
+                .index_locations(locations)
+                .build()?;
+
+        let error = fetch_simple_detail(&client, &canonical, &IndexCapabilities::default())
+            .await
+            .expect_err("the proxy response should be ignored by its status-code policy");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::RemotePackageNotFound(package) if package.as_ref() == "example"
+        ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_attributes_authentication_failure_to_proxy() -> Result<(), Error> {
+        let canonical_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(0)
+            .mount(&canonical_server)
+            .await;
+
+        let proxy_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/simple/example/"))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+
+        let canonical = IndexUrl::from_str(&format!("{}/simple", canonical_server.uri()))?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", proxy_server.uri()))?;
+        let client = proxy_registry_client(&canonical, &proxy)?;
+        let capabilities = IndexCapabilities::default();
+
+        fetch_simple_detail(&client, &canonical, &capabilities)
+            .await
+            .expect_err("the proxy should reject the request");
+
+        assert!(capabilities.unauthorized(&proxy));
+        assert!(!capabilities.unauthorized(&canonical));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn proxy_artifact_uses_exact_filename_and_locked_digest() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let filename = "example-1.0.0-py3-none-any.whl";
+        let digest = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3";
+        Mock::given(method("GET"))
+            .and(wiremock::matchers::path("/simple/example/"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(
+                    json!({
+                        "name": "example",
+                        "files": [{
+                            "filename": filename,
+                            "url": format!("https://artifacts.example.com/files/{filename}"),
+                            "hashes": {
+                                "sha256": digest.strip_prefix("sha256:").unwrap_or_default()
+                            },
+                            "core-metadata": true
+                        }]
+                    })
+                    .to_string(),
+                    "application/vnd.pypi.simple.v1+json",
+                ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let canonical = IndexUrl::from_str("https://pypi.org/simple")?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let locations = IndexLocations::default().with_proxy_indexes(vec![ProxyIndex {
+            index: IndexReference::Url(canonical.clone()),
+            url: proxy,
+        }]);
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(locations)
+            .build()?;
+        let hashes = HashDigests::from(vec![HashDigest::from_str(digest)?]);
+
+        let artifact = client
+            .proxy_artifact(
+                &PackageName::from_str("example")?,
+                &canonical,
+                filename,
+                &hashes,
+                &IndexCapabilities::default(),
+            )
+            .await?
+            .ok_or("expected a proxy artifact")?;
+        assert_eq!(
+            artifact.file.url.to_url()?.as_str(),
+            format!("https://artifacts.example.com/files/{filename}")
+        );
+        assert!(artifact.file.dist_info_metadata);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn proxy_artifact_attributes_authentication_failure_to_proxy() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(wiremock::matchers::path("/simple/example/"))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let locations = IndexLocations::default().with_proxy_indexes(vec![ProxyIndex {
+            index: IndexReference::Url(canonical.clone()),
+            url: proxy.clone(),
+        }]);
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(locations)
+            .build()?;
+        let capabilities = IndexCapabilities::default();
+        let locked_hashes = HashDigests::from(HashDigest::from_str(
+            "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3",
+        )?);
+
+        let error = client
+            .proxy_artifact(
+                &PackageName::from_str("example")?,
+                &canonical,
+                "example-1.0.0-py3-none-any.whl",
+                &locked_hashes,
+                &capabilities,
+            )
+            .await
+            .expect_err("an unauthorized proxy lookup should fail");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::ProxyArtifactNotFound {
+                canonical: error_canonical,
+                proxy: error_proxy,
+                ..
+            } if error_canonical == &canonical && error_proxy == &proxy
+        ));
+        assert!(capabilities.unauthorized(&proxy));
+        assert!(!capabilities.unauthorized(&canonical));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn locked_wheel_metadata_routes_through_proxy_artifact() -> Result<(), Error> {
+        let canonical_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(0)
+            .mount(&canonical_server)
+            .await;
+
+        let proxy_server = MockServer::start().await;
+        let filename = "example-1.0.0-py3-none-any.whl";
+        let digest = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3";
+        let metadata = "Metadata-Version: 2.3\nName: example\nVersion: 1.0.0\n";
+        Mock::given(method("GET"))
+            .and(wiremock::matchers::path("/simple/example/"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(
+                    json!({
+                        "name": "example",
+                        "files": [{
+                            "filename": filename,
+                            "url": format!("{}/files/{filename}", proxy_server.uri()),
+                            "hashes": {
+                                "sha256": digest.strip_prefix("sha256:").unwrap_or_default()
+                            },
+                            "core-metadata": true
+                        }]
+                    })
+                    .to_string(),
+                    "application/vnd.pypi.simple.v1+json",
+                ),
+            )
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(wiremock::matchers::path(format!(
+                "/files/{filename}.metadata"
+            )))
+            .respond_with(ResponseTemplate::new(200).set_body_string(metadata))
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+
+        let canonical = IndexUrl::from_str(&format!("{}/simple", canonical_server.uri()))?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", proxy_server.uri()))?;
+        let locations =
+            IndexLocations::new(vec![Index::from(canonical.clone())], Vec::new(), false)
+                .with_proxy_indexes(vec![ProxyIndex {
+                    index: IndexReference::Url(canonical.clone()),
+                    url: proxy,
+                }]);
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(locations)
+            .build()?;
+        let locked_hashes = HashDigests::from(vec![HashDigest::from_str(digest)?]);
+        let locked_file = File {
+            dist_info_metadata: true,
+            filename: SmallString::from(filename),
+            hashes: locked_hashes,
+            requires_python: None,
+            size: None,
+            upload_time_utc_ms: None,
+            url: FileLocation::new(
+                SmallString::from(format!("{}/files/{filename}", canonical_server.uri())),
+                &SmallString::from(canonical_server.uri()),
+            ),
+            yanked: None,
+            zstd: None,
+        };
+        let built_dist = BuiltDist::Registry(RegistryBuiltDist {
+            wheels: vec![RegistryBuiltWheel {
+                filename: WheelFilename::from_str(filename)?,
+                file: Box::new(locked_file),
+                index: canonical,
+                proxy: None,
+            }],
+            best_wheel_index: 0,
+            sdist: None,
+        });
+
+        let metadata = client
+            .wheel_metadata(
+                &built_dist,
+                &GitResolver::default(),
+                &IndexCapabilities::default(),
+                None,
+            )
+            .await?;
+
+        assert_eq!(metadata.name, PackageName::from_str("example")?);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hashless_proxy_artifact_metadata_requires_verified_wheel() -> Result<(), Error> {
+        let canonical_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(0)
+            .mount(&canonical_server)
+            .await;
+
+        let filename = "example-1.0.0-py3-none-any.whl";
+        let mut wheel = ZipFileWriter::new(Vec::new());
+        let padding_entry = ZipEntryBuilder::new(
+            "example/padding.bin".to_string().into(),
+            ZipCompression::Stored,
+        );
+        let padding = vec![0; 64 * 1024];
+        wheel.write_entry_whole(padding_entry, &padding).await?;
+        let metadata_entry = ZipEntryBuilder::new(
+            "example-1.0.0.dist-info/METADATA".to_string().into(),
+            ZipCompression::Stored,
+        );
+        wheel
+            .write_entry_whole(
+                metadata_entry,
+                b"Metadata-Version: 2.3\nName: example\nVersion: 1.0.0\n",
+            )
+            .await?;
+        let wheel_bytes = wheel.close().await?;
+        let mut hashers = vec![Hasher::from(HashAlgorithm::Sha256)];
+        let mut reader = HashReader::new(std::io::Cursor::new(&wheel_bytes), &mut hashers);
+        reader.finish().await?;
+        let locked_digest = hashers
+            .into_iter()
+            .next()
+            .map(HashDigest::from)
+            .ok_or("expected a wheel digest")?;
+
+        let proxy_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(wiremock::matchers::path("/simple/example/"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=3600")
+                    .set_body_raw(
+                        json!({
+                            "name": "example",
+                            "files": [{
+                                "filename": filename,
+                                "url": format!("{}/files/{filename}", proxy_server.uri()),
+                                "hashes": {},
+                                "core-metadata": true
+                            }]
+                        })
+                        .to_string(),
+                        "application/vnd.pypi.simple.v1+json",
+                    ),
+            )
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(wiremock::matchers::path(format!(
+                "/files/{filename}.metadata"
+            )))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string("Metadata-Version: 2.3\nName: example\nVersion: 2.0.0\n"),
+            )
+            .expect(0)
+            .mount(&proxy_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(wiremock::matchers::path(format!("/files/{filename}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=3600")
+                    .set_body_bytes(wheel_bytes),
+            )
+            .expect(3)
+            .mount(&proxy_server)
+            .await;
+
+        let canonical = IndexUrl::from_str(&format!("{}/simple", canonical_server.uri()))?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", proxy_server.uri()))?;
+        let locations =
+            IndexLocations::new(vec![Index::from(canonical.clone())], Vec::new(), false)
+                .with_proxy_indexes(vec![ProxyIndex {
+                    index: IndexReference::Url(canonical.clone()),
+                    url: proxy.clone(),
+                }]);
+        let cache = Cache::temp()?;
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone())
+            .index_locations(locations)
+            .build()?;
+        let built_dist = |hashes: HashDigests| -> Result<BuiltDist, Error> {
+            let locked_file = File {
+                dist_info_metadata: true,
+                filename: SmallString::from(filename),
+                hashes,
+                requires_python: None,
+                size: None,
+                upload_time_utc_ms: None,
+                url: FileLocation::new(
+                    SmallString::from(format!("{}/files/{filename}", canonical_server.uri())),
+                    &SmallString::from(canonical_server.uri()),
+                ),
+                yanked: None,
+                zstd: None,
+            };
+            Ok(BuiltDist::Registry(RegistryBuiltDist {
+                wheels: vec![RegistryBuiltWheel {
+                    filename: WheelFilename::from_str(filename)?,
+                    file: Box::new(locked_file),
+                    index: canonical.clone(),
+                    proxy: None,
+                }],
+                best_wheel_index: 0,
+                sdist: None,
+            }))
+        };
+
+        let metadata = client
+            .wheel_metadata(
+                &built_dist(HashDigests::from(locked_digest.clone()))?,
+                &GitResolver::default(),
+                &IndexCapabilities::default(),
+                None,
+            )
+            .await?;
+        assert_eq!(metadata.version.to_string(), "1.0.0");
+
+        let wheel_filename = WheelFilename::from_str(filename)?;
+        let locked_hashes_cache_key = vec![locked_digest.to_string()];
+        let cache_file = format!(
+            "{}-artifact-{}.msgpack",
+            wheel_filename.cache_key(),
+            super::cache_digest(&locked_hashes_cache_key)
+        );
+        let canonical_entry = cache.entry(
+            CacheBucket::Wheels,
+            WheelCache::Index(&canonical).wheel_dir(wheel_filename.name.as_ref()),
+            &cache_file,
+        );
+        let proxy_entry = cache.entry(
+            CacheBucket::Wheels,
+            WheelCache::Index(&proxy).wheel_dir(wheel_filename.name.as_ref()),
+            &cache_file,
+        );
+        assert!(!canonical_entry.path().exists());
+        assert!(proxy_entry.path().exists());
+
+        let invalid_hashes = HashDigests::from(HashDigest::from_str(
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        )?);
+        for _ in 0..2 {
+            let error = client
+                .wheel_metadata(
+                    &built_dist(invalid_hashes.clone())?,
+                    &GitResolver::default(),
+                    &IndexCapabilities::default(),
+                    None,
+                )
+                .await
+                .expect_err("the proxy wheel should fail its locked digest");
+            assert!(matches!(
+                error.kind(),
+                crate::ErrorKind::ProxyArtifactDigestMismatch {
+                    canonical: error_canonical,
+                    proxy: error_proxy,
+                    ..
+                } if error_canonical == &canonical && error_proxy == &proxy
+            ));
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn proxy_artifact_requires_exact_filename() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let locked_filename = "example-1.1.0-py3-none-any.whl";
+        let proxy_filename = "example-1.01.0-py3-none-any.whl";
+        let digest = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3";
+        Mock::given(method("GET"))
+            .and(wiremock::matchers::path("/simple/example/"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(
+                    json!({
+                        "name": "example",
+                        "files": [{
+                            "filename": proxy_filename,
+                            "url": format!("https://artifacts.example.com/files/{proxy_filename}"),
+                            "hashes": {
+                                "sha256": digest.strip_prefix("sha256:").unwrap_or_default()
+                            }
+                        }]
+                    })
+                    .to_string(),
+                    "application/vnd.pypi.simple.v1+json",
+                ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let canonical = IndexUrl::from_str("https://pypi.org/simple")?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let locations = IndexLocations::default().with_proxy_indexes(vec![ProxyIndex {
+            index: IndexReference::Url(canonical.clone()),
+            url: proxy.clone(),
+        }]);
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(locations)
+            .build()?;
+        let hashes = HashDigests::from(vec![HashDigest::from_str(digest)?]);
+
+        let error = client
+            .proxy_artifact(
+                &PackageName::from_str("example")?,
+                &canonical,
+                locked_filename,
+                &hashes,
+                &IndexCapabilities::default(),
+            )
+            .await
+            .expect_err("an equivalent parsed filename should not match");
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::ProxyArtifactNotFound {
+                filename,
+                canonical: error_canonical,
+                proxy: error_proxy,
+            } if filename == locked_filename && error_canonical == &canonical && error_proxy == &proxy
+        ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn proxy_artifact_rejects_hashless_lock_entry() -> Result<(), Error> {
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let proxy = IndexUrl::from_str("https://proxy.example.com/simple")?;
+        let locations = IndexLocations::default().with_proxy_indexes(vec![ProxyIndex {
+            index: IndexReference::Url(canonical.clone()),
+            url: proxy.clone(),
+        }]);
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(locations)
+            .build()?;
+
+        let error = client
+            .proxy_artifact(
+                &PackageName::from_str("example")?,
+                &canonical,
+                "example-1.0.0-py3-none-any.whl",
+                &HashDigests::empty(),
+                &IndexCapabilities::default(),
+            )
+            .await
+            .expect_err("a hashless lock artifact should fail before proxy lookup");
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::ProxyArtifactMissingDigest {
+                canonical: error_canonical,
+                proxy: error_proxy,
+                ..
+            } if error_canonical == &canonical && error_proxy == &proxy
+        ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn proxy_artifact_rejects_local_url() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let filename = "example-1.0.0-py3-none-any.whl";
+        Mock::given(method("GET"))
+            .and(wiremock::matchers::path("/simple/example/"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(
+                    json!({
+                        "name": "example",
+                        "files": [{
+                            "filename": filename,
+                            "url": format!("file:///tmp/{filename}"),
+                            "hashes": {}
+                        }]
+                    })
+                    .to_string(),
+                    "application/vnd.pypi.simple.v1+json",
+                ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let locations = IndexLocations::default().with_proxy_indexes(vec![ProxyIndex {
+            index: IndexReference::Url(canonical.clone()),
+            url: proxy.clone(),
+        }]);
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(locations)
+            .build()?;
+        let locked_hashes = HashDigests::from(HashDigest::from_str(
+            "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3",
+        )?);
+
+        let error = client
+            .proxy_artifact(
+                &PackageName::from_str("example")?,
+                &canonical,
+                filename,
+                &locked_hashes,
+                &IndexCapabilities::default(),
+            )
+            .await
+            .expect_err("proxy artifacts must not use local URLs");
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::ProxyArtifactLocalUrl {
+                filename: error_filename,
+                proxy: error_proxy,
+                ..
+            } if error_filename == filename && error_proxy == &proxy
+        ));
         Ok(())
     }
 

@@ -280,7 +280,7 @@ impl<'a> Planner<'a> {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
-        );
+        )?;
         let built_index = BuiltWheelIndex::new(
             cache,
             tags,
@@ -399,7 +399,9 @@ impl<'a> Planner<'a> {
             // Identify any cached distributions that satisfy the requirement.
             match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
-                    if let Some(distribution) = registry_index.wheel(wheel, no_build, no_binary) {
+                    if let Some(distribution) =
+                        registry_index.try_wheel(wheel, no_build, no_binary)?
+                    {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
@@ -593,7 +595,9 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
-                    if let Some(distribution) = registry_index.source(sdist, no_build, no_binary) {
+                    if let Some(distribution) =
+                        registry_index.try_source(sdist, no_build, no_binary)?
+                    {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;

@@ -1,7 +1,7 @@
 use tokio::sync::Semaphore;
 use tracing::debug;
 
-use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
+use uv_client::{IndexMetadataResponse, MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     File, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexUrl, RequiresPython,
@@ -144,8 +144,12 @@ impl LatestClient<'_> {
             Err(err) => return Err(err),
         };
 
-        for (index, archive) in archives {
-            let exclude_newer = self.effective_exclude_newer(package, index);
+        for IndexMetadataResponse {
+            index_route,
+            format: archive,
+        } in archives
+        {
+            let exclude_newer = self.effective_exclude_newer(package, index_route.canonical);
 
             match archive {
                 MetadataFormat::Simple(archive) => {
