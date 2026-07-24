@@ -186,14 +186,13 @@ fn python_reinstall_patch() {
      + cpython-3.12.7-[PLATFORM] (python3.12)
     ");
 
-    // Reinstall all "3.12" versions
-    // TODO(zanieb): This doesn't work today, because we need this to install the "latest" as there
-    // is no workflow for `--upgrade` yet
+    // Reinstall all "3.12" versions.
     uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("--reinstall"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed Python 3.12.[LATEST] in [TIME]
-     + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
+    Installed 2 versions in [TIME]
+     ~ cpython-3.12.6-[PLATFORM]
+     ~ cpython-3.12.7-[PLATFORM] (python3.12)
     ");
 }
 
@@ -3605,12 +3604,20 @@ fn python_install_upgrade() {
      + cpython-3.10.17-[PLATFORM] (python3.10)
     ");
 
-    // Ask for an `--upgrade`
-    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.10"), @"
+    // Upgrade an outdated patch even when a reinstall is requested.
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("--reinstall").arg("3.10"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
      + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
+    ");
+
+    // Reinstall only the latest patch, leaving older installed patches untouched.
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("--reinstall").arg("3.10"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.10.[LATEST] in [TIME]
+     ~ cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
     ");
 
     // Request a patch version with `--upgrade`

@@ -31,8 +31,8 @@ fn python_upgrade() {
     error: `uv python upgrade` only accepts minor versions, got: 3.10.17
     ");
 
-    // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
+    // Upgrade an outdated patch even when a reinstall is requested.
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10").arg("--reinstall"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
