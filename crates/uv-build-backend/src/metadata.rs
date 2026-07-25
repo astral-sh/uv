@@ -618,12 +618,12 @@ impl PyProjectToml {
                             .iter()
                             .flat_map(|(extra, requirements)| {
                                 requirements.iter().cloned().map(|mut requirement| {
-                                    requirement.marker.and(MarkerTree::expression(
-                                        MarkerExpression::Extra {
+                                    requirement.marker = requirement.marker.and(
+                                        MarkerTree::expression(MarkerExpression::Extra {
                                             operator: ExtraOperator::Equal,
                                             name: MarkerValueExtra::Extra(extra.clone()),
-                                        },
-                                    ));
+                                        }),
+                                    );
                                     requirement
                                 })
                             })

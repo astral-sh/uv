@@ -93,7 +93,7 @@ impl UnresolvedRequirement {
             Self::Named(mut requirement) => Self::Named(Requirement {
                 marker: marker
                     .map(|marker| {
-                        requirement.marker.and(marker);
+                        requirement.marker = requirement.marker.and(marker);
                         requirement.marker
                     })
                     .unwrap_or(requirement.marker),
@@ -149,7 +149,7 @@ impl UnresolvedRequirement {
             Self::Unnamed(mut requirement) => Self::Unnamed(UnnamedRequirement {
                 marker: marker
                     .map(|marker| {
-                        requirement.marker.and(marker);
+                        requirement.marker = requirement.marker.and(marker);
                         requirement.marker
                     })
                     .unwrap_or(requirement.marker),

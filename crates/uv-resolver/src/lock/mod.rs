@@ -314,11 +314,11 @@ pub fn implicit_constraints_marker(
     } else {
         let mut environments_union = MarkerTree::FALSE;
         for environment in supported_environments {
-            environments_union.or(*environment);
+            environments_union = environments_union.or(*environment);
         }
         environments_union
     };
-    environments_union.and(requires_python);
+    environments_union = environments_union.and(requires_python);
     environments_union
 }
 
@@ -448,7 +448,7 @@ impl Lock {
         } else {
             let mut combined = MarkerTree::FALSE;
             for marker in &supported_environments {
-                combined.or(*marker);
+                combined = combined.or(*marker);
             }
             Some(UniversalMarker::new(combined, ConflictMarker::TRUE))
         };
@@ -919,9 +919,9 @@ impl Lock {
         } else {
             let mut combined = MarkerTree::FALSE;
             for fork_marker in &package.fork_markers {
-                combined.or(fork_marker.pep508());
+                combined = combined.or(fork_marker.pep508());
             }
-            combined.and(requirement.marker);
+            combined = combined.and(requirement.marker);
             combined
         };
 
@@ -1943,9 +1943,9 @@ impl Lock {
                     } else {
                         let mut combined = MarkerTree::FALSE;
                         for fork_marker in &package.fork_markers {
-                            combined.or(fork_marker.pep508());
+                            combined = combined.or(fork_marker.pep508());
                         }
-                        combined.and(requirement.marker);
+                        combined = combined.and(requirement.marker);
                         combined
                     };
                     if marker.is_false() {
@@ -6572,7 +6572,7 @@ fn fork_markers_union(
     }
     let mut environment = MarkerTree::FALSE;
     for fork_marker in fork_markers {
-        environment.or(fork_marker.pep508());
+        environment = environment.or(fork_marker.pep508());
     }
     environment
 }

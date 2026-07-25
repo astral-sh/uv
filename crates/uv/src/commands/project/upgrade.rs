@@ -392,8 +392,7 @@ fn select_requirements(
             })?;
         if requirement.name == *package {
             found_matching_name = true;
-            let mut effective_marker = requirement.marker;
-            effective_marker.and(resolution_marker);
+            let mut effective_marker = requirement.marker.and(resolution_marker);
             if effective_marker.is_false() {
                 skipped.push(SkippedRequirement {
                     package: package.clone(),

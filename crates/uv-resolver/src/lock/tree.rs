@@ -234,9 +234,9 @@ impl<'env> TreeDisplay<'env> {
                     } else {
                         let mut combined = MarkerTree::FALSE;
                         for fork_marker in &package.fork_markers {
-                            combined.or(fork_marker.pep508());
+                            combined = combined.or(fork_marker.pep508());
                         }
-                        combined.and(requirement.marker);
+                        combined = combined.and(requirement.marker);
                         combined
                     };
                     if marker.is_false() {
@@ -286,9 +286,9 @@ impl<'env> TreeDisplay<'env> {
                         } else {
                             let mut combined = MarkerTree::FALSE;
                             for fork_marker in &package.fork_markers {
-                                combined.or(fork_marker.pep508());
+                                combined = combined.or(fork_marker.pep508());
                             }
-                            combined.and(requirement.marker);
+                            combined = combined.and(requirement.marker);
                             combined
                         };
                         if marker.is_false() {

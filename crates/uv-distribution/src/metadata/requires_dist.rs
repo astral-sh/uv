@@ -393,7 +393,7 @@ impl FlatRequiresDist {
                 }
                 let requirement = {
                     let mut marker = marker;
-                    marker.and(requirement.marker);
+                    marker = marker.and(requirement.marker);
                     Requirement {
                         name: requirement.name.clone(),
                         extras: requirement.extras.clone(),

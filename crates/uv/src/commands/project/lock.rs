@@ -675,8 +675,7 @@ async fn do_lock(
         if let Some(environments) = &environments {
             for [lhs, rhs] in environments.as_markers().array_windows() {
                 if !lhs.is_disjoint(*rhs) {
-                    let mut hint = lhs.negate();
-                    hint.and(*rhs);
+                    let hint = lhs.negate().and(*rhs);
 
                     let lhs = lhs
                         .contents()
@@ -705,8 +704,7 @@ async fn do_lock(
         // Ensure that the environments are disjoint.
         for [lhs, rhs] in required_environments.as_markers().array_windows() {
             if !lhs.is_disjoint(*rhs) {
-                let mut hint = lhs.negate();
-                hint.and(*rhs);
+                let hint = lhs.negate().and(*rhs);
 
                 let lhs = lhs
                     .contents()

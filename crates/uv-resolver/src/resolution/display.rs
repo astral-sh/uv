@@ -434,7 +434,7 @@ fn strip_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGr
                 // foo==1.0.0; sys_platform != 'linux'
                 // ```
                 // In this case, we want to write `foo==1.0.0; sys_platform == 'linux' or sys_platform == 'windows'`
-                node.markers.or(dist.markers);
+                node.markers = node.markers.or(dist.markers);
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
                 let index = next.add_node(dist.clone());

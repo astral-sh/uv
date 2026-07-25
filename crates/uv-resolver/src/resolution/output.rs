@@ -762,7 +762,7 @@ impl ResolverOutput {
                     }
                 }
             };
-            conjunction.and(MarkerTree::expression(expr));
+            conjunction = conjunction.and(MarkerTree::expression(expr));
         }
         Ok(conjunction)
     }

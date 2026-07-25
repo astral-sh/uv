@@ -386,7 +386,7 @@ impl MetadataNode {
         parent_reachability: MarkerTree,
     ) {
         let mut marker = dependency.simplified_marker.as_simplified_marker_tree();
-        marker.and(parent_reachability);
+        marker = marker.and(parent_reachability);
         let marker = marker.try_to_string();
         let extras = dependency.extra();
         if extras.is_empty() {
@@ -654,7 +654,7 @@ fn metadata_reachability(
         for dependency in dependencies {
             let mut dependency_reachability =
                 dependency.simplified_marker.as_simplified_marker_tree();
-            dependency_reachability.and(parent_reachability);
+            dependency_reachability = dependency_reachability.and(parent_reachability);
             let dependency_package = lock.find_by_id(&dependency.package_id);
             if dependency.extra.is_empty() {
                 add_metadata_reachability(
@@ -694,7 +694,7 @@ fn add_metadata_reachability<'lock>(
     let id = MetadataNodeId::from_package_id(workspace_root, &package.id, kind.clone()).to_flat();
     let changed = if let Some(existing) = reachability.get_mut(&id) {
         let previous = *existing;
-        existing.or(marker);
+        *existing = existing.or(marker);
         *existing != previous
     } else {
         reachability.insert(id, marker);
