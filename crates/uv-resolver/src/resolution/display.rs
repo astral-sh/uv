@@ -118,13 +118,13 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 }
             }
 
-            for requirement in
-                self.resolution
-                    .overrides
-                    .global_requirements()
-                    .filter(|requirement| {
-                        requirement.evaluate_markers(self.env.marker_environment(), &[])
-                    })
+            for requirement in self
+                .resolution
+                .modifiers
+                .global_overrides()
+                .filter(|requirement| {
+                    requirement.evaluate_markers(self.env.marker_environment(), &[])
+                })
             {
                 if let Some(origin) = &requirement.origin {
                     sources.add(
@@ -143,8 +143,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 };
                 for requirement in self
                     .resolution
-                    .overrides
-                    .scoped_requirements_for(&parent.name, &parent.version)
+                    .modifiers
+                    .scoped_overrides_for(&parent.name, &parent.version)
                     .filter(|requirement| requirement.name == dependency.name)
                     .filter(|requirement| {
                         requirement.evaluate_markers(self.env.marker_environment(), &[])
