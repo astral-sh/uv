@@ -19,7 +19,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
@@ -122,8 +122,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
-    overrides: Overrides,
-    excludes: Excludes,
+    modifiers: DependencyModifiers,
     preferences: Preferences,
     git: GitResolver,
     capabilities: IndexCapabilities,
@@ -255,11 +254,8 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             project: manifest.project,
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
-            constraints: manifest
-                .constraints
-                .with_recorder(manifest.recorder.clone()),
-            overrides: manifest.overrides.with_recorder(manifest.recorder.clone()),
-            excludes: manifest.excludes.with_recorder(manifest.recorder.clone()),
+            constraints: manifest.constraints,
+            modifiers: manifest.modifiers,
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -867,7 +863,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.workspace_members,
             self.requirements.clone(),
             self.constraints.clone(),
-            self.overrides.clone(),
+            self.modifiers.clone(),
             &self.preferences,
             &self.hasher,
             &self.index,
