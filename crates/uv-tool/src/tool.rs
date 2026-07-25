@@ -4,9 +4,10 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use toml_edit::{Array, Item, Table, Value, value};
 
-use uv_configuration::ExcludeDependency;
+use uv_configuration::DependencyModifier;
 use uv_distribution_types::Requirement;
 use uv_fs::{PortablePath, Simplified};
+use uv_normalize::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
 use uv_settings::{ToolOptions, ToolOptionsWire};
@@ -25,7 +26,7 @@ pub struct Tool {
     /// The overrides requested by the user during installation.
     overrides: Vec<Requirement>,
     /// The excludes requested by the user during installation.
-    excludes: Vec<ExcludeDependency>,
+    excludes: Vec<DependencyModifier<PackageName>>,
     /// The build constraints requested by the user during installation.
     build_constraints: Vec<Requirement>,
     /// The Python requested by the user during installation.
@@ -46,7 +47,7 @@ struct ToolWire {
     #[serde(default)]
     overrides: Vec<Requirement>,
     #[serde(default)]
-    excludes: Vec<ExcludeDependency>,
+    excludes: Vec<DependencyModifier<PackageName>>,
     #[serde(default)]
     build_constraint_dependencies: Vec<Requirement>,
     python: Option<PythonRequest>,
@@ -175,7 +176,7 @@ impl Tool {
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
-        excludes: Vec<ExcludeDependency>,
+        excludes: Vec<DependencyModifier<PackageName>>,
         build_constraints: Vec<Requirement>,
         python: Option<PythonRequest>,
         entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
@@ -367,7 +368,7 @@ impl Tool {
         &self.overrides
     }
 
-    pub fn excludes(&self) -> &[ExcludeDependency] {
+    pub fn excludes(&self) -> &[DependencyModifier<PackageName>] {
         &self.excludes
     }
 

@@ -38,7 +38,7 @@ use url::Url;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    DependencyGroups, ExcludeDependency, NoBinary, NoBuild, Override, PackageOverride,
+    DependencyGroups, DependencyModifier, NoBinary, NoBuild, PackageDependencyModifier,
 };
 use uv_distribution_types::{Index, Requirement};
 use uv_distribution_types::{
@@ -50,7 +50,7 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
-use uv_scripts::{OverrideDependency, Pep723Metadata};
+use uv_scripts::Pep723Metadata;
 use uv_warnings::warn_user;
 
 use crate::{RequirementsSource, SourceTree};
@@ -66,9 +66,9 @@ pub struct RequirementsSpecification {
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
     /// The overrides that have already been lowered to named requirements.
-    pub override_dependencies: Vec<Override<Requirement>>,
+    pub override_dependencies: Vec<DependencyModifier<Requirement>>,
     /// The excludes for the project.
-    pub excludes: Vec<ExcludeDependency>,
+    pub excludes: Vec<DependencyModifier<PackageName>>,
     /// The `pylock.toml` file from which to extract the resolution.
     pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
@@ -140,18 +140,20 @@ impl RequirementsSpecification {
                 .into_iter()
                 .flatten()
                 .map(|dependency| match dependency {
-                    OverrideDependency::Requirement(requirement) => {
-                        Override::Requirement(Requirement::from(requirement.clone()))
+                    DependencyModifier::Dependency(requirement) => {
+                        DependencyModifier::Dependency(Requirement::from(requirement.clone()))
                     }
-                    OverrideDependency::Package(package) => Override::Package(PackageOverride {
-                        package: package.package.clone(),
-                        dependencies: package
-                            .dependencies
-                            .iter()
-                            .cloned()
-                            .map(Requirement::from)
-                            .collect(),
-                    }),
+                    DependencyModifier::Package(package) => {
+                        DependencyModifier::Package(PackageDependencyModifier {
+                            package: package.package.clone(),
+                            dependencies: package
+                                .dependencies
+                                .iter()
+                                .cloned()
+                                .map(Requirement::from)
+                                .collect(),
+                        })
+                    }
                 })
                 .collect();
 
@@ -659,7 +661,7 @@ impl RequirementsSpecification {
                 match req_spec.requirement {
                     UnresolvedRequirement::Named(requirement) => {
                         spec.excludes
-                            .push(ExcludeDependency::Dependency(requirement.name));
+                            .push(DependencyModifier::Dependency(requirement.name));
                     }
                     UnresolvedRequirement::Unnamed(requirement) => {
                         return Err(anyhow::anyhow!(
@@ -695,7 +697,7 @@ impl RequirementsSpecification {
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
-        excludes: Vec<ExcludeDependency>,
+        excludes: Vec<DependencyModifier<PackageName>>,
     ) -> Self {
         Self {
             requirements: requirements

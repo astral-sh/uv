@@ -14,8 +14,9 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifier, DryRun,
+    ExtrasSpecification, GitLfsSetting, PackageDependencyModifier, Reinstall, TargetTriple,
+    Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -3336,7 +3337,7 @@ pub(crate) async fn script_specification(
         let mut overrides = Vec::new();
         for entry in override_entries {
             match entry {
-                Override::Requirement(requirement) => {
+                DependencyModifier::Dependency(requirement) => {
                     overrides.extend(
                         LoweredRequirement::from_non_workspace_requirement(
                             requirement,
@@ -3350,11 +3351,11 @@ pub(crate) async fn script_specification(
                         )
                         .await
                         .map_ok(LoweredRequirement::into_inner)
-                        .map_ok(Override::Requirement)
+                        .map_ok(DependencyModifier::Dependency)
                         .collect::<Result<Vec<_>, _>>()?,
                     );
                 }
-                Override::Package(package) => {
+                DependencyModifier::Package(package) => {
                     let mut dependencies = Vec::new();
                     for requirement in package.dependencies.into_vec() {
                         dependencies.extend(
@@ -3373,7 +3374,7 @@ pub(crate) async fn script_specification(
                             .collect::<Result<Vec<_>, _>>()?,
                         );
                     }
-                    overrides.push(Override::Package(PackageOverride {
+                    overrides.push(DependencyModifier::Package(PackageDependencyModifier {
                         package: package.package,
                         dependencies: dependencies.into_boxed_slice(),
                     }));

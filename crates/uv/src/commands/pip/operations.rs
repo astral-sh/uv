@@ -14,8 +14,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, ExcludeDependency, Excludes,
-    ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DependencyModifier,
+    DependencyModifiers, DryRun, ExtrasSpecification, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -102,8 +102,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    lowered_overrides: Vec<Override<Requirement>>,
-    excludes: Vec<ExcludeDependency>,
+    lowered_overrides: Vec<DependencyModifier<Requirement>>,
+    excludes: Vec<DependencyModifier<PackageName>>,
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
@@ -309,14 +309,13 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .map(|constraint| constraint.requirement)
             .chain(upgrade.constraints().cloned()),
     );
-    let overrides = Overrides::from_entries(
+    let modifiers = DependencyModifiers::from_entries(
         lowered_overrides
             .into_iter()
-            .chain(overrides.into_iter().map(Override::Requirement))
-            .collect(),
+            .chain(overrides.into_iter().map(DependencyModifier::Dependency)),
+        excludes,
     )
     .map_err(anyhow::Error::from)?;
-    let excludes = Excludes::from_entries(excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
@@ -325,8 +324,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             let (lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
-                &overrides,
-                &excludes,
+                &modifiers,
                 &hasher,
                 index,
                 DistributionDatabase::new(
@@ -351,8 +349,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let manifest = Manifest::new(
         requirements,
         constraints,
-        overrides,
-        excludes,
+        modifiers,
         preferences,
         project,
         workspace_members,

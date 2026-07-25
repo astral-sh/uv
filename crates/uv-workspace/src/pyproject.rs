@@ -20,7 +20,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
-use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
+use uv_configuration::{DependencyModifier, GitLfsSetting};
 use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
@@ -285,9 +285,6 @@ where
     Ok(indexes)
 }
 
-/// An override dependency before source lowering.
-pub type OverrideDependency = Override<uv_pep508::Requirement<VerbatimParsedUrl>>;
-
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
 #[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
@@ -482,7 +479,8 @@ pub struct ToolUv {
             ]
         "#
     )]
-    pub(crate) override_dependencies: Option<Vec<OverrideDependency>>,
+    pub(crate) override_dependencies:
+        Option<Vec<DependencyModifier<uv_pep508::Requirement<VerbatimParsedUrl>>>>,
 
     /// Dependencies to exclude when resolving the project's dependencies.
     ///
@@ -515,7 +513,7 @@ pub struct ToolUv {
             ]
         "#
     )]
-    pub(crate) exclude_dependencies: Option<Vec<ExcludeDependency>>,
+    pub(crate) exclude_dependencies: Option<Vec<DependencyModifier<PackageName>>>,
 
     /// Constraints to apply when resolving the project's dependencies.
     ///

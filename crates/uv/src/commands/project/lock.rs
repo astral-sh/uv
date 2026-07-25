@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExcludeDependency,
-    ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifier, DryRun,
+    ExtrasSpecification, PackageDependencyModifier, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -572,7 +572,7 @@ async fn do_lock(
         let mut lowered_overrides = Vec::new();
         for entry in overrides {
             match entry {
-                Override::Requirement(requirement) => {
+                DependencyModifier::Dependency(requirement) => {
                     lowered_overrides.extend(
                         target
                             .lower(
@@ -585,24 +585,26 @@ async fn do_lock(
                             )
                             .await?
                             .into_iter()
-                            .map(Override::Requirement),
+                            .map(DependencyModifier::Dependency),
                     );
                 }
-                Override::Package(package) => {
-                    lowered_overrides.push(Override::Package(PackageOverride {
-                        package: package.package,
-                        dependencies: target
-                            .lower(
-                                package.dependencies.into_vec(),
-                                index_locations,
-                                sources,
-                                cache,
-                                workspace_cache,
-                                client_builder.credentials_cache(),
-                            )
-                            .await?
-                            .into_boxed_slice(),
-                    }));
+                DependencyModifier::Package(package) => {
+                    lowered_overrides.push(DependencyModifier::Package(
+                        PackageDependencyModifier {
+                            package: package.package,
+                            dependencies: target
+                                .lower(
+                                    package.dependencies.into_vec(),
+                                    index_locations,
+                                    sources,
+                                    cache,
+                                    workspace_cache,
+                                    client_builder.credentials_cache(),
+                                )
+                                .await?
+                                .into_boxed_slice(),
+                        },
+                    ));
                 }
             }
         }
@@ -1147,8 +1149,8 @@ impl ValidatedLock {
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
-        overrides: &[Override<Requirement>],
-        excludes: &[ExcludeDependency],
+        overrides: &[DependencyModifier<Requirement>],
+        excludes: &[DependencyModifier<PackageName>],
         build_constraints: &[Requirement],
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,

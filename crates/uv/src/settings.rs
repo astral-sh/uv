@@ -34,11 +34,12 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode, DryRun, EditableMode,
-    EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode,
-    IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, Override,
-    PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion,
-    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DependencyModifier, DevMode,
+    DryRun, EditableMode, EnvFile, ExportFormat, ExtrasSpecification, GitLfsSetting,
+    HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild,
+    NoSources, PackageDependencyModifier, PipCompileFormat, ProjectBuildBackend, ProxyUrl,
+    Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -64,7 +65,7 @@ use uv_settings::{
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode};
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies, OverrideDependency};
+use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::commands::pip::operations::Modifications;
@@ -3210,7 +3211,9 @@ impl AuditSettings {
     }
 }
 
-fn workspace_overrides(filesystem: Option<&FilesystemOptions>) -> Vec<Override<Requirement>> {
+fn workspace_overrides(
+    filesystem: Option<&FilesystemOptions>,
+) -> Vec<DependencyModifier<Requirement>> {
     let mut overrides = Vec::new();
     for dependency in filesystem
         .and_then(|configuration| configuration.override_dependencies.as_ref())
@@ -3218,15 +3221,15 @@ fn workspace_overrides(filesystem: Option<&FilesystemOptions>) -> Vec<Override<R
         .flatten()
     {
         match dependency {
-            OverrideDependency::Requirement(requirement) => {
-                overrides.push(Override::Requirement(Requirement::from(
+            DependencyModifier::Dependency(requirement) => {
+                overrides.push(DependencyModifier::Dependency(Requirement::from(
                     requirement
                         .clone()
                         .with_origin(RequirementOrigin::Workspace),
                 )));
             }
-            OverrideDependency::Package(package) => {
-                overrides.push(Override::Package(PackageOverride {
+            DependencyModifier::Package(package) => {
+                overrides.push(DependencyModifier::Package(PackageDependencyModifier {
                     package: package.package.clone(),
                     dependencies: package
                         .dependencies
@@ -3253,8 +3256,8 @@ pub(crate) struct PipCompileSettings {
     pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
-    pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
-    pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
+    pub(crate) overrides_from_workspace: Vec<DependencyModifier<Requirement>>,
+    pub(crate) excludes_from_workspace: Vec<DependencyModifier<PackageName>>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) required_environments: SupportedEnvironments,
@@ -3572,8 +3575,8 @@ pub(crate) struct PipInstallSettings {
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
-    pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
-    pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
+    pub(crate) overrides_from_workspace: Vec<DependencyModifier<Requirement>>,
+    pub(crate) excludes_from_workspace: Vec<DependencyModifier<PackageName>>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,

@@ -947,8 +947,6 @@ async fn get_or_create_environment(
         client_builder,
     )
     .await?;
-    let exclusions = uv_configuration::Excludes::from_entries(spec.excludes.iter().cloned());
-
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
@@ -998,6 +996,10 @@ async fn get_or_create_environment(
         lfs,
     )
     .await?;
+    let modifiers = uv_configuration::DependencyModifiers::from_requirements(
+        overrides.clone(),
+        spec.excludes.iter().cloned(),
+    );
 
     // Check if the tool is already installed in a compatible environment.
     if !isolated && !request.is_latest() {
@@ -1050,8 +1052,7 @@ async fn get_or_create_environment(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
                             constraints.iter().chain(latest.iter()),
-                            &uv_configuration::Overrides::from_requirements(overrides.clone()),
-                            &exclusions,
+                            &modifiers,
                             InstallationStrategy::Permissive,
                             &markers,
                             &tags,

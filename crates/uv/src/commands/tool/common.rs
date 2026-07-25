@@ -14,8 +14,8 @@ use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
-    ExtrasSpecification, GitLfsSetting, InstallOptions, Override, TargetTriple,
+    BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifier,
+    ExtrasSpecification, GitLfsSetting, InstallOptions, TargetTriple,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{
@@ -315,7 +315,7 @@ impl ToolLock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
-        excludes: &[ExcludeDependency],
+        excludes: &[DependencyModifier<PackageName>],
         build_constraints: &[Requirement],
         dependency_metadata: &DependencyMetadata,
     ) -> ResolverManifest {
@@ -323,7 +323,10 @@ impl ToolLock {
             std::iter::empty::<PackageName>(),
             requirements.iter().cloned(),
             constraints.iter().cloned(),
-            overrides.iter().cloned().map(Override::Requirement),
+            overrides
+                .iter()
+                .cloned()
+                .map(DependencyModifier::Dependency),
             excludes.iter().cloned(),
             build_constraints.iter().cloned(),
             std::iter::empty::<(GroupName, Vec<Requirement>)>(),
@@ -396,7 +399,7 @@ impl ToolLock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
-        excludes: &[ExcludeDependency],
+        excludes: &[DependencyModifier<PackageName>],
         build_constraints: &[Requirement],
         refresh: &Refresh,
         interpreter: &Interpreter,
@@ -515,7 +518,7 @@ impl ToolLock {
         let overrides = overrides
             .iter()
             .cloned()
-            .map(Override::Requirement)
+            .map(DependencyModifier::Dependency)
             .collect::<Vec<_>>();
         let Self { root, lock } = self;
         let validated = ValidatedLock::validate(
@@ -738,7 +741,7 @@ pub(crate) fn finalize_tool_install(
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
-    excludes: Vec<ExcludeDependency>,
+    excludes: Vec<DependencyModifier<PackageName>>,
     build_constraints: Vec<Requirement>,
     lock: Option<&ToolLock>,
     printer: Printer,

@@ -20,7 +20,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, DependencyModifiers};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
@@ -108,8 +108,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
-    overrides: Overrides,
-    excludes: Excludes,
+    modifiers: DependencyModifiers,
     preferences: Preferences,
     git: GitResolver,
     capabilities: IndexCapabilities,
@@ -240,8 +239,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
-            overrides: manifest.overrides,
-            excludes: manifest.excludes,
+            modifiers: manifest.modifiers,
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -828,7 +826,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &resolutions,
             self.requirements.clone(),
             self.constraints.clone(),
-            self.overrides.clone(),
+            self.modifiers.clone(),
             &self.preferences,
             &self.index,
             &self.git,
@@ -2331,13 +2329,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     where
         'data: 'parameters,
     {
-        self.overrides
-            .apply_for_package(override_package, dependencies)
-            .filter(move |requirement| {
-                !self
-                    .excludes
-                    .contains_for_package(exclusion_package, &requirement.name)
-            })
+        self.modifiers
+            .apply_for_packages(override_package, exclusion_package, dependencies)
             .filter(move |requirement| {
                 Self::is_requirement_applicable(
                     requirement,

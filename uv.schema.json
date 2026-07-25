@@ -181,7 +181,7 @@
       "description": "Dependencies to exclude when resolving the project's dependencies.\n\nExcludes are used to prevent a package from being selected during resolution,\nregardless of whether it's requested by any other package. When a package is excluded,\nit will be omitted from the dependency list entirely.\n\nIncluding a package as an exclusion will prevent it from being installed, even if\nit's requested by transitive dependencies. This can be useful for removing optional\ndependencies or working around packages with broken dependencies.\n\nExclusions can be limited to the dependencies declared by a specific package version by\nusing a table with `package` and `dependencies`. The `package` table identifies the package\nwhose dependencies will be excluded by `name` and, optionally, `version`. If `version` is\nomitted, the exclusions apply to all versions of that package. A version-specific entry\ntakes precedence over an all-versions entry.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
       "type": ["array", "null"],
       "items": {
-        "$ref": "#/definitions/ExcludeDependency"
+        "$ref": "#/definitions/DependencyModifier_for_PackageName"
       }
     },
     "exclude-newer": {
@@ -403,7 +403,7 @@
       "description": "Overrides to apply when resolving the project's dependencies.\n\nOverrides are used to force selection of a specific version of a package, regardless of the\nversion requested by any other package, and regardless of whether choosing that version\nwould typically constitute an invalid resolution.\n\nWhile constraints are _additive_, in that they're combined with the requirements of the\nconstituent packages, overrides are _absolute_, in that they completely replace the\nrequirements of any constituent packages.\n\nIncluding a package as an override will _not_ trigger installation of the package on its\nown; instead, the package must be requested elsewhere in the project's first-party or\ntransitive dependencies.\n\nOverrides can be limited to the dependencies declared by a specific package version by\nusing a table with `package` and `dependencies`. The `package` table identifies the package\nwhose dependencies will be overridden by `name` and, optionally, `version`. If `version` is\nomitted, the overrides apply to all versions of that package. Requirements in `dependencies`\nreplace dependencies with the same name and add dependencies that are not declared by the\npackage. Dependencies not listed in `dependencies` are left unchanged.\n\nScoped overrides currently support registry version specifiers only. Direct URL and path\nsources, including Git sources, and explicit indexes are not supported.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
       "type": ["array", "null"],
       "items": {
-        "$ref": "#/definitions/Override"
+        "$ref": "#/definitions/DependencyModifier_for_Requirement"
       }
     },
     "package": {
@@ -871,21 +871,32 @@
         }
       }
     },
-    "DisplaySafeUrl": {
-      "description": "A [`Url`] wrapper that redacts credentials and sensitive query parameters when displaying the URL.\n\n`DisplaySafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask\nsecrets by default when the URL is displayed or logged. This helps prevent accidental\nexposure of sensitive information in logs and debug output.\n\n# Examples\n\n```\nuse uv_redacted::DisplaySafeUrl;\nuse std::str::FromStr;\n\n// Create a `DisplaySafeUrl` from a `&str`\nlet mut url = DisplaySafeUrl::parse(\"https://user:password@example.com\").unwrap();\n\n// Display will mask secrets\nassert_eq!(url.to_string(), \"https://user:****@example.com/\");\n\n// You can still access the username and password\nassert_eq!(url.username(), \"user\");\nassert_eq!(url.password(), Some(\"password\"));\n\n// And you can still update the username and password\nlet _ = url.set_username(\"new_user\");\nlet _ = url.set_password(Some(\"new_password\"));\nassert_eq!(url.username(), \"new_user\");\nassert_eq!(url.password(), Some(\"new_password\"));\n\n// It is also possible to remove the credentials entirely\nurl.remove_credentials();\nassert_eq!(url.username(), \"\");\nassert_eq!(url.password(), None);\n```",
-      "type": "string",
-      "format": "uri"
-    },
-    "ExcludeDependency": {
-      "description": "An exclusion, either global or scoped to a specific package version.",
+    "DependencyModifier_for_PackageName": {
+      "description": "A dependency modifier, either global or scoped to a specific package version.",
       "anyOf": [
         {
-          "$ref": "#/definitions/PackageExclusion"
+          "$ref": "#/definitions/PackageDependencyModifier_for_PackageName"
         },
         {
           "$ref": "#/definitions/PackageName"
         }
       ]
+    },
+    "DependencyModifier_for_Requirement": {
+      "description": "A dependency modifier, either global or scoped to a specific package version.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PackageDependencyModifier_for_Requirement"
+        },
+        {
+          "$ref": "#/definitions/Requirement"
+        }
+      ]
+    },
+    "DisplaySafeUrl": {
+      "description": "A [`Url`] wrapper that redacts credentials and sensitive query parameters when displaying the URL.\n\n`DisplaySafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask\nsecrets by default when the URL is displayed or logged. This helps prevent accidental\nexposure of sensitive information in logs and debug output.\n\n# Examples\n\n```\nuse uv_redacted::DisplaySafeUrl;\nuse std::str::FromStr;\n\n// Create a `DisplaySafeUrl` from a `&str`\nlet mut url = DisplaySafeUrl::parse(\"https://user:password@example.com\").unwrap();\n\n// Display will mask secrets\nassert_eq!(url.to_string(), \"https://user:****@example.com/\");\n\n// You can still access the username and password\nassert_eq!(url.username(), \"user\");\nassert_eq!(url.password(), Some(\"password\"));\n\n// And you can still update the username and password\nlet _ = url.set_username(\"new_user\");\nlet _ = url.set_password(Some(\"new_password\"));\nassert_eq!(url.username(), \"new_user\");\nassert_eq!(url.password(), Some(\"new_password\"));\n\n// It is also possible to remove the credentials entirely\nurl.remove_credentials();\nassert_eq!(url.username(), \"\");\nassert_eq!(url.password(), None);\n```",
+      "type": "string",
+      "format": "uri"
     },
     "ExcludeNewerOverride": {
       "oneOf": [
@@ -1214,17 +1225,6 @@
         }
       ]
     },
-    "Override": {
-      "description": "An override, either global or scoped to a specific package version.",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/PackageOverride"
-        },
-        {
-          "$ref": "#/definitions/Requirement"
-        }
-      ]
-    },
     "PackageConfigSettings": {
       "description": "Settings to pass to PEP 517 build backends on a per-package basis.",
       "type": "object",
@@ -1232,8 +1232,23 @@
         "$ref": "#/definitions/ConfigSettings"
       }
     },
-    "PackageExclusion": {
-      "description": "A set of exclusions that applies to the dependencies of a specific package version.",
+    "PackageDependencyModifierTarget": {
+      "description": "The package and optional version selected by a [`PackageDependencyModifier`].",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/PackageName"
+        },
+        "version": {
+          "description": "PEP 440-style package version, e.g., `1.2.3`",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false,
+      "required": ["name"]
+    },
+    "PackageDependencyModifier_for_PackageName": {
+      "description": "A dependency modifier that applies to the dependencies of a specific package version.",
       "type": "object",
       "properties": {
         "dependencies": {
@@ -1243,38 +1258,14 @@
           }
         },
         "package": {
-          "$ref": "#/definitions/PackageExclusionTarget"
+          "$ref": "#/definitions/PackageDependencyModifierTarget"
         }
       },
       "additionalProperties": false,
       "required": ["package", "dependencies"]
     },
-    "PackageExclusionTarget": {
-      "description": "The package and optional version selected by a [`PackageExclusion`].",
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/definitions/PackageName"
-        },
-        "version": {
-          "description": "PEP 440-style package version, e.g., `1.2.3`",
-          "type": ["string", "null"]
-        }
-      },
-      "additionalProperties": false,
-      "required": ["name"]
-    },
-    "PackageName": {
-      "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
-      "type": "string"
-    },
-    "PackageNameSpecifier": {
-      "description": "The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.",
-      "type": "string",
-      "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
-    },
-    "PackageOverride": {
-      "description": "An override that applies to the dependencies of a specific package version.",
+    "PackageDependencyModifier_for_Requirement": {
+      "description": "A dependency modifier that applies to the dependencies of a specific package version.",
       "type": "object",
       "properties": {
         "dependencies": {
@@ -1284,26 +1275,20 @@
           }
         },
         "package": {
-          "$ref": "#/definitions/PackageOverrideTarget"
+          "$ref": "#/definitions/PackageDependencyModifierTarget"
         }
       },
       "additionalProperties": false,
       "required": ["package", "dependencies"]
     },
-    "PackageOverrideTarget": {
-      "description": "The package and optional version selected by a [`PackageOverride`].",
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/definitions/PackageName"
-        },
-        "version": {
-          "description": "PEP 440-style package version, e.g., `1.2.3`",
-          "type": ["string", "null"]
-        }
-      },
-      "additionalProperties": false,
-      "required": ["name"]
+    "PackageName": {
+      "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
+      "type": "string"
+    },
+    "PackageNameSpecifier": {
+      "description": "The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.",
+      "type": "string",
+      "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
     },
     "PipGroupName": {
       "description": "The pip-compatible variant of a [`GroupName`].\n\nEither <groupname> or <path>:<groupname>.\nIf <path> is omitted it defaults to \"pyproject.toml\".",
