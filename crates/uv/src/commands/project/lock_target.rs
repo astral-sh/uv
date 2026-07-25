@@ -7,7 +7,7 @@ use tracing::info_span;
 
 use uv_auth::CredentialsCache;
 use uv_cache::Cache;
-use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency, NoSources};
+use uv_configuration::{DependencyExclusion, DependencyGroupsWithDefaults, NoSources};
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
@@ -16,7 +16,7 @@ use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_resolver::{Lock, LockVersion, VERSION};
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
-use uv_workspace::pyproject::OverrideDependency;
+use uv_workspace::pyproject::UnresolvedDependencyOverride;
 use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
@@ -51,7 +51,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of overrides for the [`LockTarget`].
-    pub(crate) fn overrides(self) -> Vec<OverrideDependency> {
+    pub(crate) fn overrides(self) -> Vec<UnresolvedDependencyOverride> {
         match self {
             Self::Workspace(workspace) => workspace.overrides(),
             Self::Script(script) => script
@@ -68,7 +68,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of dependency exclusions for the [`LockTarget`].
-    pub(crate) fn exclude_dependencies(self) -> Vec<ExcludeDependency> {
+    pub(crate) fn exclude_dependencies(self) -> Vec<DependencyExclusion> {
         match self {
             Self::Workspace(workspace) => workspace.exclude_dependencies(),
             Self::Script(script) => script
