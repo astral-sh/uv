@@ -1659,9 +1659,11 @@ impl Lock {
             ));
         }
 
-        // A local package can declare an explicit index that is not present in the workspace's
-        // top-level configuration. Trust that index only after its refreshed requirements have
-        // been validated, so stale static metadata cannot authorize an unrelated locked source.
+        // Add any explicit indexes to the list of known locals or remotes. These indexes may
+        // not be available as top-level configuration (i.e., if they're defined within a
+        // workspace member), but we already validated that the dependencies are up-to-date, so
+        // we can consider them "available". Recording indexes only after validating refreshed
+        // requirements prevents stale static metadata from authorizing an unrelated locked source.
         for index in &indexes {
             Self::record_index(index, remotes, locals, root);
         }
