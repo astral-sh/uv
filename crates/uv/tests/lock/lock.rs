@@ -34064,6 +34064,75 @@ async fn lock_path_dependency_explicit_index() -> Result<()> {
     Ok(())
 }
 
+/// Discover an extra's explicit index from refreshed path-dependency declarations on stable.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_path_dependency_extra_explicit_index_from_declarations() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let dependency = context.temp_dir.child("dependency");
+    fs_err::create_dir_all(&dependency)?;
+    dependency.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "inner-index" }}
+
+        [[tool.uv.index]]
+        name = "inner-index"
+        url = "{proxy_uri}/simple"
+        explicit = true
+        "#,
+        proxy_uri = proxy.uri(),
+    ))?;
+
+    let project = context.temp_dir.child("project");
+    fs_err::create_dir_all(&project)?;
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency[feature]"]
+
+        [tool.uv.sources]
+        dependency = { path = "../dependency", editable = true }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    ");
+
+    // The configured default index does not contain `iniconfig`. Validation must discover the
+    // package's actual explicit index from the path dependency, without enabling preview.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--default-index")
+        .arg("https://example.invalid/simple")
+        .current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that lockfile validation includes explicit indexes from path dependencies
 /// defined in a non-root workspace member.
 #[cfg(feature = "test-universal")]
