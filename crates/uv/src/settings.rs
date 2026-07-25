@@ -34,12 +34,11 @@ use uv_cli::{
 };
 use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
 use uv_configuration::{
-    ActiveEnvironment, BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode,
-    DryRun, EditableMode, EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification,
-    GitLfsSetting, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary,
-    NoBuild, NoSources, Override, PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl,
-    Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
-    VersionControlSystem,
+    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DependencyModifiers, DevMode,
+    DryRun, EditableMode, EnvFile, ExportFormat, ExtrasSpecification, GitLfsSetting,
+    HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild,
+    NoSources, PipCompileFormat, ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion,
+    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -65,7 +64,7 @@ use uv_settings::{
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode};
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies, OverrideDependency};
+use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::commands::pip::operations::Modifications;
@@ -3430,37 +3429,26 @@ impl AuditSettings {
     }
 }
 
-fn workspace_overrides(filesystem: Option<&FilesystemOptions>) -> Vec<Override<Requirement>> {
-    let mut overrides = Vec::new();
-    for dependency in filesystem
+fn workspace_modifiers(
+    filesystem: Option<&FilesystemOptions>,
+) -> anyhow::Result<DependencyModifiers> {
+    let overrides = filesystem
         .and_then(|configuration| configuration.override_dependencies.as_ref())
         .into_iter()
         .flatten()
-    {
-        match dependency {
-            OverrideDependency::Requirement(requirement) => {
-                overrides.push(Override::Requirement(Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )));
-            }
-            OverrideDependency::Package(package) => {
-                overrides.push(Override::Package(PackageOverride {
-                    package: package.package.clone(),
-                    dependencies: package
-                        .dependencies
-                        .iter()
-                        .cloned()
-                        .map(|requirement| {
-                            Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
-                        })
-                        .collect(),
-                }));
-            }
-        }
-    }
-    overrides
+        .cloned()
+        .map(|dependency| {
+            dependency.map_requirements(|requirement| {
+                Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+            })
+        })
+        .collect::<Vec<_>>();
+    let exclusions = filesystem
+        .and_then(|configuration| configuration.exclude_dependencies.as_ref())
+        .into_iter()
+        .flatten()
+        .cloned();
+    Ok(DependencyModifiers::from_parts(overrides, exclusions)?)
 }
 
 /// The resolved settings to use for a `pip compile` invocation.
@@ -3473,8 +3461,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
-    pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
-    pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
+    pub(crate) modifiers_from_workspace: DependencyModifiers,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) required_environments: SupportedEnvironments,
@@ -3557,16 +3544,7 @@ impl PipCompileSettings {
             Vec::new()
         };
 
-        let overrides_from_workspace = workspace_overrides(filesystem.as_ref());
-
-        let excludes_from_workspace = if let Some(configuration) = &filesystem {
-            configuration
-                .exclude_dependencies
-                .clone()
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
+        let modifiers_from_workspace = workspace_modifiers(filesystem.as_ref())?;
 
         let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
             configuration
@@ -3617,8 +3595,7 @@ impl PipCompileSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             constraints_from_workspace,
-            overrides_from_workspace,
-            excludes_from_workspace,
+            modifiers_from_workspace,
             build_constraints_from_workspace,
             environments,
             required_environments,
@@ -3792,8 +3769,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
-    pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
-    pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
+    pub(crate) modifiers_from_workspace: DependencyModifiers,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,
@@ -3868,16 +3844,7 @@ impl PipInstallSettings {
             Vec::new()
         };
 
-        let overrides_from_workspace = workspace_overrides(filesystem.as_ref());
-
-        let excludes_from_workspace = if let Some(configuration) = &filesystem {
-            configuration
-                .exclude_dependencies
-                .clone()
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
+        let modifiers_from_workspace = workspace_modifiers(filesystem.as_ref())?;
 
         let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
             configuration
@@ -3915,8 +3882,7 @@ impl PipInstallSettings {
                 .collect(),
             dry_run: DryRun::from_args(dry_run),
             constraints_from_workspace,
-            overrides_from_workspace,
-            excludes_from_workspace,
+            modifiers_from_workspace,
             build_constraints_from_workspace,
             modifications: if flag(exact, inexact, "inexact")?.unwrap_or(false) {
                 Modifications::Exact

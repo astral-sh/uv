@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{DependencyMode, ExcludeDependency, Excludes, Override, Overrides};
+use uv_configuration::{DependencyModifierScope, DependencyModifiers, DependencyMode, DependencyOverride};
 use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
@@ -332,8 +332,7 @@ impl SitePackages {
         requirements: &[UnresolvedRequirementSpecification],
         constraints: &[NameRequirementSpecification],
         overrides: &[UnresolvedRequirementSpecification],
-        override_dependencies: &[Override<Requirement>],
-        exclude_dependencies: &[ExcludeDependency],
+        modifiers: &DependencyModifiers,
         dependency_mode: DependencyMode,
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
@@ -422,26 +421,19 @@ impl SitePackages {
             named
         };
 
-        let overrides = Overrides::from_entries(
-            override_dependencies
+        let mut modifiers = modifiers.clone();
+        modifiers.extend_overrides(
+            overrides
                 .iter()
+                .map(Cow::as_ref)
                 .cloned()
-                .chain(
-                    overrides
-                        .iter()
-                        .map(Cow::as_ref)
-                        .cloned()
-                        .map(Override::Requirement),
-                )
-                .collect(),
+                .map(DependencyOverride::requirement),
         )?;
-        let excludes = Excludes::from_entries(exclude_dependencies.iter().cloned());
 
         self.satisfies_requirements(
             requirements.iter().map(Cow::as_ref),
             constraints.iter().map(|constraint| &constraint.requirement),
-            &overrides,
-            &excludes,
+            &modifiers,
             dependency_mode,
             installation,
             markers,
@@ -458,8 +450,7 @@ impl SitePackages {
         &self,
         requirements: impl ExactSizeIterator<Item = &'a Requirement>,
         constraints: impl Iterator<Item = &'a Requirement>,
-        overrides: &'a Overrides,
-        excludes: &'a Excludes,
+        modifiers: &'a DependencyModifiers,
         dependency_mode: DependencyMode,
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
@@ -482,10 +473,7 @@ impl SitePackages {
         let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
 
         // Add the direct requirements to the queue.
-        for requirement in overrides
-            .apply(requirements)
-            .filter(|requirement| !excludes.contains(&requirement.name))
-        {
+        for requirement in modifiers.apply(DependencyModifierScope::Global, requirements) {
             if requirement.evaluate_markers(Some(markers), &[]) {
                 let requirement = requirement.into_owned();
                 if seen.insert(requirement.clone()) {
@@ -573,12 +561,10 @@ impl SitePackages {
                         .cloned()
                         .map(Requirement::from)
                         .collect::<Vec<_>>();
-                    for dependency in overrides
-                        .apply_for(name, distribution.version(), &dependencies)
-                        .filter(|dependency| {
-                            !excludes.contains_for(name, distribution.version(), &dependency.name)
-                        })
-                    {
+                    for dependency in modifiers.apply(
+                        DependencyModifierScope::Package(name, distribution.version()),
+                        &dependencies,
+                    ) {
                         if dependency.evaluate_markers(Some(markers), &requirement.extras) {
                             let dependency = dependency.into_owned();
                             if seen.insert(dependency.clone()) {
