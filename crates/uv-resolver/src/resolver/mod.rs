@@ -2338,6 +2338,30 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .excludes
                     .contains_for_package(exclusion_package, &requirement.name)
             })
+            .map(move |mut requirement| {
+                let marker = match extra {
+                    Some(extra) => {
+                        let mut marker = requirement
+                            .marker
+                            .simplify_extras(slice::from_ref(extra))
+                            .simplify_not_extras_with(|candidate| candidate != extra);
+                        marker.and(
+                            requirement
+                                .marker
+                                .simplify_not_extras_with(|_| true)
+                                .negate(),
+                        );
+                        marker
+                    }
+                    None => requirement.marker.simplify_not_extras_with(|_| true),
+                };
+
+                if requirement.marker != marker {
+                    requirement.to_mut().marker = marker;
+                }
+
+                requirement
+            })
             .filter(move |requirement| {
                 Self::is_requirement_applicable(
                     requirement,
@@ -2368,27 +2392,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
     ) -> bool {
         // If the requirement isn't relevant for the current platform, skip it.
-        match extra {
-            Some(source_extra) => {
-                // Only include requirements that are relevant for the current extra.
-                if requirement.evaluate_markers(env.marker_environment(), &[]) {
-                    return false;
-                }
-                if !requirement
-                    .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
-                {
-                    return false;
-                }
-                if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
-                {
-                    return false;
-                }
-            }
-            None => {
-                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
-                    return false;
-                }
-            }
+        if !requirement.evaluate_markers(env.marker_environment(), &[]) {
+            return false;
+        }
+
+        if let Some(source_extra) = extra
+            && !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
+        {
+            return false;
         }
 
         // If the requirement would not be selected with any Python version
