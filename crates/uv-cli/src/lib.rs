@@ -1871,47 +1871,8 @@ pub struct PipSyncArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Require a matching hash for each requirement.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash.
-    ///
-    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
-    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
-    /// specified via direct URL.
-    ///
-    /// Hash-checking mode introduces a number of additional constraints:
-    ///
-    /// - Git dependencies are not supported.
-    /// - Editable installations are not supported.
-    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
-    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(
-        long,
-        env = EnvVars::UV_REQUIRE_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_require_hashes"),
-    )]
-    pub require_hashes: bool,
-
-    #[arg(long, overrides_with("require_hashes"), hide = true)]
-    pub no_require_hashes: bool,
-
-    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
-    pub verify_hashes: bool,
-
-    /// Disable validation of hashes in the requirements file.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash. To enforce hash validation, use
-    /// `--require-hashes`.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("verify_hashes"),
-    )]
-    pub no_verify_hashes: bool,
+    #[command(flatten)]
+    pub hash_checking: HashCheckingArgs,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -2257,47 +2218,8 @@ pub struct PipInstallArgs {
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
 
-    /// Require a matching hash for each requirement.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash.
-    ///
-    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
-    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
-    /// specified via direct URL.
-    ///
-    /// Hash-checking mode introduces a number of additional constraints:
-    ///
-    /// - Git dependencies are not supported.
-    /// - Editable installations are not supported.
-    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
-    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(
-        long,
-        env = EnvVars::UV_REQUIRE_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_require_hashes"),
-    )]
-    pub require_hashes: bool,
-
-    #[arg(long, overrides_with("require_hashes"), hide = true)]
-    pub no_require_hashes: bool,
-
-    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
-    pub verify_hashes: bool,
-
-    /// Disable validation of hashes in the requirements file.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash. To enforce hash validation, use
-    /// `--require-hashes`.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("verify_hashes"),
-    )]
-    pub no_verify_hashes: bool,
+    #[command(flatten)]
+    pub hash_checking: HashCheckingArgs,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -3040,47 +2962,8 @@ pub struct BuildArgs {
     )]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
-    /// Require a matching hash for each requirement.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash.
-    ///
-    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
-    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
-    /// specified via direct URL.
-    ///
-    /// Hash-checking mode introduces a number of additional constraints:
-    ///
-    /// - Git dependencies are not supported.
-    /// - Editable installations are not supported.
-    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
-    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(
-        long,
-        env = EnvVars::UV_REQUIRE_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_require_hashes"),
-    )]
-    pub require_hashes: bool,
-
-    #[arg(long, overrides_with("require_hashes"), hide = true)]
-    pub no_require_hashes: bool,
-
-    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
-    pub verify_hashes: bool,
-
-    /// Disable validation of hashes in the requirements file.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash. To enforce hash validation, use
-    /// `--require-hashes`.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("verify_hashes"),
-    )]
-    pub no_verify_hashes: bool,
+    #[command(flatten)]
+    pub hash_checking: HashCheckingArgs,
 
     /// The Python interpreter to use for the build environment.
     ///
@@ -6257,51 +6140,8 @@ pub struct ToolUpgradeArgs {
     #[command(flatten)]
     pub registry_client: RegistryClientArgs,
 
-    /// The strategy to use when selecting between the different compatible versions for a given
-    /// package requirement.
-    ///
-    /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_RESOLUTION,
-        help_heading = "Resolver options"
-    )]
-    pub resolution: Option<ResolutionMode>,
-
-    /// The strategy to use when considering pre-release versions.
-    ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_PRERELEASE,
-        help_heading = "Resolver options"
-    )]
-    pub prerelease: Option<PrereleaseMode>,
-
-    #[arg(long, hide = true)]
-    pub pre: bool,
-
-    /// The strategy to use when selecting multiple versions of a given package across Python
-    /// versions and platforms.
-    ///
-    /// By default, uv will optimize for selecting the latest version of each package for each
-    /// supported Python version (`requires-python`), while minimizing the number of selected
-    /// versions across platforms.
-    ///
-    /// Under `fewest`, uv will minimize the number of selected versions for each package,
-    /// preferring older versions that are compatible with a wider range of supported Python
-    /// versions or platforms.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_FORK_STRATEGY,
-        help_heading = "Resolver options"
-    )]
-    pub fork_strategy: Option<ForkStrategy>,
+    #[command(flatten)]
+    pub version_selection: VersionSelectionArgs,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -6320,31 +6160,8 @@ pub struct ToolUpgradeArgs {
     )]
     pub config_setting_package: Option<Vec<ConfigSettingPackageEntry>>,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        overrides_with("build_isolation"),
-        help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_ISOLATION,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub no_build_isolation: bool,
-
-    /// Disable isolation when building source distributions for a specific package.
-    ///
-    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
-    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
-    pub no_build_isolation_package: Vec<PackageName>,
-
-    #[arg(
-        long,
-        overrides_with("no_build_isolation"),
-        hide = true,
-        help_heading = "Build options"
-    )]
-    pub build_isolation: bool,
+    #[command(flatten)]
+    pub build_isolation: PackageBuildIsolationArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -6402,20 +6219,8 @@ pub struct ToolUpgradeArgs {
     #[command(flatten)]
     pub compile_bytecode: CompileBytecodeArgs,
 
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options",
-    )]
-    pub no_sources: bool,
-
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    pub no_sources_package: Vec<PackageName>,
+    #[command(flatten)]
+    pub sources: SourcesArgs,
 
     #[command(flatten)]
     pub build: BuildOptionsArgs,
@@ -7245,6 +7050,124 @@ pub struct RegistryClientArgs {
     pub keyring_provider: Option<KeyringProviderType>,
 }
 
+/// Arguments that control dependency sources.
+#[derive(Args)]
+#[group(skip)]
+pub struct SourcesArgs {
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
+    /// URL, or local path sources.
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_SOURCES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Resolver options",
+    )]
+    no_sources: bool,
+
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
+    no_sources_package: Vec<PackageName>,
+}
+
+/// Arguments that configure package version selection.
+#[derive(Args)]
+#[group(skip)]
+pub struct VersionSelectionArgs {
+    /// The strategy to use when selecting between the different compatible versions for a given
+    /// package requirement.
+    ///
+    /// By default, uv will use the latest compatible version of each package (`highest`).
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_RESOLUTION,
+        help_heading = "Resolver options"
+    )]
+    resolution: Option<ResolutionMode>,
+
+    /// The strategy to use when considering pre-release versions.
+    ///
+    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
+    /// with first-party requirements that contain an explicit pre-release marker in the declared
+    /// specifiers (`if-necessary-or-explicit`).
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_PRERELEASE,
+        help_heading = "Resolver options"
+    )]
+    prerelease: Option<PrereleaseMode>,
+
+    #[arg(long, hide = true, help_heading = "Resolver options")]
+    pre: bool,
+
+    /// The strategy to use when selecting multiple versions of a given package across Python
+    /// versions and platforms.
+    ///
+    /// By default, uv will optimize for selecting the latest version of each package for each
+    /// supported Python version (`requires-python`), while minimizing the number of selected
+    /// versions across platforms.
+    ///
+    /// Under `fewest`, uv will minimize the number of selected versions for each package,
+    /// preferring older versions that are compatible with a wider range of supported Python
+    /// versions or platforms.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_FORK_STRATEGY,
+        help_heading = "Resolver options"
+    )]
+    fork_strategy: Option<ForkStrategy>,
+}
+
+/// Arguments that configure requirement hash checking.
+#[derive(Args)]
+#[group(skip)]
+pub struct HashCheckingArgs {
+    /// Require a matching hash for each requirement.
+    ///
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash.
+    ///
+    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
+    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
+    /// specified via direct URL.
+    ///
+    /// Hash-checking mode introduces a number of additional constraints:
+    ///
+    /// - Git dependencies are not supported.
+    /// - Editable installations are not supported.
+    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
+    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
+    #[arg(
+        long,
+        env = EnvVars::UV_REQUIRE_HASHES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_require_hashes"),
+    )]
+    pub require_hashes: bool,
+
+    #[arg(long, overrides_with("require_hashes"), hide = true)]
+    pub no_require_hashes: bool,
+
+    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
+    pub verify_hashes: bool,
+
+    /// Disable validation of hashes in the requirements file.
+    ///
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash. To enforce hash validation, use
+    /// `--require-hashes`.
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_VERIFY_HASHES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("verify_hashes"),
+    )]
+    pub no_verify_hashes: bool,
+}
+
 #[derive(Args)]
 pub struct RefreshArgs {
     /// Refresh all cached data.
@@ -7326,6 +7249,45 @@ pub struct BuildOptionsArgs {
         value_hint = ValueHint::Other,
     )]
     no_binary_package: Vec<PackageName>,
+}
+
+/// Arguments that configure build isolation for source distributions.
+#[derive(Args)]
+#[group(skip)]
+pub struct BuildIsolationArgs {
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    #[arg(
+        long,
+        overrides_with("build_isolation"),
+        help_heading = "Build options",
+        env = EnvVars::UV_NO_BUILD_ISOLATION,
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    no_build_isolation: bool,
+
+    #[arg(
+        long,
+        overrides_with("no_build_isolation"),
+        hide = true,
+        help_heading = "Build options"
+    )]
+    build_isolation: bool,
+}
+
+/// Arguments that configure global and package-specific build isolation.
+#[derive(Args)]
+#[group(skip)]
+pub struct PackageBuildIsolationArgs {
+    #[command(flatten)]
+    build_isolation: BuildIsolationArgs,
+
+    /// Disable isolation when building source distributions for a specific package.
+    ///
+    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
+    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
+    no_build_isolation_package: Vec<PackageName>,
 }
 
 #[derive(Args)]
@@ -7418,25 +7380,8 @@ pub struct InstallerArgs {
     )]
     config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        overrides_with("build_isolation"),
-        help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_ISOLATION,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    no_build_isolation: bool,
-
-    #[arg(
-        long,
-        overrides_with("no_build_isolation"),
-        hide = true,
-        help_heading = "Build options"
-    )]
-    build_isolation: bool,
+    #[command(flatten)]
+    build_isolation: BuildIsolationArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -7494,20 +7439,8 @@ pub struct InstallerArgs {
     #[command(flatten)]
     compile_bytecode: CompileBytecodeArgs,
 
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options"
-    )]
-    no_sources: bool,
-
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    no_sources_package: Vec<PackageName>,
+    #[command(flatten)]
+    sources: SourcesArgs,
 }
 
 /// Arguments that are used by commands that need to resolve (but not install) packages.
@@ -7547,51 +7480,8 @@ pub struct ResolverArgs {
     #[command(flatten)]
     registry_client: RegistryClientArgs,
 
-    /// The strategy to use when selecting between the different compatible versions for a given
-    /// package requirement.
-    ///
-    /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_RESOLUTION,
-        help_heading = "Resolver options"
-    )]
-    resolution: Option<ResolutionMode>,
-
-    /// The strategy to use when considering pre-release versions.
-    ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_PRERELEASE,
-        help_heading = "Resolver options"
-    )]
-    prerelease: Option<PrereleaseMode>,
-
-    #[arg(long, hide = true, help_heading = "Resolver options")]
-    pre: bool,
-
-    /// The strategy to use when selecting multiple versions of a given package across Python
-    /// versions and platforms.
-    ///
-    /// By default, uv will optimize for selecting the latest version of each package for each
-    /// supported Python version (`requires-python`), while minimizing the number of selected
-    /// versions across platforms.
-    ///
-    /// Under `fewest`, uv will minimize the number of selected versions for each package,
-    /// preferring older versions that are compatible with a wider range of supported Python
-    /// versions or platforms.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_FORK_STRATEGY,
-        help_heading = "Resolver options"
-    )]
-    fork_strategy: Option<ForkStrategy>,
+    #[command(flatten)]
+    version_selection: VersionSelectionArgs,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -7610,31 +7500,8 @@ pub struct ResolverArgs {
     )]
     config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        overrides_with("build_isolation"),
-        help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_ISOLATION,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    no_build_isolation: bool,
-
-    /// Disable isolation when building source distributions for a specific package.
-    ///
-    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
-    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
-    no_build_isolation_package: Vec<PackageName>,
-
-    #[arg(
-        long,
-        overrides_with("no_build_isolation"),
-        hide = true,
-        help_heading = "Build options"
-    )]
-    build_isolation: bool,
+    #[command(flatten)]
+    build_isolation: PackageBuildIsolationArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -7691,20 +7558,8 @@ pub struct ResolverArgs {
     )]
     link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options",
-    )]
-    no_sources: bool,
-
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    no_sources_package: Vec<PackageName>,
+    #[command(flatten)]
+    sources: SourcesArgs,
 }
 
 /// Arguments that are used by commands that need to resolve and install packages.
@@ -7747,51 +7602,8 @@ pub struct ResolverInstallerArgs {
     #[command(flatten)]
     pub registry_client: RegistryClientArgs,
 
-    /// The strategy to use when selecting between the different compatible versions for a given
-    /// package requirement.
-    ///
-    /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_RESOLUTION,
-        help_heading = "Resolver options"
-    )]
-    pub resolution: Option<ResolutionMode>,
-
-    /// The strategy to use when considering pre-release versions.
-    ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_PRERELEASE,
-        help_heading = "Resolver options"
-    )]
-    pub prerelease: Option<PrereleaseMode>,
-
-    #[arg(long, hide = true)]
-    pub pre: bool,
-
-    /// The strategy to use when selecting multiple versions of a given package across Python
-    /// versions and platforms.
-    ///
-    /// By default, uv will optimize for selecting the latest version of each package for each
-    /// supported Python version (`requires-python`), while minimizing the number of selected
-    /// versions across platforms.
-    ///
-    /// Under `fewest`, uv will minimize the number of selected versions for each package,
-    /// preferring older versions that are compatible with a wider range of supported Python
-    /// versions or platforms.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_FORK_STRATEGY,
-        help_heading = "Resolver options"
-    )]
-    pub fork_strategy: Option<ForkStrategy>,
+    #[command(flatten)]
+    pub version_selection: VersionSelectionArgs,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -7812,31 +7624,8 @@ pub struct ResolverInstallerArgs {
     )]
     pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        overrides_with("build_isolation"),
-        help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_ISOLATION,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub no_build_isolation: bool,
-
-    /// Disable isolation when building source distributions for a specific package.
-    ///
-    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
-    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
-    pub no_build_isolation_package: Vec<PackageName>,
-
-    #[arg(
-        long,
-        overrides_with("no_build_isolation"),
-        hide = true,
-        help_heading = "Build options"
-    )]
-    pub build_isolation: bool,
+    #[command(flatten)]
+    pub build_isolation: PackageBuildIsolationArgs,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -7899,20 +7688,8 @@ pub struct ResolverInstallerArgs {
     #[command(flatten)]
     pub compile_bytecode: CompileBytecodeArgs,
 
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options",
-    )]
-    pub no_sources: bool,
-
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    pub no_sources_package: Vec<PackageName>,
+    #[command(flatten)]
+    pub sources: SourcesArgs,
 }
 
 /// Arguments that are used by commands that need to fetch from the Simple API.

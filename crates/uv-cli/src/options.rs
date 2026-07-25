@@ -11,8 +11,9 @@ use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, Resolv
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
-    BuildOptionsArgs, CompileBytecodeArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs,
-    RegistryClientArgs, ReinstallArgs, ResolverArgs, ResolverInstallerArgs,
+    BuildIsolationArgs, BuildOptionsArgs, CompileBytecodeArgs, FetchArgs, IndexArgs, InstallerArgs,
+    Maybe, PackageBuildIsolationArgs, RefreshArgs, RegistryClientArgs, ReinstallArgs, ResolverArgs,
+    ResolverInstallerArgs, SourcesArgs, VersionSelectionArgs,
 };
 
 /// An error caused by an invalid combination of command-line arguments.
@@ -266,19 +267,31 @@ impl TryFrom<ResolverArgs> for PipOptions {
                     index_strategy,
                     keyring_provider,
                 },
-            resolution,
-            prerelease,
-            pre,
-            fork_strategy,
+            version_selection:
+                VersionSelectionArgs {
+                    resolution,
+                    prerelease,
+                    pre,
+                    fork_strategy,
+                },
             config_setting,
             config_settings_package,
-            no_build_isolation,
-            no_build_isolation_package,
-            build_isolation,
+            build_isolation:
+                PackageBuildIsolationArgs {
+                    build_isolation:
+                        BuildIsolationArgs {
+                            no_build_isolation,
+                            build_isolation,
+                        },
+                    no_build_isolation_package,
+                },
             exclude_newer,
             link_mode,
-            no_sources,
-            no_sources_package,
+            sources:
+                SourcesArgs {
+                    no_sources,
+                    no_sources_package,
+                },
             exclude_newer_package,
         } = args;
 
@@ -343,8 +356,11 @@ impl TryFrom<InstallerArgs> for PipOptions {
                 },
             config_setting,
             config_settings_package,
-            no_build_isolation,
-            build_isolation,
+            build_isolation:
+                BuildIsolationArgs {
+                    no_build_isolation,
+                    build_isolation,
+                },
             exclude_newer,
             link_mode,
             compile_bytecode:
@@ -352,8 +368,11 @@ impl TryFrom<InstallerArgs> for PipOptions {
                     compile_bytecode,
                     no_compile_bytecode,
                 },
-            no_sources,
-            no_sources_package,
+            sources:
+                SourcesArgs {
+                    no_sources,
+                    no_sources_package,
+                },
             exclude_newer_package,
         } = args;
 
@@ -406,15 +425,24 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
                     index_strategy,
                     keyring_provider,
                 },
-            resolution,
-            prerelease,
-            pre,
-            fork_strategy,
+            version_selection:
+                VersionSelectionArgs {
+                    resolution,
+                    prerelease,
+                    pre,
+                    fork_strategy,
+                },
             config_setting,
             config_settings_package,
-            no_build_isolation,
-            no_build_isolation_package,
-            build_isolation,
+            build_isolation:
+                PackageBuildIsolationArgs {
+                    build_isolation:
+                        BuildIsolationArgs {
+                            no_build_isolation,
+                            build_isolation,
+                        },
+                    no_build_isolation_package,
+                },
             exclude_newer,
             link_mode,
             compile_bytecode:
@@ -422,8 +450,11 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
                     compile_bytecode,
                     no_compile_bytecode,
                 },
-            no_sources,
-            no_sources_package,
+            sources:
+                SourcesArgs {
+                    no_sources,
+                    no_sources_package,
+                },
             exclude_newer_package,
         } = args;
 
@@ -541,19 +572,30 @@ pub fn resolver_options(
                 index_strategy,
                 keyring_provider,
             },
-        resolution,
-        prerelease,
-        pre,
-        fork_strategy,
+        version_selection:
+            VersionSelectionArgs {
+                resolution,
+                prerelease,
+                pre,
+                fork_strategy,
+            },
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
-        build_isolation,
+        build_isolation:
+            PackageBuildIsolationArgs {
+                build_isolation:
+                    BuildIsolationArgs {
+                        no_build_isolation,
+                        build_isolation,
+                    },
+                no_build_isolation_package,
+            },
         exclude_newer,
         link_mode,
-        no_sources,
-        no_sources_package,
+        sources: SourcesArgs {
+            no_sources,
+            no_sources_package,
+        },
         exclude_newer_package,
     } = resolver_args;
 
@@ -677,15 +719,24 @@ pub fn resolver_installer_options_with_indexes(
                 index_strategy,
                 keyring_provider,
             },
-        resolution,
-        prerelease,
-        pre,
-        fork_strategy,
+        version_selection:
+            VersionSelectionArgs {
+                resolution,
+                prerelease,
+                pre,
+                fork_strategy,
+            },
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
-        build_isolation,
+        build_isolation:
+            PackageBuildIsolationArgs {
+                build_isolation:
+                    BuildIsolationArgs {
+                        no_build_isolation,
+                        build_isolation,
+                    },
+                no_build_isolation_package,
+            },
         exclude_newer,
         exclude_newer_package,
         link_mode,
@@ -694,8 +745,10 @@ pub fn resolver_installer_options_with_indexes(
                 compile_bytecode,
                 no_compile_bytecode,
             },
-        no_sources,
-        no_sources_package,
+        sources: SourcesArgs {
+            no_sources,
+            no_sources_package,
+        },
     } = resolver_installer_args;
 
     let BuildOptionsArgs {
