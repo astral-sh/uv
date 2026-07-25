@@ -15,12 +15,12 @@ use std::str::FromStr;
 
 use glob::Pattern;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::de::SeqAccess;
+use serde::de::{IntoDeserializer, SeqAccess};
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
-use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
+use uv_configuration::{DependencyExclusion, GitLfsSetting, PackageDependencyModifierTarget};
 use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git_types::GitReference;
@@ -285,8 +285,91 @@ where
     Ok(indexes)
 }
 
-/// An override dependency before source lowering.
-pub type OverrideDependency = Override<uv_pep508::Requirement<VerbatimParsedUrl>>;
+/// An override that applies to the dependencies of a specific package version.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(rename = "PackageOverride")
+)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct UnresolvedPackageOverride {
+    pub package: PackageDependencyModifierTarget,
+    pub dependencies: Box<[uv_pep508::Requirement<VerbatimParsedUrl>]>,
+}
+
+/// An override, either global or scoped to a specific package version.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(untagged, rename = "Override")
+)]
+#[serde(untagged)]
+pub enum UnresolvedDependencyOverride {
+    Package(UnresolvedPackageOverride),
+    Requirement(Box<uv_pep508::Requirement<VerbatimParsedUrl>>),
+}
+
+impl<'de> serde::Deserialize<'de> for UnresolvedDependencyOverride {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum MapOverride {
+            Package(UnresolvedPackageOverride),
+            Requirement(Box<uv_pep508::Requirement<VerbatimParsedUrl>>),
+        }
+
+        serde_untagged::UntaggedEnumVisitor::new()
+            .string(|string| {
+                uv_pep508::Requirement::deserialize(string.into_deserializer())
+                    .map(Box::new)
+                    .map(Self::Requirement)
+            })
+            .map(|map| {
+                map.deserialize::<MapOverride>().map(|entry| match entry {
+                    MapOverride::Package(package) => Self::Package(package),
+                    MapOverride::Requirement(requirement) => Self::Requirement(requirement),
+                })
+            })
+            .deserialize(deserializer)
+    }
+}
+
+impl UnresolvedDependencyOverride {
+    /// Lower the requirements in this override with the given function.
+    pub fn map_requirements(
+        self,
+        mut function: impl FnMut(
+            uv_pep508::Requirement<VerbatimParsedUrl>,
+        ) -> uv_distribution_types::Requirement,
+    ) -> uv_configuration::DependencyOverride {
+        match self {
+            Self::Package(package) => {
+                uv_configuration::DependencyOverride::Package(uv_configuration::PackageOverride {
+                    package: package.package,
+                    dependencies: package
+                        .dependencies
+                        .into_vec()
+                        .into_iter()
+                        .map(function)
+                        .collect(),
+                })
+            }
+            Self::Requirement(requirement) => {
+                uv_configuration::DependencyOverride::requirement(function(*requirement))
+            }
+        }
+    }
+
+    /// Lower this override without applying workspace sources.
+    pub fn into_resolved(self) -> uv_configuration::DependencyOverride {
+        self.map_requirements(uv_distribution_types::Requirement::from)
+    }
+}
 
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
@@ -482,7 +565,7 @@ pub struct ToolUv {
             ]
         "#
     )]
-    pub(crate) override_dependencies: Option<Vec<OverrideDependency>>,
+    pub(crate) override_dependencies: Option<Vec<UnresolvedDependencyOverride>>,
 
     /// Dependencies to exclude when resolving the project's dependencies.
     ///
@@ -515,7 +598,7 @@ pub struct ToolUv {
             ]
         "#
     )]
-    pub(crate) exclude_dependencies: Option<Vec<ExcludeDependency>>,
+    pub(crate) exclude_dependencies: Option<Vec<DependencyExclusion>>,
 
     /// Constraints to apply when resolving the project's dependencies.
     ///

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use toml_edit::{Array, Item, Table, Value, value};
 
-use uv_configuration::ExcludeDependency;
+use uv_configuration::DependencyModifiers;
 use uv_distribution_types::Requirement;
 use uv_fs::{PortablePath, Simplified};
 use uv_pypi_types::VerbatimParsedUrl;
@@ -22,10 +22,8 @@ pub struct Tool {
     requirements: Vec<Requirement>,
     /// The constraints requested by the user during installation.
     constraints: Vec<Requirement>,
-    /// The overrides requested by the user during installation.
-    overrides: Vec<Requirement>,
-    /// The excludes requested by the user during installation.
-    excludes: Vec<ExcludeDependency>,
+    /// The dependency modifiers requested by the user during installation.
+    modifiers: DependencyModifiers,
     /// The build constraints requested by the user during installation.
     build_constraints: Vec<Requirement>,
     /// The Python requested by the user during installation.
@@ -43,10 +41,8 @@ struct ToolWire {
     requirements: Vec<RequirementWire>,
     #[serde(default)]
     constraints: Vec<Requirement>,
-    #[serde(default)]
-    overrides: Vec<Requirement>,
-    #[serde(default)]
-    excludes: Vec<ExcludeDependency>,
+    #[serde(flatten)]
+    modifiers: DependencyModifiers,
     #[serde(default)]
     build_constraint_dependencies: Vec<Requirement>,
     python: Option<PythonRequest>,
@@ -74,8 +70,7 @@ impl From<Tool> for ToolWire {
                 .map(RequirementWire::Requirement)
                 .collect(),
             constraints: tool.constraints,
-            overrides: tool.overrides,
-            excludes: tool.excludes,
+            modifiers: tool.modifiers,
             build_constraint_dependencies: tool.build_constraints,
             python: tool.python,
             entrypoints: tool.entrypoints,
@@ -98,8 +93,7 @@ impl TryFrom<ToolWire> for Tool {
                 })
                 .collect(),
             constraints: tool.constraints,
-            overrides: tool.overrides,
-            excludes: tool.excludes,
+            modifiers: tool.modifiers,
             build_constraints: tool.build_constraint_dependencies,
             python: tool.python,
             entrypoints: tool.entrypoints,
@@ -174,8 +168,7 @@ impl Tool {
     pub fn new(
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
-        overrides: Vec<Requirement>,
-        excludes: Vec<ExcludeDependency>,
+        modifiers: DependencyModifiers,
         build_constraints: Vec<Requirement>,
         python: Option<PythonRequest>,
         entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
@@ -186,8 +179,7 @@ impl Tool {
         Self {
             requirements,
             constraints,
-            overrides,
-            excludes,
+            modifiers,
             build_constraints,
             python,
             entrypoints,
@@ -249,11 +241,11 @@ impl Tool {
             });
         }
 
-        if !self.overrides.is_empty() {
+        let overrides = self.modifiers.override_entries().collect::<Vec<_>>();
+        if !overrides.is_empty() {
             table.insert("overrides", {
-                let overrides = self
-                    .overrides
-                    .iter()
+                let overrides = overrides
+                    .into_iter()
                     .map(|r#override| {
                         serde::Serialize::serialize(
                             &r#override,
@@ -271,11 +263,11 @@ impl Tool {
             });
         }
 
-        if !self.excludes.is_empty() {
+        let excludes = self.modifiers.exclusion_entries().collect::<Vec<_>>();
+        if !excludes.is_empty() {
             table.insert("excludes", {
-                let excludes = self
-                    .excludes
-                    .iter()
+                let excludes = excludes
+                    .into_iter()
                     .map(|r#exclude| {
                         serde::Serialize::serialize(
                             &r#exclude,
@@ -363,12 +355,8 @@ impl Tool {
         &self.constraints
     }
 
-    pub fn overrides(&self) -> &[Requirement] {
-        &self.overrides
-    }
-
-    pub fn excludes(&self) -> &[ExcludeDependency] {
-        &self.excludes
+    pub fn modifiers(&self) -> &DependencyModifiers {
+        &self.modifiers
     }
 
     pub fn build_constraints(&self) -> &[Requirement] {

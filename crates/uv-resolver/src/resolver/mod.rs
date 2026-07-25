@@ -20,7 +20,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
@@ -110,8 +110,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
-    overrides: Overrides,
-    excludes: Excludes,
+    modifiers: DependencyModifiers,
     preferences: Preferences,
     git: GitResolver,
     capabilities: IndexCapabilities,
@@ -242,8 +241,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
-            overrides: manifest.overrides,
-            excludes: manifest.excludes,
+            modifiers: manifest.modifiers,
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -857,7 +855,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &resolutions,
             self.requirements.clone(),
             self.constraints.clone(),
-            self.overrides.clone(),
+            self.modifiers.clone(),
             &self.preferences,
             &self.index,
             &self.git,
@@ -2075,6 +2073,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &'a PythonRequirement,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
         let python_marker = python_requirement.to_marker_tree();
+        let package_scope = name
+            .zip(version)
+            .map_or(DependencyModifierScope::Global, |(name, version)| {
+                DependencyModifierScope::Package(name, version)
+            });
+        let dependency_group_scope = name
+            .zip(version)
+            .map_or(DependencyModifierScope::Global, |(name, version)| {
+                DependencyModifierScope::DependencyGroup(name, version)
+            });
 
         if let Some(dev) = dev {
             // Dependency groups can include the project itself, so no need to flatten recursive
@@ -2082,8 +2090,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Left(Either::Left(self.requirements_for_extra(
                 dev_dependencies.get(dev).into_iter().flatten(),
                 extra,
-                None,
-                name.zip(version),
+                dependency_group_scope,
                 env,
                 python_marker,
                 python_requirement,
@@ -2096,8 +2103,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Left(Either::Right(self.requirements_for_extra(
                 dependencies.iter(),
                 extra,
-                name.zip(version),
-                name.zip(version),
+                package_scope,
                 env,
                 python_marker,
                 python_requirement,
@@ -2107,8 +2113,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .requirements_for_extra(
                     dependencies.iter(),
                     extra,
-                    name.zip(version),
-                    name.zip(version),
+                    package_scope,
                     env,
                     python_marker,
                     python_requirement,
@@ -2130,8 +2135,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for requirement in self.requirements_for_extra(
                     dependencies,
                     Some(&extra),
-                    name.zip(version),
-                    name.zip(version),
+                    package_scope,
                     env,
                     python_marker,
                     python_requirement,
@@ -2201,8 +2205,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &'data self,
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
-        override_package: Option<(&'parameters PackageName, &'parameters Version)>,
-        exclusion_package: Option<(&'parameters PackageName, &'parameters Version)>,
+        modifier_scope: DependencyModifierScope<'parameters>,
         env: &'parameters ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
@@ -2210,13 +2213,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     where
         'data: 'parameters,
     {
-        self.overrides
-            .apply_for_package(override_package, dependencies)
-            .filter(move |requirement| {
-                !self
-                    .excludes
-                    .contains_for_package(exclusion_package, &requirement.name)
-            })
+        self.modifiers
+            .apply(modifier_scope, dependencies)
             .map(move |mut requirement| {
                 // Split the marker into production and optional components. If we have e.g.
                 // `foo; sys_platform == 'win32' or extra == 'feature'`

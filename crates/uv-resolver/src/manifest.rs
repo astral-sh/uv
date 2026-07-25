@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use either::Either;
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::Requirement;
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
@@ -20,11 +20,8 @@ pub struct Manifest {
     /// The constraints for the project.
     pub(super) constraints: Constraints,
 
-    /// The overrides for the project.
-    pub(super) overrides: Overrides,
-
-    /// The dependency excludes for the project.
-    pub(super) excludes: Excludes,
+    /// The dependency modifiers for the project.
+    pub(super) modifiers: DependencyModifiers,
 
     /// The preferences for the project.
     ///
@@ -57,8 +54,7 @@ impl Manifest {
     pub fn new(
         requirements: Vec<Requirement>,
         constraints: Constraints,
-        overrides: Overrides,
-        excludes: Excludes,
+        modifiers: DependencyModifiers,
         preferences: Preferences,
         project: Option<PackageName>,
         workspace_members: BTreeSet<PackageName>,
@@ -68,8 +64,7 @@ impl Manifest {
         Self {
             requirements,
             constraints,
-            overrides,
-            excludes,
+            modifiers,
             preferences,
             project,
             workspace_members,
@@ -82,8 +77,7 @@ impl Manifest {
         Self {
             requirements,
             constraints: Constraints::default(),
-            overrides: Overrides::default(),
-            excludes: Excludes::default(),
+            modifiers: DependencyModifiers::default(),
             preferences: Preferences::default(),
             project: None,
             exclusions: Exclusions::default(),
@@ -131,16 +125,8 @@ impl Manifest {
         mode: DependencyMode,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         self.requirements(env, mode).chain(
-            self.overrides
-                .scoped_requirements()
-                .filter(|(package, version, requirement)| {
-                    !self.excludes.contains_for_scope(
-                        &self.overrides,
-                        package,
-                        *version,
-                        &requirement.name,
-                    )
-                })
+            self.modifiers
+                .scoped_overrides()
                 .map(|(_, _, requirement)| Cow::Borrowed(requirement))
                 .filter(move |requirement| {
                     requirement.evaluate_markers(env.marker_environment(), &[])
@@ -160,28 +146,22 @@ impl Manifest {
                 self.lookaheads
                     .iter()
                     .flat_map(move |lookahead| {
-                        self.overrides
-                            .apply_for(
-                                lookahead.package(),
-                                lookahead.version(),
-                                lookahead.requirements(),
-                            )
-                            .filter(|requirement| {
-                                !self.excludes.contains_for(
+                        self.modifiers
+                            .apply(
+                                DependencyModifierScope::Package(
                                     lookahead.package(),
                                     lookahead.version(),
-                                    &requirement.name,
-                                )
-                            })
+                                ),
+                                lookahead.requirements(),
+                            )
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
                             })
                     })
                     .chain(
-                        self.overrides
-                            .apply(&self.requirements)
-                            .filter(|requirement| !self.excludes.contains(&requirement.name))
+                        self.modifiers
+                            .apply(DependencyModifierScope::Global, &self.requirements)
                             .filter(move |requirement| {
                                 requirement.evaluate_markers(env.marker_environment(), &[])
                             }),
@@ -189,7 +169,7 @@ impl Manifest {
                     .chain(
                         self.constraints
                             .requirements()
-                            .filter(|requirement| !self.excludes.contains(&requirement.name))
+                            .filter(|requirement| !self.modifiers.is_excluded(&requirement.name))
                             .filter(move |requirement| {
                                 requirement.evaluate_markers(env.marker_environment(), &[])
                             })
@@ -198,10 +178,10 @@ impl Manifest {
             ),
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
-                self.overrides
-                    .apply(&self.requirements)
+                self.modifiers
+                    .apply(DependencyModifierScope::Global, &self.requirements)
                     .chain(self.constraints.requirements().map(Cow::Borrowed))
-                    .filter(|requirement| !self.excludes.contains(&requirement.name))
+                    .filter(|requirement| !self.modifiers.is_excluded(&requirement.name))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
                     }),
@@ -218,9 +198,8 @@ impl Manifest {
         match mode {
             // Include all direct and transitive requirements, with constraints and overrides applied.
             DependencyMode::Transitive => Either::Left(
-                self.overrides
-                    .global_requirements()
-                    .filter(|requirement| !self.excludes.contains(&requirement.name))
+                self.modifiers
+                    .global_overrides()
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
                     })
@@ -228,9 +207,8 @@ impl Manifest {
             ),
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
-                self.overrides
-                    .global_requirements()
-                    .filter(|requirement| !self.excludes.contains(&requirement.name))
+                self.modifiers
+                    .global_overrides()
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
                     })
@@ -262,27 +240,22 @@ impl Manifest {
                     .iter()
                     .filter(|lookahead| lookahead.direct())
                     .flat_map(move |lookahead| {
-                        self.overrides
-                            .apply_for(
-                                lookahead.package(),
-                                lookahead.version(),
-                                lookahead.requirements(),
-                            )
-                            .filter(|requirement| {
-                                !self.excludes.contains_for(
+                        self.modifiers
+                            .apply(
+                                DependencyModifierScope::Package(
                                     lookahead.package(),
                                     lookahead.version(),
-                                    &requirement.name,
-                                )
-                            })
+                                ),
+                                lookahead.requirements(),
+                            )
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
                             })
                     })
                     .chain(
-                        self.overrides
-                            .apply(&self.requirements)
+                        self.modifiers
+                            .apply(DependencyModifierScope::Global, &self.requirements)
                             .filter(move |requirement| {
                                 requirement.evaluate_markers(env.marker_environment(), &[])
                             }),
@@ -290,11 +263,13 @@ impl Manifest {
             ),
 
             // Restrict to the direct requirements.
-            DependencyMode::Direct => {
-                Either::Right(self.overrides.apply(self.requirements.iter()).filter(
-                    move |requirement| requirement.evaluate_markers(env.marker_environment(), &[]),
-                ))
-            }
+            DependencyMode::Direct => Either::Right(
+                self.modifiers
+                    .apply(DependencyModifierScope::Global, self.requirements.iter())
+                    .filter(move |requirement| {
+                        requirement.evaluate_markers(env.marker_environment(), &[])
+                    }),
+            ),
         }
     }
 
