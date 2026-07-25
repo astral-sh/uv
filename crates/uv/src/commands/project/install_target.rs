@@ -341,15 +341,11 @@ impl<'lock> InstallTarget<'lock> {
                 }
 
                 let roots = self.roots().collect::<FxHashSet<_>>();
-                let member_packages: Vec<&Package> = lock
+                // Collect all known extras from the member packages.
+                let known_extras = lock
                     .packages()
                     .iter()
                     .filter(|package| roots.contains(package.name()))
-                    .collect();
-
-                // Collect all known extras from the member packages.
-                let known_extras = member_packages
-                    .iter()
                     .flat_map(|package| package.provides_extras().iter())
                     .collect::<FxHashSet<_>>();
 
@@ -393,47 +389,33 @@ impl<'lock> InstallTarget<'lock> {
         }
 
         match self {
-            Self::Workspace { lock, workspace } | Self::NonProjectWorkspace { lock, workspace } => {
-                let roots = self.roots().collect::<FxHashSet<_>>();
-                let member_packages: Vec<&Package> = lock
-                    .packages()
-                    .iter()
-                    .filter(|package| roots.contains(package.name()))
-                    .collect();
-
-                // Extract the dependency groups that are exclusive to the workspace root.
-                let known_groups = member_packages
-                    .iter()
-                    .flat_map(|package| package.dependency_groups().keys().map(Cow::Borrowed))
-                    .chain(
-                        workspace
-                            .workspace_dependency_groups()
-                            .ok()
-                            .into_iter()
-                            .flat_map(|dependency_groups| {
-                                dependency_groups.into_keys().map(Cow::Owned)
-                            }),
-                    )
-                    .collect::<FxHashSet<_>>();
-
-                for group in groups.explicit_names() {
-                    if !known_groups.contains(group) {
-                        return Err(ProjectError::MissingGroupProjects(group.clone()));
-                    }
-                }
+            Self::Project {
+                lock, workspace, ..
             }
-            Self::Project { lock, .. } | Self::Projects { lock, .. } => {
+            | Self::Projects {
+                lock, workspace, ..
+            }
+            | Self::Workspace { lock, workspace }
+            | Self::NonProjectWorkspace { lock, workspace } => {
                 let roots = self.roots().collect::<FxHashSet<_>>();
-                let member_packages: Vec<&Package> = lock
+                let member_groups = lock
                     .packages()
                     .iter()
                     .filter(|package| roots.contains(package.name()))
-                    .collect();
+                    .flat_map(|package| package.dependency_groups().keys().map(Cow::Borrowed));
 
-                // Extract the dependency groups defined in the relevant member(s).
-                let known_groups = member_packages
-                    .iter()
-                    .flat_map(|package| package.dependency_groups().keys())
+                // Groups defined directly on a non-project workspace root are not members.
+                let workspace_groups = matches!(
+                    self,
+                    Self::Workspace { .. } | Self::NonProjectWorkspace { .. }
+                )
+                .then(|| workspace.workspace_dependency_groups().ok())
+                .flatten()
+                .into_iter()
+                .flat_map(|dependency_groups| dependency_groups.into_keys().map(Cow::Owned));
+
+                let known_groups = member_groups
+                    .chain(workspace_groups)
                     .collect::<FxHashSet<_>>();
 
                 for group in groups.explicit_names() {
@@ -442,10 +424,7 @@ impl<'lock> InstallTarget<'lock> {
                             Self::Project { .. } => {
                                 Err(ProjectError::MissingGroupProject(group.clone()))
                             }
-                            Self::Projects { .. } => {
-                                Err(ProjectError::MissingGroupProjects(group.clone()))
-                            }
-                            _ => unreachable!(),
+                            _ => Err(ProjectError::MissingGroupProjects(group.clone())),
                         };
                     }
                 }
