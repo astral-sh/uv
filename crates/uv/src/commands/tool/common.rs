@@ -543,6 +543,7 @@ impl ToolLock {
             &hasher,
             state.index(),
             &database,
+            preview,
             printer,
         )
         .await?;
