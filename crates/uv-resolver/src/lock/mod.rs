@@ -845,6 +845,11 @@ impl Lock {
         (self.version(), self.revision()) >= (1, 1)
     }
 
+    /// Returns `true` if this [`Lock`] can validate packages without declaration metadata.
+    pub fn supports_missing_package_metadata(&self) -> bool {
+        (self.version(), self.revision()) >= (1, 4)
+    }
+
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
     fn includes_empty_groups(&self) -> bool {
         // Empty dependency groups are included as of https://github.com/astral-sh/uv/pull/8598,
@@ -3598,6 +3603,11 @@ impl Package {
     /// Returns `true` if the package is a dynamic source tree.
     fn is_dynamic(&self) -> bool {
         self.id.version.is_none()
+    }
+
+    /// Returns `true` if the package contains the validation-only package metadata.
+    pub fn has_metadata(&self) -> bool {
+        self.metadata != PackageMetadata::default()
     }
 
     /// Returns the extras the package provides, if any.

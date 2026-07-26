@@ -325,6 +325,8 @@ pub enum PreviewFeature {
     IndexHashAlgorithm,
     /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
     LockfileFormatCheck,
+    /// Allows frozen installations from lockfiles that omit package declaration metadata.
+    LockWithoutMetadata,
 }
 
 impl Display for PreviewFeature {
