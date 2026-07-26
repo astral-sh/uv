@@ -6,6 +6,14 @@ When creating projects, uv supports two basic templates: [**applications**](#app
 [**libraries**](#libraries). By default, uv will create a project for an application. The `--lib`
 flag can be used to create a project for a library instead.
 
+| Option                | When to Use                                                                  | Project Layout                                                                  |
+| --------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `--bare`              | You only want a minimal `pyproject.toml` without README, pin file, or source | Just `pyproject.toml` (can combine with `--lib` or `--build-backend`)           |
+| *(default)* / `--app` | You’re building a simple application (script, CLI, web server)               | Flat layout with `main.py`, `README.md`, `.python-version`, `pyproject.toml`    |
+| `--package`           | You want an installable packaged app (e.g. CLI on PyPI, tests, entry points) | `src/` layout with package module, `pyproject.toml` including build system      |
+| `--lib`               | You’re creating a reusable library to distribute on PyPI                     | Like `--package`, but with `py.typed` and intended for import by other projects |
+
+
 ## Target directory
 
 uv will create a project in the working directory, or, in a target directory by providing a name,
