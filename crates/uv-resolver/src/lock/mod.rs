@@ -1566,8 +1566,21 @@ impl Lock {
         requires_dist: Box<[Requirement]>,
         dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
         package: &'lock Package,
+        remotes: &mut Option<BTreeSet<UrlString>>,
+        locals: &mut Option<BTreeSet<Box<Path>>>,
         root: &Path,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
+        let indexes = requires_dist
+            .iter()
+            .chain(dependency_groups.values().flatten())
+            .filter_map(|requirement| match &requirement.source {
+                RequirementSource::Registry {
+                    index: Some(index), ..
+                } => Some(index.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
         // Special-case: if the version is dynamic, compare the flattened requirements.
         let flattened = if package.is_dynamic() {
             Some(
@@ -1646,22 +1659,24 @@ impl Lock {
             ));
         }
 
+        // Add any explicit indexes to the list of known locals or remotes. These indexes may
+        // not be available as top-level configuration (i.e., if they're defined within a
+        // workspace member), but we already validated that the dependencies are up-to-date, so
+        // we can consider them "available". Recording indexes only after validating refreshed
+        // requirements prevents stale static metadata from authorizing an unrelated locked source.
+        for index in &indexes {
+            Self::record_index(index, remotes, locals, root);
+        }
+
         Ok(SatisfiesResult::Satisfied)
     }
 
     fn record_index(
-        requirement: &Requirement,
+        index: &IndexMetadata,
         remotes: &mut Option<BTreeSet<UrlString>>,
         locals: &mut Option<BTreeSet<Box<Path>>>,
         root: &Path,
     ) {
-        let RequirementSource::Registry {
-            index: Some(index), ..
-        } = &requirement.source
-        else {
-            return;
-        };
-
         match &index.url {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 if let Some(remotes) = remotes.as_mut() {
@@ -1968,7 +1983,12 @@ impl Lock {
             .collect::<Vec<_>>();
 
         for requirement in &root_requirements {
-            Self::record_index(requirement, &mut remotes, &mut locals, root);
+            if let RequirementSource::Registry {
+                index: Some(index), ..
+            } = &requirement.source
+            {
+                Self::record_index(index, &mut remotes, &mut locals, root);
+            }
         }
 
         if !root_requirements.is_empty() {
@@ -2103,6 +2123,8 @@ impl Lock {
                             metadata.requires_dist,
                             metadata.dependency_groups,
                             package,
+                            &mut remotes,
+                            &mut locals,
                             root,
                         )? {
                             SatisfiesResult::Satisfied => true,
@@ -2189,6 +2211,8 @@ impl Lock {
                         metadata.requires_dist,
                         metadata.dependency_groups,
                         package,
+                        &mut remotes,
+                        &mut locals,
                         root,
                     )? {
                         SatisfiesResult::Satisfied => {}
@@ -2226,7 +2250,14 @@ impl Lock {
                     }
 
                     // Validate that the requirements are unchanged.
-                    match self.satisfies_requires_dist(metadata.requires_dist, metadata.dependency_groups, package, root) {
+                    match self.satisfies_requires_dist(
+                        metadata.requires_dist,
+                        metadata.dependency_groups,
+                        package,
+                        &mut remotes,
+                        &mut locals,
+                        root,
+                    ) {
                         Ok(SatisfiesResult::Satisfied) => {
                             debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
                         },
@@ -2310,6 +2341,8 @@ impl Lock {
                         metadata.requires_dist,
                         metadata.dependency_groups,
                         package,
+                        &mut remotes,
+                        &mut locals,
                         root,
                     )? {
                         SatisfiesResult::Satisfied => {}
@@ -2318,19 +2351,6 @@ impl Lock {
                 }
             } else {
                 return Ok(SatisfiesResult::MissingVersion(&package.id.name));
-            }
-
-            // Add any explicit indexes to the list of known locals or remotes. These indexes may
-            // not be available as top-level configuration (i.e., if they're defined within a
-            // workspace member), but we already validated that the dependencies are up-to-date, so
-            // we can consider them "available".
-            for requirement in package
-                .metadata
-                .requires_dist
-                .iter()
-                .chain(package.metadata.dependency_groups.values().flatten())
-            {
-                Self::record_index(requirement, &mut remotes, &mut locals, root);
             }
 
             // Recurse.
