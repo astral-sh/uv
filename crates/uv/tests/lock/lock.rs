@@ -24528,6 +24528,112 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that unreachable extras are split off, but the marker itself remains.
+///
+/// In this case,
+/// `foo; sys_platform == 'win32' or extra == 'feature'`
+/// is split into
+/// `foo; sys_platform == 'win32'` (production)
+/// and
+/// `foo; extra == 'feature'` (extra)
+/// which are tracked in production and optional dependencies respectively.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_extra_marker_preserves_production_platform() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "marker-leaf ; sys_platform == 'win32' or extra == 'feature'",
+        ]
+
+        [project.optional-dependencies]
+        feature = []
+
+        [tool.uv.sources]
+        marker-leaf = { path = "leaf" }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("leaf")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "marker-leaf"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["uv_build>=0.7,<10000"]
+            build-backend = "uv_build"
+            "#,
+        )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("correct-extra-markers").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "marker-leaf"
+        version = "1.0.0"
+        source = { directory = "leaf" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "marker-leaf", marker = "sys_platform == 'win32'" },
+        ]
+
+        [package.optional-dependencies]
+        feature = [
+            { name = "marker-leaf", marker = "sys_platform != 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "marker-leaf", marker = "sys_platform == 'win32' or extra == 'feature'", directory = "leaf" }]
+        provides-extras = ["feature"]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./leaf ; sys_platform == 'win32'
+        # via project
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header").arg("--extra").arg("feature"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./leaf
+        # via project
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_extra() -> Result<()> {

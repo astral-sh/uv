@@ -115,6 +115,7 @@ mod tests {
         - `centralized-project-envs`: Stores [project virtual environments](./projects/layout.md#centralized-project-environments)
           in the uv cache.
         - `check-command`: Allows using `uv check`.
+        - `correct-extra-markers`: Split extra-dependent requirement markers to their production or extra context.
         - `detect-module-conflicts`: Warns when multiple packages would install conflicting Python modules into the same
           environment.
         - `direct-publish`: Allows publishing directly to a package index.

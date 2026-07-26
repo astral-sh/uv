@@ -325,6 +325,8 @@ pub enum PreviewFeature {
     IndexHashAlgorithm,
     /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
     LockfileFormatCheck,
+    /// Split extra-dependent requirement markers to their production or extra context.
+    CorrectExtraMarkers,
 }
 
 impl Display for PreviewFeature {
