@@ -1106,6 +1106,12 @@ async fn do_lock(
             .with_conflicts(conflicts)
             .with_required_environments(lock_required_environments.into_markers());
 
+            let lock = if preview.is_enabled(PreviewFeature::LockWithoutMetadata) {
+                lock.without_package_metadata()
+            } else {
+                lock
+            };
+
             let unchanged = if let Some(check_lockfile_contents) = check_lockfile_contents {
                 previous.is_some() && check_lockfile_contents == lock.to_toml()?.as_str()
             } else {

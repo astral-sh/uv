@@ -88,6 +88,9 @@ pub const VERSION: u32 = 1;
 /// The current revision of the lockfile format.
 const REVISION: u32 = 3;
 
+/// The first lockfile revision that supports omitting package declaration metadata.
+const METADATA_FREE_REVISION: u32 = 4;
+
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
@@ -1271,6 +1274,16 @@ impl Lock {
         self
     }
 
+    /// Omit package declaration metadata using the revision that supports metadata-free locks.
+    #[must_use]
+    pub fn without_package_metadata(mut self) -> Self {
+        self.revision = METADATA_FREE_REVISION;
+        for package in &mut self.packages {
+            package.metadata = PackageMetadata::default();
+        }
+        self
+    }
+
     /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
     pub fn supports_provides_extra(&self) -> bool {
         // `provides-extra` was added in Version 1 Revision 1.
@@ -1279,7 +1292,7 @@ impl Lock {
 
     /// Returns `true` if this [`Lock`] can validate packages without declaration metadata.
     pub fn supports_missing_package_metadata(&self) -> bool {
-        (self.version(), self.revision()) >= (1, 4)
+        (self.version(), self.revision()) >= (VERSION, METADATA_FREE_REVISION)
     }
 
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
