@@ -62,6 +62,14 @@
     {
       "caller": "uv",
       "environment": "automations",
+      "caller_workflow": "sync-python-releases.yml",
+      "on": ["schedule", "workflow_dispatch"],
+      "permissions": { "contents": "write", "pull_requests": "write" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
       "caller_workflow": "sync-uv-dev.yml",
       "on": ["push", "workflow_dispatch"],
       "permissions": { "contents": "write", "workflows": "write" },
