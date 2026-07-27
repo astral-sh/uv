@@ -1,3 +1,4 @@
+use std::env;
 use std::error::Error;
 use std::fmt;
 
@@ -231,7 +232,7 @@ impl TryFrom<RefreshArgs> for Refresh {
 }
 
 /// Extract the `--index` and `--default-index` values from [`IndexArgs`].
-pub fn indexes_from_args(
+fn indexes_from_args(
     default_index: Option<&Maybe<Index>>,
     index: Option<&[Vec<Maybe<Index>>]>,
 ) -> Option<Vec<Index>> {
@@ -319,7 +320,7 @@ impl TryFrom<ResolverArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::from(index_args)
+            ..Self::try_from(index_args)?
         })
     }
 }
@@ -380,7 +381,7 @@ impl TryFrom<InstallerArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::from(index_args)
+            ..Self::try_from(index_args)?
         })
     }
 }
@@ -467,13 +468,15 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::from(index_args)
+            ..Self::try_from(index_args)?
         })
     }
 }
 
-impl From<FetchArgs> for PipOptions {
-    fn from(args: FetchArgs) -> Self {
+impl TryFrom<FetchArgs> for PipOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(args: FetchArgs) -> anyhow::Result<Self> {
         let FetchArgs {
             index_args,
             registry_client:
@@ -484,17 +487,19 @@ impl From<FetchArgs> for PipOptions {
             exclude_newer,
         } = args;
 
-        Self {
+        Ok(Self {
             index_strategy,
             keyring_provider,
             exclude_newer,
-            ..Self::from(index_args)
-        }
+            ..Self::try_from(index_args)?
+        })
     }
 }
 
-impl From<IndexArgs> for PipOptions {
-    fn from(args: IndexArgs) -> Self {
+impl TryFrom<IndexArgs> for PipOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(args: IndexArgs) -> anyhow::Result<Self> {
         let IndexArgs {
             default_index,
             index,
@@ -522,6 +527,8 @@ impl From<IndexArgs> for PipOptions {
             }),
             ..Self::default()
         }
+        .relative_to(&env::current_dir()?)
+        .map_err(Into::into)
     }
 }
 
@@ -566,7 +573,7 @@ pub fn resolver_options(
         no_binary_package,
     } = build_args;
 
-    Ok(ResolverOptions {
+    ResolverOptions {
         index: indexes_from_args(
             index_args.default_index.as_ref(),
             index_args.index.as_deref(),
@@ -639,7 +646,9 @@ pub fn resolver_options(
         } else {
             Some(no_sources_package)
         },
-    })
+    }
+    .relative_to(&env::current_dir()?)
+    .map_err(Into::into)
 }
 
 /// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildOptionsArgs`].
@@ -694,7 +703,7 @@ pub fn resolver_installer_options(
         no_binary_package,
     } = build_args;
 
-    Ok(ResolverInstallerOptions {
+    ResolverInstallerOptions {
         index: indexes_from_args(
             index_args.default_index.as_ref(),
             index_args.index.as_deref(),
@@ -772,5 +781,7 @@ pub fn resolver_installer_options(
             Some(no_sources_package)
         },
         torch_backend: None,
-    })
+    }
+    .relative_to(&env::current_dir()?)
+    .map_err(Into::into)
 }

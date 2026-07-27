@@ -3876,7 +3876,7 @@ impl PipListSettings {
                     strict: flag(strict, no_strict, "strict")?,
                     target,
                     prefix,
-                    ..PipOptions::from(fetch)
+                    ..PipOptions::try_from(fetch)?
                 },
                 filesystem,
                 environment,
@@ -3977,7 +3977,7 @@ impl PipTreeSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system")?,
                     strict: flag(strict, no_strict, "strict")?,
-                    ..PipOptions::from(fetch)
+                    ..PipOptions::try_from(fetch)?
                 },
                 filesystem,
                 environment,
@@ -4226,7 +4226,7 @@ impl VenvSettings {
                     exclude_newer_package: exclude_newer_package
                         .map(ExcludeNewerPackage::from_iter),
                     link_mode,
-                    ..PipOptions::from(index_args)
+                    ..PipOptions::try_from(index_args)?
                 },
                 filesystem,
                 environment,

@@ -609,6 +609,21 @@ pub struct ResolverOptions {
     pub no_sources_package: Option<Vec<PackageName>>,
 }
 
+impl ResolverOptions {
+    /// Resolve the [`ResolverOptions`] relative to the given root directory.
+    pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        rebase_indexes(
+            root_dir,
+            &mut self.index,
+            &mut self.index_url,
+            &mut self.extra_index_url,
+            &mut self.find_links,
+        )?;
+
+        Ok(self)
+    }
+}
+
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
 /// union of [`InstallerOptions`] and [`ResolverOptions`].
 #[derive(Debug, Clone, Default, CombineOptions)]
@@ -642,6 +657,21 @@ pub struct ResolverInstallerOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+}
+
+impl ResolverInstallerOptions {
+    /// Resolve the [`ResolverInstallerOptions`] relative to the given root directory.
+    pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        rebase_indexes(
+            root_dir,
+            &mut self.index,
+            &mut self.index_url,
+            &mut self.extra_index_url,
+            &mut self.find_links,
+        )?;
+
+        Ok(self)
+    }
 }
 
 impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
@@ -2097,7 +2127,7 @@ pub struct PipOptions {
 
 impl PipOptions {
     /// Resolve the [`PipOptions`] relative to the given root directory.
-    fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+    pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         rebase_indexes(
             root_dir,
             &mut self.index,
