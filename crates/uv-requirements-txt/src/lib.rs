@@ -988,6 +988,16 @@ fn parse_requirement_and_hashes(
     };
 
     let requirement = &content[start..end];
+    let requirement = if requirement.contains('\\') {
+        Cow::Owned(
+            requirement
+                .replace("\\\r\n", "")
+                .replace("\\\n", "")
+                .replace("\\\r", ""),
+        )
+    } else {
+        Cow::Borrowed(requirement)
+    };
 
     // If the requirement looks like a `requirements.txt` file (with a missing `-r`), raise an
     // error.
