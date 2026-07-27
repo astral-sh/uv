@@ -19,7 +19,7 @@ a `src` layout and the uv build backend; the previous flat layout remains availa
 `uv init --no-package` or `uv init --app`.
 
 This release also stabilizes preview behavior for project discovery, virtual environment safety,
-publishing, Conda environments, and source distributions.
+publishing, Conda environments, source distributions, and Unix resource limits.
 
 The [`uv_build` build backend](https://docs.astral.sh/uv/concepts/build-backend/) follows uv's
 breaking-release versioning policy. If your `[build-system]` table includes an upper bound such as
@@ -299,6 +299,74 @@ Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend als
   though annotations were disabled. That footer is now omitted.
 
   You can recover the footer by removing `--no-annotate`.
+
+### Stabilizations
+
+- **Packaged projects created by `uv init`**
+  ([#19197](https://github.com/astral-sh/uv/pull/19197))
+
+  `uv init` now creates an importable, distributable project with a `src` layout, the `uv_build`
+  backend, and a command-line entry point by default. Existing projects are unaffected, and
+  `uv init --no-package` or `uv init --app` retains the previous flat application layout.
+
+  See the
+  [project creation documentation](https://docs.astral.sh/uv/concepts/projects/init/#packaged-applications)
+  for more details.
+
+- **Script-relative project and workspace discovery**
+  ([#20225](https://github.com/astral-sh/uv/pull/20225))
+
+  `uv run path/to/project/script.py` now discovers the target project or workspace from the
+  script's directory. This allows scripts to use their own project's dependencies even when they
+  are invoked from another directory. An explicit `--project` still takes precedence.
+
+- **Safer virtual environment clearing**
+  ([#20225](https://github.com/astral-sh/uv/pull/20225))
+
+  `uv venv --clear` now protects directories that are not virtual environments from accidental
+  deletion. Existing virtual environments can still be replaced normally; use `--force` when
+  clearing another directory is intentional.
+
+- **Validation of `--project` paths**
+  ([#20225](https://github.com/astral-sh/uv/pull/20225))
+
+  Project commands now validate `--project` before proceeding, providing an immediate error when
+  the selected path does not exist or is not a directory. Paths to a `pyproject.toml` file remain
+  supported and select the containing project.
+
+- **Project paths for `uv init`**
+  ([#20225](https://github.com/astral-sh/uv/pull/20225))
+
+  `uv init` now rejects `--project`, which is intended to select an existing project. Use a
+  positional path to create a project in another directory, or `--directory` to change the working
+  directory before initialization.
+
+- **Normalized distribution filenames in `uv publish`**
+  ([#20225](https://github.com/astral-sh/uv/pull/20225))
+
+  `uv publish` now skips wheels and source distributions whose package names or versions are not
+  normalized, preventing invalid artifacts from being uploaded to package indexes.
+
+- **Conda environments named `base` and `root`**
+  ([#20225](https://github.com/astral-sh/uv/pull/20225))
+
+  uv now determines whether a Conda environment is the base environment from its location instead
+  of treating `base` and `root` as reserved names. Child environments with either name can be
+  discovered and used normally.
+
+- **TOML 1.0-compatible source distributions**
+  ([#20225](https://github.com/astral-sh/uv/pull/20225))
+
+  `uv_build` now writes a TOML 1.0-compatible `pyproject.toml` when building source distributions,
+  allowing older Python build frontends to consume projects that use newer TOML syntax. The
+  original project file remains available in the archive as `pyproject.toml.orig`.
+
+- **Automatic open-file limit adjustment on Unix**
+  ([#20225](https://github.com/astral-sh/uv/pull/20225))
+
+  On Linux and macOS, uv now raises the soft open-file limit at startup toward the hard limit,
+  capped at 1,048,576 descriptors. The higher limit is inherited by subprocesses and helps prevent
+  open-file exhaustion during large dependency installations and builds.
 
 ## 0.11.33
 
