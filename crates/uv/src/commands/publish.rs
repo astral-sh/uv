@@ -208,19 +208,11 @@ pub(crate) async fn publish(
         // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
         let normalized_filename = group.filename.to_string();
         if group.raw_filename != normalized_filename {
-            if preview.is_enabled(PreviewFeature::PublishRequireNormalized) {
-                warn_user_once!(
-                    "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
-                    group.raw_filename
-                );
-                continue;
-            }
             warn_user_once!(
-                "`{}` has a non-normalized filename (expected `{normalized_filename}`). \
-                Pass `--preview-features {}` to skip such files.",
-                group.raw_filename,
-                PreviewFeature::PublishRequireNormalized
+                "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
+                group.raw_filename
             );
+            continue;
         }
 
         let reporter = Arc::new(PublishReporter::single(printer));
