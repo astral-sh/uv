@@ -45,6 +45,9 @@ on:
       test-smoke:
         description: "Whether smoke tests should run"
         value: ${{ jobs.plan.outputs.test-smoke }}
+      test-shell-activation:
+        description: "Whether shell activation tests should run"
+        value: ${{ jobs.plan.outputs.test-shell-activation }}
       test-ecosystem:
         description: "Whether ecosystem tests should run"
         value: ${{ jobs.plan.outputs.test-ecosystem }}
@@ -81,6 +84,7 @@ jobs:
       save-rust-cache: ${{ steps.plan.outputs.save_rust_cache }}
       run-bench: ${{ steps.plan.outputs.run_bench }}
       test-smoke: ${{ steps.plan.outputs.test_smoke }}
+      test-shell-activation: ${{ steps.plan.outputs.test_shell_activation }}
       test-ecosystem: ${{ steps.plan.outputs.test_ecosystem }}
       test-integration: ${{ steps.plan.outputs.test_integration }}
       test-system: ${{ steps.plan.outputs.test_system }}
@@ -149,6 +153,7 @@ jobs:
             [[ "$file" == "Dockerfile" ]] && dockerfile_changed=1
             [[ "$file" == ".github/workflows/build-docker.yml" ]] && docker_workflow_changed=1
             [[ "$file" == ".github/workflows/bench.yml" ]] && bench_workflow_changed=1
+            [[ "$file" == ".github/workflows/test-shell-activation.yml" || "$file" == ".github/workflows/build-dev-binaries.yml" || "$file" == "crates/uv/tests/python/venv.rs" || "$file" =~ ^crates/uv-virtualenv/src/activator/ || "$file" == "crates/uv-virtualenv/src/virtualenv.rs" ]] && shell_activation_changed=1
             [[ "$file" == ".github/workflows/test-integration.yml" || "$file" =~ ^test/integration/ || "$file" == "scripts/check_registry.py" || "$file" == "scripts/check_cache_compat.py" || "$file" == "scripts/registries-test.py" ]] && integration_changed=1
             [[ "$file" == ".github/workflows/test-system.yml" ]] && system_workflow_changed=1
             [[ "$file" == "scripts/check_system_python.py" || "$file" == "scripts/check_embedded_python.py" ]] && system_test_changed=1
@@ -175,6 +180,7 @@ jobs:
           [[ $on_main_branch || $cache_relevant_changed ]] && save_rust_cache=1
           [[ ! $has_skip_label && ($any_rust_changed || $bench_workflow_changed || $on_main_branch) ]] && run_bench=1
           [[ ! $has_skip_label ]] && test_smoke=1
+          [[ ! $has_skip_label && ($shell_activation_changed || $has_integration_label || $has_extended_label || $on_main_branch) ]] && test_shell_activation=1
           [[ ! $has_skip_label ]] && test_ecosystem=1
           [[ $has_integration_label || $has_extended_label || $on_main_branch || $integration_changed ]] && test_integration=1
           [[ $has_system_label || $has_extended_label || $on_main_branch || $system_workflow_changed || $system_test_changed ]] && test_system=1
@@ -196,6 +202,7 @@ jobs:
             out save_rust_cache         "$save_rust_cache"
             out run_bench               "$run_bench"
             out test_smoke              "$test_smoke"
+            out test_shell_activation   "$test_shell_activation"
             out test_ecosystem          "$test_ecosystem"
             out test_integration        "$test_integration"
             out test_system             "$test_system"
