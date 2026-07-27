@@ -15057,6 +15057,132 @@ fn lock_transitive_extra() -> Result<()> {
     Ok(())
 }
 
+/// An extra activated transitively on an already-known path dependency should enable its
+/// extra-gated path dependencies, even when the extra arrives via a registry-form requirement
+/// (i.e., one without an explicit URL).
+///
+/// See <https://github.com/astral-sh/uv/issues/20672>
+#[test]
+fn lock_transitive_extra_path_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    let target = context.temp_dir.child("packages").child("target");
+    target.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+    "#})?;
+
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "bridge"
+        version = "0.1.0"
+        source = { directory = "packages/bridge" }
+        dependencies = [
+            { name = "target" },
+        ]
+
+        [package.optional-dependencies]
+        feature = [
+            { name = "target", extra = ["feature"] },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "target", directory = "packages/target" },
+            { name = "target", extras = ["feature"], marker = "extra == 'feature'", directory = "packages/target" },
+        ]
+        provides-extras = ["feature"]
+
+        [[package]]
+        name = "leaf"
+        version = "0.1.0"
+        source = { directory = "packages/leaf" }
+
+        [[package]]
+        name = "target"
+        version = "0.1.0"
+        source = { directory = "packages/target" }
+
+        [package.optional-dependencies]
+        feature = [
+            { name = "leaf" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "leaf", marker = "extra == 'feature'", directory = "packages/leaf" }]
+        provides-extras = ["feature"]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// If a source is provided via `tool.uv.sources` _and_ a URL is provided in `project.dependencies`,
 /// we accept the source in `tool.uv.sources`, unless `--no-sources` is provided.
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
