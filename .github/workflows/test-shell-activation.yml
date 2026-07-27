@@ -505,48 +505,51 @@ jobs:
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
+      - name: "Prepare batch activation test"
+        run: |
+          $activationTest = @'
+          @echo off
+          set "ORIGINAL_PATH=%PATH%"
+
+          call "%~1\Scripts\activate.bat"
+          if errorlevel 1 exit /b 1
+
+          if /I not "%VIRTUAL_ENV%"=="%CD%\%~1" exit /b 1
+
+          python -c "import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ['VIRTUAL_ENV'])"
+          if errorlevel 1 exit /b 1
+
+          call "%~1\Scripts\deactivate.bat"
+          if errorlevel 1 exit /b 1
+
+          if not "%PATH%"=="%ORIGINAL_PATH%" exit /b 1
+          if defined VIRTUAL_ENV exit /b 1
+          '@
+
+          Set-Content -Path activation-test.cmd -Value $activationTest -Encoding ascii
+
       - name: "Create virtual environment"
-        shell: cmd
-        run: .\uv.exe venv
+        run: ./uv.exe venv
 
       - name: "Activate and deactivate virtual environment"
-        shell: cmd
         run: |
-          @set "ORIGINAL_PATH=%PATH%"
-
-          @call .venv\Scripts\activate.bat
-          @if errorlevel 1 exit /b 1
-
-          @if /I not "%VIRTUAL_ENV%"=="%CD%\.venv" exit /b 1
-
-          @python -c "import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ['VIRTUAL_ENV'])"
-          @if errorlevel 1 exit /b 1
-
-          @call .venv\Scripts\deactivate.bat
-          @if errorlevel 1 exit /b 1
-
-          @if not "%PATH%"=="%ORIGINAL_PATH%" exit /b 1
-          @if defined VIRTUAL_ENV exit /b 1
+          cmd.exe /d /c .\activation-test.cmd .venv
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to activate and deactivate the virtual environment in cmd.exe"
+          }
 
       - name: "Create relocatable virtual environment"
-        shell: cmd
         run: |
-          @.\uv.exe venv --relocatable .relocatable
-          @if errorlevel 1 exit /b 1
+          ./uv.exe venv --relocatable .relocatable
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create relocatable virtual environment"
+          }
 
-          @move .relocatable relocated
-          @if errorlevel 1 exit /b 1
+          Move-Item .relocatable relocated
 
       - name: "Activate relocated virtual environment"
-        shell: cmd
         run: |
-          @call relocated\Scripts\activate.bat
-          @if errorlevel 1 exit /b 1
-
-          @if /I not "%VIRTUAL_ENV%"=="%CD%\relocated" exit /b 1
-
-          @python -c "import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ['VIRTUAL_ENV'])"
-          @if errorlevel 1 exit /b 1
-
-          @call relocated\Scripts\deactivate.bat
-          @if errorlevel 1 exit /b 1
+          cmd.exe /d /c .\activation-test.cmd relocated
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to activate and deactivate the relocated virtual environment in cmd.exe"
+          }
