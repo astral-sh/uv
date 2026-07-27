@@ -7380,8 +7380,6 @@ name = "uv-toml"
 version = "0.0.65"
 dependencies = [
  "serde",
- "toml_datetime",
- "toml_parser",
 ]
 
 [[package]]
@@ -7508,7 +7506,6 @@ dependencies = [
  "uv-python",
  "uv-shell",
  "uv-version",
- "uv-warnings",
 ]
 
 [[package]]
