@@ -935,7 +935,7 @@ fn error_on_relative_module_root_outside_project_root() -> Result<()> {
     uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building source distribution (uv build backend)...
+    Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
       Caused by: Module root must be inside the project: ..
     ");
@@ -943,7 +943,7 @@ fn error_on_relative_module_root_outside_project_root() -> Result<()> {
     uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building wheel (uv build backend)...
+    Building wheel...
     error: Failed to build `[TEMP_DIR]/`
       Caused by: Module root must be inside the project: ..
     ");
@@ -984,7 +984,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
     uv_snapshot!(context.filters(), context.build().arg("project"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building source distribution (uv build backend)...
+    Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
       Caused by: The path for the data directory headers must be inside the project: ../header
     ");
@@ -992,7 +992,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
     uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building wheel (uv build backend)...
+    Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
       Caused by: The path for the data directory headers must be inside the project: ../header
     ");
@@ -1019,7 +1019,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
     uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building wheel (uv build backend)...
+    Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
       Caused by: The path for the data directory headers must be inside the project: ../outside
     ");
@@ -1172,7 +1172,7 @@ fn venv_in_source_tree() {
     uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building source distribution (uv build backend)...
+    Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
       Caused by: Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
@@ -1180,7 +1180,7 @@ fn venv_in_source_tree() {
     uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building wheel (uv build backend)...
+    Building wheel...
     error: Failed to build `[TEMP_DIR]/`
       Caused by: Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
@@ -1226,9 +1226,9 @@ fn warn_on_redundant_module_names() -> Result<()> {
     uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
+    Building source distribution...
     warning: Ignoring redundant module names in `tool.uv.build-backend.module-name`: `foo.bar`, `foo`, `foo.bar.baz`, `foobar.baz`
-    Building wheel from source distribution (uv build backend)...
+    Building wheel from source distribution...
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
@@ -1239,8 +1239,8 @@ fn warn_on_redundant_module_names() -> Result<()> {
     uv_snapshot!(context.filters(), context.build().arg("--no-sources"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel from source distribution (uv build backend)...
+    Building source distribution...
+    Building wheel from source distribution...
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
@@ -1269,7 +1269,7 @@ fn invalid_pyproject_toml() -> Result<()> {
     uv_snapshot!(context.filters(), context.build().arg("child"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building source distribution (uv build backend)...
+    Building source distribution...
     error: Failed to build `[TEMP_DIR]/child`
       Caused by: Invalid metadata format in: child/pyproject.toml
       Caused by: TOML parse error at line 2, column 8
@@ -1673,9 +1673,9 @@ fn warn_on_license_classifier() -> Result<()> {
     uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
+    Building source distribution...
     warning: Found license classifier `License :: OSI Approved :: MIT License`. License classifiers are ambiguous and deprecated per PEP 639; projects should use `project.license` and `project.license-files` instead.
-    Building wheel from source distribution (uv build backend)...
+    Building wheel from source distribution...
     Successfully built dist/foo-1.0.0.tar.gz
     Successfully built dist/foo-1.0.0-py3-none-any.whl
     ");
@@ -1708,8 +1708,8 @@ fn rewrite_toml_1_1_by_default() -> Result<()> {
     uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel from source distribution (uv build backend)...
+    Building source distribution...
+    Building wheel from source distribution...
     Successfully built dist/foo-1.0.0.tar.gz
     Successfully built dist/foo-1.0.0-py3-none-any.whl
     ");

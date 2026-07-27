@@ -2108,8 +2108,8 @@ fn build_fast_path() -> Result<()> {
         .arg(context.temp_dir.join("output1")), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel from source distribution (uv build backend)...
+    Building source distribution...
+    Building wheel from source distribution...
     Successfully built output1/built_by_uv-0.1.0.tar.gz
     Successfully built output1/built_by_uv-0.1.0-py3-none-any.whl
     ");
@@ -2131,7 +2131,7 @@ fn build_fast_path() -> Result<()> {
         .arg("--sdist"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
+    Building source distribution...
     Successfully built output2/built_by_uv-0.1.0.tar.gz
     ");
     context
@@ -2147,7 +2147,7 @@ fn build_fast_path() -> Result<()> {
         .arg("--wheel"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building wheel (uv build backend)...
+    Building wheel...
     Successfully built output3/built_by_uv-0.1.0-py3-none-any.whl
     ");
     context
@@ -2164,8 +2164,8 @@ fn build_fast_path() -> Result<()> {
         .arg("--wheel"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel (uv build backend)...
+    Building source distribution...
+    Building wheel...
     Successfully built output4/built_by_uv-0.1.0.tar.gz
     Successfully built output4/built_by_uv-0.1.0-py3-none-any.whl
     ");
@@ -2179,6 +2179,57 @@ fn build_fast_path() -> Result<()> {
         .child("output4")
         .child("built_by_uv-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Only mention the bundled build backend when verbose logging is enabled.
+#[test]
+fn build_fast_path_verbose() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+
+    let output = context
+        .build()
+        .arg("project")
+        .arg("--sdist")
+        .arg("--verbose")
+        .env_remove(EnvVars::RUST_LOG)
+        .output()?;
+
+    let stderr = apply_filters(
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+        context.filters(),
+    );
+    assert!(output.status.success(), "build failed:\n{stderr}");
+
+    let messages = stderr
+        .lines()
+        .filter(|line| {
+            line.starts_with("DEBUG Using bundled `uv_build` backend for")
+                || line.starts_with("Building ")
+                || line.starts_with("Successfully built ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert_snapshot!(messages, @r"
+    DEBUG Using bundled `uv_build` backend for `project`
+    Building source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    ");
 
     Ok(())
 }
@@ -2215,7 +2266,7 @@ fn build_unsafe_script_entry_point_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building wheel (uv build backend)...
+    Building wheel...
     error: Failed to build `[TEMP_DIR]/`
       Caused by: Invalid project metadata
       Caused by: Script entry point name `../script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
@@ -2256,7 +2307,7 @@ fn build_dot_script_entry_point_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building wheel (uv build backend)...
+    Building wheel...
     error: Failed to build `[TEMP_DIR]/`
       Caused by: Invalid project metadata
       Caused by: Script entry point name `.` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
@@ -2297,7 +2348,7 @@ fn build_nested_script_entry_point_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building wheel (uv build backend)...
+    Building wheel...
     error: Failed to build `[TEMP_DIR]/`
       Caused by: Invalid project metadata
       Caused by: Script entry point name `nested/script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
@@ -2356,7 +2407,7 @@ fn build_list_files() -> Result<()> {
     built_by_uv-0.1.0.dist-info/METADATA (generated)
 
     ----- stderr -----
-    Building source distribution (uv build backend)...
+    Building source distribution...
     Successfully built output1/built_by_uv-0.1.0.tar.gz
     ");
     context
@@ -2742,7 +2793,7 @@ fn force_pep517() -> Result<()> {
     uv_snapshot!(context.filters(), context.build().env(EnvVars::RUST_BACKTRACE, "0"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building source distribution (uv build backend)...
+    Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
       Caused by: Expected a Python module at: src/does_not_exist/__init__.py
     ");
@@ -2848,8 +2899,8 @@ fn test_workspace_trailing_slash() {
     uv_snapshot!(context.filters(), context.build().arg("child"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel from source distribution (uv build backend)...
+    Building source distribution...
+    Building wheel from source distribution...
     Successfully built dist/child-0.1.0.tar.gz
     Successfully built dist/child-0.1.0-py3-none-any.whl
     ");
@@ -2858,8 +2909,8 @@ fn test_workspace_trailing_slash() {
     uv_snapshot!(context.filters(), context.build().arg("child/"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel from source distribution (uv build backend)...
+    Building source distribution...
+    Building wheel from source distribution...
     Successfully built dist/child-0.1.0.tar.gz
     Successfully built dist/child-0.1.0-py3-none-any.whl
     ");
@@ -2868,8 +2919,8 @@ fn test_workspace_trailing_slash() {
     uv_snapshot!(context.filters(), context.build().arg("./child/"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel from source distribution (uv build backend)...
+    Building source distribution...
+    Building wheel from source distribution...
     Successfully built dist/child-0.1.0.tar.gz
     Successfully built dist/child-0.1.0-py3-none-any.whl
     ");
@@ -2877,8 +2928,8 @@ fn test_workspace_trailing_slash() {
     uv_snapshot!(context.filters(), context.build().arg("./child/../child/"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel from source distribution (uv build backend)...
+    Building source distribution...
+    Building wheel from source distribution...
     Successfully built dist/child-0.1.0.tar.gz
     Successfully built dist/child-0.1.0-py3-none-any.whl
     ");
@@ -2897,8 +2948,8 @@ fn build_clear() -> Result<()> {
     uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel from source distribution (uv build backend)...
+    Building source distribution...
+    Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
     ");
@@ -2923,8 +2974,8 @@ fn build_clear() -> Result<()> {
     uv_snapshot!(&context.filters(), context.build().arg("project").arg("--clear").arg("--no-build-logs"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel from source distribution (uv build backend)...
+    Building source distribution...
+    Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
     ");
@@ -2958,8 +3009,8 @@ fn build_no_gitignore() -> Result<()> {
     uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel from source distribution (uv build backend)...
+    Building source distribution...
+    Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
     ");
@@ -2975,8 +3026,8 @@ fn build_no_gitignore() -> Result<()> {
     uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-create-gitignore").arg("--no-build-logs"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    Building wheel from source distribution (uv build backend)...
+    Building source distribution...
+    Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
     ");
