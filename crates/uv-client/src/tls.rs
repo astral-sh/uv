@@ -243,25 +243,30 @@ impl Certificates {
 
     /// Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
     ///
-    /// Returns `None` if neither variable is set, if the referenced files or directories are
-    /// missing or inaccessible, or if no valid certificates are found (with a warning in each
-    /// case). Delegates path loading to [`rustls_native_certs::load_certs_from_paths`].
+    /// Returns `None` if neither variable is set to a non-empty value. An explicitly configured
+    /// file or directory always replaces the default certificate roots, even when it is missing,
+    /// inaccessible, or contains no valid certificates. Delegates path loading to
+    /// [`rustls_native_certs::load_certs_from_paths`].
     pub fn from_env() -> Option<Self> {
         let mut certs = Self::default();
         let mut has_source = false;
 
         if let Some(ssl_cert_file) = env::var_os(EnvVars::SSL_CERT_FILE)
-            && let Some(file_certs) = Self::from_ssl_cert_file(&ssl_cert_file)
+            && !ssl_cert_file.is_empty()
         {
             has_source = true;
-            certs.merge(file_certs);
+            if let Some(file_certs) = Self::from_ssl_cert_file(&ssl_cert_file) {
+                certs.merge(file_certs);
+            }
         }
 
         if let Some(ssl_cert_dir) = env::var_os(EnvVars::SSL_CERT_DIR)
-            && let Some(dir_certs) = Self::from_ssl_cert_dir(&ssl_cert_dir)
+            && !ssl_cert_dir.is_empty()
         {
             has_source = true;
-            certs.merge(dir_certs);
+            if let Some(dir_certs) = Self::from_ssl_cert_dir(&ssl_cert_dir) {
+                certs.merge(dir_certs);
+            }
         }
 
         if has_source { Some(certs) } else { None }
@@ -515,6 +520,23 @@ mod tests {
     }
 
     #[test]
+    fn test_from_env_missing_ssl_cert_file_returns_empty_roots() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing_file = dir.path().join("missing.pem");
+
+        temp_env::with_vars(
+            [
+                (EnvVars::SSL_CERT_FILE, Some(missing_file.as_os_str())),
+                (EnvVars::SSL_CERT_DIR, None),
+            ],
+            || {
+                let certs = Certificates::from_env().expect("explicit file should override roots");
+                assert_eq!(certs.iter().count(), 0);
+            },
+        );
+    }
+
+    #[test]
     fn test_from_ssl_cert_file_empty_value_returns_none() {
         let certs = Certificates::from_ssl_cert_file(OsString::new().as_os_str());
         assert!(certs.is_none());
@@ -553,6 +575,23 @@ mod tests {
 
         let certs = Certificates::from_ssl_cert_dir(cert_dirs.as_os_str());
         assert!(certs.is_none());
+    }
+
+    #[test]
+    fn test_from_env_empty_ssl_cert_dir_returns_empty_roots() {
+        let dir = tempfile::tempdir().unwrap();
+
+        temp_env::with_vars(
+            [
+                (EnvVars::SSL_CERT_FILE, None),
+                (EnvVars::SSL_CERT_DIR, Some(dir.path().as_os_str())),
+            ],
+            || {
+                let certs =
+                    Certificates::from_env().expect("explicit directory should override roots");
+                assert_eq!(certs.iter().count(), 0);
+            },
+        );
     }
 
     #[test]
