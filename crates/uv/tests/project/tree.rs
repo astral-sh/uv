@@ -1,3 +1,4 @@
+#[cfg(feature = "test-universal")]
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
@@ -4655,6 +4656,7 @@ fn setup_json_output(context: &TestContext) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 fn json_tree_package_names(command: &mut Command) -> Result<Vec<String>> {
     let assert = command
         .arg("--preview-features")

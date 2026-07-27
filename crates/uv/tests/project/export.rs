@@ -6,6 +6,7 @@ use assert_fs::prelude::*;
 #[cfg(feature = "test-universal")]
 use indoc::formatdoc;
 use indoc::indoc;
+#[cfg(feature = "test-universal")]
 use insta::assert_snapshot;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::path::Path;
