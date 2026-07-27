@@ -109,7 +109,7 @@ official distroless Docker image:
 
 ```dockerfile title="Dockerfile"
 FROM python:3.12-slim-trixie
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:latest /usr/local/bin/uv /usr/local/bin/uvx /bin/
 ```
 
 Or, with the installer:
@@ -135,7 +135,7 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.32 /usr/local/bin/uv /usr/local/bin/uvx /bin/
 ```
 
 !!! tip
@@ -147,7 +147,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /uvx /bin/
 
     ```Dockerfile
     # e.g., using a hash from a previous release
-    COPY --from=ghcr.io/astral-sh/uv@sha256:2381d6aa60c326b71fd40023f921a0a3b8f91b14d5db6b90402e65a635053709 /uv /uvx /bin/
+    COPY --from=ghcr.io/astral-sh/uv@sha256:656194585e22cf53cab0bedd2c2d9158428220a33255f3bfe668e124d4f2fe6f /usr/local/bin/uv /usr/local/bin/uvx /bin/
     ```
 
 Or, with the installer:
@@ -399,7 +399,7 @@ a big time saver.
 ```dockerfile title="Dockerfile"
 # Install uv
 FROM python:3.12-slim
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:latest /usr/local/bin/uv /usr/local/bin/uvx /bin/
 
 # Change the working directory to the `app` directory
 WORKDIR /app
@@ -437,7 +437,7 @@ needed:
 ```dockerfile title="Dockerfile"
 # Install uv
 FROM python:3.12-slim
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:latest /usr/local/bin/uv /usr/local/bin/uvx /bin/
 
 WORKDIR /app
 
@@ -474,7 +474,7 @@ For example:
 ```dockerfile title="Dockerfile"
 # Install uv
 FROM python:3.12-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:latest /usr/local/bin/uv /usr/local/bin/uvx /bin/
 
 # Use the system Python across both stages
 ENV UV_PYTHON_DOWNLOADS=0
