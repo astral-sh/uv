@@ -15,9 +15,12 @@ numbers, repository-name shorthand, Markdown link syntax, or backticks around re
 
 Read `CONTRIBUTING.md`, `AGENTS.md`, and the integration tests nearest the affected behavior before
 editing. Reconstruct the smallest case that demonstrates the observed behavior, then add a single
-focused regression test under `crates/uv/tests/it/` or `crates/uv-client/tests/it/`. You may update
-the corresponding snapshots in those directories, but do not modify production code, dependencies,
-lockfiles, or unrelated tests.
+focused regression test to the existing module with the most closely related coverage under
+`crates/uv/tests/` or `crates/uv-client/tests/it/`. Do not create an issue-numbered test file or add
+a new module when an existing module can accommodate the test. Create a new module only when no
+existing module can reasonably contain the test, and explain why in the result summary. You may
+update the corresponding snapshots in those directories, but do not modify production code,
+dependencies, lockfiles, or unrelated tests.
 
 Match the surrounding test style and helpers. Prefer the existing `TestContext` and `uv_snapshot!`
 patterns, stable snapshot filters, and minimal inline project or package metadata over new fixtures
@@ -25,11 +28,13 @@ or substring assertions. Preserve the relevant command, configuration, platform,
 details from the confirmed reproduction, while removing anything that is not necessary to trigger
 the bug.
 
-Assert the expected behavior, not the buggy output. Run the most specific debug-profile test command
-for the new case and confirm that its failure demonstrates the reported bug rather than a compile,
-setup, network, or snapshot-formatting error. Never build with the release profile. Format the
-changed Rust files with `cargo fmt --all`. Do not implement a fix or weaken the test to make it
-pass.
+Assert the current observed behavior, even when it is undesirable, so the regression test passes
+without changing production code. Add a concise code comment explaining why that behavior is
+undesirable and referencing the underlying issue in the canonical astral-sh/uv#123 form. A later fix
+pull request should deliberately update the assertion or snapshot to the desired behavior. Run the
+most specific debug-profile test command for the new case and confirm that it passes while
+demonstrating the reported bug. Never build with the release profile. Format the changed Rust files
+with `cargo fmt --all`. Do not implement a fix.
 
 It will not always be feasible or worthwhile to create an integration test. If the behavior depends
 on unavailable services, credentials, hardware, platform details, timing, or other state that cannot
