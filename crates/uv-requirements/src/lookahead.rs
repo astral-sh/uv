@@ -113,15 +113,29 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .or_insert_with(|| requirement.clone());
             }
         }
+        let mut pending: FxHashMap<_, FxHashSet<_>> = FxHashMap::default();
 
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {
                 if !matches!(requirement.source, RequirementSource::Registry { .. }) {
-                    direct
+                    let source = direct
                         .entry(requirement.name.clone())
-                        .or_insert_with(|| requirement.clone());
+                        .or_insert_with(|| requirement.clone())
+                        .source
+                        .clone();
                     if seen.insert(requirement.clone()) {
-                        futures.push(self.lookahead(requirement, hasher.clone()));
+                        futures.push(self.lookahead(requirement.clone(), hasher.clone()));
+                    }
+                    if let Some(pending_requirements) = pending.remove(&requirement.name) {
+                        for pending_requirement in pending_requirements {
+                            let candidate = Requirement {
+                                source: source.clone(),
+                                ..pending_requirement
+                            };
+                            if seen.insert(candidate.clone()) {
+                                futures.push(self.lookahead(candidate, hasher.clone()));
+                            }
+                        }
                     }
                 } else if let Some(direct_requirement) = direct.get(&requirement.name) {
                     // The package will resolve to a known direct URL source, so re-run the
@@ -134,6 +148,11 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     if seen.insert(candidate.clone()) {
                         futures.push(self.lookahead(candidate, hasher.clone()));
                     }
+                } else {
+                    pending
+                        .entry(requirement.name.clone())
+                        .or_default()
+                        .insert(requirement);
                 }
             }
 

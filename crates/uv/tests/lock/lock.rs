@@ -15198,6 +15198,89 @@ fn lock_transitive_extra_path_dependency() -> Result<()> {
     Ok(())
 }
 
+/// A registry-form extra should be replayed if the matching path source is discovered later.
+#[test]
+fn lock_transitive_extra_path_dependency_source_discovered_later() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "provider"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        provider = { path = "packages/provider" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    let provider = context.temp_dir.child("packages").child("provider");
+    provider.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [tool.uv.sources]
+        target = { path = "../target" }
+    "#})?;
+
+    let target = context.temp_dir.child("packages").child("target");
+    target.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+    "#})?;
+
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("[[package]]\nname = \"leaf\""));
+
+    Ok(())
+}
+
 /// A marker-disabled registry-form extra must not activate the extra-gated path dependency.
 #[test]
 fn lock_transitive_extra_path_dependency_disabled_marker() -> Result<()> {
