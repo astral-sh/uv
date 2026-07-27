@@ -21,9 +21,11 @@ a `src` layout and the uv build backend; the previous flat layout remains availa
 This release also stabilizes preview behavior for project discovery, virtual environment safety,
 publishing, Conda environments, and source distributions.
 
-The [`uv_build` build backend](https://docs.astral.sh/uv/concepts/build-backend/) now rewrites
-`pyproject.toml` in source distributions, as described below. If you have an upper bound in your
-`[build-system]` table, you should update it, e.g., from `<0.12` to `<0.13`.
+The [`uv_build` build backend](https://docs.astral.sh/uv/concepts/build-backend/) follows uv's
+breaking-release versioning policy. If your `[build-system]` table includes an upper bound such as
+`uv_build>=0.11.32,<0.12`, it will continue selecting an older build backend after upgrading uv.
+Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend also changes how
+`pyproject.toml` is included in source distributions, as described below.
 
 ### Breaking changes
 
