@@ -11,9 +11,10 @@ use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, Resolv
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
-    BuildIsolationArgs, BuildOptionsArgs, CompileBytecodeArgs, FetchArgs, IndexArgs, InstallerArgs,
-    Maybe, PackageBuildIsolationArgs, RefreshArgs, RegistryClientArgs, ReinstallArgs, ResolverArgs,
-    ResolverInstallerArgs, SourcesArgs, VersionSelectionArgs,
+    BuildIsolationArgs, BuildOptionsArgs, CompileBytecodeArgs, ExcludeNewerArgs, FetchArgs,
+    IndexArgs, InstallerArgs, Maybe, PackageBuildIsolationArgs, PackageExcludeNewerArgs,
+    RefreshArgs, RegistryClientArgs, ReinstallArgs, ResolverArgs, ResolverInstallerArgs,
+    SourcesArgs, VersionSelectionArgs,
 };
 
 /// An error caused by an invalid combination of command-line arguments.
@@ -285,14 +286,17 @@ impl TryFrom<ResolverArgs> for PipOptions {
                         },
                     no_build_isolation_package,
                 },
-            exclude_newer,
+            exclude_newer:
+                PackageExcludeNewerArgs {
+                    exclude_newer: ExcludeNewerArgs { exclude_newer },
+                    exclude_newer_package,
+                },
             link_mode,
             sources:
                 SourcesArgs {
                     no_sources,
                     no_sources_package,
                 },
-            exclude_newer_package,
         } = args;
 
         if !upgrade_group.is_empty() {
@@ -361,7 +365,11 @@ impl TryFrom<InstallerArgs> for PipOptions {
                     no_build_isolation,
                     build_isolation,
                 },
-            exclude_newer,
+            exclude_newer:
+                PackageExcludeNewerArgs {
+                    exclude_newer: ExcludeNewerArgs { exclude_newer },
+                    exclude_newer_package,
+                },
             link_mode,
             compile_bytecode:
                 CompileBytecodeArgs {
@@ -373,7 +381,6 @@ impl TryFrom<InstallerArgs> for PipOptions {
                     no_sources,
                     no_sources_package,
                 },
-            exclude_newer_package,
         } = args;
 
         Ok(Self {
@@ -443,7 +450,11 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
                         },
                     no_build_isolation_package,
                 },
-            exclude_newer,
+            exclude_newer:
+                PackageExcludeNewerArgs {
+                    exclude_newer: ExcludeNewerArgs { exclude_newer },
+                    exclude_newer_package,
+                },
             link_mode,
             compile_bytecode:
                 CompileBytecodeArgs {
@@ -455,7 +466,6 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
                     no_sources,
                     no_sources_package,
                 },
-            exclude_newer_package,
         } = args;
 
         if !upgrade_group.is_empty() {
@@ -512,13 +522,18 @@ impl From<FetchArgs> for PipOptions {
                     index_strategy,
                     keyring_provider,
                 },
-            exclude_newer,
+            exclude_newer:
+                PackageExcludeNewerArgs {
+                    exclude_newer: ExcludeNewerArgs { exclude_newer },
+                    exclude_newer_package,
+                },
         } = args;
 
         Self {
             index_strategy,
             keyring_provider,
             exclude_newer,
+            exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             ..Self::from(index_args)
         }
     }
@@ -590,13 +605,16 @@ pub fn resolver_options(
                     },
                 no_build_isolation_package,
             },
-        exclude_newer,
+        exclude_newer:
+            PackageExcludeNewerArgs {
+                exclude_newer: ExcludeNewerArgs { exclude_newer },
+                exclude_newer_package,
+            },
         link_mode,
         sources: SourcesArgs {
             no_sources,
             no_sources_package,
         },
-        exclude_newer_package,
     } = resolver_args;
 
     let BuildOptionsArgs {
@@ -737,8 +755,11 @@ pub fn resolver_installer_options_with_indexes(
                     },
                 no_build_isolation_package,
             },
-        exclude_newer,
-        exclude_newer_package,
+        exclude_newer:
+            PackageExcludeNewerArgs {
+                exclude_newer: ExcludeNewerArgs { exclude_newer },
+                exclude_newer_package,
+            },
         link_mode,
         compile_bytecode:
             CompileBytecodeArgs {

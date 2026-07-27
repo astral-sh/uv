@@ -24,8 +24,9 @@ use uv_cli::{
     VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, CheckArgs, ExportArgs, FormatArgs, HashCheckingArgs, PublishArgs,
-    PythonDirArgs, RegistryClientArgs, ResolverInstallerArgs, ToolUpgradeArgs,
+    AuthorFrom, BuildArgs, CheckArgs, ExcludeNewerArgs, ExportArgs, FormatArgs, HashCheckingArgs,
+    PackageExcludeNewerArgs, PublishArgs, PythonDirArgs, RegistryClientArgs, ResolverInstallerArgs,
+    ToolUpgradeArgs,
     options::{
         Flag, FlagSource, check_conflicts, flag, indexes_from_args, resolve_flag,
         resolve_flag_pair, resolver_installer_options, resolver_installer_options_with_indexes,
@@ -1182,7 +1183,6 @@ impl ToolUpgradeSettings {
             link_mode,
             compile_bytecode,
             sources,
-            exclude_newer_package,
             build,
         } = args;
 
@@ -1207,7 +1207,6 @@ impl ToolUpgradeSettings {
             config_settings_package,
             build_isolation,
             exclude_newer,
-            exclude_newer_package,
             link_mode,
             compile_bytecode,
             sources,
@@ -1269,14 +1268,21 @@ impl ToolListSettings {
             show_python,
             outdated,
             no_outdated,
-            exclude_newer,
+            exclude_newer:
+                PackageExcludeNewerArgs {
+                    exclude_newer: ExcludeNewerArgs { exclude_newer },
+                    exclude_newer_package,
+                },
             python_preference: _,
             no_python_downloads: _,
         } = args;
 
-        let filesystem = filesystem.map(FilesystemOptions::into_options);
+        let filesystem = filesystem
+            .map(FilesystemOptions::into_options)
+            .unwrap_or_default();
         let filesystem = ResolverInstallerOptions {
-            exclude_newer: filesystem.and_then(|options| options.top_level.exclude_newer),
+            exclude_newer: filesystem.top_level.exclude_newer,
+            exclude_newer_package: filesystem.top_level.exclude_newer_package,
             ..ResolverInstallerOptions::default()
         };
 
@@ -1289,6 +1295,7 @@ impl ToolListSettings {
             outdated: flag(outdated, no_outdated, "outdated")?.unwrap_or(false),
             args: ResolverInstallerOptions {
                 exclude_newer,
+                exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
                 ..ResolverInstallerOptions::default()
             },
             filesystem,
@@ -4201,12 +4208,15 @@ impl VenvSettings {
                     index_strategy,
                     keyring_provider,
                 },
-            exclude_newer,
+            exclude_newer:
+                PackageExcludeNewerArgs {
+                    exclude_newer: ExcludeNewerArgs { exclude_newer },
+                    exclude_newer_package,
+                },
             no_project,
             link_mode,
             refresh,
             compat_args: _,
-            exclude_newer_package,
         } = args;
 
         // Resolve flags from CLI and environment variables.
