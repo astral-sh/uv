@@ -74,17 +74,24 @@ Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend als
 - **Prefer stable releases before falling back to pre-releases**
   ([#19993](https://github.com/astral-sh/uv/pull/19993))
 
-  uv previously allowed pre-releases by default when a direct dependency explicitly requested one
-  or a package only published pre-releases. A pre-release requested by a transitive dependency,
-  e.g., `example>=2.0.0b1`, could cause resolution to fail even when that pre-release satisfied
-  every requirement.
+  Pre-releases are difficult to resolve because requirements are discovered incrementally. uv
+  previously required each package's pre-release eligibility to be known before resolution began:
+  the default `if-necessary-or-explicit` mode allowed them for direct requirements that explicitly
+  requested a pre-release, or for packages that only published pre-releases.
 
-  uv now prefers stable candidates and considers pre-releases when no stable candidate satisfies
-  the active constraints. This allows transitive pre-release requirements, but can change which
-  versions are selected when both stable and pre-release candidates are available.
+  This meant that a pre-release requirement discovered in a dependency's metadata, e.g.,
+  `example>=2.0.0b1`, could fail to resolve even when a compatible pre-release existed. Users had
+  to add that dependency as a direct requirement or allow pre-releases across their entire
+  dependency graph.
+
+  The default mode is now `if-necessary`. uv tries stable candidates first and falls back to
+  pre-releases when no stable candidate satisfies the active constraints, including constraints
+  discovered transitively. This matches modern pip's pre-release handling, but can select different
+  versions than previous uv releases when stable and pre-release candidates are both available.
 
   You can opt out of automatic pre-release selection with `--prerelease disallow`. Alternatively,
-  `--prerelease allow` considers pre-releases without first preferring stable releases. If you
+  `--prerelease allow` considers pre-releases without first preferring stable releases, while
+  `--prerelease explicit` only allows them for direct requirements that mention a pre-release. If you
   explicitly configured `if-necessary-or-explicit`, replace it with `if-necessary`; the old name
   remains available as a deprecated alias.
 
