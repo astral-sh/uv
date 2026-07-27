@@ -124,6 +124,58 @@ fn python_install() {
     bin_python.assert(predicate::path::missing());
 }
 
+/// An explicit Python install should reclaim downloads left behind by an interrupted process.
+#[test]
+fn python_install_cleans_stale_temporary_directories() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+
+    let scratch = context.temp_dir.child("managed").child(".temp");
+    let interrupted = scratch.child(".tmp-interrupted");
+    interrupted.create_dir_all()?;
+    interrupted.child("download").write_str("partial Python")?;
+
+    uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `foobar` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions
+    ");
+
+    assert!(scratch.is_dir());
+    assert!(!interrupted.exists());
+
+    Ok(())
+}
+
+/// Automatically downloading Python should also reclaim interrupted managed downloads.
+#[test]
+fn python_install_automatic_cleans_stale_temporary_directories() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    let scratch = context.temp_dir.child("managed").child(".temp");
+    let interrupted = scratch.child(".tmp-interrupted");
+    interrupted.create_dir_all()?;
+    interrupted.child("download").write_str("partial Python")?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .arg("python")
+        .arg("-c")
+        .arg("import sys; print(sys.version_info[:2])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    (3, 14)
+    ");
+
+    assert!(scratch.is_dir());
+    assert!(!interrupted.exists());
+
+    Ok(())
+}
+
 #[test]
 fn python_reinstall() {
     let context = uv_test::test_context_with_versions!(&[])

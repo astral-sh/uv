@@ -328,6 +328,7 @@ impl PythonInstallation {
         let installations_dir = installations.root();
         let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
+        installations.clear_scratch()?;
 
         info!("Fetching requested Python...");
         let result = download

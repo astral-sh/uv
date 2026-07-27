@@ -64,6 +64,112 @@ fn clear_all_alias() -> Result<()> {
     Ok(())
 }
 
+/// A full cache clean should also reclaim interrupted managed Python downloads.
+#[test]
+fn clean_all_python_temporary_directories() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_managed_python_dirs();
+
+    let managed = context.temp_dir.child("managed");
+    let scratch = managed.child(".temp");
+    let interrupted = scratch.child(".tmp-interrupted");
+    interrupted.create_dir_all()?;
+    interrupted.child("download").write_str("partial Python")?;
+
+    let installation = managed.child("cpython-existing");
+    installation.create_dir_all()?;
+    installation.child("python").write_str("installed Python")?;
+
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Clearing temporary Python downloads at: managed/.temp
+    Removed [N] files ([SIZE])
+    ");
+
+    assert!(scratch.is_dir());
+    assert!(!interrupted.exists());
+    assert!(installation.child("python").is_file());
+
+    Ok(())
+}
+
+/// An empty managed Python scratch directory should not produce a cleanup message.
+#[test]
+fn clean_all_does_not_report_empty_python_temporary_directories() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_managed_python_dirs();
+
+    let scratch = context.temp_dir.child("managed").child(".temp");
+    scratch.create_dir_all()?;
+
+    context.cache_dir.create_dir_all()?;
+    context.cache_dir.child("cached").write_str("cached")?;
+
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+
+    assert!(scratch.is_dir());
+
+    Ok(())
+}
+
+/// Managed Python downloads can still be cleaned when the package cache is absent.
+#[test]
+fn clean_python_temporary_directories_without_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_managed_python_dirs();
+
+    if context.cache_dir.exists() {
+        fs_err::remove_dir_all(&context.cache_dir)?;
+    }
+
+    let scratch = context.temp_dir.child("managed").child(".temp");
+    let interrupted = scratch.child(".tmp-interrupted");
+    interrupted.create_dir_all()?;
+    interrupted.child("download").write_str("partial Python")?;
+
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    No cache found at: [CACHE_DIR]/
+    Clearing temporary Python downloads at: managed/.temp
+    Removed 1 file ([SIZE])
+    ");
+
+    assert!(scratch.is_dir());
+    assert!(!interrupted.exists());
+
+    Ok(())
+}
+
+/// Cleaning an individual package must not remove managed Python downloads.
+#[test]
+fn clean_package_preserves_python_temporary_directories() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_managed_python_dirs();
+
+    let scratch = context.temp_dir.child("managed").child(".temp");
+    let interrupted = scratch.child(".tmp-interrupted");
+    interrupted.create_dir_all()?;
+    interrupted.child("download").write_str("partial Python")?;
+
+    uv_snapshot!(context.filters(), context.clean().arg("missing-package"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    No cache entries found
+    ");
+
+    assert!(interrupted.child("download").is_file());
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn clean_force() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();

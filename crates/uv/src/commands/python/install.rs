@@ -329,6 +329,7 @@ async fn perform_install(
     let installations_dir = installations.root();
     let scratch_dir = installations.scratch();
     let _lock = installations.lock().await?;
+    installations.clear_scratch()?;
     let existing_installations: Vec<_> = installations
         .find_all()?
         .inspect(|installation| trace!("Found existing installation {}", installation.key()))

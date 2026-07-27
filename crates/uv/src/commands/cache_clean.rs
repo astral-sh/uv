@@ -7,6 +7,7 @@ use tracing::debug;
 use uv_cache::{Cache, Removal};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
+use uv_python::managed::ManagedPythonInstallations;
 
 use crate::commands::reporters::{CleaningDirectoryReporter, CleaningPackageReporter};
 use crate::commands::{ExitStatus, human_readable_bytes};
@@ -19,12 +20,44 @@ pub(crate) async fn cache_clean(
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let mut python_removal = Removal::default();
+    let mut python_scratch = None;
+
+    if packages.is_empty() {
+        let installations = ManagedPythonInstallations::from_settings(None)?;
+        let scratch = installations.scratch();
+
+        if scratch.is_dir() {
+            let _lock = installations.lock().await?;
+            python_removal = installations.clear_scratch().with_context(|| {
+                format!(
+                    "Failed to clear temporary Python downloads at: {}",
+                    scratch.user_display()
+                )
+            })?;
+
+            if python_removal.num_files > 0 || python_removal.num_dirs > 0 {
+                python_scratch = Some(scratch);
+            }
+        }
+    }
+
     if !cache.root().exists() {
         writeln!(
             printer.stderr(),
             "No cache found at: {}",
             cache.root().user_display().cyan()
         )?;
+
+        if let Some(scratch) = python_scratch {
+            writeln!(
+                printer.stderr(),
+                "Clearing temporary Python downloads at: {}",
+                scratch.user_display().cyan()
+            )?;
+            write_removal_summary(&python_removal, printer)?;
+        }
+
         return Ok(ExitStatus::Success);
     }
 
@@ -43,12 +76,20 @@ pub(crate) async fn cache_clean(
         }
     };
 
-    let summary = if packages.is_empty() {
+    let mut summary = if packages.is_empty() {
         writeln!(
             printer.stderr(),
             "Clearing cache at: {}",
             cache.root().user_display().cyan()
         )?;
+
+        if let Some(scratch) = python_scratch {
+            writeln!(
+                printer.stderr(),
+                "Clearing temporary Python downloads at: {}",
+                scratch.user_display().cyan()
+            )?;
+        }
 
         let num_paths = walkdir::WalkDir::new(cache.root()).into_iter().count();
         let reporter = CleaningDirectoryReporter::new(printer, Some(num_paths));
@@ -71,6 +112,15 @@ pub(crate) async fn cache_clean(
         summary
     };
 
+    summary += python_removal;
+
+    write_removal_summary(&summary, printer)?;
+
+    Ok(ExitStatus::Success)
+}
+
+/// Write a summary of the files, directories, and bytes removed.
+fn write_removal_summary(summary: &Removal, printer: Printer) -> Result<()> {
     // Write a summary of the number of files and directories removed.
     match (summary.num_files, summary.num_dirs) {
         (0, 0) => {
@@ -103,5 +153,5 @@ pub(crate) async fn cache_clean(
 
     writeln!(printer.stderr())?;
 
-    Ok(ExitStatus::Success)
+    Ok(())
 }

@@ -15,6 +15,7 @@ use tracing::{debug, warn};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
+use uv_cache::{Removal, rm_rf};
 use uv_fs::{
     LockedFile, LockedFileError, LockedFileMode, Simplified, normalize_absolute_path,
     replace_symlink, symlink_or_copy_file, verbatim_path,
@@ -149,6 +150,21 @@ impl ManagedPythonInstallations {
     /// Return the location of the scratch directory for managed Python installations.
     pub fn scratch(&self) -> PathBuf {
         self.root.join(".temp")
+    }
+
+    /// Remove the contents of the scratch directory for managed Python installations.
+    ///
+    /// The caller must hold the managed Python installation lock to avoid removing an active
+    /// download from another process. Preserve the scratch directory itself, since another
+    /// process may have initialized it before waiting for the same lock.
+    pub fn clear_scratch(&self) -> Result<Removal, Error> {
+        let mut removal = Removal::default();
+
+        for entry in fs::read_dir(self.scratch())? {
+            removal += rm_rf(entry?.path())?;
+        }
+
+        Ok(removal)
     }
 
     /// Initialize the Python installation directory.
