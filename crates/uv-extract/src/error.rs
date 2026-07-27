@@ -93,17 +93,23 @@ pub enum Error {
     EmptyFilename,
     #[error("Archive contains unacceptable filename: {filename}")]
     UnacceptableFilename { filename: String },
+    #[error(
+        "Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'"
+    )]
+    UnsupportedCompression,
 }
 
 impl From<async_zip::error::ZipError> for Error {
     fn from(err: async_zip::error::ZipError) -> Self {
-        let async_zip::error::ZipError::FileNameContainsNul { filename } = err else {
-            return Self::AsyncZip(err);
-        };
-
-        let filename = String::from_utf8_lossy(&filename);
-        validate_archive_member_name(&filename)
-            .expect_err("a filename containing an embedded NUL must be rejected")
+        match err {
+            async_zip::error::ZipError::CompressionNotSupported(_) => Self::UnsupportedCompression,
+            async_zip::error::ZipError::FileNameContainsNul { filename } => {
+                let filename = String::from_utf8_lossy(&filename);
+                validate_archive_member_name(&filename)
+                    .expect_err("a filename containing an embedded NUL must be rejected")
+            }
+            error => Self::AsyncZip(error),
+        }
     }
 }
 
@@ -122,7 +128,7 @@ impl Error {
             Err(err) => err,
         };
         let err = match err.downcast::<async_zip::error::ZipError>() {
-            Ok(zip_err) => return Self::AsyncZip(zip_err),
+            Ok(zip_err) => return Self::from(zip_err),
             Err(err) => err,
         };
         Self::Io(err)

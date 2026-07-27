@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::vendor::CloneableSeekableReader;
-use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
+use crate::{Error, insecure_no_validate, validate_archive_member_name};
 use async_zip::base::read::seek::ZipFileReader;
 use async_zip::error::ZipError;
 use futures::executor::block_on;
@@ -11,13 +11,12 @@ use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use tracing::warn;
 use uv_configuration::initialize_rayon_once;
-use uv_warnings::warn_user_once;
 
 /// Unzip a `.zip` archive into the target directory.
 ///
 /// Returns the list of unpacked files and their sizes.
 pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>, Error> {
-    let (reader, filename) = reader.into_parts();
+    let (reader, _) = reader.into_parts();
 
     // Parse the central directory once, then clone the archive reader per Rayon worker so
     // extraction stays parallel for already-downloaded wheels.
@@ -42,17 +41,6 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
                 }
                 Err(err) => return Err(err.into()),
             };
-
-            let compression = CompressionMethod::from(entry.compression());
-            if !compression.is_well_known() {
-                warn_user_once!(
-                    "One or more file entries in '{filename}' use the '{compression}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
-                    filename = filename.display(),
-                    stored = CompressionMethod::Stored,
-                    deflate = CompressionMethod::Deflated,
-                    zstd = CompressionMethod::Zstd,
-                );
-            }
 
             if let Err(e) = validate_archive_member_name(file_name) {
                 if !skip_validation {
