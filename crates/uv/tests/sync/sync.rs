@@ -14905,10 +14905,7 @@ async fn sync_non_pep625_sdist() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only basic-package==0.1.0 is available and basic-package==0.1.0 has a non-PEP 625-compliant source distribution filename, we can conclude that all versions of basic-package cannot be used.
@@ -15010,10 +15007,7 @@ async fn sync_non_pep625_sdist_with_compatible_wheel() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -15076,11 +15070,8 @@ fn sync_non_pep625_sdist_from_lockfile() -> Result<()> {
         requires-dist = [{ name = "bz2", path = "bz2-1.0.0.tar.bz2" }]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Source distribution for `bz2==1.0.0 @ path+bz2-1.0.0.tar.bz2` has a non-PEP 625-compliant filename; only `.tar.gz` and `.zip` archives are accepted
     ");

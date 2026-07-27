@@ -15370,7 +15370,6 @@ fn fail_on_bz2_wheel() {
         @"
     exit_code: 1 (failure)
     ----- stderr -----
-    WARN Range requests not supported for futzed_bz2-0.1.0-py3-none-any.whl; streaming wheel
       × Failed to download `futzed-bz2 @ http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
       ├─▶ Failed to read metadata: `http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
       ╰─▶ Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
@@ -15390,7 +15389,6 @@ fn fail_on_lzma_wheel() {
         @"
     exit_code: 1 (failure)
     ----- stderr -----
-    WARN Range requests not supported for futzed_lzma-0.1.0-py3-none-any.whl; streaming wheel
       × Failed to download `futzed-lzma @ http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
       ├─▶ Failed to read metadata: `http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
       ╰─▶ Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
