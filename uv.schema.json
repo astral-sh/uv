@@ -1803,8 +1803,7 @@
             "workspace-list-scripts",
             "no-distutils-patch",
             "index-hash-algorithm",
-            "lockfile-format-check",
-            "correct-extra-markers"
+            "lockfile-format-check"
           ]
         },
         {

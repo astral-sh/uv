@@ -35,7 +35,6 @@ use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
 use uv_platform_tags::{IncompatibleTag, Tags};
-use uv_preview::PreviewFeature;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
 use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
@@ -2332,8 +2331,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     where
         'data: 'parameters,
     {
-        let correct_extra_markers = uv_preview::is_enabled(PreviewFeature::CorrectExtraMarkers);
-
         self.overrides
             .apply_for_package(override_package, dependencies)
             .filter(move |requirement| {
@@ -2342,10 +2339,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .contains_for_package(exclusion_package, &requirement.name)
             })
             .map(move |mut requirement| {
-                if !correct_extra_markers {
-                    return requirement;
-                }
-
                 // Split the marker into production and optional components. If we have e.g.
                 // `foo; sys_platform == 'win32' or extra == 'feature'`
                 // we split it into
@@ -2384,7 +2377,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     env,
                     python_marker,
                     python_requirement,
-                    correct_extra_markers,
                 )
             })
             .flat_map(move |requirement| {
@@ -2406,24 +2398,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &PythonRequirement,
-        correct_extra_markers: bool,
     ) -> bool {
         // If the requirement isn't relevant for the current platform, skip it.
         match extra {
             Some(source_extra) => {
-                if correct_extra_markers {
-                    if !requirement.evaluate_markers(env.marker_environment(), &[]) {
-                        return false;
-                    }
-                } else {
-                    if requirement.evaluate_markers(env.marker_environment(), &[]) {
-                        return false;
-                    }
-                    if !requirement
-                        .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
-                    {
-                        return false;
-                    }
+                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
+                    return false;
                 }
 
                 if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))

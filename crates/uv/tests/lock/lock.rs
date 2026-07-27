@@ -24577,7 +24577,7 @@ fn lock_extra_marker_preserves_production_platform() -> Result<()> {
             "#,
         )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("correct-extra-markers").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]

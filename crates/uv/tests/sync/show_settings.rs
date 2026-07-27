@@ -3226,7 +3226,6 @@ fn preview_features() {
     +            NoDistutilsPatch,
     +            IndexHashAlgorithm,
     +            LockfileFormatCheck,
-    +            CorrectExtraMarkers,
     +        ],
          },
          python_preference: Managed,
