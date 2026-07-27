@@ -121,12 +121,6 @@ pub enum DirhashError {
     Io(#[from] io::Error),
 }
 
-#[derive(Debug, Clone)]
-enum DirhashEntry {
-    File(blake3::Hash),
-    Directory(DirhashTree),
-}
-
 // Seen symlinks form a linked list on the stack as we recurse.
 struct SeenSymlinkNode<'a> {
     canonical_path: PathBuf,
@@ -223,6 +217,8 @@ fn dirhash_path_inner_resolved(
         for entry in fs_err::read_dir(path)? {
             let entry = entry?;
             let path = entry.path();
+            // Prior components of the `path` can be non-Unicode, but names in the hashed directory
+            // tree are required to be Unicode, otherwise we report an error.
             let Ok(name) = entry.file_name().into_string() else {
                 return Err(DirhashError::InvalidPath {
                     path: path.to_string_lossy().into(),
@@ -235,6 +231,7 @@ fn dirhash_path_inner_resolved(
         // Iterate over the contents in parallel using Rayon, hashing each one recursively.
         let hashes = dir_contents
             .par_iter()
+            // Recurse back to `dirhash_path_inner` for symlink handling.
             .map(|(_, path)| dirhash_path_inner(path, seen_symlinks))
             .collect::<Result<Vec<blake3::Hash>, _>>()?;
         let dirhash_entries = dir_contents
@@ -247,6 +244,12 @@ fn dirhash_path_inner_resolved(
         // thread pool as `par_iter` above.
         Ok(blake3::Hasher::new().update_mmap_rayon(path)?.finalize())
     }
+}
+
+#[derive(Debug, Clone)]
+enum DirhashEntry {
+    File(blake3::Hash),
+    Directory(DirhashTree),
 }
 
 /// An in-memory directory structure for computing a dirhash from an archive as we unpack it, when
@@ -420,6 +423,11 @@ where
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::cmp;
+    use std::io;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+    use tokio::io::AsyncRead;
 
     #[test]
     fn test_normalize() {
@@ -569,6 +577,68 @@ mod tests {
         symlink("../../dir1", root.join("dir2/inner/dir_link"))?;
         let error = super::dirhash_path(root).unwrap_err();
         std::assert_matches!(error, super::DirhashError::SymlinkCycle { .. });
+        Ok(())
+    }
+
+    /// Write a test input byte pattern that doesn't repeat at regular power-of-two boundaries.
+    /// This is more likely to catch mistakes than hashing a buffer of e.g. all zeros.
+    fn paint_input(buf: &mut [u8]) {
+        let mut value = 0u8;
+        for byte in buf {
+            *byte = value;
+            value = if value == 250 { 0 } else { value + 1 };
+        }
+    }
+
+    #[tokio::test]
+    async fn test_blake3_copy() -> io::Result<()> {
+        let input = b"hello";
+        let mut output = Vec::new();
+        let (bytes_read, hash) = Box::pin(super::blake3_copy(&input[..], &mut output)).await?;
+        assert_eq!(bytes_read, input.len() as u64);
+        assert_eq!(input, &output[..]);
+        assert_eq!(hash, blake3::hash(input));
+
+        let mut big_input = vec![0; 64_000 * 3];
+        paint_input(&mut big_input);
+        let mut big_output = Vec::new();
+        let (big_bytes_read, big_hash) =
+            Box::pin(super::blake3_copy(&big_input[..], &mut big_output)).await?;
+        assert_eq!(big_bytes_read, big_input.len() as u64);
+        assert_eq!(big_input, big_output);
+        assert_eq!(big_hash, blake3::hash(&big_input));
+        Ok(())
+    }
+
+    /// A reader that always returns short reads, even if it holds lots of input.
+    struct ShortReader<'a>(&'a [u8]);
+
+    impl AsyncRead for ShortReader<'_> {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            buf: &mut tokio::io::ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            const SHORT_READ_LEN: usize = 251; // any small prime will do
+            let want = cmp::min(self.0.len(), buf.remaining());
+            let take = cmp::min(want, SHORT_READ_LEN);
+            buf.put_slice(&self.0[..take]);
+            self.0 = &self.0[take..];
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    /// Exercise the buffer filling logic with a reader that always returns short reads.
+    #[tokio::test]
+    async fn test_blake3_copy_short_reader() -> io::Result<()> {
+        let mut input = vec![0; 64_000 * 3];
+        paint_input(&mut input);
+        let mut output = Vec::new();
+        let (bytes_read, hash) =
+            Box::pin(super::blake3_copy(ShortReader(&input), &mut output)).await?;
+        assert_eq!(bytes_read, input.len() as u64);
+        assert_eq!(input, &output[..]);
+        assert_eq!(hash, blake3::hash(&input));
         Ok(())
     }
 }
