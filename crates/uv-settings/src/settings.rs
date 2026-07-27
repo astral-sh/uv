@@ -510,6 +510,49 @@ impl TryFrom<GlobalOptionsWire> for GlobalOptions {
     }
 }
 
+/// Resolve registry indexes and find-links relative to the given root directory.
+fn rebase_indexes(
+    root_dir: &Path,
+    indexes: &mut Option<Vec<Index>>,
+    index_url: &mut Option<PipIndex>,
+    extra_index_urls: &mut Option<Vec<PipExtraIndex>>,
+    find_links: &mut Option<Vec<PipFindLinks>>,
+) -> Result<(), IndexUrlError> {
+    *indexes = indexes
+        .take()
+        .map(|indexes| {
+            indexes
+                .into_iter()
+                .map(|index| index.relative_to(root_dir))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?;
+    *index_url = index_url
+        .take()
+        .map(|index| index.relative_to(root_dir))
+        .transpose()?;
+    *extra_index_urls = extra_index_urls
+        .take()
+        .map(|indexes| {
+            indexes
+                .into_iter()
+                .map(|index| index.relative_to(root_dir))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?;
+    *find_links = find_links
+        .take()
+        .map(|find_links| {
+            find_links
+                .into_iter()
+                .map(|find_link| find_link.relative_to(root_dir))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?;
+
+    Ok(())
+}
+
 /// Settings relevant to all installer operations.
 #[derive(Debug, Clone, Default, CombineOptions)]
 pub struct InstallerOptions {
@@ -684,41 +727,16 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
 
 impl ResolverInstallerSchema {
     /// Resolve the [`ResolverInstallerSchema`] relative to the given root directory.
-    fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        Ok(Self {
-            index: self
-                .index
-                .map(|index| {
-                    index
-                        .into_iter()
-                        .map(|index| index.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            index_url: self
-                .index_url
-                .map(|index_url| index_url.relative_to(root_dir))
-                .transpose()?,
-            extra_index_url: self
-                .extra_index_url
-                .map(|extra_index_url| {
-                    extra_index_url
-                        .into_iter()
-                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            find_links: self
-                .find_links
-                .map(|find_links| {
-                    find_links
-                        .into_iter()
-                        .map(|find_link| find_link.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            ..self
-        })
+    fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        rebase_indexes(
+            root_dir,
+            &mut self.index,
+            &mut self.index_url,
+            &mut self.extra_index_url,
+            &mut self.find_links,
+        )?;
+
+        Ok(self)
     }
 }
 
@@ -2079,41 +2097,16 @@ pub struct PipOptions {
 
 impl PipOptions {
     /// Resolve the [`PipOptions`] relative to the given root directory.
-    fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        Ok(Self {
-            index: self
-                .index
-                .map(|index| {
-                    index
-                        .into_iter()
-                        .map(|index| index.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            index_url: self
-                .index_url
-                .map(|index_url| index_url.relative_to(root_dir))
-                .transpose()?,
-            extra_index_url: self
-                .extra_index_url
-                .map(|extra_index_url| {
-                    extra_index_url
-                        .into_iter()
-                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            find_links: self
-                .find_links
-                .map(|find_links| {
-                    find_links
-                        .into_iter()
-                        .map(|find_link| find_link.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            ..self
-        })
+    fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        rebase_indexes(
+            root_dir,
+            &mut self.index,
+            &mut self.index_url,
+            &mut self.extra_index_url,
+            &mut self.find_links,
+        )?;
+
+        Ok(self)
     }
 }
 
