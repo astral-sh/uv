@@ -305,9 +305,13 @@ jobs:
           or exit 1
 
   activation-nushell:
-    name: "Nushell activation"
+    name: "Nushell activation (${{ matrix.environment }})"
     timeout-minutes: 10
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [standard, relocatable]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -334,12 +338,14 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Create virtual environment"
+        if: matrix.environment == 'standard'
         run: ./uv venv
 
       - name: "Activate and deactivate virtual environment"
+        if: matrix.environment == 'standard'
         shell: nu {0}
         run: |
-          overlay use .venv/bin/activate.nu
+          overlay use ${{ github.workspace }}/.venv/bin/activate.nu
 
           if ($env.VIRTUAL_ENV | path expand) != (".venv" | path expand) {
               error make { msg: "VIRTUAL_ENV does not identify the activated environment" }
@@ -354,14 +360,16 @@ jobs:
           }
 
       - name: "Create relocatable virtual environment"
+        if: matrix.environment == 'relocatable'
         run: |
           ./uv venv --relocatable .relocatable
           mv .relocatable relocated
 
       - name: "Activate relocated virtual environment"
+        if: matrix.environment == 'relocatable'
         shell: nu {0}
         run: |
-          overlay use relocated/bin/activate.nu
+          overlay use ${{ github.workspace }}/relocated/bin/activate.nu
 
           if ($env.VIRTUAL_ENV | path expand) != ("relocated" | path expand) {
               error make { msg: "VIRTUAL_ENV does not identify the relocated environment" }
