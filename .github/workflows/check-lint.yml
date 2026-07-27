@@ -73,7 +73,10 @@ jobs:
           curl -sSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" | tar -xJf -
           sudo mv "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/
       - name: "Run shellcheck"
-        run: find . -name '*.sh' -type f | xargs shellcheck --shell bash --severity style
+        run: |
+          find . -type f \
+            \( -name '*.sh' -o -path './crates/uv-virtualenv/src/activator/activate' \) |
+            xargs shellcheck --shell bash --severity style
 
   validate-pyproject:
     timeout-minutes: 10

@@ -81,6 +81,8 @@ deactivate () {
 deactivate nondestructive
 
 VIRTUAL_ENV='{{ VIRTUAL_ENV_DIR }}'
+# Preserve this condition's grouping and command substitution for POSIX shell compatibility.
+# shellcheck disable=SC2091,SC2235
 if ([ "${OSTYPE-}" = "cygwin" ] || [ "${OSTYPE-}" = "msys" ]) && $(command -v cygpath &> /dev/null) ; then
     VIRTUAL_ENV=$(cygpath -u "$VIRTUAL_ENV")
 fi
@@ -100,6 +102,8 @@ _OLD_VIRTUAL_PATH="$PATH"
 PATH="$VIRTUAL_ENV/{{ BIN_NAME }}:$PATH"
 export PATH
 
+# The prompt template is rendered when the virtual environment is created.
+# shellcheck disable=SC2050,SC2268
 if [ "x{{ VIRTUAL_PROMPT }}" != x ] ; then
     VIRTUAL_ENV_PROMPT="{{ VIRTUAL_PROMPT }}"
 else
