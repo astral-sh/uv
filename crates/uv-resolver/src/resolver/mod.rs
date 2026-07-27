@@ -2338,6 +2338,35 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .excludes
                     .contains_for_package(exclusion_package, &requirement.name)
             })
+            .map(move |mut requirement| {
+                // Split the marker into production and optional components. If we have e.g.
+                // `foo; sys_platform == 'win32' or extra == 'feature'`
+                // we split it into
+                // `foo; sys_platform == 'win32'` (production) when `extra` is `None`,
+                // `foo; extra == 'feature'` (optional) when `extra` is `Some("feature")`.
+                // The requirements are then separately tracked in production and optional
+                // dependencies respectively.
+
+                let marker = match extra {
+                    Some(extra) => requirement
+                        .marker
+                        .simplify_extras(slice::from_ref(extra))
+                        .simplify_not_extras_with(|candidate| candidate != extra)
+                        .and(
+                            requirement
+                                .marker
+                                .simplify_not_extras_with(|_| true)
+                                .negate(),
+                        ),
+                    None => requirement.marker.simplify_not_extras_with(|_| true),
+                };
+
+                if requirement.marker != marker {
+                    requirement.to_mut().marker = marker;
+                }
+
+                requirement
+            })
             .filter(move |requirement| {
                 Self::is_requirement_applicable(
                     requirement,
@@ -2370,15 +2399,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // If the requirement isn't relevant for the current platform, skip it.
         match extra {
             Some(source_extra) => {
-                // Only include requirements that are relevant for the current extra.
-                if requirement.evaluate_markers(env.marker_environment(), &[]) {
+                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
                     return false;
                 }
-                if !requirement
-                    .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
-                {
-                    return false;
-                }
+
                 if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
                 {
                     return false;
