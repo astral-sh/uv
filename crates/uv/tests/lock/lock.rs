@@ -15121,7 +15121,7 @@ fn lock_transitive_extra_path_dependency() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     let lock = context.read("uv.lock");
