@@ -11,8 +11,9 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::{Index, Resolution};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{DEV_DEPENDENCIES, ExtraName, PackageName};
 use uv_platform_tags::Tags;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     DependencyGroupSpecifier, LenientRequirement, ResolverMarkerEnvironment, VerbatimParsedUrl,
 };
@@ -332,25 +333,49 @@ impl<'lock> InstallTarget<'lock> {
             return Ok(());
         }
         match self {
-            Self::Project { lock, .. }
-            | Self::Projects { lock, .. }
-            | Self::Workspace { lock, .. }
-            | Self::NonProjectWorkspace { lock, .. } => {
+            Self::Project {
+                lock, workspace, ..
+            }
+            | Self::Projects {
+                lock, workspace, ..
+            }
+            | Self::Workspace { lock, workspace }
+            | Self::NonProjectWorkspace { lock, workspace } => {
                 if !lock.supports_provides_extra() {
                     return Ok(());
                 }
 
+                let metadata_free_lock = lock.supports_missing_package_metadata()
+                    && uv_preview::is_enabled(PreviewFeature::LockWithoutMetadata);
                 let roots = self.roots().collect::<FxHashSet<_>>();
-                let member_packages: Vec<&Package> = lock
+                // Collect all known extras from the member packages.
+                let known_extras = lock
                     .packages()
                     .iter()
                     .filter(|package| roots.contains(package.name()))
-                    .collect();
+                    .flat_map(|package| {
+                        // Extras that are empty or where the dependencies are filtered out through
+                        // their marker have no locked edges, so we read the workspace instead.
+                        let declared_extras = metadata_free_lock
+                            .then_some(package)
+                            .filter(|package| !package.has_metadata())
+                            .and_then(|package| workspace.packages().get(package.name()))
+                            .and_then(|member| member.pyproject_toml().project.as_ref())
+                            .and_then(|project| project.optional_dependencies.as_ref())
+                            .into_iter()
+                            .flat_map(|dependencies| dependencies.keys());
 
-                // Collect all known extras from the member packages.
-                let known_extras = member_packages
-                    .iter()
-                    .flat_map(|package| package.provides_extras().iter())
+                        package
+                            .provides_extras()
+                            .iter()
+                            .chain(
+                                metadata_free_lock
+                                    .then(|| package.optional_dependencies().keys())
+                                    .into_iter()
+                                    .flatten(),
+                            )
+                            .chain(declared_extras)
+                    })
                     .collect::<FxHashSet<_>>();
 
                 for extra in extras.explicit_names() {
@@ -393,47 +418,72 @@ impl<'lock> InstallTarget<'lock> {
         }
 
         match self {
-            Self::Workspace { lock, workspace } | Self::NonProjectWorkspace { lock, workspace } => {
-                let roots = self.roots().collect::<FxHashSet<_>>();
-                let member_packages: Vec<&Package> = lock
-                    .packages()
-                    .iter()
-                    .filter(|package| roots.contains(package.name()))
-                    .collect();
-
-                // Extract the dependency groups that are exclusive to the workspace root.
-                let known_groups = member_packages
-                    .iter()
-                    .flat_map(|package| package.dependency_groups().keys().map(Cow::Borrowed))
-                    .chain(
-                        workspace
-                            .workspace_dependency_groups()
-                            .ok()
-                            .into_iter()
-                            .flat_map(|dependency_groups| {
-                                dependency_groups.into_keys().map(Cow::Owned)
-                            }),
-                    )
-                    .collect::<FxHashSet<_>>();
-
-                for group in groups.explicit_names() {
-                    if !known_groups.contains(group) {
-                        return Err(ProjectError::MissingGroupProjects(group.clone()));
-                    }
-                }
+            Self::Project {
+                lock, workspace, ..
             }
-            Self::Project { lock, .. } | Self::Projects { lock, .. } => {
+            | Self::Projects {
+                lock, workspace, ..
+            }
+            | Self::Workspace { lock, workspace }
+            | Self::NonProjectWorkspace { lock, workspace } => {
+                let metadata_free_lock = lock.supports_missing_package_metadata()
+                    && uv_preview::is_enabled(PreviewFeature::LockWithoutMetadata);
                 let roots = self.roots().collect::<FxHashSet<_>>();
-                let member_packages: Vec<&Package> = lock
+                let member_groups = lock
                     .packages()
                     .iter()
                     .filter(|package| roots.contains(package.name()))
-                    .collect();
+                    .flat_map(|package| {
+                        // Groups that are empty or where the dependencies are filtered out through
+                        // their marker have no locked edges, so we read the workspace instead.
+                        let declared_groups = metadata_free_lock
+                            .then_some(package)
+                            .filter(|package| !package.has_metadata())
+                            .and_then(|package| workspace.packages().get(package.name()))
+                            .into_iter()
+                            .flat_map(|member| {
+                                let pyproject = member.pyproject_toml();
+                                let declared_groups = pyproject
+                                    .dependency_groups
+                                    .as_ref()
+                                    .into_iter()
+                                    .flatten()
+                                    .map(|(group, _)| group);
+                                let legacy_dev = pyproject
+                                    .tool
+                                    .as_ref()
+                                    .and_then(|tool| tool.uv.as_ref())
+                                    .and_then(|uv| uv.dev_dependencies.as_ref())
+                                    .is_some()
+                                    .then_some(&*DEV_DEPENDENCIES);
+                                declared_groups.chain(legacy_dev)
+                            });
 
-                // Extract the dependency groups defined in the relevant member(s).
-                let known_groups = member_packages
-                    .iter()
-                    .flat_map(|package| package.dependency_groups().keys())
+                        package
+                            .dependency_groups()
+                            .keys()
+                            .chain(
+                                metadata_free_lock
+                                    .then(|| package.resolved_dependency_groups().keys())
+                                    .into_iter()
+                                    .flatten(),
+                            )
+                            .chain(declared_groups)
+                            .map(Cow::Borrowed)
+                    });
+
+                // Groups defined directly on a non-project workspace root are not members.
+                let workspace_groups = matches!(
+                    self,
+                    Self::Workspace { .. } | Self::NonProjectWorkspace { .. }
+                )
+                .then(|| workspace.workspace_dependency_groups().ok())
+                .flatten()
+                .into_iter()
+                .flat_map(|dependency_groups| dependency_groups.into_keys().map(Cow::Owned));
+
+                let known_groups = member_groups
+                    .chain(workspace_groups)
                     .collect::<FxHashSet<_>>();
 
                 for group in groups.explicit_names() {
@@ -442,10 +492,7 @@ impl<'lock> InstallTarget<'lock> {
                             Self::Project { .. } => {
                                 Err(ProjectError::MissingGroupProject(group.clone()))
                             }
-                            Self::Projects { .. } => {
-                                Err(ProjectError::MissingGroupProjects(group.clone()))
-                            }
-                            _ => unreachable!(),
+                            _ => Err(ProjectError::MissingGroupProjects(group.clone())),
                         };
                     }
                 }

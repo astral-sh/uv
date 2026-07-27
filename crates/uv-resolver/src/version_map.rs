@@ -94,6 +94,7 @@ impl VersionMap {
         }
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
+                package_name: package_name.clone(),
                 map,
                 stable,
                 local,
@@ -253,6 +254,18 @@ impl VersionMap {
         }
     }
 
+    /// Return an iterator over the versions that can be considered for selection.
+    ///
+    /// Unlike [`Self::iter`], this skips lazy registry versions whose files are all excluded by
+    /// an upload-time cutoff without materializing their distributions. Files without an upload
+    /// time remain included so that materialization can emit the appropriate warning.
+    pub(crate) fn iter_included(
+        &self,
+        range: &Ranges<Version>,
+    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle<'_>)> {
+        self.iter(range).filter(|(_, dist)| dist.is_included())
+    }
+
     /// Return the [`Hashes`] for the given version, if any.
     pub(crate) fn hashes(&self, version: &Version) -> Option<&[HashDigest]> {
         match self.inner {
@@ -327,6 +340,18 @@ enum VersionMapDistHandleInner<'a> {
 }
 
 impl<'a> VersionMapDistHandle<'a> {
+    /// Returns whether this distribution can be considered for selection.
+    fn is_included(&self) -> bool {
+        match self.inner {
+            VersionMapDistHandleInner::Eager(_) => true,
+            VersionMapDistHandleInner::Lazy { lazy, dist } => match (&dist.flat, &dist.simple) {
+                (Some(_), _) => true,
+                (None, Some(simple)) => lazy.any_file_materializable(simple),
+                (None, None) => false,
+            },
+        }
+    }
+
     /// Returns a prioritized distribution from this handle.
     pub(crate) fn prioritized_dist(&self) -> Option<&'a PrioritizedDist> {
         match self.inner {
@@ -466,6 +491,8 @@ impl VersionMapLazyIndex {
 /// provide substantial savings in some cases.
 #[derive(Debug)]
 struct VersionMapLazy {
+    /// The normalized package name used to reconstruct cached wheel filenames.
+    package_name: PackageName,
     /// An immutable archive-order index from version to possibly-initialized distribution.
     map: VersionMapLazyIndex,
     /// Whether the version map contains at least one stable (non-pre-release) version.
@@ -505,7 +532,7 @@ impl VersionMapLazy {
             .get(version)
             .and_then(|entry| entry.dist.simple.as_ref())
             .and_then(|simple| self.simple_metadata.datum(simple.datum_index))
-            .and_then(|datum| datum.metadata.as_ref())?;
+            .and_then(|datum| datum.metadata.as_deref())?;
         Some(
             rkyv::deserialize::<ResolutionMetadata, rkyv::rancor::Error>(archived)
                 .expect("archived metadata always deserializes"),
@@ -546,10 +573,9 @@ impl VersionMapLazy {
         files
             .wheels
             .iter()
-            .map(|wheel| &wheel.file)
-            .chain(files.source_dists.iter().map(|sdist| &sdist.file))
+            .chain(files.source_dists.iter())
             .any(|file| {
-                let upload_time = file.upload_time_utc_ms.as_ref().map(|t| t.to_native());
+                let upload_time = file.upload_time_utc_ms();
                 let excluded = if let Some(cutoff) = &self.included_version_cutoff {
                     upload_time.is_none_or(|t| t >= cutoff.as_millisecond())
                 } else if let Some(cutoff) = &self.available_version_cutoff {
@@ -558,6 +584,32 @@ impl VersionMapLazy {
                     false
                 };
                 !excluded
+            })
+    }
+
+    /// Returns whether a version should be materialized during candidate selection.
+    ///
+    /// Missing upload times are retained here, even for `included_version_cutoff`, since
+    /// materializing them is what emits the corresponding `exclude-newer` warning.
+    fn any_file_materializable(&self, simple: &SimplePrioritizedDist) -> bool {
+        let Some(cutoff) = self
+            .included_version_cutoff
+            .as_ref()
+            .or(self.available_version_cutoff.as_ref())
+        else {
+            return true;
+        };
+        let Some(datum) = self.simple_metadata.datum(simple.datum_index) else {
+            return false;
+        };
+        datum
+            .files
+            .wheels
+            .iter()
+            .chain(datum.files.source_dists.iter())
+            .any(|file| {
+                file.upload_time_utc_ms()
+                    .is_none_or(|upload_time| upload_time < cutoff.as_millisecond())
             })
     }
 
@@ -594,7 +646,7 @@ impl VersionMapLazy {
             )
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
-            for (filename, file) in files.all() {
+            for (filename, file) in files.all(&self.package_name) {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =

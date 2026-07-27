@@ -57,8 +57,7 @@ fn run_with_python_version() -> Result<()> {
     let mut command = context.run();
     let command_with_args = command.arg("python").arg("-B").arg("main.py");
     uv_snapshot!(context.filters(), command_with_args, @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
     3.7.0
@@ -84,8 +83,7 @@ fn run_with_python_version() -> Result<()> {
         .arg("-B")
         .arg("main.py");
     uv_snapshot!(context.filters(), command_with_args, @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
     3.7.0
@@ -106,8 +104,7 @@ fn run_with_python_version() -> Result<()> {
         .env_remove(EnvVars::VIRTUAL_ENV);
 
     uv_snapshot!(context.filters(), command_with_args, @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.11.[X]
     3.6.0
@@ -136,10 +133,7 @@ fn run_with_python_version() -> Result<()> {
         .env_remove(EnvVars::VIRTUAL_ENV);
 
     uv_snapshot!(context.filters(), command_with_args, @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.11, <4` (from `project.requires-python`)
@@ -153,8 +147,14 @@ fn run_args() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let context = context
-        .with_filter((r"Usage: uv(\.exe)? run \[OPTIONS\] (?s).*", "[UV RUN HELP]"))
-        .with_filter((r"usage: .*(\n|.*)*", "usage: [PYTHON HELP]"));
+        .with_filter((
+            r"Usage: uv(?:\.exe)? run \[OPTIONS\] (?s:.*?)(\n----- stderr -----|$)",
+            "[UV RUN HELP]$1",
+        ))
+        .with_filter((
+            r"usage: (?s:.*?)(\n----- stderr -----|$)",
+            "usage: [PYTHON HELP]$1",
+        ));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -178,26 +178,27 @@ fn run_args() -> Result<()> {
 
     // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.run().arg("--help").arg("python"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Run a command or script
 
-    [UV RUN HELP]
-    ");
+    [UV RUN HELP]");
 
     // We don't treat arguments after the command as uv arguments
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--help"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     usage: [PYTHON HELP]
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
     ");
 
     // Can use `--` to separate uv arguments from the command arguments.
     uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -239,8 +240,7 @@ fn run_no_args() -> Result<()> {
     // Run without specifying any arguments.
     #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.run(), @"
-    success: false
-    exit_code: 2
+    exit_code: 2 (failure)
     ----- stdout -----
     Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
@@ -261,8 +261,7 @@ fn run_no_args() -> Result<()> {
 
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run(), @r###"
-    success: false
-    exit_code: 2
+    exit_code: 2 (failure)
     ----- stdout -----
     Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
@@ -326,10 +325,7 @@ fn run_pep723_script() -> Result<()> {
 
     // Running the script should install the requirements.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -339,11 +335,7 @@ fn run_pep723_script() -> Result<()> {
 
     // Running again should use the existing environment.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     // But neither invocation should create a lockfile.
@@ -358,10 +350,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -386,8 +375,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -407,30 +395,23 @@ fn run_pep723_script() -> Result<()> {
        "#
     })?;
 
-    // Running the script should install the requirements.
+    // Running the script should succeed without installing any requirements.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     // Running a script with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to find lockfile for Python script, but `--locked` was provided. To create a lockfile, run `uv lock --script`.
     ");
 
     // Running a script with `UV_LOCKED` should warn (not error).
     uv_snapshot!(context.filters(), context.run().env("UV_LOCKED", "1").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -452,10 +433,7 @@ fn run_pep723_script() -> Result<()> {
 
     // Running a script with `--group` should warn.
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving script dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
@@ -474,10 +452,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving script dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
@@ -499,10 +474,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`.
     ");
@@ -523,10 +495,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The script contains multiple PEP 723 metadata blocks
     ");
@@ -557,8 +526,7 @@ fn run_pep723_script_long_filename() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg(&script_name), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -595,24 +563,18 @@ fn run_pep723_script_requires_python() -> Result<()> {
     // The `.python-version` (3.11) is incompatible with the script's `requires-python` (>=3.12),
     // so uv should ignore it and discover a compatible Python (3.12) instead.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
-
-    ----- stderr -----
     ");
 
     // Deleting the `.python-version` file should not change the behavior.
     fs_err::remove_file(&python_version)?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -641,12 +603,9 @@ fn run_pep723_script_requires_python_compatible() -> Result<()> {
     // The `.python-version` (3.11) is compatible with the script's `requires-python` (>=3.11),
     // so it should be used.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.11.[X]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -673,12 +632,9 @@ fn run_pep723_script_requires_python_incompatible_range() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -716,10 +672,7 @@ fn run_pythonw_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.pyw"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -756,12 +709,9 @@ fn run_pep723_script_metadata() -> Result<()> {
        "#
     })?;
 
-    // Running the script should fail without network access.
+    // Running the script should honor its inline resolution setting.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -788,10 +738,7 @@ fn run_pep723_script_metadata() -> Result<()> {
 
     // The script should succeed with the specified source.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -829,10 +776,7 @@ fn run_pep723_script_index() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -873,10 +817,7 @@ fn run_pep723_script_no_sources_package() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--default-index").arg(default.index_url()).arg("--no-sources-package").arg("unrelated").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -887,10 +828,7 @@ fn run_pep723_script_no_sources_package() -> Result<()> {
     fs_err::remove_dir_all(&context.cache_dir)?;
 
     uv_snapshot!(context.filters(), context.run().arg("--default-index").arg(default.index_url()).arg("--no-sources-package").arg("a").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -923,10 +861,7 @@ fn run_pep723_script_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -961,10 +896,7 @@ fn run_pep723_script_overrides() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -999,10 +931,7 @@ fn run_pep723_script_excludes() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -1039,10 +968,7 @@ fn run_pep723_script_build_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
@@ -1068,10 +994,7 @@ fn run_pep723_script_build_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -1109,20 +1032,14 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Without a lockfile, running with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to find lockfile for Python script, but `--locked` was provided. To create a lockfile, run `uv lock --script`.
     ");
 
     // Explicitly lock the script.
     uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
@@ -1158,8 +1075,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Run the script.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -1172,8 +1088,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // With a lockfile, running with `--locked` should not warn.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -1199,10 +1114,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Re-running the script with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -1212,10 +1124,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Re-running the script with `--frozen` should also error, but at runtime.
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("main.py"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Checked 1 package in [TIME]
     Traceback (most recent call last):
@@ -1226,8 +1135,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Re-running the script should update the lockfile.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -1317,12 +1225,9 @@ fn run_managed_false() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -1343,10 +1248,7 @@ fn run_exact() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -1366,10 +1268,7 @@ fn run_exact() -> Result<()> {
 
     // By default, `uv run` uses inexact semantics, so both `iniconfig` and `anyio` should still be available.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig; import anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -1381,10 +1280,7 @@ fn run_exact() -> Result<()> {
 
     // But under `--exact`, `iniconfig` should not be available.
     uv_snapshot!(context.filters(), context.run().arg("--exact").arg("python").arg("-c").arg("import iniconfig"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -1431,8 +1327,7 @@ fn run_with() -> Result<()> {
 
     // Requesting an unsatisfied requirement should install it.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1.3.0
 
@@ -1450,8 +1345,7 @@ fn run_with() -> Result<()> {
 
     // Requesting a satisfied requirement should use the base environment.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1.3.0
 
@@ -1462,8 +1356,7 @@ fn run_with() -> Result<()> {
 
     // Unless the user requests a different version.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.0").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1.2.0
 
@@ -1480,8 +1373,7 @@ fn run_with() -> Result<()> {
     // other dependencies. In this case, `sniffio==1.3.0` is not the latest-compatible version, but
     // we should use it anyway.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1.3.0
 
@@ -1498,8 +1390,7 @@ fn run_with() -> Result<()> {
 
     // Even if we run with` --no-sync`.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio==4.2.0").arg("--no-sync").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1.3.0
 
@@ -1514,10 +1405,7 @@ fn run_with() -> Result<()> {
 
     // If the dependencies can't be resolved, we should reference `--with`.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("add").arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
@@ -1575,8 +1463,7 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
         .arg("-c")
         .arg("import foo; print(foo.hello())")
         .env_remove(EnvVars::VIRTUAL_ENV), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello from foo!
 
@@ -1617,8 +1504,7 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
         .arg("-c")
         .arg("import foo; print(foo.hello())")
         .env_remove(EnvVars::VIRTUAL_ENV), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Updated code!
 
@@ -1641,8 +1527,7 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
         .arg("-c")
         .arg("import foo; print(foo.hello())")
         .env_remove(EnvVars::VIRTUAL_ENV), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Updated code!
 
@@ -1661,7 +1546,22 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
 /// search paths are available in these ephemeral environments.
 #[test]
 fn run_with_pyvenv_cfg_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_pyvenv_cfg_filters();
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_pyvenv_cfg_filters();
+
+    // This sets up to test for a regression where we escaped double quotes and backslashes.
+    // Windows paths don't allow double quotes and use backslash as a path separator so the path has
+    // to differ.
+    let parent_environment = context.temp_dir.child(if cfg!(windows) {
+        ".\\parent-environment"
+    } else {
+        "parent\"\\environment"
+    });
+    context
+        .venv()
+        .arg(parent_environment.path())
+        .assert()
+        .success();
+    let context = context.with_filtered_path(&parent_environment, "PARENT_VENV");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1691,16 +1591,20 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.run()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, parent_environment.path())
+        .env(EnvVars::VIRTUAL_ENV, parent_environment.path())
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("main.py"), @"
+    exit_code: 0 (success)
     ----- stdout -----
     home = [PYTHON_HOME]
     implementation = CPython
     uv = [UV_VERSION]
     version_info = 3.12.[X]
     include-system-site-packages = false
-    extends-environment = [PARENT_VENV]
+    extends-environment = [PARENT_VENV]/
 
 
     ----- stderr -----
@@ -1719,7 +1623,9 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
 
 #[test]
 fn run_with_overlay_interpreter() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1774,10 +1680,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1796,10 +1701,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
     // The project's gui entrypoint should be rewritten to use the overlay interpreter.
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main_gui").arg(context.temp_dir.child("main_gui").as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1813,7 +1717,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     }, {
             assert_snapshot!(
                 context.read("main"), @r#"
-            #![CACHE_DIR]/builds-v0/[TMP]/python
+            #![CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
             # -*- coding: utf-8 -*-
             import sys
             from foo import main
@@ -1841,10 +1745,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     // When layering the project on top (via `--with`), the overlay interpreter also should be used.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -1859,10 +1762,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
     // When layering the project on top (via `--with`), the overlay gui interpreter also should be used.
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--gui-script").arg("--with").arg(".").arg("main_gui"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -1883,10 +1785,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1897,10 +1798,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
     // The project's gui entrypoint should be rewritten to use the overlay interpreter.
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main_gui").arg(context.temp_dir.child("main_gui").as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1925,7 +1825,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     }, {
             assert_snapshot!(
                 context.read("main"), @r#"
-            #![CACHE_DIR]/builds-v0/[TMP]/python
+            #![CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
             # -*- coding: utf-8 -*-
             import sys
             from foo import main
@@ -1942,10 +1842,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     // When layering the project on top (via `--with`), the overlay interpreter also should be used.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -1954,10 +1853,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
     // When layering the project on top (via `--with`), the overlay gui interpreter also should be used.
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--gui-script").arg("--with").arg(".").arg("main_gui"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -1991,10 +1889,7 @@ fn run_with_build_constraints() -> Result<()> {
 
     // Installing requests with incompatible build constraints should fail.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -2024,10 +1919,7 @@ fn run_with_build_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 5 packages in [TIME]
@@ -2120,10 +2012,7 @@ fn run_in_workspace() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -2141,10 +2030,7 @@ fn run_in_workspace() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -2155,10 +2041,7 @@ fn run_in_workspace() -> Result<()> {
     "#);
 
     uv_snapshot!(context.filters(), context.run().arg("--package").arg("child1").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -2174,10 +2057,7 @@ fn run_in_workspace() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -2188,10 +2068,7 @@ fn run_in_workspace() -> Result<()> {
     "#);
 
     uv_snapshot!(context.filters(), context.run().arg("--all-packages").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -2248,10 +2125,7 @@ fn run_with_editable() -> Result<()> {
 
     // Requesting an editable requirement should install it in a layer.
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/black_editable").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -2268,10 +2142,7 @@ fn run_with_editable() -> Result<()> {
 
     // Requesting an editable requirement should install it in a layer, even if it satisfied
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -2283,10 +2154,7 @@ fn run_with_editable() -> Result<()> {
 
     // Requesting the project itself should use the base environment.
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg(".").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -2310,10 +2178,7 @@ fn run_with_editable() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -2326,10 +2191,7 @@ fn run_with_editable() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked 3 packages in [TIME]
@@ -2337,10 +2199,7 @@ fn run_with_editable() -> Result<()> {
 
     // If invalid, we should reference `--with-editable`.
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./foo").arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked 3 packages in [TIME]
@@ -2396,8 +2255,7 @@ fn run_group() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     failed to import `anyio`
     failed to import `iniconfig`
@@ -2412,8 +2270,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("bar").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     failed to import `anyio`
     imported `iniconfig`
@@ -2427,8 +2284,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -2443,8 +2299,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -2456,8 +2311,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -2469,8 +2323,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-group").arg("bar").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -2482,8 +2335,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--no-project").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -2494,8 +2346,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("--no-project").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -2506,8 +2357,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("dev").arg("--no-project").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -2518,8 +2368,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-project").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -2530,8 +2379,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--dev").arg("--no-project").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -2570,8 +2418,7 @@ fn run_dev_overrides_uv_no_dev() -> Result<()> {
         .arg("-c")
         .arg("import iniconfig; print(iniconfig.__name__)")
         .env(EnvVars::UV_NO_DEV, "1"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     iniconfig
 
@@ -2612,10 +2459,7 @@ fn run_locked() -> Result<()> {
 
     // Running with `--locked` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -2699,10 +2543,7 @@ fn run_locked() -> Result<()> {
 
     // Running with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -2717,10 +2558,7 @@ fn run_locked() -> Result<()> {
 
     // Lock the updated requirements.
     uv_snapshot!(context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Removed anyio v3.7.0
@@ -2731,18 +2569,14 @@ fn run_locked() -> Result<()> {
 
     // Lock the updated requirements.
     uv_snapshot!(context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
 
     // Running with `--locked` should succeed.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -2784,10 +2618,7 @@ fn run_frozen() -> Result<()> {
 
     // Running with `--frozen` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -2811,8 +2642,7 @@ fn run_frozen() -> Result<()> {
 
     // Running with `--frozen` should install the stale lockfile.
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -2853,38 +2683,29 @@ fn run_no_sync() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    // Running with `--no-sync` should succeed error, even if the lockfile isn't present.
+    // Running with `--no-sync` should succeed, even if the lockfile isn't present.
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     context.lock().assert().success();
 
     // Running with `--no-sync` should not install any requirements.
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     context.sync().assert().success();
 
     // But it should have access to the installed packages.
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -2920,36 +2741,27 @@ fn run_no_sync_env_var() -> Result<()> {
 
     // Running with `UV_NO_SYNC=1` should succeed, even if the lockfile isn't present.
     uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     context.lock().assert().success();
 
     // Running with `UV_NO_SYNC=1` should not install any requirements.
     uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     context.sync().assert().success();
 
     // But it should have access to the installed packages.
     uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -2991,10 +2803,7 @@ fn run_empty_requirements_txt() -> Result<()> {
 
     // The project environment is synced on the first invocation.
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -3008,10 +2817,7 @@ fn run_empty_requirements_txt() -> Result<()> {
 
     // Then reused in subsequent invocations
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -3056,10 +2862,7 @@ fn run_requirements_txt() -> Result<()> {
     requirements_txt.write_str("iniconfig")?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -3078,10 +2881,7 @@ fn run_requirements_txt() -> Result<()> {
     requirements_txt.write_str("sniffio")?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -3091,10 +2891,7 @@ fn run_requirements_txt() -> Result<()> {
     requirements_txt.write_str("sniffio<1.3.1")?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -3113,10 +2910,7 @@ fn run_requirements_txt() -> Result<()> {
         .arg("--with")
         .arg("iniconfig")
         .arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -3134,10 +2928,7 @@ fn run_requirements_txt() -> Result<()> {
         .arg("iniconfig")
         .arg("main.py")
         .stdin(std::fs::File::open(&requirements_txt)?), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -3151,10 +2942,7 @@ fn run_requirements_txt() -> Result<()> {
         // The script to run
         .arg("-")
         .stdin(std::fs::File::open(&requirements_txt)?), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot read both requirements file and script from stdin
     ");
@@ -3165,10 +2953,7 @@ fn run_requirements_txt() -> Result<()> {
         .arg("--script")
         .arg("-")
         .stdin(std::fs::File::open(&requirements_txt)?), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot read both requirements file and script from stdin
     ");
@@ -3216,10 +3001,7 @@ fn run_requirements_txt_arguments() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -3270,8 +3052,7 @@ fn run_editable() -> Result<()> {
 
     // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -3287,8 +3068,7 @@ fn run_editable() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--no-editable-package").arg("foo").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -3357,8 +3137,7 @@ fn run_from_directory() -> Result<()> {
     // Use `--project`, which resolves configuration relative to the provided directory, but paths
     // relative to the current working directory.
     uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
 
@@ -3374,10 +3153,7 @@ fn run_from_directory() -> Result<()> {
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("./project/main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -3390,8 +3166,7 @@ fn run_from_directory() -> Result<()> {
     // Use `--directory`, which switches to the provided directory entirely.
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
 
@@ -3406,10 +3181,7 @@ fn run_from_directory() -> Result<()> {
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -3421,10 +3193,7 @@ fn run_from_directory() -> Result<()> {
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./project/main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -3449,8 +3218,7 @@ fn run_from_directory() -> Result<()> {
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.10.[X]
 
@@ -3465,8 +3233,7 @@ fn run_from_directory() -> Result<()> {
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.10.[X]
 
@@ -3515,10 +3282,7 @@ fn run_without_output() -> Result<()> {
 
     // On the first run, we only show the summary line for each environment.
     uv_snapshot!(context.filters(), context.run().env_remove(EnvVars::UV_SHOW_RESOLUTION).arg("--with").arg("iniconfig").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 4 packages in [TIME]
     Installed 1 package in [TIME]
@@ -3526,11 +3290,7 @@ fn run_without_output() -> Result<()> {
 
     // Subsequent runs are quiet.
     uv_snapshot!(context.filters(), context.run().env_remove(EnvVars::UV_SHOW_RESOLUTION).arg("--with").arg("iniconfig").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     Ok(())
@@ -3570,8 +3330,7 @@ fn run_isolated_python_version() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     (3, 9)
 
@@ -3590,8 +3349,7 @@ fn run_isolated_python_version() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     (3, 9)
 
@@ -3613,8 +3371,7 @@ fn run_isolated_python_version() -> Result<()> {
         .write_str("3.12")?;
 
     uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     (3, 12)
 
@@ -3660,8 +3417,7 @@ fn run_no_project() -> Result<()> {
 
     // `run` should run in the context of the project.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
 
@@ -3678,39 +3434,29 @@ fn run_no_project() -> Result<()> {
     // `run --no-project` should not (but it should still run in the same environment, as it would
     // if there were no project at all).
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     // `run --no-project --isolated` should run in an entirely isolated environment.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--isolated").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[PYTHON]
-
-    ----- stderr -----
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/[PYTHON]
     ");
 
     // `run --no-project` should not (but it should still run in the same environment, as it would
     // if there were no project at all).
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
-    // `run --no-project --locked` should fail.
+    // `run --no-project --locked` should warn about `--locked`.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--locked").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
 
@@ -3734,12 +3480,9 @@ fn run_stdin() -> Result<()> {
     let mut command = context.run();
     let command_with_args = command.stdin(std::fs::File::open(test_script)?).arg("-");
     uv_snapshot!(context.filters(), command_with_args, @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -3756,12 +3499,9 @@ fn run_package() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("."), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -3795,12 +3535,9 @@ fn run_zipapp() -> Result<()> {
 
     // Run the zipapp.
     uv_snapshot!(context.filters(), context.run().arg(zipapp.as_ref()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -3811,12 +3548,9 @@ fn run_stdin_args() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.argv)").arg("foo").arg("bar"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     ['-c', 'foo', 'bar']
-
-    ----- stderr -----
     ");
 }
 
@@ -3826,17 +3560,13 @@ fn run_module() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("-m").arg("__hello__"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello world!
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("-m").arg("http.server").arg("-h"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     usage: server.py [-h] [--cgi] [-b ADDRESS] [-d DIRECTORY] [-p VERSION] [port]
 
@@ -3852,8 +3582,6 @@ fn run_module() {
                             serve this directory (default: current directory)
       -p VERSION, --protocol VERSION
                             conform to this HTTP version (default: HTTP/1.0)
-
-    ----- stderr -----
     ");
 }
 
@@ -3862,10 +3590,7 @@ fn run_module_stdin() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("-m").arg("-"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot run a Python module from stdin
     ");
@@ -3891,8 +3616,7 @@ fn virtual_empty() -> Result<()> {
 
     // `run` should work fine
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
 
@@ -3904,12 +3628,9 @@ fn virtual_empty() -> Result<()> {
 
     // `run --no-project` should also work fine
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -3947,10 +3668,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
     // We should reject Python 3.9...
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
@@ -3959,10 +3677,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
     // ...even if `--isolated` is provided.
     uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
     Use `uv python pin` to update the `.python-version` file to a compatible version
@@ -4007,8 +3722,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--isolated")
         .arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     4.3.0
 
@@ -4030,8 +3744,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
 
     // Create initial lock with default resolution
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     4.3.0
 
@@ -4054,8 +3767,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
         .arg("--resolution")
         .arg("lowest-direct")
         .arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.0.0
 
@@ -4117,8 +3829,7 @@ fn run_isolated_with_frozen() -> Result<()> {
         .arg("--resolution")
         .arg("lowest-direct")
         .arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.0.0
 
@@ -4138,8 +3849,7 @@ fn run_isolated_with_frozen() -> Result<()> {
         .arg("--isolated")
         .arg("--frozen")
         .arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.0.0
 
@@ -4167,12 +3877,9 @@ fn run_compiled_python_file() -> Result<()> {
 
     // Run a non-PEP 723 script.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     let compile_output = context
@@ -4191,12 +3898,9 @@ fn run_compiled_python_file() -> Result<()> {
     // Run the compiled non-PEP 723 script.
     let compiled_non_script = context.temp_dir.child("__pycache__/main.cpython-312.pyc");
     uv_snapshot!(context.filters(), context.run().arg(compiled_non_script.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     // If the script contains a PEP 723 tag, we should install its requirements.
@@ -4213,10 +3917,7 @@ fn run_compiled_python_file() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4241,10 +3942,7 @@ fn run_compiled_python_file() -> Result<()> {
     // Run the compiled PEP 723 script. This fails, since we can't read the script tag.
     let compiled_script = context.temp_dir.child("__pycache__/script.cpython-312.pyc");
     uv_snapshot!(context.filters(), context.run().arg(compiled_script.path()), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Traceback (most recent call last):
       File "[TEMP_DIR]/script.py", line 7, in <module>
@@ -4296,10 +3994,7 @@ fn run_invalid_project_table() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 2
@@ -4340,10 +4035,7 @@ fn run_script_without_build_system() -> Result<()> {
     // TODO(lucab): this should match `entry` and warn
     // <https://github.com/astral-sh/uv/issues/7428>
     uv_snapshot!(context.filters(), context.run().arg("entry"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
@@ -4383,8 +4075,7 @@ fn run_script_module_conflict() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello from `__init__`
 
@@ -4403,8 +4094,7 @@ fn run_script_module_conflict() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello from `__init__`
 
@@ -4415,8 +4105,7 @@ fn run_script_module_conflict() -> Result<()> {
 
     // Even if the working directory is `src`
     uv_snapshot!(context.filters(), context.run().arg("--directory").arg("src").arg("foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello from `__init__`
 
@@ -4427,8 +4116,7 @@ fn run_script_module_conflict() -> Result<()> {
 
     // Unless the user opts-in to module running with `-m`
     uv_snapshot!(context.filters(), context.run().arg("-m").arg("foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello from `__main__`
 
@@ -4458,8 +4146,7 @@ fn run_script_explicit() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--script").arg("script"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -4491,8 +4178,7 @@ fn run_script_explicit_stdin() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--script").arg("-").stdin(std::fs::File::open(test_script)?), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -4526,10 +4212,7 @@ fn run_script_explicit_directory() -> Result<()> {
     fs_err::create_dir(context.temp_dir.child("script"))?;
 
     uv_snapshot!(context.filters(), context.run().arg("--script").arg("script"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: failed to read from file `script`: Is a directory (os error 21)
     ");
@@ -4560,10 +4243,7 @@ fn run_gui_script_explicit_windows() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using executable: pythonw.exe
     "###);
@@ -4590,8 +4270,7 @@ fn run_gui_script_explicit_stdin_windows() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -4623,10 +4302,7 @@ fn run_gui_script_explicit_unix() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using executable: python
     ");
@@ -4660,10 +4336,7 @@ fn run_linked_environment_path() -> Result<()> {
     // Running `uv sync` should use the environment at `target``
     uv_snapshot!(context.filters(), context.sync()
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -4681,8 +4354,7 @@ fn run_linked_environment_path() -> Result<()> {
         .env_remove(EnvVars::VIRTUAL_ENV)  // Ignore the test context's active virtual environment
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target")
         .arg("python").arg("-c").arg("import sys; print(sys.prefix); print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/target
     [TEMP_DIR]/target/[BIN]/[PYTHON]
@@ -4737,8 +4409,7 @@ fn run_active_project_environment() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.11.[X]
 
@@ -4757,8 +4428,7 @@ fn run_active_project_environment() -> Result<()> {
         .arg("--no-active")
         .arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.11.[X]
 
@@ -4782,8 +4452,7 @@ fn run_active_project_environment() -> Result<()> {
         .arg("--active")
         .arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.11.[X]
 
@@ -4806,8 +4475,7 @@ fn run_active_project_environment() -> Result<()> {
         .arg("-p").arg("3.12")
         .arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -4849,8 +4517,7 @@ fn run_active_script_environment() -> Result<()> {
         .arg("--script")
         .arg("main.py")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -4867,12 +4534,9 @@ fn run_active_script_environment() -> Result<()> {
         .arg("--script")
         .arg("main.py")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     context
@@ -4886,8 +4550,7 @@ fn run_active_script_environment() -> Result<()> {
         .arg("--script")
         .arg("main.py")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -4909,8 +4572,7 @@ fn run_active_script_environment() -> Result<()> {
         .arg("--script")
         .arg("main.py")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -4942,8 +4604,7 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -4965,8 +4626,7 @@ fn run_remote_pep723_script() {
         "Downloaded remote script to: [TEMP_PATH].py",
     ));
     uv_snapshot!(context.filters(), context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg(EnvVars::CI), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello CI, from uv!
 
@@ -4993,10 +4653,7 @@ fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
         .arg("--with-requirements")
         .arg("http://username:password@example.com/requirements.txt")
         .arg(script.as_os_str()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Network connectivity is disabled, but a remote requirements file was requested: http://username:****@example.com/requirements.txt
     ");
@@ -5024,10 +4681,7 @@ fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Res
         .arg(url)
         .arg(script.as_os_str())
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 3 retries
       Caused by: error sending request for url (http://[LOCALHOST]/requirements.py)
@@ -5057,12 +4711,9 @@ fn run_url_like_with_local_file_priority() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg(url), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -5086,8 +4737,7 @@ fn run_stdin_with_pep723() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().stdin(std::fs::File::open(test_script)?).arg("-"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -5123,27 +4773,21 @@ fn run_with_env() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     None
     None
     None
     None
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     palpatine
     leia_organa
     obi_wan_kenobi
     C3PO
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -5171,15 +4815,12 @@ fn run_with_env_file() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".file").arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     palpatine
     leia_organa
     obi_wan_kenobi
     C3PO
-
-    ----- stderr -----
     ");
 
     context.temp_dir.child(".file").write_str(indoc! { "
@@ -5200,15 +4841,12 @@ fn run_with_env_file() -> Result<()> {
         .env_remove(EnvVars::VIRTUAL_ENV)
         .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH)
         .env(EnvVars::PATH, context.python_path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     palpatine
     leia_organa
     obi_wan_kenobi
     C3PO
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -5240,25 +4878,19 @@ fn run_with_multiple_env_files() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env1").arg("--env-file").arg(".env2").arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     palpatine
     obi_wan_kenobi
     C3PO
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("test.py").env(EnvVars::UV_ENV_FILE, ".env1 .env2"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     palpatine
     obi_wan_kenobi
     C3PO
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -5280,12 +4912,9 @@ fn run_with_env_omitted() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("--no-env-file").arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     None
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -5307,8 +4936,7 @@ fn run_with_malformed_env() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     None
 
@@ -5335,29 +4963,19 @@ fn run_with_not_existing_env_file() -> Result<()> {
     ));
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("test.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No environment file found at: `.env.development`
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("test.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No environment file found at: `.env.development`
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("--quiet").arg("test.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 2 (failure)
     ");
 
     Ok(())
@@ -5395,10 +5013,7 @@ fn run_with_extra_conflict() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5441,10 +5056,7 @@ fn run_with_group_conflict() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5479,10 +5091,7 @@ fn run_default_groups() -> Result<()> {
 
     // Only the main dependencies and `dev` group should be installed.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -5515,10 +5124,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -5535,10 +5141,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -5555,10 +5158,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5576,10 +5176,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 5 packages in [TIME]
@@ -5593,10 +5190,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -5612,10 +5206,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -5632,10 +5223,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -5650,10 +5238,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -5675,10 +5260,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 5 packages in [TIME]
@@ -5713,8 +5295,7 @@ fn run_groups_requires_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--no-default-groups")
         .arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -5729,8 +5310,7 @@ fn run_groups_requires_python() -> Result<()> {
     // (This should trigger a version bump)
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.13.[X]
 
@@ -5796,8 +5376,7 @@ fn run_groups_requires_python_environment() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--no-default-groups")
         .arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.13.[X]
 
@@ -5811,8 +5390,7 @@ fn run_groups_requires_python_environment() -> Result<()> {
         .arg("--no-default-groups")
         .arg("-p").arg("3.12")
         .arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -5855,10 +5433,7 @@ fn run_groups_requires_python_errors() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("-p").arg("3.12")
         .arg("python").arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
@@ -5868,10 +5443,7 @@ fn run_groups_requires_python_errors() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--group").arg("foo")
         .arg("python").arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for Python >=3.100 in [PYTHON SOURCES]
     ");
@@ -5911,10 +5483,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--no-default-groups")
         .arg("python").arg("-c").arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -5928,10 +5497,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     // (This should trigger a version bump)
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("-c").arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: .venv
@@ -5951,10 +5517,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--group").arg("bar")
         .arg("python").arg("-c").arg("import typing_extensions"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Found conflicting Python requirements:
     - project: >=3.11
@@ -5966,10 +5529,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("-p").arg("3.13")
         .arg("python").arg("-c").arg("import typing_extensions"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     error: The requested interpreter resolved to Python 3.13.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from `tool.uv.dependency-groups.dev.requires-python`).
@@ -6011,10 +5571,7 @@ fn run_repeated() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     Creating virtual environment at: .venv
@@ -6032,10 +5589,7 @@ fn run_repeated() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -6046,10 +5600,7 @@ fn run_repeated() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Traceback (most recent call last):
@@ -6081,10 +5632,7 @@ fn run_without_overlay() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     Creating virtual environment at: .venv
@@ -6102,10 +5650,7 @@ fn run_without_overlay() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Traceback (most recent call last):
@@ -6119,10 +5664,7 @@ fn run_without_overlay() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -6158,10 +5700,7 @@ fn detect_infinite_recursion() -> Result<()> {
     cmd.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");
 
     uv_snapshot!(context.filters(), cmd, @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `uv run` was recursively invoked 6 times which exceeds the limit of 5
 
@@ -6179,12 +5718,9 @@ fn run_uv_variable() {
     uv_snapshot!(
         context.filters(),
         context.run().arg("python").arg("-c").arg("import os; print(os.environ['UV'])"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [UV]
-
-    ----- stderr -----
     ");
 }
 
@@ -6229,8 +5765,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
     custom_pydoc_ps1.write_str("python.exe -m pydoc $args")?;
 
     uv_snapshot!(context.filters(), context.run(), @r###"
-    success: false
-    exit_code: 2
+    exit_code: 2 (failure)
     ----- stdout -----
     Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
@@ -6254,8 +5789,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     // Test with explicit .bat extension
     uv_snapshot!(context.filters(), context.run().arg("custom_pydoc.bat"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pydoc - the Python documentation tool
 
@@ -6295,8 +5829,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     // Test with explicit .cmd extension
     uv_snapshot!(context.filters(), context.run().arg("custom_pydoc.cmd"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pydoc - the Python documentation tool
 
@@ -6336,8 +5869,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     // Test with explicit .ps1 extension
     uv_snapshot!(context.filters(), context.run().arg("custom_pydoc.ps1"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pydoc - the Python documentation tool
 
@@ -6377,8 +5909,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     // Test without explicit extension (.ps1 should be used) as there's no .exe available.
     uv_snapshot!(context.filters(), context.run().arg("custom_pydoc"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pydoc - the Python documentation tool
 
@@ -6444,10 +5975,7 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
 
     // Explicitly lock the script.
     uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
@@ -6494,8 +6022,7 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with").arg(".").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -6550,8 +6077,7 @@ fn run_pep723_script_with_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with").arg(".").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -6594,8 +6120,7 @@ fn run_no_sync_incompatible_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -6609,8 +6134,7 @@ fn run_no_sync_incompatible_python() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--python").arg("3.9").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -6629,41 +6153,29 @@ fn run_python_preference_no_project() {
     context.venv().assert().success();
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--managed-python").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     // `VIRTUAL_ENV` is set here, so we'll ignore the flag
     uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     // If we remove the `VIRTUAL_ENV` variable, we should get the unmanaged Python
     uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version").env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.11.[X]
-
-    ----- stderr -----
     ");
 }
 
@@ -6702,10 +6214,7 @@ fn isolate_child_environment() -> Result<()> {
 
     // Sync the parent package.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -6715,10 +6224,7 @@ fn isolate_child_environment() -> Result<()> {
 
     // Ensure that the isolated environment can't access `iniconfig` (from the parent package).
     uv_snapshot!(context.filters(), context.run().arg("--package").arg("child").arg("--isolated").arg("python").arg("-c").arg("import iniconfig"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked in [TIME]
@@ -6729,10 +6235,7 @@ fn isolate_child_environment() -> Result<()> {
 
     // Ensure that the isolated environment can't access `iniconfig` (from the parent package).
     uv_snapshot!(context.filters(), context.run().arg("--package").arg("child").arg("--isolated").arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import iniconfig"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked in [TIME]
@@ -6771,10 +6274,7 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
 
     // Using --only-group and --extra together should error.
     uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("dev").arg("--extra").arg("test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--extra <EXTRA>'
 
@@ -6785,10 +6285,7 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
 
     // Using --only-group and --all-extras together should also error.
     uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("dev").arg("--all-extras").arg("python").arg("-c").arg("print('hello')"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--all-extras'
 
@@ -6846,10 +6343,7 @@ fn run_target_workspace_discovery() -> Result<()> {
     // Without the preview feature, running from the parent directory fails to find the workspace,
     // so the dependency is not installed.
     uv_snapshot!(context.filters(), context.run().arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Traceback (most recent call last):
       File "[TEMP_DIR]/project/script.py", line 1, in <module>
@@ -6864,8 +6358,7 @@ fn run_target_workspace_discovery() -> Result<()> {
 
     // With the preview feature, the workspace is discovered from the target's directory.
     uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("target-workspace-discovery").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     success
 
@@ -6899,12 +6392,9 @@ fn run_target_workspace_discovery_bare_script() -> Result<()> {
         .arg("--preview-features")
         .arg("target-workspace-discovery")
         .arg("script.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     success
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -6924,10 +6414,7 @@ fn run_project_precedes_target_workspace_discovery() -> Result<()> {
         .arg(missing_project.path())
         .arg("project/script.py")
         .env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project directory `missing-project` does not exist
     ");
@@ -6941,8 +6428,7 @@ fn run_project_not_found() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     hello
 
@@ -6957,10 +6443,7 @@ fn run_project_not_found_preview() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("project-directory-must-exist").arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project directory `/tmp/does-not-exist-uv-test` does not exist
     ");
@@ -6972,10 +6455,7 @@ fn run_project_not_found_uv_preview_env() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().env("UV_PREVIEW", "1").arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project directory `/tmp/does-not-exist-uv-test` does not exist
     ");
@@ -7010,8 +6490,7 @@ fn run_project_pyproject_toml_file() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -7053,8 +6532,7 @@ fn run_project_non_pyproject_file() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -7100,8 +6578,7 @@ fn run_project_nested_file() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -7133,10 +6610,7 @@ fn run_project_file_no_ancestor_project() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: Project path `isolated/somefile` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
     error: failed to open file `[TEMP_DIR]/isolated/somefile/uv.toml`: Not a directory (os error 20)
@@ -7189,10 +6663,7 @@ async fn run_malware_detected() {
         .arg("--version")
         .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     warning: Malware detected in locked dependencies:
@@ -7234,8 +6705,64 @@ fn run_centralized_environment_no_sync_uses_incompatible_python() -> Result<()> 
         .arg("python")
         .arg("-c")
         .arg("import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    warning: Using incompatible environment (`project-cp3.12.[X]-[HASH]`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
+    "#);
+    Ok(())
+}
+
+#[test]
+fn run_centralized_environment_path_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_centralized_environment_hashes();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+    context
+        .sync()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    // Point the path file at an environment outside the centralized store.
+    let environment = context.temp_dir.child(".venv");
+    uv_fs::remove_virtualenv(environment.path())?;
+    let external = context.temp_dir.child("external");
+    context
+        .venv()
+        .arg(external.path())
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+    // Resolve a relative path file target from `.venv`'s parent.
+    environment.write_str("external")?;
+
+    // Like a directory link, use the path file's interpreter to select the cached environment.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--no-sync")
+        .arg("--python")
+        .arg("3.11")
+        .arg("python")
+        .arg("-c")
+        .arg("import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"), @r#"
+    exit_code: 0 (success)
     ----- stdout -----
     3.12
 

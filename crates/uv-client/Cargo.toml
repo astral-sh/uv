@@ -1,6 +1,6 @@
 [package]
 name = "uv-client"
-version = "0.0.61"
+version = "0.0.65"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -50,6 +50,7 @@ async_zip = { workspace = true }
 bytecheck = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+hex = { workspace = true }
 h2 = { workspace = true }
 html-escape = { workspace = true }
 http = { workspace = true }
@@ -63,6 +64,7 @@ reqwest-retry = { workspace = true }
 rkyv = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
+rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pki-types = { workspace = true }
 serde = { workspace = true }
@@ -85,7 +87,6 @@ hyper-util = { workspace = true }
 insta = { workspace = true }
 rcgen = { workspace = true }
 regex = { workspace = true }
-rustls = { workspace = true }
 temp-env = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

@@ -495,9 +495,7 @@ impl RequirementsSpecification {
                     spec.groups.insert(
                         pylock_toml.clone(),
                         DependencyGroups::from_args(
-                            false,
-                            false,
-                            false,
+                            None,
                             Vec::new(),
                             Vec::new(),
                             false,
@@ -526,16 +524,8 @@ impl RequirementsSpecification {
 
             let mut group_specs = BTreeMap::new();
             for (path, groups) in groups_by_path {
-                let group_spec = DependencyGroups::from_args(
-                    false,
-                    false,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                    false,
-                    groups,
-                    false,
-                );
+                let group_spec =
+                    DependencyGroups::from_args(None, Vec::new(), Vec::new(), false, groups, false);
                 group_specs.insert(path, group_spec);
             }
             spec.groups = group_specs;

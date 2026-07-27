@@ -33,6 +33,30 @@ pub enum FilePreference {
     Versions,
 }
 
+/// Whether configuration files should be discovered.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ConfigDiscovery {
+    #[default]
+    Enabled,
+    Disabled,
+}
+
+impl ConfigDiscovery {
+    /// Determine the [`ConfigDiscovery`] setting based on the command-line arguments.
+    pub fn from_args(no_config: bool) -> Self {
+        if no_config {
+            Self::Disabled
+        } else {
+            Self::Enabled
+        }
+    }
+
+    /// Returns `true` if configuration discovery is enabled.
+    pub const fn enabled(self) -> bool {
+        matches!(self, Self::Enabled)
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct DiscoveryOptions<'a> {
     /// The path to stop discovery at.
@@ -40,7 +64,7 @@ pub struct DiscoveryOptions<'a> {
     /// Ignore Python version files.
     ///
     /// Discovery will still run in order to display a log about the ignored file.
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     /// Whether `.python-version` or `.python-versions` should be preferred.
     preference: FilePreference,
     /// Whether to ignore local version files, and only search for a global one.
@@ -49,8 +73,11 @@ pub struct DiscoveryOptions<'a> {
 
 impl<'a> DiscoveryOptions<'a> {
     #[must_use]
-    pub fn with_no_config(self, no_config: bool) -> Self {
-        Self { no_config, ..self }
+    pub fn with_config_discovery(self, config_discovery: ConfigDiscovery) -> Self {
+        Self {
+            config_discovery,
+            ..self
+        }
     }
 
     #[must_use]
@@ -112,7 +139,7 @@ impl PythonVersionFile {
             return Ok(None);
         };
 
-        if options.no_config {
+        if !options.config_discovery.enabled() {
             debug!(
                 "Ignoring Python version file at `{}` due to `--no-config`",
                 path.user_display()

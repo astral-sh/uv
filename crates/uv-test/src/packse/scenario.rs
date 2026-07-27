@@ -46,6 +46,10 @@ pub struct Scenario {
     /// Additional resolver options.
     #[serde(default)]
     pub resolver_options: ResolverOptions,
+
+    /// Options for generating tests from this scenario.
+    #[serde(default)]
+    pub testgen: TestGeneration,
 }
 
 impl Scenario {
@@ -74,6 +78,7 @@ impl Scenario {
             },
             environment: Environment::default(),
             resolver_options: ResolverOptions::default(),
+            testgen: TestGeneration::default(),
         }
     }
 }
@@ -210,10 +215,6 @@ impl Default for Environment {
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResolverOptions {
-    /// Select the generated test command for this scenario.
-    #[serde(default)]
-    pub test: Option<ScenarioTest>,
-
     /// Version selection strategy.
     #[serde(default)]
     pub resolution: Option<Resolution>,
@@ -245,6 +246,19 @@ pub struct ResolverOptions {
     /// Required environments (platform markers).
     #[serde(default)]
     pub required_environments: Vec<MarkerTree>,
+}
+
+/// Options for generating tests from a scenario.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TestGeneration {
+    /// Disable test generation for this scenario.
+    #[serde(default)]
+    pub disable: bool,
+
+    /// Select the generated test command for this scenario.
+    #[serde(default)]
+    pub kind: Option<ScenarioTest>,
 }
 
 /// The command template used to generate a scenario test.
@@ -367,12 +381,14 @@ requires = ["a"]
 [expected]
 satisfiable = true
 
+[testgen]
+kind = "compile"
+
 [resolver_options]
-test = "compile"
 resolution = "lowest-direct"
 "#;
         let scenario: Scenario = toml::from_str(toml).expect("scenario should parse");
-        assert_eq!(scenario.resolver_options.test, Some(ScenarioTest::Compile));
+        assert_eq!(scenario.testgen.kind, Some(ScenarioTest::Compile));
         assert_eq!(
             scenario.resolver_options.resolution,
             Some(Resolution::LowestDirect)

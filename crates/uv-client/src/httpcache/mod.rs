@@ -276,6 +276,17 @@ impl CachePolicy {
 }
 
 impl ArchivedCachePolicy {
+    /// Returns whether this cached response matches a request that permits stale data.
+    ///
+    /// This applies only the conditions from [`Self::before_request`] that produce
+    /// [`BeforeRequest::NoMatch`]. It intentionally skips freshness, `Vary`, and `no-cache`
+    /// checks because those produce [`BeforeRequest::Stale`], which an allow-stale caller accepts.
+    pub(crate) fn matches_stale_request(&self, request: &reqwest::Request) -> bool {
+        self.is_storable()
+            && self.request.uri == request.url().as_str()
+            && (request.method() == http::Method::GET || request.method() == http::Method::HEAD)
+    }
+
     /// Determines what caching behavior is correct given an existing
     /// `CachePolicy` and a new HTTP request for the resource managed by this
     /// cache policy. This is done as per [RFC 9111 S4].
@@ -1409,6 +1420,20 @@ mod tests {
 
     use super::*;
 
+    fn http_request(method: http::Method, uri: &str) -> reqwest::Request {
+        reqwest::Request::new(method, uri.parse().unwrap())
+    }
+
+    fn archived_cache_policy(
+        request: &reqwest::Request,
+        response: http::response::Builder,
+    ) -> OwnedArchive<CachePolicy> {
+        let response = reqwest::Response::from(response.body(Vec::new()).unwrap());
+        CachePolicyBuilder::new(request)
+            .build(&response)
+            .to_archived()
+    }
+
     /// A server or proxy is free to send an arbitrarily large `Age` header, up
     /// to `u64::MAX`. Combined with the resident age of a cached response, the
     /// RFC 9111 S4.2.3 age computation must not overflow. Every term uses
@@ -1438,5 +1463,57 @@ mod tests {
         let now = SystemTime::now() + Duration::from_secs(5);
         assert_eq!(archived.age(now), Duration::from_secs(u64::MAX));
         assert!(!archived.is_fresh(now, &request));
+    }
+
+    #[test]
+    fn stale_request_ignores_freshness_and_vary() {
+        let mut original = http_request(http::Method::GET, "https://example.com/");
+        original
+            .headers_mut()
+            .insert(http::header::ACCEPT, "application/json".parse().unwrap());
+        let archived = archived_cache_policy(
+            &original,
+            http::Response::builder()
+                .status(http::StatusCode::OK)
+                .header(http::header::CACHE_CONTROL, "no-cache")
+                .header(http::header::VARY, "accept"),
+        );
+
+        let mut request = http_request(http::Method::GET, "https://example.com/");
+        request
+            .headers_mut()
+            .insert(http::header::ACCEPT, "text/html".parse().unwrap());
+
+        assert!(archived.matches_stale_request(&request));
+        assert!(matches!(
+            archived.before_request(&mut request),
+            BeforeRequest::Stale(_)
+        ));
+
+        let request = http_request(http::Method::HEAD, "https://example.com/");
+        assert!(archived.matches_stale_request(&request));
+    }
+
+    #[test]
+    fn stale_request_rejects_non_matching_cache_entries() {
+        let original = http_request(http::Method::GET, "https://example.com/");
+        let archived = archived_cache_policy(
+            &original,
+            http::Response::builder().status(http::StatusCode::OK),
+        );
+
+        let different_uri = http_request(http::Method::GET, "https://example.com/other");
+        assert!(!archived.matches_stale_request(&different_uri));
+
+        let unsupported_method = http_request(http::Method::POST, "https://example.com/");
+        assert!(!archived.matches_stale_request(&unsupported_method));
+
+        let unstorable = archived_cache_policy(
+            &original,
+            http::Response::builder()
+                .status(http::StatusCode::OK)
+                .header(http::header::CACHE_CONTROL, "no-store"),
+        );
+        assert!(!unstorable.matches_stale_request(&original));
     }
 }

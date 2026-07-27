@@ -15,10 +15,7 @@ fn show_empty() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.pip_show(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     warning: Please provide a package name or names.
     "
@@ -38,10 +35,7 @@ fn show_requires_multiple() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -57,16 +51,13 @@ fn show_requires_multiple() -> Result<()> {
     context.assert_command("import requests").success();
     uv_snapshot!(context.filters(), context.pip_show()
         .arg("requests"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Name: requests
     Version: 2.31.0
     Location: [SITE_PACKAGES]/
     Requires: certifi, charset-normalizer, idna, urllib3
     Required-by:
-
-    ----- stderr -----
     "
     );
 
@@ -88,10 +79,7 @@ fn show_python_version_marker() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -109,16 +97,13 @@ fn show_python_version_marker() -> Result<()> {
 
     uv_snapshot!(filters, context.pip_show()
         .arg("click"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Name: click
     Version: 8.1.7
     Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
-
-    ----- stderr -----
     "
     );
 
@@ -138,10 +123,7 @@ fn show_found_single_package() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -154,16 +136,13 @@ fn show_found_single_package() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_show()
         .arg("markupsafe"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Name: markupsafe
     Version: 2.1.3
     Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
-
-    ----- stderr -----
     "
     );
 
@@ -187,10 +166,7 @@ fn show_found_multiple_packages() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -205,8 +181,7 @@ fn show_found_multiple_packages() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_show()
         .arg("markupsafe")
         .arg("pip"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Name: markupsafe
     Version: 2.1.3
@@ -219,8 +194,6 @@ fn show_found_multiple_packages() -> Result<()> {
     Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
-
-    ----- stderr -----
     "
     );
 
@@ -244,10 +217,7 @@ fn show_found_one_out_of_three() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -263,8 +233,7 @@ fn show_found_one_out_of_three() -> Result<()> {
         .arg("markupsafe")
         .arg("flask")
         .arg("django"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Name: markupsafe
     Version: 2.1.3
@@ -297,10 +266,7 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -317,11 +283,7 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
         .arg("markupsafe")
         .arg("flask")
         .arg("--quiet"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     "
     );
 
@@ -345,10 +307,7 @@ fn show_empty_quiet() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -364,11 +323,7 @@ fn show_empty_quiet() -> Result<()> {
     uv_snapshot!(context.pip_show()
         .arg("flask")
         .arg("--quiet"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 1 (failure)
     "
     );
 
@@ -395,8 +350,7 @@ fn show_editable() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_show()
         .arg("poetry-editable"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Name: poetry-editable
     Version: 0.1.0
@@ -404,8 +358,6 @@ fn show_editable() -> Result<()> {
     Editable project location: [WORKSPACE]/test/packages/poetry_editable
     Requires: anyio
     Required-by:
-
-    ----- stderr -----
     "
     );
 
@@ -429,10 +381,7 @@ fn show_required_by_multiple() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
@@ -452,16 +401,13 @@ fn show_required_by_multiple() -> Result<()> {
     // idna is required by anyio and requests
     uv_snapshot!(context.filters(), context.pip_show()
         .arg("idna"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Name: idna
     Version: 3.6
     Location: [SITE_PACKAGES]/
     Requires:
     Required-by: anyio, requests
-
-    ----- stderr -----
     "
     );
 
@@ -477,10 +423,7 @@ fn show_files() {
         .pip_install()
         .arg("requests==2.31.0")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -496,8 +439,7 @@ fn show_files() {
     // Windows has a different files order.
     #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.pip_show().arg("requests").arg("--files"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Name: requests
     Version: 2.31.0
@@ -530,8 +472,6 @@ fn show_files() {
       requests/status_codes.py
       requests/structures.py
       requests/utils.py
-
-    ----- stderr -----
     ");
 }
 
@@ -560,25 +500,19 @@ fn show_target() -> Result<()> {
         .arg("markupsafe")
         .arg("--target")
         .arg(target.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Name: markupsafe
     Version: 2.1.3
     Location: [TEMP_DIR]/target
     Requires:
     Required-by:
-
-    ----- stderr -----
     "
     );
 
     // Without --target, the package should not be found.
     uv_snapshot!(context.pip_show().arg("markupsafe"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     warning: Package(s) not found for: markupsafe
     "
@@ -612,25 +546,19 @@ fn show_prefix() -> Result<()> {
         .arg("markupsafe")
         .arg("--prefix")
         .arg(prefix.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Name: markupsafe
     Version: 2.1.3
     Location: [TEMP_DIR]/prefix/[PYTHON-LIB]/site-packages
     Requires:
     Required-by:
-
-    ----- stderr -----
     "
     );
 
     // Without --prefix, the package should not be found.
     uv_snapshot!(context.pip_show().arg("markupsafe"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     warning: Package(s) not found for: markupsafe
     "

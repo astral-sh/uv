@@ -3,11 +3,10 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::PathBuf;
 use std::process::ExitStatus;
-use std::sync::LazyLock;
 
 use crate::PythonRunnerOutput;
 use owo_colors::OwoColorize;
-use regex::Regex;
+use regex::regex;
 use thiserror::Error;
 use uv_configuration::BuildOutput;
 use uv_distribution_types::IsBuildBackendError;
@@ -16,44 +15,6 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_types::AnyErrorBuild;
-
-/// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
-static MISSING_HEADER_RE_GCC: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: (.*\.(?:h|h..)): No such file or directory",
-    )
-    .unwrap()
-});
-
-/// e.g. `pygraphviz/graphviz_wrap.c:3023:10: fatal error: 'graphviz/cgraph.h' file not found`
-static MISSING_HEADER_RE_CLANG: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: '(.*\.(?:h|h..))' file not found")
-        .unwrap()
-});
-
-/// e.g. `pygraphviz/graphviz_wrap.c(3023): fatal error C1083: Cannot open include file: 'graphviz/cgraph.h': No such file or directory`
-static MISSING_HEADER_RE_MSVC: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r".*\.(?:c|c..|h|h..)\(\d+\): fatal error C1083: Cannot open include file: '(.*\.(?:h|h..))': No such file or directory")
-        .unwrap()
-});
-
-/// e.g. `/usr/bin/ld: cannot find -lncurses: No such file or directory`
-static LD_NOT_FOUND_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"/usr/bin/ld: cannot find -l([a-zA-Z10-9]+): No such file or directory").unwrap()
-});
-
-/// e.g. `error: invalid command 'bdist_wheel'`
-static WHEEL_NOT_FOUND_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
-
-/// e.g. `ModuleNotFoundError`
-static MODULE_NOT_FOUND: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new("ModuleNotFoundError: No module named ['\"]([^'\"]+)['\"]").unwrap()
-});
-
-/// e.g. `ModuleNotFoundError: No module named 'distutils'`
-static DISTUTILS_NOT_FOUND_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'distutils'").unwrap());
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -382,27 +343,48 @@ impl Error {
         version: Option<&Version>,
         version_id: Option<&str>,
     ) -> Self {
+        // e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
+        let missing_header_re_gcc = regex!(
+            r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: (.*\.(?:h|h..)): No such file or directory"
+        );
+        // e.g. `pygraphviz/graphviz_wrap.c:3023:10: fatal error: 'graphviz/cgraph.h' file not found`
+        let missing_header_re_clang =
+            regex!(r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: '(.*\.(?:h|h..))' file not found");
+        // e.g. `pygraphviz/graphviz_wrap.c(3023): fatal error C1083: Cannot open include file: 'graphviz/cgraph.h': No such file or directory`
+        let missing_header_re_msvc = regex!(
+            r".*\.(?:c|c..|h|h..)\(\d+\): fatal error C1083: Cannot open include file: '(.*\.(?:h|h..))': No such file or directory"
+        );
+        // e.g. `/usr/bin/ld: cannot find -lncurses: No such file or directory`
+        let ld_not_found_re =
+            regex!(r"/usr/bin/ld: cannot find -l([a-zA-Z10-9]+): No such file or directory");
+        // e.g. `error: invalid command 'bdist_wheel'`
+        let wheel_not_found_re = regex!(r"error: invalid command 'bdist_wheel'");
+        // e.g. `ModuleNotFoundError: No module named 'distutils'`
+        let distutils_not_found_re = regex!(r"ModuleNotFoundError: No module named 'distutils'");
+        // e.g. `ModuleNotFoundError`
+        let module_not_found = regex!(r#"ModuleNotFoundError: No module named ['"]([^'"]+)['"]"#);
+
         // In the cases I've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff.
         let missing_library = output.stderr.iter().rev().take(10).find_map(|line| {
-            if let Some((_, [header])) = MISSING_HEADER_RE_GCC
+            if let Some((_, [header])) = missing_header_re_gcc
                 .captures(line.trim())
-                .or(MISSING_HEADER_RE_CLANG.captures(line.trim()))
-                .or(MISSING_HEADER_RE_MSVC.captures(line.trim()))
+                .or(missing_header_re_clang.captures(line.trim()))
+                .or(missing_header_re_msvc.captures(line.trim()))
                 .map(|c| c.extract())
             {
                 Some(MissingLibrary::Header(header.to_string()))
             } else if let Some((_, [library])) =
-                LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract())
+                ld_not_found_re.captures(line.trim()).map(|c| c.extract())
             {
                 Some(MissingLibrary::Linker(library.to_string()))
-            } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
+            } else if wheel_not_found_re.is_match(line.trim()) {
                 Some(MissingLibrary::BuildDependency("wheel".to_string()))
-            } else if DISTUTILS_NOT_FOUND_RE.is_match(line.trim()) {
+            } else if distutils_not_found_re.is_match(line.trim()) {
                 Some(MissingLibrary::DeprecatedModule(
                     "distutils".to_string(),
                     Version::new([3, 12]),
                 ))
-            } else if let Some(caps) = MODULE_NOT_FOUND.captures(line.trim()) {
+            } else if let Some(caps) = module_not_found.captures(line.trim()) {
                 if let Some(module_match) = caps.get(1) {
                     let module_name = module_match.as_str();
                     let package_name = match crate::pipreqs::MODULE_MAPPING.lookup(module_name) {

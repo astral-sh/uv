@@ -29,7 +29,7 @@ There are 5 kinds of node in the graph:
 - `{ "group": "groupname" }` -- a dependency group a package or workspace root defines
 
 (In the future we will add "build" nodes for the dependencies of
-[build environments](https://docs.astral.sh/uv/concepts/projects/config/#build-isolation).)
+[build environments](../../concepts/projects/config.md#build-isolation).)
 
 If you want to install `mypackage`, find its `"kind": "package"` node. This node will also include
 information on its sdist, its wheels, its extras (`optional_dependencies`), and dependency groups
@@ -56,15 +56,15 @@ The first way is for
 to have conflicting requirements that force different versions of a package to be used.
 
 The second way is when a workspace has
-[conflicts](https://docs.astral.sh/uv/concepts/resolution/#conflicting-dependencies), implying some
-workspace members or their extras are mutually exclusive, and only one of them can be installed at a
-time. Information about conflicts can be found in the top-level `conflicts` field.
+[conflicts](../../concepts/resolution.md#conflicting-dependencies), implying some workspace members
+or their extras are mutually exclusive, and only one of them can be installed at a time. Information
+about conflicts can be found in the top-level `conflicts` field.
 
 The specific guarantee we provide is that **for any concrete choice of
 [markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#dependency-specifiers),
 if you select a set of packages to install that has no
-[conflicts](https://docs.astral.sh/uv/concepts/resolution/#conflicting-dependencies), then the
-resulting set of packages to install will not have multiple versions of a package**.
+[conflicts](../../concepts/resolution.md#conflicting-dependencies), then the resulting set of
+packages to install will not have multiple versions of a package**.
 
 If you just want to get "every version of pydantic this workspace uses" you're free to iterate
 through the list of nodes and collect up every instance. If however you want to specifically analyze
@@ -115,9 +115,9 @@ something like:
 ```python
 to_analyze = []
 for member_name in ["package1", "package2"]:
-  member = find_by_name(metadata.members, member_name)
-  member_node = metadata.resolution[member.id]
-  to_analyze.append(member_node)
+    member = find_by_name(metadata.members, member_name)
+    member_node = metadata.resolution[member.id]
+    to_analyze.append(member_node)
 visit(metadata, to_analyze)
 ```
 
@@ -132,25 +132,25 @@ Where `visit` is your favourite graph traversal algorithm like depth-first-searc
 
 ```python
 def visit(metadata: UvMetadata, to_analyze: list[Node]):
-  visited = set()
-  while len(to_analyze) > 0:
-    node = to_analyze.pop()
+    visited = set()
+    while len(to_analyze) > 0:
+        node = to_analyze.pop()
 
-    # Handle cycles by avoiding revisiting nodes
-    if node.id in visited:
-      continue
-    visited.add(node.id)
+        # Handle cycles by avoiding revisiting nodes
+        if node.id in visited:
+            continue
+        visited.add(node.id)
 
-    # We also need to analyze its dependencies
-    for dependency in node.dependencies:
-      # Only follow edges if they satisfy the desired platform's markers
-      if dependency.marker and not satisfies(platform, dependency.marker):
-        continue
-      to_analyze.append(metadata.resolution[dependency.id])
+        # We also need to analyze its dependencies
+        for dependency in node.dependencies:
+            # Only follow edges if they satisfy the desired platform's markers
+            if dependency.marker and not satisfies(platform, dependency.marker):
+                continue
+            to_analyze.append(metadata.resolution[dependency.id])
 
-    # Analyze any package node we encounter
-    if node.kind == "package":
-      print(node.name, node.version, node.source)
+        # Analyze any package node we encounter
+        if node.kind == "package":
+            print(node.name, node.version, node.source)
 ```
 
 ## Schema
@@ -168,10 +168,19 @@ Here is a human-readable annotated example:
   },
   // The directory the uv.lock can be found in
   "workspace_root": "/workspace",
-  // Information about the environment, currently only available with `--sync`
+  // Information about the environment, available when an environment exists or `--sync` is used
   "environment": {
     // The absolute path to the environment root
-    "root": "/workspace/.venv"
+    "root": "/workspace/.venv",
+    // Information about the Python interpreter in the environment
+    "python": {
+      // The absolute path to the Python executable
+      "path": "/workspace/.venv/bin/python",
+      // The full Python version
+      "version": "3.12.12",
+      // The Python implementation name
+      "implementation": "cpython"
+    }
   },
   // Information about the script target, only present with `--script`.
   // Workspace metadata uses `workspace` and `members` below as graph entry-points instead.

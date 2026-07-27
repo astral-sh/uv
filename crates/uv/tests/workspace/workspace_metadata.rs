@@ -2,12 +2,13 @@ use std::path::Path;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
 use url::Url;
 
+use uv_static::EnvVars;
 use uv_test::{copy_dir_ignore, uv_snapshot};
 
 fn write_wheel(
@@ -78,8 +79,7 @@ fn workspace_metadata_simple() {
     let workspace = context.temp_dir.child("foo");
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -125,12 +125,58 @@ fn workspace_metadata_simple() {
     Resolved 1 package in [TIME]
     "#
     );
+
+    assert!(!workspace.child(".venv").exists());
+}
+
+#[test]
+fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.init().arg("foo").assert().success();
+
+    let workspace = context.temp_dir.child("foo");
+    let environment = workspace.child(".venv");
+    environment.create_dir_all()?;
+
+    let empty_output = context
+        .workspace_metadata()
+        .current_dir(&workspace)
+        .assert()
+        .success();
+    let empty_metadata: serde_json::Value =
+        serde_json::from_slice(&empty_output.get_output().stdout)?;
+
+    environment
+        .child("pyvenv.cfg")
+        .write_str("home = /missing-python\n")?;
+
+    let broken_output = context
+        .workspace_metadata()
+        .current_dir(&workspace)
+        .assert()
+        .success();
+    let broken_metadata: serde_json::Value =
+        serde_json::from_slice(&broken_output.get_output().stdout)?;
+
+    insta::assert_json_snapshot!(serde_json::json!({
+        "broken_environment": broken_metadata.get("environment"),
+        "empty_environment": empty_metadata.get("environment"),
+    }), @r#"
+    {
+      "broken_environment": null,
+      "empty_environment": null
+    }
+    "#);
+
+    Ok(())
 }
 
 #[test]
 #[cfg(feature = "test-pypi")]
 fn workspace_metadata_script() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
     let script = context.temp_dir.child("script.py");
     script.write_str(
         r#"# /// script
@@ -150,8 +196,7 @@ import iniconfig
             .arg(script.path())
             .arg("--sync"),
         @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -159,7 +204,12 @@ import iniconfig
       },
       "workspace_root": "[TEMP_DIR]/",
       "environment": {
-        "root": "[CACHE_DIR]/environments-v2/script-[HASH]"
+        "root": "[CACHE_DIR]/environments-v2/script-[HASH]",
+        "python": {
+          "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/[PYTHON]",
+          "version": "3.12.[X]",
+          "implementation": "cpython"
+        }
       },
       "script": {
         "path": "[TEMP_DIR]/script.py",
@@ -266,8 +316,7 @@ print("Hello, world!")
             .arg("--script")
             .arg(script.path()),
         @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -298,6 +347,52 @@ print("Hello, world!")
     );
 
     assert!(!context.temp_dir.child("script.py.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_script_includes_existing_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    let script = context.temp_dir.child("script.py");
+    script.write_str(
+        r#"# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+"#,
+    )?;
+
+    context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--sync")
+        .assert()
+        .success();
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["environment"], @r#"
+        {
+          "python": {
+            "implementation": "cpython",
+            "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/[PYTHON]",
+            "version": "3.12.[X]"
+          },
+          "root": "[CACHE_DIR]/environments-v2/script-[HASH]"
+        }
+        "#);
+    });
 
     Ok(())
 }
@@ -522,12 +617,180 @@ fn workspace_metadata_sync_centralized_environment() -> Result<()> {
         target.parent(),
         Some(context.cache_dir.child("environments-v2").path())
     );
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--preview-features")
+        .arg("workspace-metadata,centralized-project-envs")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    assert_eq!(
+        metadata["environment"]["root"].as_str().map(Path::new),
+        Some(target.as_path())
+    );
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_sync_active_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]);
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.11")
+        .assert()
+        .success();
+    let active = context.temp_dir.child("active");
+    context
+        .venv()
+        .arg(active.path())
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, active.path())
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    assert_eq!(
+        metadata["environment"]["root"].as_str().map(Path::new),
+        Some(active.path())
+    );
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, active.path())
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    assert_eq!(
+        metadata["environment"]["root"].as_str().map(Path::new),
+        Some(active.path())
+    );
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_includes_existing_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+
+    let installed_owner = context
+        .temp_dir
+        .child("installed_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        installed_owner.path(),
+        "installed-owner",
+        "installed_owner-0.1.0",
+        &[("installed_module.py", "")],
+    )?;
+
+    let missing_owner = context
+        .temp_dir
+        .child("missing_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        missing_owner.path(),
+        "missing-owner",
+        "missing_owner-0.1.0",
+        &[("missing_module.py", "")],
+    )?;
+
+    let installed_owner_url = Url::from_file_path(installed_owner.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+    let missing_owner_url = Url::from_file_path(missing_owner.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"[project]
+name = "module-owner-root"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "installed-owner @ {installed_owner_url}",
+  "missing-owner @ {missing_owner_url}",
+]
+"#
+        ))?;
+
+    context.lock().assert().success();
+    context
+        .pip_install()
+        .arg(installed_owner.path())
+        .assert()
+        .success();
+
+    // Removing the uninstalled wheel makes any accidental synchronization fail.
+    fs_err::remove_file(missing_owner.path())?;
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--frozen")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "environment": metadata["environment"],
+            "module_owners": metadata["module_owners"],
+        }), @r#"
+        {
+          "environment": {
+            "python": {
+              "implementation": "cpython",
+              "path": "[VENV]/[BIN]/[PYTHON]",
+              "version": "3.12.[X]"
+            },
+            "root": "[VENV]/"
+          },
+          "module_owners": {
+            "installed_module": [
+              {
+                "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+              }
+            ]
+          }
+        }
+        "#);
+    });
+
+    context.pip_show().arg("missing-owner").assert().failure();
+
     Ok(())
 }
 
 #[test]
 fn workspace_metadata_module_owners_from_locked_wheels() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
 
     let gpu_a = context.temp_dir.child("gpu_a-0.1.0-py3-none-any.whl");
     write_wheel(gpu_a.path(), "gpu-a", "gpu_a-0.1.0", &[("gpu/a.py", "")])?;
@@ -577,8 +840,7 @@ dependencies = [
     filters.push((r#""sha256": "[0-9a-f]{64}""#, r#""sha256": "[SHA256]""#));
 
     uv_snapshot!(filters, context.workspace_metadata().arg("--sync"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -586,7 +848,12 @@ dependencies = [
       },
       "workspace_root": "[TEMP_DIR]/",
       "environment": {
-        "root": "[VENV]/"
+        "root": "[VENV]/",
+        "python": {
+          "path": "[VENV]/[BIN]/[PYTHON]",
+          "version": "3.12.[X]",
+          "implementation": "cpython"
+        }
       },
       "workspace": {
         "path": "[TEMP_DIR]/",
@@ -863,10 +1130,7 @@ dependencies = [
     fs_err::remove_file(gpu_a.path())?;
 
     uv_snapshot!(context.filters(), context.workspace_metadata().arg("--frozen").arg("--sync"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     error: Failed to collect module owners
@@ -892,8 +1156,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1070,8 +1333,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
     ));
 
     uv_snapshot!(filters, context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1311,8 +1573,7 @@ fn workspace_metadata_from_member() -> Result<()> {
     let member_dir = workspace.join("packages").join("bird-feeder");
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&member_dir), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1494,8 +1755,7 @@ fn workspace_metadata_multiple_members() {
         .success();
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace_root), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1581,8 +1841,7 @@ fn workspace_metadata_single_project() {
     let project = context.temp_dir.child("my-project");
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&project), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1645,8 +1904,7 @@ fn workspace_metadata_with_excluded() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1745,8 +2003,7 @@ fn workspace_metadata_group_only() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -1870,10 +2127,7 @@ fn workspace_metadata_no_project() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.workspace_metadata(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     error: No `pyproject.toml` found in current directory or any parent directory
@@ -1896,8 +2150,7 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {

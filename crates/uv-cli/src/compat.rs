@@ -110,12 +110,6 @@ impl CompatArgs for PipCompileCompatArgs {
             ));
         }
 
-        if self.cert.is_some() {
-            return Err(anyhow!(
-                "pip-compile's `--cert` is unsupported (set the `SSL_CERT_FILE` environment variable to use a custom CA certificate bundle)"
-            ));
-        }
-
         if self.client_cert.is_some() {
             return Err(anyhow!(
                 "pip-compile's `--client-cert` is unsupported (uv doesn't support dedicated client certificates)"
@@ -142,7 +136,7 @@ impl CompatArgs for PipCompileCompatArgs {
 
         if self.emit_options {
             return Err(anyhow!(
-                "pip-compile's `--emit-options` is unsupported (uv never emits options)"
+                "pip-compile's `--emit-options` is unsupported (try `--emit-build-options` instead)"
             ));
         }
 
@@ -236,12 +230,6 @@ impl CompatArgs for PipSyncCompatArgs {
         if self.user {
             return Err(anyhow!(
                 "pip-sync's `--user` is unsupported (use a virtual environment instead)"
-            ));
-        }
-
-        if self.cert.is_some() {
-            return Err(anyhow!(
-                "pip-sync's `--cert` is unsupported (set the `SSL_CERT_FILE` environment variable to use a custom CA certificate bundle)"
             ));
         }
 

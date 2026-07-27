@@ -19,9 +19,9 @@ use uv_configuration::{Concurrency, Constraints, HashCheckingMode, TargetTriple}
 use uv_distribution_types::{
     BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };
-use uv_fs::PythonExt;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
+use uv_settings::MalwareCheckSettings;
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
@@ -77,10 +77,11 @@ impl EphemeralEnvironment {
         &self,
         parent_environment_sys_prefix: &Path,
     ) -> Result<(), ProjectError> {
-        self.0.set_pyvenv_cfg(
-            "extends-environment",
-            &parent_environment_sys_prefix.escape_for_python(),
-        )?;
+        let parent_environment_sys_prefix = parent_environment_sys_prefix
+            .to_str()
+            .ok_or(ProjectError::InvalidParentEnvironmentPath)?;
+        self.0
+            .set_pyvenv_cfg("extends-environment", parent_environment_sys_prefix)?;
         Ok(())
     }
 
@@ -197,14 +198,16 @@ impl CachedEnvironment {
     /// Prefer [`Self::from_spec`] when starting from unresolved requirements; it selects the base
     /// interpreter and resolves the requirements for that interpreter before delegating here.
     ///
-    /// This method verifies the hashes recorded in `resolution`. `interpreter` must be the base
-    /// interpreter for which `resolution` was produced. In particular, callers materializing a
-    /// universal lock must derive its markers and tags from the same interpreter.
+    /// This method checks `resolution` for malware when enabled and verifies its recorded hashes.
+    /// Both checks run before cache lookup. `interpreter` must be the base interpreter for which
+    /// `resolution` was produced. In particular, callers materializing a universal lock must derive
+    /// its markers and tags from the same interpreter.
     pub(crate) async fn from_locked_resolution(
         resolution: &Resolution,
         build_constraints: Constraints,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
+        malware_settings: &MalwareCheckSettings,
         client_builder: &BaseClientBuilder<'_>,
         state: &PlatformState,
         install: Box<dyn InstallLogger>,
@@ -214,6 +217,19 @@ impl CachedEnvironment {
         printer: Printer,
         preview: Preview,
     ) -> Result<Self, ProjectError> {
+        let malware_check_client_builder = client_builder
+            .clone()
+            .keyring(settings.resolver.keyring_provider);
+        crate::commands::project::sync::check_resolution_malware(
+            resolution,
+            &malware_check_client_builder,
+            concurrency,
+            malware_settings,
+            cache,
+            preview,
+        )
+        .await?;
+
         let hash_strategy = HashStrategy::from_resolution(resolution, HashCheckingMode::Verify)?;
         Self::from_resolution(
             resolution,
@@ -312,7 +328,7 @@ impl CachedEnvironment {
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             true,
-            false,
+            uv_virtualenv::Seed::Disabled,
             false,
         )?;
 

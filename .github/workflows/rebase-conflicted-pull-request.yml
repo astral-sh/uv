@@ -1,0 +1,191 @@
+name: Rebase conflicted pull request
+
+on:
+  workflow_call:
+    inputs:
+      number:
+        required: true
+        type: number
+      base-ref:
+        required: true
+        type: string
+      head-ref:
+        required: true
+        type: string
+      head-sha:
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  rebase:
+    name: "Rebase pull request #${{ inputs.number }}"
+    runs-on: depot-ubuntu-24.04-4
+    environment: automations
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
+          save-if: false
+
+      - name: Prepare Rust dependencies
+        run: cargo fetch --locked
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        with:
+          tool: cargo-nextest
+
+      - name: Prepare pull request branch
+        env:
+          BASE_REF: ${{ inputs.base-ref }}
+          HEAD_REF: ${{ inputs.head-ref }}
+          HEAD_SHA: ${{ inputs.head-sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/codex-home"
+          cp agents/codex/config.toml "$RUNNER_TEMP/codex-home/config.toml"
+          cp agents/prompts/rebase-pull-request.md "$RUNNER_TEMP/rebase-pull-request.md"
+
+          git fetch --no-tags https://github.com/astral-sh/uv-dev.git "refs/heads/$HEAD_REF"
+          current_head=$(git rev-parse 'FETCH_HEAD^{commit}')
+          if [ "$current_head" != "$HEAD_SHA" ]; then
+            echo "The pull request head changed; refusing to rebase a stale revision." >&2
+            exit 1
+          fi
+
+          git checkout --detach "$HEAD_SHA"
+          git config user.name "astral-automations-bot[bot]"
+          git config user.email "305554984+astral-automations-bot[bot]@users.noreply.github.com"
+          git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}" > /dev/null
+
+      - name: Enable Linux user namespaces for bubblewrap
+        run: |
+          current_userns="$(sysctl -n kernel.unprivileged_userns_clone 2>/dev/null || true)"
+          if [ -n "$current_userns" ] && [ "$current_userns" != "1" ]; then
+            sudo sysctl -w kernel.unprivileged_userns_clone=1
+          fi
+
+          current_apparmor="$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || true)"
+          if [ -n "$current_apparmor" ] && [ "$current_apparmor" != "0" ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
+      - name: Rebase pull request
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          BASE_REF: ${{ inputs.base-ref }}
+          TMPDIR: ${{ runner.temp }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-5.6-sol
+          codex-home: "${{ runner.temp }}/codex-home"
+          permission-profile: "pull-request-rebase"
+          safety-strategy: drop-sudo
+          allow-bot-users: "astral-automations-bot[bot]"
+          prompt-file: "${{ runner.temp }}/rebase-pull-request.md"
+
+      - name: Verify rebased pull request
+        env:
+          BASE_REF: ${{ inputs.base-ref }}
+        run: |
+          if [ -d "$(git rev-parse --git-path rebase-merge)" ] || [ -d "$(git rev-parse --git-path rebase-apply)" ]; then
+            echo "The rebase is still in progress; refusing to push." >&2
+            exit 1
+          fi
+
+          git diff --check "refs/remotes/origin/$BASE_REF...HEAD"
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The worktree is not clean after the rebase; refusing to push." >&2
+            exit 1
+          fi
+
+          git bundle create "$RUNNER_TEMP/rebased.bundle" "refs/remotes/origin/$BASE_REF..HEAD"
+
+      - name: Upload rebased pull request
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rebased-pull-request-${{ inputs.number }}-${{ inputs.head-sha }}
+          path: ${{ runner.temp }}/rebased.bundle
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  push:
+    name: "Push rebased pull request #${{ inputs.number }}"
+    needs: rebase
+    runs-on: ubuntu-slim
+    environment: automations
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download rebased pull request
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rebased-pull-request-${{ inputs.number }}-${{ inputs.head-sha }}
+          path: ${{ runner.temp }}/rebased-pull-request
+
+      - name: Import rebased pull request
+        id: import
+        env:
+          BASE_REF: ${{ inputs.base-ref }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+        run: |
+          bundle="$RUNNER_TEMP/rebased-pull-request/rebased.bundle"
+          git bundle verify "$bundle"
+          git -c core.hooksPath=/dev/null fetch --no-tags "$bundle" HEAD
+          rebased_head=$(git rev-parse 'FETCH_HEAD^{commit}')
+
+          if ! git merge-base --is-ancestor "refs/remotes/origin/$BASE_REF" "$rebased_head"; then
+            echo "The rebased pull request does not contain its base; refusing to push." >&2
+            exit 1
+          fi
+
+          echo "head_sha=$rebased_head" >> "$GITHUB_OUTPUT"
+
+      - name: Get uv-dev token
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          # `workflows: write` is required when a rebased pull request modifies workflow files.
+          permissions: |
+            contents: write
+            workflows: write
+
+      - name: Push rebased pull request
+        env:
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          HEAD_REF: ${{ inputs.head-ref }}
+          HEAD_SHA: ${{ inputs.head-sha }}
+          REBASED_HEAD: ${{ steps.import.outputs.head_sha }}
+        run: |
+          git -c core.hooksPath=/dev/null push \
+            --force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA" \
+            "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
+            "${REBASED_HEAD}:refs/heads/$HEAD_REF"

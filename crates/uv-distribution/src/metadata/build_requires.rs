@@ -74,17 +74,22 @@ impl BuildRequires {
             locations,
             sources,
             editable,
+            cache,
+            workspace_cache,
             credentials_cache,
         )
+        .await
     }
 
     /// Lower the `build-system.requires` field from a `pyproject.toml` file.
-    fn from_project_workspace(
+    async fn from_project_workspace(
         metadata: uv_pypi_types::BuildRequires,
         project_workspace: &ProjectWorkspace,
         locations: &IndexLocations,
         sources: &NoSources,
         editable: bool,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -119,46 +124,43 @@ impl BuildRequires {
         };
 
         // Lower the requirements.
-        let requires_dist = metadata.requires_dist.into_iter();
-        let requires_dist = if sources.all() {
-            requires_dist.into_iter().map(Requirement::from).collect()
-        } else {
-            requires_dist
-                .flat_map(|requirement| {
-                    // Check if sources should be disabled for this specific package
-                    if sources.for_package(&requirement.name) {
-                        vec![Ok(Requirement::from(requirement))].into_iter()
-                    } else {
-                        let requirement_name = requirement.name.clone();
-                        let extra = requirement.marker.top_level_extra_name();
-                        let group = None;
-                        LoweredRequirement::from_requirement(
-                            requirement,
-                            metadata.name.as_ref(),
-                            project_workspace.project_root(),
-                            project_sources,
-                            project_indexes,
-                            extra.as_deref(),
-                            group,
-                            locations,
-                            project_workspace.workspace(),
-                            None,
-                            editable,
-                            credentials_cache,
-                        )
-                        .map(move |requirement| match requirement {
-                            Ok(requirement) => Ok(requirement.into_inner()),
-                            Err(err) => Err(MetadataError::LoweringError(
-                                requirement_name.clone(),
-                                Box::new(err),
-                            )),
+        let mut requires_dist = Vec::new();
+        for requirement in metadata.requires_dist {
+            if sources.for_package(&requirement.name) {
+                requires_dist.push(Requirement::from(requirement));
+                continue;
+            }
+
+            let requirement_name = requirement.name.clone();
+            let extra = requirement.marker.top_level_extra_name();
+            requires_dist.extend(
+                LoweredRequirement::from_requirement(
+                    requirement,
+                    metadata.name.as_ref(),
+                    project_workspace.project_root(),
+                    project_sources,
+                    project_indexes,
+                    extra.as_deref(),
+                    None,
+                    locations,
+                    project_workspace.workspace(),
+                    None,
+                    editable,
+                    cache,
+                    workspace_cache,
+                    credentials_cache,
+                )
+                .await
+                .map(|requirement| {
+                    requirement
+                        .map(LoweredRequirement::into_inner)
+                        .map_err(|err| {
+                            MetadataError::LoweringError(requirement_name.clone(), Box::new(err))
                         })
-                        .collect::<Vec<_>>()
-                        .into_iter()
-                    }
                 })
-                .collect::<Result<Vec<_>, _>>()?
-        };
+                .collect::<Result<Vec<_>, _>>()?,
+            );
+        }
 
         Ok(Self {
             name: metadata.name,
@@ -167,11 +169,13 @@ impl BuildRequires {
     }
 
     /// Lower the `build-system.requires` field from a `pyproject.toml` file.
-    pub fn from_workspace(
+    pub async fn from_workspace(
         metadata: uv_pypi_types::BuildRequires,
         workspace: &Workspace,
         locations: &IndexLocations,
         sources: &NoSources,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -196,43 +200,43 @@ impl BuildRequires {
             .unwrap_or(&empty);
 
         // Lower the requirements.
-        let requires_dist = metadata.requires_dist.into_iter();
-        let requires_dist = requires_dist
-            .flat_map(|requirement| {
-                // Check if sources should be disabled for this specific package
-                if sources.for_package(&requirement.name) {
-                    vec![Ok(Requirement::from(requirement))].into_iter()
-                } else {
-                    let requirement_name = requirement.name.clone();
-                    let extra = requirement.marker.top_level_extra_name();
-                    let group = None;
+        let mut requires_dist = Vec::new();
+        for requirement in metadata.requires_dist {
+            if sources.for_package(&requirement.name) {
+                requires_dist.push(Requirement::from(requirement));
+                continue;
+            }
 
-                    LoweredRequirement::from_requirement(
-                        requirement,
-                        None,
-                        workspace.install_path(),
-                        project_sources,
-                        project_indexes,
-                        extra.as_deref(),
-                        group,
-                        locations,
-                        workspace,
-                        None,
-                        true,
-                        credentials_cache,
-                    )
-                    .map(move |requirement| match requirement {
-                        Ok(requirement) => Ok(requirement.into_inner()),
-                        Err(err) => Err(MetadataError::LoweringError(
-                            requirement_name.clone(),
-                            Box::new(err),
-                        )),
-                    })
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+            let requirement_name = requirement.name.clone();
+            let extra = requirement.marker.top_level_extra_name();
+            requires_dist.extend(
+                LoweredRequirement::from_requirement(
+                    requirement,
+                    None,
+                    workspace.install_path(),
+                    project_sources,
+                    project_indexes,
+                    extra.as_deref(),
+                    None,
+                    locations,
+                    workspace,
+                    None,
+                    true,
+                    cache,
+                    workspace_cache,
+                    credentials_cache,
+                )
+                .await
+                .map(|requirement| {
+                    requirement
+                        .map(LoweredRequirement::into_inner)
+                        .map_err(|err| {
+                            MetadataError::LoweringError(requirement_name.clone(), Box::new(err))
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            );
+        }
 
         Ok(Self {
             name: metadata.name,
@@ -255,11 +259,13 @@ impl LoweredExtraBuildDependencies {
     }
 
     /// Create from a workspace, lowering the extra build dependencies.
-    pub fn from_workspace(
+    pub async fn from_workspace(
         extra_build_dependencies: ExtraBuildDependencies,
         workspace: &Workspace,
         index_locations: &IndexLocations,
         source_strategy: &NoSources,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         match source_strategy {
@@ -286,45 +292,48 @@ impl LoweredExtraBuildDependencies {
                 // Lower each package's extra build dependencies
                 let mut build_requires = ExtraBuildRequires::default();
                 for (package_name, requirements) in extra_build_dependencies {
-                    let lowered: Vec<ExtraBuildRequirement> = requirements
-                        .into_iter()
-                        .flat_map(
-                            |ExtraBuildDependency {
-                                 requirement,
-                                 match_runtime,
-                             }| {
-                                let requirement_name = requirement.name.clone();
-                                let extra = requirement.marker.top_level_extra_name();
-                                let group = None;
-                                LoweredRequirement::from_requirement(
-                                    requirement,
-                                    None,
-                                    workspace.install_path(),
-                                    project_sources,
-                                    project_indexes,
-                                    extra.as_deref(),
-                                    group,
-                                    index_locations,
-                                    workspace,
-                                    None,
-                                    true,
-                                    credentials_cache,
-                                )
-                                .map(move |requirement| {
-                                    match requirement {
-                                        Ok(requirement) => Ok(ExtraBuildRequirement {
-                                            requirement: requirement.into_inner(),
-                                            match_runtime,
-                                        }),
-                                        Err(err) => Err(MetadataError::LoweringError(
+                    let mut lowered = Vec::new();
+                    for ExtraBuildDependency {
+                        requirement,
+                        match_runtime,
+                    } in requirements
+                    {
+                        let requirement_name = requirement.name.clone();
+                        let extra = requirement.marker.top_level_extra_name();
+                        lowered.extend(
+                            LoweredRequirement::from_requirement(
+                                requirement,
+                                None,
+                                workspace.install_path(),
+                                project_sources,
+                                project_indexes,
+                                extra.as_deref(),
+                                None,
+                                index_locations,
+                                workspace,
+                                None,
+                                true,
+                                cache,
+                                workspace_cache,
+                                credentials_cache,
+                            )
+                            .await
+                            .map(|requirement| {
+                                requirement
+                                    .map(|requirement| ExtraBuildRequirement {
+                                        requirement: requirement.into_inner(),
+                                        match_runtime,
+                                    })
+                                    .map_err(|err| {
+                                        MetadataError::LoweringError(
                                             requirement_name.clone(),
                                             Box::new(err),
-                                        )),
-                                    }
-                                })
-                            },
-                        )
-                        .collect::<Result<Vec<_>, _>>()?;
+                                        )
+                                    })
+                            })
+                            .collect::<Result<Vec<_>, _>>()?,
+                        );
+                    }
                     build_requires.insert(package_name, lowered);
                 }
                 Ok(Self(build_requires))

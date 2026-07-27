@@ -284,7 +284,8 @@ impl<T: Pep508Url> Requirement<T> {
     /// `flask >= 2.0.2 ; extra == "dotenv"`.
     #[must_use]
     pub fn with_extra_marker(mut self, extra: ExtraName) -> Self {
-        self.marker
+        self.marker = self
+            .marker
             .and(MarkerTree::expression(MarkerExpression::Extra {
                 operator: ExtraOperator::Equal,
                 name: MarkerValueExtra::Extra(extra),
@@ -1500,17 +1501,17 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        let mut a = MarkerTree::expression(MarkerExpression::Version {
+        let a = MarkerTree::expression(MarkerExpression::Version {
             key: MarkerValueVersion::PythonVersion,
             specifier: VersionSpecifier::from_pattern(Operator::Equal, "2.7".parse().unwrap())
                 .unwrap(),
         });
-        let mut b = MarkerTree::expression(MarkerExpression::String {
+        let b = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::SysPlatform,
             operator: MarkerOperator::Equal,
             value: arcstr::literal!("win32"),
         });
-        let mut c = MarkerTree::expression(MarkerExpression::String {
+        let c = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::OsName,
             operator: MarkerOperator::Equal,
             value: arcstr::literal!("linux"),
@@ -1521,9 +1522,9 @@ mod tests {
             value: arcstr::literal!("cpython"),
         });
 
-        c.and(d);
-        b.or(c);
-        a.and(b);
+        let c = c.and(d);
+        let b = b.or(c);
+        let a = a.and(b);
 
         assert_eq!(a, actual);
     }

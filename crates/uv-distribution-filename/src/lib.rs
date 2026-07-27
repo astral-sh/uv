@@ -40,8 +40,7 @@ pub enum DistFilename {
 
 impl DistFilename {
     /// Parse a filename as wheel or source dist name.
-    #[cfg(test)]
-    fn try_from_filename(filename: &str, package_name: &PackageName) -> Option<Self> {
+    pub fn try_from_filename(filename: &str, package_name: &PackageName) -> Option<Self> {
         Self::try_from_filename_with_reason(filename, package_name).ok()
     }
 

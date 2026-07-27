@@ -1,7 +1,7 @@
-use std::{fmt::Display, sync::LazyLock};
+use std::fmt::Display;
 
 pub use error::Error;
-use regex::Regex;
+use regex::regex;
 pub use sync::*;
 use uv_static::EnvVars;
 
@@ -11,7 +11,6 @@ pub mod stream;
 mod sync;
 mod vendor;
 
-static CONTROL_CHARACTERS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\p{C}").unwrap());
 static REPLACEMENT_CHARACTER: &str = "\u{FFFD}";
 
 /// Compression methods that we consider supported.
@@ -77,7 +76,7 @@ pub(crate) fn validate_archive_member_name(name: &str) -> Result<(), Error> {
         return Err(Error::EmptyFilename);
     }
 
-    match CONTROL_CHARACTERS_RE.replace_all(name, REPLACEMENT_CHARACTER) {
+    match regex!(r"\p{C}").replace_all(name, REPLACEMENT_CHARACTER) {
         // No replacements mean no control characters.
         std::borrow::Cow::Borrowed(_) => Ok(()),
         std::borrow::Cow::Owned(sanitized) => Err(Error::UnacceptableFilename {

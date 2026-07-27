@@ -335,10 +335,10 @@ impl Boolean for UniversalMarker {
 
 impl Boolean for MarkerTree {
     fn and(&mut self, other: Self) {
-        self.and(other);
+        *self = Self::and(*self, other);
     }
 
     fn or(&mut self, other: Self) {
-        self.or(other);
+        *self = Self::or(*self, other);
     }
 }

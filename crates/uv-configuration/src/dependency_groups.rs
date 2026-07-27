@@ -86,32 +86,14 @@ impl DependencyGroups {
     }
 
     /// Create from raw CLI args
-    #[expect(clippy::fn_params_excessive_bools)]
     pub fn from_args(
-        dev: bool,
-        no_dev: bool,
-        only_dev: bool,
+        dev_mode: Option<DevMode>,
         group: Vec<GroupName>,
         no_group: Vec<GroupName>,
         no_default_groups: bool,
         only_group: Vec<GroupName>,
         all_groups: bool,
     ) -> Self {
-        // Lower the --dev flags into a single dev mode.
-        //
-        // In theory only one of these 3 flags should be set (enforced by CLI),
-        // but we explicitly allow `--dev` and `--only-dev` to both be set,
-        // and "saturate" that to `--only-dev`.
-        let dev_mode = if only_dev {
-            Some(DevMode::Only)
-        } else if no_dev {
-            Some(DevMode::Exclude)
-        } else if dev {
-            Some(DevMode::Include)
-        } else {
-            None
-        };
-
         Self::from_history(DependencyGroupsHistory {
             dev_mode,
             group,
@@ -338,6 +320,22 @@ pub enum DevMode {
 }
 
 impl DevMode {
+    /// Determine the development dependency mode from the command-line arguments.
+    pub fn from_args(dev: bool, no_dev: bool, only_dev: bool) -> Option<Self> {
+        // In theory only one of these 3 flags should be set (enforced by CLI),
+        // but we explicitly allow `--dev` and `--only-dev` to both be set,
+        // and "saturate" that to `--only-dev`.
+        if only_dev {
+            Some(Self::Only)
+        } else if no_dev {
+            Some(Self::Exclude)
+        } else if dev {
+            Some(Self::Include)
+        } else {
+            None
+        }
+    }
+
     /// Returns the flag that was used to request development dependencies.
     fn as_flag(self) -> &'static str {
         match self {

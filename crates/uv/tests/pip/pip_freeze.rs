@@ -23,13 +23,10 @@ fn freeze_many() -> Result<()> {
     // Run `pip freeze`.
     uv_snapshot!(context.pip_freeze()
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     tomli==2.0.1
-
-    ----- stderr -----
     "
     );
 
@@ -74,8 +71,7 @@ fn freeze_duplicate() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context1.filters(), context1.pip_freeze().arg("--strict"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pip==21.3.1
     pip==22.1.1
@@ -108,8 +104,7 @@ fn freeze_url() -> Result<()> {
     // Run `pip freeze`.
     uv_snapshot!(context.pip_freeze()
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio==4.3.0
     iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
@@ -149,13 +144,10 @@ fn freeze_direct_archive_hashes() -> Result<()> {
     )?;
 
     uv_snapshot!(context.pip_freeze(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     legacy @ https://example.com/legacy-1.0.0.tar.gz#sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
     project @ https://example.com/project-1.0.0.tar.gz#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -183,12 +175,9 @@ fn freeze_direct_archive_hash_roundtrip() -> Result<()> {
     ))?;
 
     let frozen = uv_snapshot!(context.filters(), context.pip_freeze(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
-
-    ----- stderr -----
     ");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -215,10 +204,7 @@ fn freeze_direct_archive_hash_roundtrip() -> Result<()> {
         .arg("--no-deps")
         .arg("--require-hashes")
         .arg("--reinstall"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to read `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
@@ -257,8 +243,7 @@ fn freeze_with_editable() -> Result<()> {
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio==4.3.0
     -e file://[WORKSPACE]/test/packages/poetry_editable
@@ -273,8 +258,7 @@ fn freeze_with_editable() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--exclude-editable")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio==4.3.0
 
@@ -328,12 +312,9 @@ fn freeze_with_egg_info() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     zstandard==0.22.0
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -381,12 +362,9 @@ fn freeze_with_egg_info_no_py() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     zstandard==0.22.0
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -418,13 +396,10 @@ fn freeze_with_egg_info_file() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pycurl==7.45.1
     vtk==9.2.6
-
-    ----- stderr -----
     ");
     Ok(())
 }
@@ -456,12 +431,9 @@ Version: 0.22.0
 
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     -e [TEMP_DIR]/zstandard_project
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -489,13 +461,10 @@ fn freeze_path() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--path")
         .arg(target.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     tomli==2.0.1
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -530,14 +499,11 @@ fn freeze_multiple_paths() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze().arg("--path").arg(target1.path()).arg("--path").arg(target2.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     requests==2.31.0
     tomli==2.0.1
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -558,11 +524,7 @@ fn freeze_nonexistent_path() {
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--path")
         .arg(nonexistent_dir.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 }
 
@@ -582,13 +544,10 @@ fn freeze_with_quiet_flag() -> Result<()> {
 
     // Run `pip freeze` with `--quiet` flag.
     uv_snapshot!(context.pip_freeze().arg("--quiet"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     tomli==2.0.1
-
-    ----- stderr -----
     "
     );
 
@@ -618,23 +577,16 @@ fn freeze_target() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--target")
         .arg(target.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     tomli==2.0.1
-
-    ----- stderr -----
     "
     );
 
     // Without --target, the packages should not be visible.
     uv_snapshot!(context.pip_freeze(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     "
     );
 
@@ -664,23 +616,16 @@ fn freeze_prefix() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--prefix")
         .arg(prefix.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     tomli==2.0.1
-
-    ----- stderr -----
     "
     );
 
     // Without --prefix, the packages should not be visible.
     uv_snapshot!(context.pip_freeze(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     "
     );
 
@@ -705,22 +650,15 @@ fn freeze_exclude() {
 
     // Run `pip freeze --exclude MarkupSafe`.
     uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--prefix").arg(prefix.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     tomli==2.0.1
-
-    ----- stderr -----
     "
     );
 
     // Run `pip freeze --exclude MarkupSafe --exclude tomli`.
     uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--exclude").arg("tomli").arg("--prefix").arg(prefix.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     "
     );
 }

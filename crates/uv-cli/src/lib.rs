@@ -327,9 +327,6 @@ pub struct GlobalArgs {
     /// Preview features may change without warning.
     ///
     /// Use comma-separated values or pass multiple times to enable multiple features.
-    ///
-    /// The following features are available: `python-install-default`, `python-upgrade`,
-    /// `json-output`, `pylock`, `add-bounds`.
     #[arg(
         global = true,
         long = "preview-features",
@@ -1874,47 +1871,8 @@ pub struct PipSyncArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Require a matching hash for each requirement.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash.
-    ///
-    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
-    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
-    /// specified via direct URL.
-    ///
-    /// Hash-checking mode introduces a number of additional constraints:
-    ///
-    /// - Git dependencies are not supported.
-    /// - Editable installations are not supported.
-    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
-    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(
-        long,
-        env = EnvVars::UV_REQUIRE_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_require_hashes"),
-    )]
-    pub require_hashes: bool,
-
-    #[arg(long, overrides_with("require_hashes"), hide = true)]
-    pub no_require_hashes: bool,
-
-    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
-    pub verify_hashes: bool,
-
-    /// Disable validation of hashes in the requirements file.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash. To enforce hash validation, use
-    /// `--require-hashes`.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("verify_hashes"),
-    )]
-    pub no_verify_hashes: bool,
+    #[command(flatten)]
+    pub hash_checking: HashCheckingArgs,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -2260,47 +2218,8 @@ pub struct PipInstallArgs {
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
 
-    /// Require a matching hash for each requirement.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash.
-    ///
-    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
-    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
-    /// specified via direct URL.
-    ///
-    /// Hash-checking mode introduces a number of additional constraints:
-    ///
-    /// - Git dependencies are not supported.
-    /// - Editable installations are not supported.
-    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
-    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(
-        long,
-        env = EnvVars::UV_REQUIRE_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_require_hashes"),
-    )]
-    pub require_hashes: bool,
-
-    #[arg(long, overrides_with("require_hashes"), hide = true)]
-    pub no_require_hashes: bool,
-
-    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
-    pub verify_hashes: bool,
-
-    /// Disable validation of hashes in the requirements file.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash. To enforce hash validation, use
-    /// `--require-hashes`.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("verify_hashes"),
-    )]
-    pub no_verify_hashes: bool,
+    #[command(flatten)]
+    pub hash_checking: HashCheckingArgs,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -3043,47 +2962,8 @@ pub struct BuildArgs {
     )]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
-    /// Require a matching hash for each requirement.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash.
-    ///
-    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
-    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
-    /// specified via direct URL.
-    ///
-    /// Hash-checking mode introduces a number of additional constraints:
-    ///
-    /// - Git dependencies are not supported.
-    /// - Editable installations are not supported.
-    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
-    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(
-        long,
-        env = EnvVars::UV_REQUIRE_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_require_hashes"),
-    )]
-    pub require_hashes: bool,
-
-    #[arg(long, overrides_with("require_hashes"), hide = true)]
-    pub no_require_hashes: bool,
-
-    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
-    pub verify_hashes: bool,
-
-    /// Disable validation of hashes in the requirements file.
-    ///
-    /// By default, uv will verify any available hashes in the requirements file, but will not
-    /// require that all requirements have an associated hash. To enforce hash validation, use
-    /// `--require-hashes`.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("verify_hashes"),
-    )]
-    pub no_verify_hashes: bool,
+    #[command(flatten)]
+    pub hash_checking: HashCheckingArgs,
 
     /// The Python interpreter to use for the build environment.
     ///
@@ -3264,59 +3144,11 @@ pub struct VenvArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-index`). This prevents
-    /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
-    /// same name to an alternate index.
-    #[arg(long, value_enum, env = EnvVars::UV_INDEX_STRATEGY)]
-    pub index_strategy: Option<IndexStrategy>,
+    #[command(flatten)]
+    pub registry_client: RegistryClientArgs,
 
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
-    pub keyring_provider: Option<KeyringProviderType>,
-
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewerOverride>,
-
-    /// Limit candidate packages for a specific package to those that were uploaded prior to the
-    /// given date.
-    ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
-    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
-    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
-    /// (e.g., `24 hours`, `1 week`, `30 days`), or a ISO 8601 duration (e.g., `PT24H`, `P7D`,
-    /// `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Can be provided multiple times for different packages.
-    #[arg(long)]
-    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+    #[command(flatten)]
+    pub exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -4651,7 +4483,13 @@ pub struct RemoveArgs {
     /// Remove the packages from the development dependency group [env: UV_DEV=]
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, conflicts_with("optional"), conflicts_with("group"), value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(
+        long,
+        conflicts_with("optional"),
+        conflicts_with("group"),
+        conflicts_with("script"),
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub dev: bool,
 
     /// Remove the packages from the project's optional dependencies for the specified extra.
@@ -5225,7 +5063,7 @@ pub struct FormatArgs {
     /// durations relative to "now" (e.g., `-1 week`).
     ///
     /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, value_hint = ValueHint::Other)]
     pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Additional arguments to pass to Ruff.
@@ -5257,6 +5095,24 @@ pub struct FormatArgs {
 
 #[derive(Args)]
 pub struct CheckArgs {
+    /// Check all packages in the workspace.
+    ///
+    /// The workspace's environment is synchronized to include all workspace members, and files in
+    /// every member are checked.
+    #[arg(long, conflicts_with_all = ["package", "script", "no_project"])]
+    pub all_packages: bool,
+
+    /// Check specific packages in the workspace.
+    ///
+    /// The workspace's environment is synchronized to include the selected members and their
+    /// dependencies. Only files owned by the selected members are checked.
+    #[arg(
+        long,
+        conflicts_with_all = ["all_packages", "script", "no_project"],
+        value_hint = ValueHint::Other
+    )]
+    pub package: Vec<PackageName>,
+
     /// Run checks for the specified PEP 723 Python script, rather than the current project.
     ///
     /// If provided, uv will use the dependencies based on the script's inline metadata table, in
@@ -5276,6 +5132,8 @@ pub struct CheckArgs {
         conflicts_with = "only_group",
         conflicts_with = "all_groups",
         conflicts_with = "no_project",
+        conflicts_with = "all_packages",
+        conflicts_with = "package",
         value_hint = ValueHint::FilePath,
     )]
     pub script: Option<PathBuf>,
@@ -5586,7 +5444,7 @@ pub struct AuditArgs {
     /// The service needs to use the OSV protocol, unless a different
     /// format was requested by `--service-format`.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub service_url: Option<String>,
+    pub service_url: Option<DisplaySafeUrl>,
 }
 
 #[derive(Args)]
@@ -6122,20 +5980,8 @@ pub struct ToolListArgs {
     #[arg(long, overrides_with("outdated"), hide = true)]
     pub no_outdated: bool,
 
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerOverride>,
+    #[command(flatten)]
+    pub exclude_newer: PackageExcludeNewerArgs,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]
@@ -6243,102 +6089,14 @@ pub struct ToolUpgradeArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// Reinstall all packages, regardless of whether they're already installed. Implies
-    /// `--refresh`.
-    #[arg(
-        long,
-        alias = "force-reinstall",
-        overrides_with("no_reinstall"),
-        help_heading = "Installer options"
-    )]
-    pub reinstall: bool,
+    #[command(flatten)]
+    pub reinstall: ReinstallArgs,
 
-    #[arg(
-        long,
-        overrides_with("reinstall"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_reinstall: bool,
+    #[command(flatten)]
+    pub registry_client: RegistryClientArgs,
 
-    /// Reinstall a specific package, regardless of whether it's already installed. Implies
-    /// `--refresh-package`.
-    #[arg(long, help_heading = "Installer options", value_hint = ValueHint::Other)]
-    pub reinstall_package: Vec<PackageName>,
-
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    pub index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    pub keyring_provider: Option<KeyringProviderType>,
-
-    /// The strategy to use when selecting between the different compatible versions for a given
-    /// package requirement.
-    ///
-    /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_RESOLUTION,
-        help_heading = "Resolver options"
-    )]
-    pub resolution: Option<ResolutionMode>,
-
-    /// The strategy to use when considering pre-release versions.
-    ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_PRERELEASE,
-        help_heading = "Resolver options"
-    )]
-    pub prerelease: Option<PrereleaseMode>,
-
-    #[arg(long, hide = true)]
-    pub pre: bool,
-
-    /// The strategy to use when selecting multiple versions of a given package across Python
-    /// versions and platforms.
-    ///
-    /// By default, uv will optimize for selecting the latest version of each package for each
-    /// supported Python version (`requires-python`), while minimizing the number of selected
-    /// versions across platforms.
-    ///
-    /// Under `fewest`, uv will minimize the number of selected versions for each package,
-    /// preferring older versions that are compatible with a wider range of supported Python
-    /// versions or platforms.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_FORK_STRATEGY,
-        help_heading = "Resolver options"
-    )]
-    pub fork_strategy: Option<ForkStrategy>,
+    #[command(flatten)]
+    pub version_selection: VersionSelectionArgs,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -6357,67 +6115,11 @@ pub struct ToolUpgradeArgs {
     )]
     pub config_setting_package: Option<Vec<ConfigSettingPackageEntry>>,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        overrides_with("build_isolation"),
-        help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_ISOLATION,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub no_build_isolation: bool,
+    #[command(flatten)]
+    pub build_isolation: PackageBuildIsolationArgs,
 
-    /// Disable isolation when building source distributions for a specific package.
-    ///
-    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
-    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
-    pub no_build_isolation_package: Vec<PackageName>,
-
-    #[arg(
-        long,
-        overrides_with("no_build_isolation"),
-        hide = true,
-        help_heading = "Build options"
-    )]
-    pub build_isolation: bool,
-
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerOverride>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the
-    /// given date.
-    ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
-    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
-    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
-    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
-    /// `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Can be provided multiple times for different packages.
-    #[arg(long, help_heading = "Resolver options")]
-    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+    #[command(flatten)]
+    pub exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -6436,50 +6138,11 @@ pub struct ToolUpgradeArgs {
     )]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Compile Python files to bytecode after installation.
-    ///
-    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
-    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
-    /// in which start time is critical, such as CLI applications and Docker containers, this option
-    /// can be enabled to trade longer installation times for faster start times.
-    ///
-    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
-    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
-    /// run`) will process the entire site-packages directory including packages that are not being
-    /// modified.
-    #[arg(
-        long,
-        alias = "compile",
-        overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options",
-        env = EnvVars::UV_COMPILE_BYTECODE,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub compile_bytecode: bool,
+    #[command(flatten)]
+    pub compile_bytecode: CompileBytecodeArgs,
 
-    #[arg(
-        long,
-        alias = "no-compile",
-        overrides_with("compile_bytecode"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_compile_bytecode: bool,
-
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options",
-    )]
-    pub no_sources: bool,
-
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    pub no_sources_package: Vec<PackageName>,
+    #[command(flatten)]
+    pub sources: SourcesArgs,
 
     #[command(flatten)]
     pub build: BuildOptionsArgs,
@@ -6529,8 +6192,7 @@ pub enum PythonCommand {
 
     /// Upgrade installed Python versions.
     ///
-    /// Upgrades versions to the latest supported patch release. Requires the `python-upgrade`
-    /// preview feature.
+    /// Upgrades versions to the latest supported patch release.
     ///
     /// A target Python minor version to upgrade may be provided, e.g., `3.13`. Multiple versions
     /// may be provided to perform more than one upgrade.
@@ -6575,8 +6237,7 @@ pub enum PythonCommand {
     /// The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
     ///
     /// To view the directory where uv installs Python executables instead, use the `--bin` flag.
-    /// The Python executable directory may be overridden with `$UV_PYTHON_BIN_DIR`. Note that
-    /// Python executables are only installed when preview mode is enabled.
+    /// The Python executable directory may be overridden with `$UV_PYTHON_BIN_DIR`.
     Dir(PythonDirArgs),
 
     /// Uninstall Python versions.
@@ -6651,8 +6312,6 @@ pub struct PythonListArgs {
 #[derive(Args)]
 pub struct PythonDirArgs {
     /// Show the directory into which `uv python` will install Python executables.
-    ///
-    /// Note that this directory is only used when installing Python with preview mode enabled.
     ///
     /// The Python executable directory is determined according to the XDG standard and is derived
     /// from the following environment variables, in order of preference:
@@ -7280,6 +6939,211 @@ pub struct IndexArgs {
     pub no_index: bool,
 }
 
+/// Arguments that configure the package registry client.
+#[derive(Args)]
+#[group(skip)]
+pub struct RegistryClientArgs {
+    /// The strategy to use when resolving against multiple index URLs.
+    ///
+    /// By default, uv will stop at the first index on which a given package is available, and limit
+    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
+    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
+    /// to an alternate index.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_INDEX_STRATEGY,
+        help_heading = "Index options"
+    )]
+    pub index_strategy: Option<IndexStrategy>,
+
+    /// Attempt to use `keyring` for authentication for index URLs.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
+    /// the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+        help_heading = "Index options"
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
+/// Arguments that control dependency sources.
+#[derive(Args)]
+#[group(skip)]
+pub struct SourcesArgs {
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
+    /// URL, or local path sources.
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_SOURCES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Resolver options",
+    )]
+    no_sources: bool,
+
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
+    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
+    no_sources_package: Vec<PackageName>,
+}
+
+/// Arguments that configure package version selection.
+#[derive(Args)]
+#[group(skip)]
+pub struct VersionSelectionArgs {
+    /// The strategy to use when selecting between the different compatible versions for a given
+    /// package requirement.
+    ///
+    /// By default, uv will use the latest compatible version of each package (`highest`).
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_RESOLUTION,
+        help_heading = "Resolver options"
+    )]
+    resolution: Option<ResolutionMode>,
+
+    /// The strategy to use when considering pre-release versions.
+    ///
+    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
+    /// with first-party requirements that contain an explicit pre-release marker in the declared
+    /// specifiers (`if-necessary-or-explicit`).
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_PRERELEASE,
+        help_heading = "Resolver options"
+    )]
+    prerelease: Option<PrereleaseMode>,
+
+    #[arg(long, hide = true, help_heading = "Resolver options")]
+    pre: bool,
+
+    /// The strategy to use when selecting multiple versions of a given package across Python
+    /// versions and platforms.
+    ///
+    /// By default, uv will optimize for selecting the latest version of each package for each
+    /// supported Python version (`requires-python`), while minimizing the number of selected
+    /// versions across platforms.
+    ///
+    /// Under `fewest`, uv will minimize the number of selected versions for each package,
+    /// preferring older versions that are compatible with a wider range of supported Python
+    /// versions or platforms.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_FORK_STRATEGY,
+        help_heading = "Resolver options"
+    )]
+    fork_strategy: Option<ForkStrategy>,
+}
+
+/// Arguments that configure requirement hash checking.
+#[derive(Args)]
+#[group(skip)]
+pub struct HashCheckingArgs {
+    /// Require a matching hash for each requirement.
+    ///
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash.
+    ///
+    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
+    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
+    /// specified via direct URL.
+    ///
+    /// Hash-checking mode introduces a number of additional constraints:
+    ///
+    /// - Git dependencies are not supported.
+    /// - Editable installations are not supported.
+    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
+    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
+    #[arg(
+        long,
+        env = EnvVars::UV_REQUIRE_HASHES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_require_hashes"),
+    )]
+    pub require_hashes: bool,
+
+    #[arg(long, overrides_with("require_hashes"), hide = true)]
+    pub no_require_hashes: bool,
+
+    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
+    pub verify_hashes: bool,
+
+    /// Disable validation of hashes in the requirements file.
+    ///
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash. To enforce hash validation, use
+    /// `--require-hashes`.
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_VERIFY_HASHES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("verify_hashes"),
+    )]
+    pub no_verify_hashes: bool,
+}
+
+/// Arguments that filter packages by upload date.
+#[derive(Args)]
+#[group(skip)]
+pub struct ExcludeNewerArgs {
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
+    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
+    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
+    /// `P7D`, `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
+    #[arg(
+        long,
+        env = EnvVars::UV_EXCLUDE_NEWER,
+        help_heading = "Resolver options",
+        value_hint = ValueHint::Other,
+    )]
+    pub exclude_newer: Option<ExcludeNewerOverride>,
+}
+
+/// Arguments that filter packages by global and package-specific upload dates.
+#[derive(Args)]
+#[group(skip)]
+pub struct PackageExcludeNewerArgs {
+    #[command(flatten)]
+    pub exclude_newer: ExcludeNewerArgs,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
+    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
+    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
+    /// `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long, help_heading = "Resolver options", value_hint = ValueHint::Other)]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+}
+
 #[derive(Args)]
 pub struct RefreshArgs {
     /// Refresh all cached data.
@@ -7363,80 +7227,10 @@ pub struct BuildOptionsArgs {
     no_binary_package: Vec<PackageName>,
 }
 
-/// Arguments that are used by commands that need to install (but not resolve) packages.
+/// Arguments that configure build isolation for source distributions.
 #[derive(Args)]
-pub struct InstallerArgs {
-    #[command(flatten)]
-    index_args: IndexArgs,
-
-    /// Reinstall all packages, regardless of whether they're already installed. Implies
-    /// `--refresh`.
-    #[arg(
-        long,
-        alias = "force-reinstall",
-        overrides_with("no_reinstall"),
-        help_heading = "Installer options"
-    )]
-    reinstall: bool,
-
-    #[arg(
-        long,
-        overrides_with("reinstall"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    no_reinstall: bool,
-
-    /// Reinstall a specific package, regardless of whether it's already installed. Implies
-    /// `--refresh-package`.
-    #[arg(long, help_heading = "Installer options", value_hint = ValueHint::Other)]
-    reinstall_package: Vec<PackageName>,
-
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    keyring_provider: Option<KeyringProviderType>,
-
-    /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
-    #[arg(
-        long,
-        short = 'C',
-        alias = "config-settings",
-        help_heading = "Build options"
-    )]
-    config_setting: Option<Vec<ConfigSettingEntry>>,
-
-    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
-    #[arg(
-        long,
-        alias = "config-settings-package",
-        help_heading = "Build options"
-    )]
-    config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
-
+#[group(skip)]
+pub struct BuildIsolationArgs {
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -7456,60 +7250,52 @@ pub struct InstallerArgs {
         help_heading = "Build options"
     )]
     build_isolation: bool,
+}
 
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerOverride>,
+/// Arguments that configure global and package-specific build isolation.
+#[derive(Args)]
+#[group(skip)]
+pub struct PackageBuildIsolationArgs {
+    #[command(flatten)]
+    build_isolation: BuildIsolationArgs,
 
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the
-    /// given date.
+    /// Disable isolation when building source distributions for a specific package.
     ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
-    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
-    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
-    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
-    /// `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Can be provided multiple times for different packages.
-    #[arg(long, help_heading = "Resolver options")]
-    exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
+    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
+    no_build_isolation_package: Vec<PackageName>,
+}
 
-    /// The method to use when installing packages from the global cache.
-    ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
-    /// Windows.
-    ///
-    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
-    /// will break all installed packages by way of removing the underlying source files. Use
-    /// symlinks with caution.
+#[derive(Args)]
+#[group(skip)]
+pub struct ReinstallArgs {
+    /// Reinstall all packages, regardless of whether they're already installed. Implies
+    /// `--refresh`.
     #[arg(
         long,
-        value_enum,
-        env = EnvVars::UV_LINK_MODE,
+        alias = "force-reinstall",
+        overrides_with("no_reinstall"),
         help_heading = "Installer options"
     )]
-    link_mode: Option<uv_install_wheel::LinkMode>,
+    pub reinstall: bool,
 
+    #[arg(
+        long,
+        overrides_with("reinstall"),
+        hide = true,
+        help_heading = "Installer options"
+    )]
+    pub no_reinstall: bool,
+
+    /// Reinstall a specific package, regardless of whether it's already installed. Implies
+    /// `--refresh-package`.
+    #[arg(long, help_heading = "Installer options", value_hint = ValueHint::Other)]
+    pub reinstall_package: Vec<PackageName>,
+}
+
+#[derive(Args)]
+#[group(skip)]
+pub struct CompileBytecodeArgs {
     /// Compile Python files to bytecode after installation.
     ///
     /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
@@ -7539,21 +7325,65 @@ pub struct InstallerArgs {
         help_heading = "Installer options"
     )]
     no_compile_bytecode: bool,
+}
 
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
+/// Arguments that are used by commands that need to install (but not resolve) packages.
+#[derive(Args)]
+pub struct InstallerArgs {
+    #[command(flatten)]
+    index_args: IndexArgs,
+
+    #[command(flatten)]
+    reinstall: ReinstallArgs,
+
+    #[command(flatten)]
+    registry_client: RegistryClientArgs,
+
+    /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
         long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options"
+        short = 'C',
+        alias = "config-settings",
+        help_heading = "Build options"
     )]
-    no_sources: bool,
+    config_setting: Option<Vec<ConfigSettingEntry>>,
 
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    no_sources_package: Vec<PackageName>,
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
+
+    #[command(flatten)]
+    build_isolation: BuildIsolationArgs,
+
+    #[command(flatten)]
+    exclude_newer: PackageExcludeNewerArgs,
+
+    /// The method to use when installing packages from the global cache.
+    ///
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
+    /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_LINK_MODE,
+        help_heading = "Installer options"
+    )]
+    link_mode: Option<uv_install_wheel::LinkMode>,
+
+    #[command(flatten)]
+    compile_bytecode: CompileBytecodeArgs,
+
+    #[command(flatten)]
+    sources: SourcesArgs,
 }
 
 /// Arguments that are used by commands that need to resolve (but not install) packages.
@@ -7590,79 +7420,11 @@ pub struct ResolverArgs {
     #[arg(long, help_heading = "Resolver options")]
     upgrade_group: Vec<GroupName>,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    index_strategy: Option<IndexStrategy>,
+    #[command(flatten)]
+    registry_client: RegistryClientArgs,
 
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    keyring_provider: Option<KeyringProviderType>,
-
-    /// The strategy to use when selecting between the different compatible versions for a given
-    /// package requirement.
-    ///
-    /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_RESOLUTION,
-        help_heading = "Resolver options"
-    )]
-    resolution: Option<ResolutionMode>,
-
-    /// The strategy to use when considering pre-release versions.
-    ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_PRERELEASE,
-        help_heading = "Resolver options"
-    )]
-    prerelease: Option<PrereleaseMode>,
-
-    #[arg(long, hide = true, help_heading = "Resolver options")]
-    pre: bool,
-
-    /// The strategy to use when selecting multiple versions of a given package across Python
-    /// versions and platforms.
-    ///
-    /// By default, uv will optimize for selecting the latest version of each package for each
-    /// supported Python version (`requires-python`), while minimizing the number of selected
-    /// versions across platforms.
-    ///
-    /// Under `fewest`, uv will minimize the number of selected versions for each package,
-    /// preferring older versions that are compatible with a wider range of supported Python
-    /// versions or platforms.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_FORK_STRATEGY,
-        help_heading = "Resolver options"
-    )]
-    fork_strategy: Option<ForkStrategy>,
+    #[command(flatten)]
+    version_selection: VersionSelectionArgs,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -7681,67 +7443,11 @@ pub struct ResolverArgs {
     )]
     config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        overrides_with("build_isolation"),
-        help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_ISOLATION,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    no_build_isolation: bool,
+    #[command(flatten)]
+    build_isolation: PackageBuildIsolationArgs,
 
-    /// Disable isolation when building source distributions for a specific package.
-    ///
-    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
-    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
-    no_build_isolation_package: Vec<PackageName>,
-
-    #[arg(
-        long,
-        overrides_with("no_build_isolation"),
-        hide = true,
-        help_heading = "Build options"
-    )]
-    build_isolation: bool,
-
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerOverride>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the
-    /// given date.
-    ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
-    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
-    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
-    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
-    /// `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Can be provided multiple times for different packages.
-    #[arg(long, help_heading = "Resolver options")]
-    exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+    #[command(flatten)]
+    exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -7762,20 +7468,8 @@ pub struct ResolverArgs {
     )]
     link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options",
-    )]
-    no_sources: bool,
-
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    no_sources_package: Vec<PackageName>,
+    #[command(flatten)]
+    sources: SourcesArgs,
 }
 
 /// Arguments that are used by commands that need to resolve and install packages.
@@ -7812,102 +7506,14 @@ pub struct ResolverInstallerArgs {
     #[arg(long, help_heading = "Resolver options")]
     pub upgrade_group: Vec<GroupName>,
 
-    /// Reinstall all packages, regardless of whether they're already installed. Implies
-    /// `--refresh`.
-    #[arg(
-        long,
-        alias = "force-reinstall",
-        overrides_with("no_reinstall"),
-        help_heading = "Installer options"
-    )]
-    pub reinstall: bool,
+    #[command(flatten)]
+    pub reinstall: ReinstallArgs,
 
-    #[arg(
-        long,
-        overrides_with("reinstall"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_reinstall: bool,
+    #[command(flatten)]
+    pub registry_client: RegistryClientArgs,
 
-    /// Reinstall a specific package, regardless of whether it's already installed. Implies
-    /// `--refresh-package`.
-    #[arg(long, help_heading = "Installer options", value_hint = ValueHint::Other)]
-    pub reinstall_package: Vec<PackageName>,
-
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    pub index_strategy: Option<IndexStrategy>,
-
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    pub keyring_provider: Option<KeyringProviderType>,
-
-    /// The strategy to use when selecting between the different compatible versions for a given
-    /// package requirement.
-    ///
-    /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_RESOLUTION,
-        help_heading = "Resolver options"
-    )]
-    pub resolution: Option<ResolutionMode>,
-
-    /// The strategy to use when considering pre-release versions.
-    ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_PRERELEASE,
-        help_heading = "Resolver options"
-    )]
-    pub prerelease: Option<PrereleaseMode>,
-
-    #[arg(long, hide = true)]
-    pub pre: bool,
-
-    /// The strategy to use when selecting multiple versions of a given package across Python
-    /// versions and platforms.
-    ///
-    /// By default, uv will optimize for selecting the latest version of each package for each
-    /// supported Python version (`requires-python`), while minimizing the number of selected
-    /// versions across platforms.
-    ///
-    /// Under `fewest`, uv will minimize the number of selected versions for each package,
-    /// preferring older versions that are compatible with a wider range of supported Python
-    /// versions or platforms.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_FORK_STRATEGY,
-        help_heading = "Resolver options"
-    )]
-    pub fork_strategy: Option<ForkStrategy>,
+    #[command(flatten)]
+    pub version_selection: VersionSelectionArgs,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -7928,72 +7534,11 @@ pub struct ResolverInstallerArgs {
     )]
     pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        overrides_with("build_isolation"),
-        help_heading = "Build options",
-        env = EnvVars::UV_NO_BUILD_ISOLATION,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub no_build_isolation: bool,
+    #[command(flatten)]
+    pub build_isolation: PackageBuildIsolationArgs,
 
-    /// Disable isolation when building source distributions for a specific package.
-    ///
-    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
-    #[arg(long, help_heading = "Build options", value_hint = ValueHint::Other)]
-    pub no_build_isolation_package: Vec<PackageName>,
-
-    #[arg(
-        long,
-        overrides_with("no_build_isolation"),
-        hide = true,
-        help_heading = "Build options"
-    )]
-    pub build_isolation: bool,
-
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(
-        long,
-        env = EnvVars::UV_EXCLUDE_NEWER,
-        help_heading = "Resolver options",
-        value_hint = ValueHint::Other,
-    )]
-    pub exclude_newer: Option<ExcludeNewerOverride>,
-
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the
-    /// given date.
-    ///
-    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339
-    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a local date in the same format (e.g.,
-    /// `2006-12-02`) resolved based on your system's configured time zone, a "friendly" duration
-    /// (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`,
-    /// `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Can be provided multiple times for different packages.
-    #[arg(long, help_heading = "Resolver options", value_hint = ValueHint::Other)]
-    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+    #[command(flatten)]
+    pub exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -8012,50 +7557,11 @@ pub struct ResolverInstallerArgs {
     )]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Compile Python files to bytecode after installation.
-    ///
-    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
-    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
-    /// in which start time is critical, such as CLI applications and Docker containers, this option
-    /// can be enabled to trade longer installation times for faster start times.
-    ///
-    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
-    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
-    /// run`) will process the entire site-packages directory including packages that are not being
-    /// modified.
-    #[arg(
-        long,
-        alias = "compile",
-        overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options",
-        env = EnvVars::UV_COMPILE_BYTECODE,
-        value_parser = clap::builder::BoolishValueParser::new(),
-    )]
-    pub compile_bytecode: bool,
+    #[command(flatten)]
+    pub compile_bytecode: CompileBytecodeArgs,
 
-    #[arg(
-        long,
-        alias = "no-compile",
-        overrides_with("compile_bytecode"),
-        hide = true,
-        help_heading = "Installer options"
-    )]
-    pub no_compile_bytecode: bool,
-
-    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
-    /// URL, or local path sources.
-    #[arg(
-        long,
-        env = EnvVars::UV_NO_SOURCES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        help_heading = "Resolver options",
-    )]
-    pub no_sources: bool,
-
-    /// Don't use sources from the `tool.uv.sources` table for the specified packages [env: `UV_NO_SOURCES_PACKAGE`=]
-    #[arg(long, help_heading = "Resolver options", value_delimiter = ' ')]
-    pub no_sources_package: Vec<PackageName>,
+    #[command(flatten)]
+    pub sources: SourcesArgs,
 }
 
 /// Arguments that are used by commands that need to fetch from the Simple API.
@@ -8064,52 +7570,11 @@ pub struct FetchArgs {
     #[command(flatten)]
     index_args: IndexArgs,
 
-    /// The strategy to use when resolving against multiple index URLs.
-    ///
-    /// By default, uv will stop at the first index on which a given package is available, and limit
-    /// resolutions to those present on that first index (`first-index`). This prevents "dependency
-    /// confusion" attacks, whereby an attacker can upload a malicious package under the same name
-    /// to an alternate index.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_INDEX_STRATEGY,
-        help_heading = "Index options"
-    )]
-    index_strategy: Option<IndexStrategy>,
+    #[command(flatten)]
+    registry_client: RegistryClientArgs,
 
-    /// Attempt to use `keyring` for authentication for index URLs.
-    ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to use
-    /// the `keyring` CLI to handle authentication.
-    ///
-    /// Defaults to `disabled`.
-    #[arg(
-        long,
-        value_enum,
-        env = EnvVars::UV_KEYRING_PROVIDER,
-        help_heading = "Index options"
-    )]
-    keyring_provider: Option<KeyringProviderType>,
-
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// The date is compared against the upload time of each individual distribution artifact
-    /// (i.e., when each file was uploaded to the package index), not the release date of the
-    /// package version.
-    ///
-    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), local dates in the same format
-    /// (e.g., `2006-12-02`) resolved based on your system's configured time zone, a "friendly"
-    /// duration (e.g., `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`,
-    /// `P7D`, `P30D`).
-    ///
-    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
-    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
-    /// Calendar units such as months and years are not allowed.
-    ///
-    /// Use `false` to disable `exclude-newer`.
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerOverride>,
+    #[command(flatten)]
+    exclude_newer: PackageExcludeNewerArgs,
 }
 
 #[derive(Args)]
@@ -8360,6 +7825,14 @@ pub struct MetadataArgs {
     /// that provide them. To do this, the venv will be synced in inexact mode.
     #[arg(long)]
     pub sync: bool,
+
+    /// Sync dependencies to the active virtual environment.
+    ///
+    /// Instead of creating or updating the virtual environment for the project or script, the
+    /// active virtual environment will be preferred, if the `VIRTUAL_ENV` environment variable is
+    /// set.
+    #[arg(long)]
+    pub active: bool,
 
     /// The Python interpreter to use during resolution.
     ///

@@ -24,7 +24,8 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
+    PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
@@ -32,7 +33,7 @@ use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{
     AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy, SourceTreeEditablePolicy,
 };
-use uv_virtualenv::{OnExisting, RemovalReason};
+use uv_virtualenv::{OnExisting, RemovalReason, Seed};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
@@ -41,8 +42,8 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{
     LinkErrorReporting, WorkspacePython, centralized_environment_root,
-    centralized_environments_enabled, is_centralized_environment_link, lock_project_environment,
-    update_project_environment_link, validate_project_requires_python,
+    centralized_environments_enabled, is_centralized_environment_reference,
+    lock_project_environment, update_project_environment_link, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -65,7 +66,6 @@ enum VenvError {
 }
 
 /// Create a virtual environment.
-#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn venv(
     project_dir: &Path,
     path: Option<PathBuf>,
@@ -81,12 +81,12 @@ pub(crate) async fn venv(
     client_builder: &BaseClientBuilder<'_>,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
-    seed: bool,
+    seed: Seed,
     on_existing: OnExisting,
     exclude_newer: ExcludeNewer,
     concurrency: Concurrency,
-    no_config: bool,
     no_project: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -156,7 +156,7 @@ pub(crate) async fn venv(
         project.as_ref().map(VirtualProject::workspace),
         &groups,
         project_dir,
-        no_config,
+        config_discovery,
     )
     .await?;
 
@@ -213,7 +213,10 @@ pub(crate) async fn venv(
         }
     }
 
-    let with_seed = if seed { " with seed packages" } else { "" };
+    let with_seed = match seed {
+        Seed::Enabled => " with seed packages",
+        Seed::Disabled => "",
+    };
     if centralized_workspace.is_some() {
         writeln!(
             printer.stderr(),
@@ -249,10 +252,19 @@ pub(crate) async fn venv(
             OnExisting::Remove(RemovalReason::ManagedEnvironment)
         }
         OnExisting::Prompt | OnExisting::Remove(_)
-            if is_centralized_environment_link(&path, cache) =>
+            if is_centralized_environment_reference(&path, cache) =>
         {
             // Remove `.venv` without following it into the cache.
-            uv_fs::remove_symlink(&path).map_err(|err| VenvError::Creation(err.into()))?;
+            uv_fs::remove_virtualenv(&path).map_err(|err| VenvError::Creation(err.into()))?;
+            on_existing
+        }
+        OnExisting::Allow
+            if fs_err::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file())
+                && is_centralized_environment_reference(&path, cache) =>
+        {
+            // TODO(tk): Revisit after PEP 832.
+            // Ignore uv-owned path files when creating a local environment.
+            uv_fs::remove_virtualenv(&path).map_err(|err| VenvError::Creation(err.into()))?;
             on_existing
         }
         _ => on_existing,
@@ -272,7 +284,7 @@ pub(crate) async fn venv(
     .map_err(VenvError::Creation)?;
 
     // Install seed packages.
-    if seed {
+    if let Seed::Enabled = seed {
         // Extract the interpreter.
         let interpreter = venv.interpreter();
 

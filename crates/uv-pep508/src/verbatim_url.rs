@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use arcstr::ArcStr;
-use regex::Regex;
+use regex::regex;
 use thiserror::Error;
 use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
@@ -21,7 +21,7 @@ use crate::Pep508Url;
 /// A wrapper around [`Url`] that preserves the original string.
 ///
 /// The original string is not preserved after serialization/deserialization.
-#[derive(Debug, Clone, Eq)]
+#[derive(Clone, Eq)]
 pub struct VerbatimUrl {
     /// The parsed URL.
     url: DisplaySafeUrl,
@@ -33,6 +33,30 @@ pub struct VerbatimUrl {
     /// Given value is a [`Pep508Url`] which contained variable references which were successfully
     /// expanded.
     expanded: bool,
+}
+
+impl Debug for VerbatimUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let given = self.given.as_deref().map(|given| {
+            DisplaySafeUrl::parse(given).map_or_else(
+                |_| Cow::Borrowed(given),
+                |url| {
+                    let redacted = url.to_string();
+                    if redacted == url.displayable_with_credentials().to_string() {
+                        Cow::Borrowed(given)
+                    } else {
+                        Cow::Owned(redacted)
+                    }
+                },
+            )
+        });
+
+        f.debug_struct("VerbatimUrl")
+            .field("url", &self.url)
+            .field("given", &given)
+            .field("expanded", &self.expanded)
+            .finish()
+    }
 }
 
 impl Hash for VerbatimUrl {
@@ -512,10 +536,7 @@ pub fn expand_env_vars(s: &str) -> Cow<'_, str> {
         project_root.to_string_lossy().to_string()
     });
 
-    static RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?P<var>\$\{(?P<name>[A-Z0-9_]+)})").unwrap());
-
-    RE.replace_all(s, |caps: &regex::Captures<'_>| {
+    regex!(r"(?P<var>\$\{(?P<name>[A-Z0-9_]+)})").replace_all(s, |caps: &regex::Captures<'_>| {
         let name = caps.name("name").unwrap().as_str();
         std::env::var(name).unwrap_or_else(|_| match name {
             "PROJECT_ROOT" => PROJECT_ROOT_FRAGMENT.to_string(),

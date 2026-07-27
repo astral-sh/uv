@@ -113,7 +113,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.11.28,<0.12"]
+requires = ["uv_build>=0.11.32,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -136,7 +136,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.11.28,<0.12"]
+requires = ["uv_build>=0.11.32,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -197,7 +197,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [build-system]
-requires = ["uv_build>=0.11.28,<0.12"]
+requires = ["uv_build>=0.11.32,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -302,7 +302,7 @@ Hello from example-ext!
 
 !!! important
 
-    When creating a project with maturin or scikit-build-core, uv configures [`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys)
+    When creating a project with maturin or scikit-build-core, uv configures [`tool.uv.cache-keys`](../../reference/settings.md#cache-keys)
     to include common source file types. To force a rebuild, e.g. when changing files outside
     `cache-keys` or when not using `cache-keys`, use `--reinstall`.
 

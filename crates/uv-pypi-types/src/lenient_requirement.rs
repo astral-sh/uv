@@ -1,32 +1,13 @@
-use regex::Regex;
+use regex::regex;
 use serde::{Deserialize, Deserializer, Serialize, de};
 use std::borrow::Cow;
 use std::str::FromStr;
-use std::sync::LazyLock;
 use tracing::warn;
 
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::{Pep508Error, Pep508Url, Requirement};
 
 use crate::VerbatimParsedUrl;
-
-/// Ex) `>=7.2.0<8.0.0`
-static MISSING_COMMA: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
-/// Ex) `!=~5.0`
-static NOT_EQUAL_TILDE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"!=~((?:\d\.)*\d)").unwrap());
-/// Ex) `>=1.9.*`, `<3.4.*`
-static INVALID_TRAILING_DOT_STAR: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(<=|>=|<|>)(\d+(\.\d+)*)\.\*").unwrap());
-/// Ex) `!=3.0*`
-static MISSING_DOT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
-/// Ex) `>=3.6,`
-static TRAILING_COMMA: LazyLock<Regex> = LazyLock::new(|| Regex::new(r",\s*$").unwrap());
-/// Ex) `>dev`
-static GREATER_THAN_DEV: LazyLock<Regex> = LazyLock::new(|| Regex::new(r">dev").unwrap());
-/// Ex) `>=9.0.0a1.0`
-static TRAILING_ZERO: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(\d+(\.\d)*(a|b|rc|post|dev)\d+)\.0").unwrap());
 
 // Search and replace functions that fix invalid specifiers.
 type FixUp = for<'a> fn(&'a str) -> Cow<'a, str>;
@@ -35,37 +16,37 @@ type FixUp = for<'a> fn(&'a str) -> Cow<'a, str>;
 static FIXUPS: &[(FixUp, &str)] = &[
     // Given `>=7.2.0<8.0.0`, rewrite to `>=7.2.0,<8.0.0`.
     (
-        |input| MISSING_COMMA.replace_all(input, r"$1,$2"),
+        |input| regex!(r"(\d)([<>=~^!])").replace_all(input, r"$1,$2"),
         "inserting missing comma",
     ),
     // Given `!=~5.0,>=4.12`, rewrite to `!=5.0.*,>=4.12`.
     (
-        |input| NOT_EQUAL_TILDE.replace_all(input, r"!=${1}.*"),
+        |input| regex!(r"!=~((?:\d\.)*\d)").replace_all(input, r"!=${1}.*"),
         "replacing invalid tilde with wildcard",
     ),
     // Given `>=1.9.*`, rewrite to `>=1.9`.
     (
-        |input| INVALID_TRAILING_DOT_STAR.replace_all(input, r"${1}${2}"),
+        |input| regex!(r"(<=|>=|<|>)(\d+(\.\d+)*)\.\*").replace_all(input, r"${1}${2}"),
         "removing star after comparison operator other than equal and not equal",
     ),
     // Given `!=3.0*`, rewrite to `!=3.0.*`.
     (
-        |input| MISSING_DOT.replace_all(input, r"${1}.*"),
+        |input| regex!(r"(\d\.\d)+\*").replace_all(input, r"${1}.*"),
         "inserting missing dot",
     ),
     // Given `>=3.6,`, rewrite to `>=3.6`
     (
-        |input| TRAILING_COMMA.replace_all(input, r"${1}"),
+        |input| regex!(r",\s*$").replace_all(input, r"${1}"),
         "removing trailing comma",
     ),
     // Given `>dev`, rewrite to `>0.0.0dev`
     (
-        |input| GREATER_THAN_DEV.replace_all(input, r">0.0.0dev"),
+        |input| regex!(r">dev").replace_all(input, r">0.0.0dev"),
         "assuming 0.0.0dev",
     ),
     // Given `>=9.0.0a1.0`, rewrite to `>=9.0.0a1`
     (
-        |input| TRAILING_ZERO.replace_all(input, r"${1}"),
+        |input| regex!(r"(\d+(\.\d)*(a|b|rc|post|dev)\d+)\.0").replace_all(input, r"${1}"),
         "removing trailing zero",
     ),
     (remove_stray_quotes, "removing stray quotes"),
@@ -73,16 +54,16 @@ static FIXUPS: &[(FixUp, &str)] = &[
 
 // Given `>= 2.7'`, rewrite to `>= 2.7`
 fn remove_stray_quotes(input: &str) -> Cow<'_, str> {
-    /// Ex) `'>= 2.7'`, `>=3.6'`
-    static STRAY_QUOTES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"['"]"#).unwrap());
+    // Ex) `'>= 2.7'`, `>=3.6'`
+    let stray_quotes = regex!(r#"['"]"#);
 
     // make sure not to touch markers, which can have quotes (e.g. `python_version >= '3.7'`)
     match input.find(';') {
         Some(markers) => {
-            let requirement = STRAY_QUOTES.replace_all(&input[..markers], "");
+            let requirement = stray_quotes.replace_all(&input[..markers], "");
             format!("{}{}", requirement, &input[markers..]).into()
         }
-        None => STRAY_QUOTES.replace_all(input, ""),
+        None => stray_quotes.replace_all(input, ""),
     }
 }
 

@@ -33,8 +33,7 @@ fn format_reuses_settings_workspace_discovery() -> Result<()> {
     uv_snapshot!(context.filters(), context.format()
         .arg("--check")
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file already formatted
 
@@ -71,8 +70,7 @@ fn format_project() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.format(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -115,8 +113,7 @@ fn format_uses_ruff_from_environment() -> Result<()> {
             .arg("--show-version")
             .env(EnvVars::RUFF, ruff.as_os_str()),
         @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -142,8 +139,7 @@ fn format_missing_pyproject_toml() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.format(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -172,8 +168,7 @@ fn format_missing_project_in_pyproject_toml() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.format(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -211,8 +206,7 @@ fn format_unmanaged_project() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.format(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -251,8 +245,7 @@ fn format_from_project_root() -> Result<()> {
 
     // Using format from a subdirectory should still run in the project root
     uv_snapshot!(context.filters(), context.format().current_dir(&subdir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -277,8 +270,7 @@ fn format_no_project() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.format().arg("--no-project"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -319,8 +311,7 @@ fn format_relative_project() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.format().arg("--project").arg("project"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -353,10 +344,7 @@ fn format_fails_malformed_pyproject() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.format(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: Failed to parse `pyproject.toml` during settings discovery:
       TOML parse error at line 1, column 11
@@ -401,8 +389,7 @@ fn format_check() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.format().arg("--check"), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     Would reformat: main.py
     1 file would be reformatted
@@ -438,8 +425,7 @@ fn format_diff() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.format().arg("--diff"), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     --- main.py
     +++ main.py
@@ -482,8 +468,7 @@ fn format_with_ruff_args() -> Result<()> {
 
     // Run format with custom line length
     uv_snapshot!(context.filters(), context.format().arg("--").arg("main.py").arg("--line-length").arg("200"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file left unchanged
 
@@ -526,8 +511,7 @@ fn format_specific_files() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.format().arg("--").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -568,8 +552,7 @@ fn format_version_option() -> Result<()> {
     // the version we're using to stderr? Alas there's not a way to get the Ruff version from the
     // format command :)
     uv_snapshot!(context.filters(), context.format().arg("--version").arg("0.8.2"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -600,8 +583,7 @@ fn format_version_constraints() -> Result<()> {
 
     // Run format with version constraints - should find the latest version matching >=0.8.0
     uv_snapshot!(context.filters(), context.format().arg("--version").arg(">=0.8.0").arg("--show-version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -633,8 +615,7 @@ fn format_version_latest() -> Result<()> {
 
     // Run format with --version latest - should fetch the latest version from the manifest
     uv_snapshot!(context.filters(), context.format().arg("--version").arg("latest").arg("--show-version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -667,8 +648,7 @@ fn format_exclude_newer() -> Result<()> {
     // Run format with a different --exclude-newer value than the default (2025-01-01)
     // This verifies that the flag is respected for version resolution
     uv_snapshot!(context.filters(), context.format().arg("--exclude-newer").arg("2026-01-01").arg("--version").arg("latest").arg("--show-version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1 file reformatted
 
@@ -704,10 +684,7 @@ fn format_no_matching_version() -> Result<()> {
         "[PLATFORM]",
     ));
     uv_snapshot!(context.filters(), context.format().arg("--version").arg(">=999.0.0"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     error: Failed to find ruff version matching: >=999.0.0

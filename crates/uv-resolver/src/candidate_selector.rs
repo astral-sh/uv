@@ -439,7 +439,7 @@ impl CandidateSelector {
                         .enumerate()
                         .map(|(map_index, version_map)| {
                             version_map
-                                .iter(range)
+                                .iter_included(range)
                                 .rev()
                                 .map(move |item| (map_index, item))
                         })
@@ -464,7 +464,9 @@ impl CandidateSelector {
                         .iter()
                         .enumerate()
                         .map(|(map_index, version_map)| {
-                            version_map.iter(range).map(move |item| (map_index, item))
+                            version_map
+                                .iter_included(range)
+                                .map(move |item| (map_index, item))
                         })
                         .kmerge_by(
                             |(index1, (version1, _)), (index2, (version2, _))| match version1
@@ -486,7 +488,7 @@ impl CandidateSelector {
             if highest {
                 version_maps.iter().find_map(|version_map| {
                     Self::select_candidate(
-                        version_map.iter(range).rev(),
+                        version_map.iter_included(range).rev(),
                         package_name,
                         range,
                         allow_prerelease,
@@ -496,7 +498,7 @@ impl CandidateSelector {
             } else {
                 version_maps.iter().find_map(|version_map| {
                     Self::select_candidate(
-                        version_map.iter(range),
+                        version_map.iter_included(range),
                         package_name,
                         range,
                         allow_prerelease,

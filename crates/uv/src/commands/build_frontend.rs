@@ -33,7 +33,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::RequirementsSource;
@@ -96,6 +96,8 @@ pub(crate) enum Error {
     InvalidBuiltSourceDistFilename(#[source] uv_distribution_filename::SourceDistFilenameError),
     #[error("The built wheel has an invalid filename")]
     InvalidBuiltWheelFilename(#[source] uv_distribution_filename::WheelFilenameError),
+    #[error("The source distribution declares name {0}, but the wheel declares name {1}")]
+    NameMismatch(PackageName, PackageName),
     #[error("The source distribution declares version {0}, but the wheel declares version {1}")]
     VersionMismatch(Version, Version),
 }
@@ -156,7 +158,7 @@ pub(crate) async fn build_frontend(
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
@@ -185,7 +187,7 @@ pub(crate) async fn build_frontend(
         install_mirrors,
         settings,
         client_builder,
-        no_config,
+        config_discovery,
         python_preference,
         python_downloads,
         &concurrency,
@@ -234,7 +236,7 @@ async fn build_impl(
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: &Concurrency,
@@ -415,7 +417,7 @@ async fn build_impl(
             output_dir,
             python_request,
             install_mirrors.clone(),
-            no_config,
+            config_discovery,
             workspace.as_deref(),
             python_preference,
             python_downloads,
@@ -491,7 +493,7 @@ async fn build_package(
     output_dir: Option<&Path>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     workspace: Result<&Workspace, &WorkspaceError>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -550,7 +552,7 @@ async fn build_package(
     if interpreter_request.is_none() {
         interpreter_request = PythonVersionFile::discover(
             source.directory(),
-            &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+            &VersionFileDiscoveryOptions::default().with_config_discovery(config_discovery),
         )
         .await?
         .and_then(PythonVersionFile::into_version);
@@ -793,7 +795,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
-                Some(sdist_build.normalized_filename().version()),
+                Some(sdist_build.normalized_filename()),
             )
             .await?;
             build_results.push(wheel_build);
@@ -865,7 +867,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
-                Some(sdist_build.normalized_filename().version()),
+                Some(sdist_build.normalized_filename()),
             )
             .await?;
             build_results.push(sdist_build);
@@ -881,13 +883,13 @@ async fn build_package(
             uv_extract::stream::archive(source.path().display(), reader, ext, temp_dir.path())
                 .await?;
 
-            // If the source distribution has a version in its filename, check the version.
-            let version = source
+            // If the source distribution has a normalized filename, check its identity.
+            let source_dist = source
                 .path()
                 .file_name()
                 .and_then(|filename| filename.to_str())
                 .and_then(|filename| SourceDistFilename::parsed_normalized_filename(filename).ok())
-                .map(|filename| filename.version);
+                .map(DistFilename::SourceDistFilename);
 
             // Extract the top-level directory from the archive.
             let extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -909,7 +911,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
-                version.as_ref(),
+                source_dist.as_ref(),
             )
             .await?;
             build_results.push(wheel_build);
@@ -1068,8 +1070,8 @@ async fn build_wheel(
     subdirectory: Option<&Path>,
     version_id: Option<&str>,
     build_output: BuildOutput,
-    // Used for checking version consistency
-    version: Option<&Version>,
+    // Used for checking source distribution and wheel consistency
+    source_dist: Option<&DistFilename>,
 ) -> Result<BuildMessage, Error> {
     let build_message = match action {
         BuildAction::List => {
@@ -1155,10 +1157,19 @@ async fn build_wheel(
             }
         }
     };
-    if let Some(expected) = version {
-        let actual = build_message.normalized_filename().version();
-        if expected != actual {
-            return Err(Error::VersionMismatch(expected.clone(), actual.clone()));
+    if let Some(expected) = source_dist {
+        let actual = build_message.normalized_filename();
+        if expected.name() != actual.name() {
+            return Err(Error::NameMismatch(
+                expected.name().clone(),
+                actual.name().clone(),
+            ));
+        }
+        if expected.version() != actual.version() {
+            return Err(Error::VersionMismatch(
+                expected.version().clone(),
+                actual.version().clone(),
+            ));
         }
     }
     Ok(build_message)

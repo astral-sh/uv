@@ -6,7 +6,7 @@ use thiserror::Error;
 use uv_fs::Simplified;
 use uv_python::{Interpreter, PythonEnvironment};
 
-pub use virtualenv::{ClearNonVirtualenv, OnExisting, RemovalReason};
+pub use virtualenv::{ClearNonVirtualenv, OnExisting, RemovalReason, Seed};
 
 mod virtualenv;
 
@@ -30,6 +30,11 @@ pub enum Error {
     #[error("uv will not clear a directory that is not a virtual environment")]
     ClearNonVirtualenv {
         /// The non-virtual environment directory that would have been cleared.
+        path: PathBuf,
+    },
+    #[error("Virtual environment path is not valid UTF-8: {}", path.user_display())]
+    NonUtf8Path {
+        /// The non-UTF-8 virtual environment path.
         path: PathBuf,
     },
 }
@@ -72,7 +77,6 @@ impl Prompt {
 }
 
 /// Create a virtualenv.
-#[expect(clippy::fn_params_excessive_bools)]
 pub fn create_venv(
     location: &Path,
     interpreter: Interpreter,
@@ -80,7 +84,7 @@ pub fn create_venv(
     system_site_packages: bool,
     on_existing: OnExisting,
     relocatable: bool,
-    seed: bool,
+    seed: Seed,
     upgradeable: bool,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.

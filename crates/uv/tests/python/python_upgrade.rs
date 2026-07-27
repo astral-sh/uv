@@ -18,10 +18,7 @@ fn python_upgrade() {
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.17 in [TIME]
      + cpython-3.10.17-[PLATFORM] (python3.10)
@@ -29,20 +26,14 @@ fn python_upgrade() {
 
     // Don't accept patch version as argument to upgrade command
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10.17"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: `uv python upgrade` only accepts minor versions, got: 3.10.17
     ");
 
     // Upgrade patch version
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
      + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
@@ -50,20 +41,14 @@ fn python_upgrade() {
 
     // Should be a no-op when already upgraded
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.10 is already on the latest supported patch release
     ");
 
     // Should reinstall on `--reinstall`
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10").arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
      ~ cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
@@ -71,10 +56,7 @@ fn python_upgrade() {
 
     // Install an earlier pre-release version
     uv_snapshot!(context.filters(), context.python_install().arg("3.14.0rc2"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.0rc2 in [TIME]
      + cpython-3.14.0rc2-[PLATFORM] (python3.14)
@@ -82,10 +64,7 @@ fn python_upgrade() {
 
     // Upgrade the pre-release version
     uv_snapshot!(context.filters(), context.python_upgrade(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
@@ -103,20 +82,14 @@ fn python_upgrade_without_version() {
 
     // Should be a no-op when no versions have been installed
     uv_snapshot!(context.filters(), context.python_upgrade(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     There are no installed versions to upgrade
     ");
 
     // Install earlier patch versions for different minor versions
     uv_snapshot!(context.filters(), context.python_install().arg("3.11.8").arg("3.12.8").arg("3.13.1"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 3 versions in [TIME]
      + cpython-3.11.8-[PLATFORM] (python3.11)
@@ -126,10 +99,7 @@ fn python_upgrade_without_version() {
 
     // Upgrade one patch version
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.13"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
      + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
@@ -138,10 +108,7 @@ fn python_upgrade_without_version() {
     // Providing no minor version to `uv python upgrade` should upgrade the rest
     // of the patch versions
     uv_snapshot!(context.filters(), context.python_upgrade(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
      + cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
@@ -150,10 +117,7 @@ fn python_upgrade_without_version() {
 
     // Should be a no-op when every version is already upgraded
     uv_snapshot!(context.filters(), context.python_upgrade(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     All versions already on latest supported patch release
     ");
@@ -170,10 +134,7 @@ fn python_upgrade_transparent_from_venv() {
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.17 in [TIME]
      + cpython-3.10.17-[PLATFORM] (python3.10)
@@ -181,10 +142,7 @@ fn python_upgrade_transparent_from_venv() {
 
     // Create a virtual environment
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.17
     Creating virtual environment at: .venv
@@ -192,12 +150,9 @@ fn python_upgrade_transparent_from_venv() {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.17
-
-    ----- stderr -----
     "
     );
 
@@ -205,10 +160,7 @@ fn python_upgrade_transparent_from_venv() {
 
     // Create a second virtual environment with minor version request
     uv_snapshot!(context.filters(), context.venv().arg(second_venv).arg("-p").arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.17
     Creating virtual environment at: .venv2
@@ -217,21 +169,15 @@ fn python_upgrade_transparent_from_venv() {
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, second_venv), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.17
-
-    ----- stderr -----
     "
     );
 
     // Upgrade patch version
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
      + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
@@ -239,24 +185,18 @@ fn python_upgrade_transparent_from_venv() {
 
     // First virtual environment should reflect upgraded patch
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.[LATEST]
-
-    ----- stderr -----
     "
     );
 
     // Second virtual environment should reflect upgraded patch
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, second_venv), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.[LATEST]
-
-    ----- stderr -----
     "
     );
 }
@@ -274,10 +214,7 @@ fn python_upgrade_transparent_from_venv_preview() {
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.17 in [TIME]
      + cpython-3.10.17-[PLATFORM] (python3.10)
@@ -285,10 +222,7 @@ fn python_upgrade_transparent_from_venv_preview() {
 
     // Create a virtual environment
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.17
     Creating virtual environment at: .venv
@@ -296,21 +230,15 @@ fn python_upgrade_transparent_from_venv_preview() {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.17
-
-    ----- stderr -----
     "
     );
 
     // Upgrade patch version
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
      + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
@@ -318,12 +246,9 @@ fn python_upgrade_transparent_from_venv_preview() {
 
     // Virtual environment should reflect upgraded patch
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.[LATEST]
-
-    ----- stderr -----
     "
     );
 }
@@ -339,10 +264,7 @@ fn python_upgrade_ignored_with_python_pin() {
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.17 in [TIME]
      + cpython-3.10.17-[PLATFORM] (python3.10)
@@ -350,10 +272,7 @@ fn python_upgrade_ignored_with_python_pin() {
 
     // Create a virtual environment
     uv_snapshot!(context.filters(), context.venv(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.17
     Creating virtual environment at: .venv
@@ -362,20 +281,14 @@ fn python_upgrade_ignored_with_python_pin() {
 
     // Pin to older patch version
     uv_snapshot!(context.filters(), context.python_pin().arg("3.10.17"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Pinned `.python-version` to `3.10.17`
-
-    ----- stderr -----
     ");
 
     // Upgrade patch version
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
      + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
@@ -383,12 +296,9 @@ fn python_upgrade_ignored_with_python_pin() {
 
     // Virtual environment should continue to respect pinned patch version
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.17
-
-    ----- stderr -----
     "
     );
 }
@@ -406,10 +316,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.17 in [TIME]
      + cpython-3.10.17-[PLATFORM] (python3.10)
@@ -417,10 +324,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
 
     // Create a virtual environment with a patch version
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10.17"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.17
     Creating virtual environment at: .venv
@@ -428,21 +332,15 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.17
-
-    ----- stderr -----
     "
     );
 
     // Upgrade patch version
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
      + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
@@ -450,12 +348,9 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
 
     // The virtual environment Python version remains the same.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.17
-
-    ----- stderr -----
     "
     );
 }
@@ -474,10 +369,7 @@ fn python_transparent_upgrade_venv_venv() {
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.17 in [TIME]
      + cpython-3.10.17-[PLATFORM] (python3.10)
@@ -485,10 +377,7 @@ fn python_transparent_upgrade_venv_venv() {
 
     // Create an initial virtual environment
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.17
     Creating virtual environment at: .venv
@@ -507,10 +396,7 @@ fn python_transparent_upgrade_venv_venv() {
     uv_snapshot!(context.filters(), context.venv()
         .arg(second_venv)
         .arg("-p").arg(venv_python.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.17 interpreter at: .venv/[BIN]/python
     Creating virtual environment at: .venv2
@@ -521,21 +407,15 @@ fn python_transparent_upgrade_venv_venv() {
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, second_venv), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.17
-
-    ----- stderr -----
     "
     );
 
     // Upgrade patch version
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
      + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
@@ -545,12 +425,9 @@ fn python_transparent_upgrade_venv_venv() {
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, second_venv), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.[LATEST]
-
-    ----- stderr -----
     "
     );
 }
@@ -571,10 +448,7 @@ fn python_upgrade_transparent_from_venv_module() {
 
     // Install earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.12.9"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.9 in [TIME]
      + cpython-3.12.9-[PLATFORM] (python3.12)
@@ -583,29 +457,19 @@ fn python_upgrade_transparent_from_venv_module() {
     // Create a virtual environment using venv module
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-m").arg("venv").arg(context.venv.as_os_str()).arg("--without-pip")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.9
-
-    ----- stderr -----
     "
     );
 
     // Upgrade patch version
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.[LATEST] in [TIME]
      + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
@@ -614,12 +478,9 @@ fn python_upgrade_transparent_from_venv_module() {
 
     // Virtual environment should reflect upgraded patch
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[LATEST]
-
-    ----- stderr -----
     "
     );
 }
@@ -640,10 +501,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
 
     // Install earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.17 in [TIME]
      + cpython-3.10.17-[PLATFORM] (python3.10)
@@ -651,10 +509,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
 
     // Create first virtual environment
     uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.17
     Creating virtual environment at: .venv
@@ -667,32 +522,22 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("-m").arg("venv").arg(second_venv).arg("--without-pip")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     // Check version within second virtual environment
     uv_snapshot!(context.filters(), context.run()
         .env(EnvVars::VIRTUAL_ENV, second_venv)
         .arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.17
-
-    ----- stderr -----
     "
     );
 
     // Upgrade patch version
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
      + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
@@ -703,12 +548,9 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     uv_snapshot!(context.filters(), context.run()
         .env(EnvVars::VIRTUAL_ENV, second_venv)
         .arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.[LATEST]
-
-    ----- stderr -----
     "
     );
 }
@@ -732,10 +574,7 @@ fn python_upgrade_force_install() -> Result<()> {
 
     // Try to upgrade with a non-managed interpreter installed in `bin`.
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: Executable already exists at `[BIN]/python3.12` but is not managed by uv; use `uv python install 3.12 --force` to replace it
     Installed Python 3.12.[LATEST] in [TIME]
@@ -744,10 +583,7 @@ fn python_upgrade_force_install() -> Result<()> {
 
     // Force the `bin` install.
     uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("--force").arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.[LATEST] in [TIME]
      + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
@@ -770,10 +606,7 @@ fn python_upgrade_implementation() {
 
     // Run the upgrade, we should not install cpython
     uv_snapshot!(context.filters(), context.python_upgrade(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     All versions already on latest supported patch release
     ");
@@ -790,10 +623,7 @@ fn python_upgrade_build_version() {
 
     // Install Python 3.12
     uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.[LATEST] in [TIME]
      + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
@@ -801,10 +631,7 @@ fn python_upgrade_build_version() {
 
     // Should be a no-op when already installed at latest version
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.12 is already on the latest supported patch release
     ");
@@ -820,10 +647,7 @@ fn python_upgrade_build_version() {
 
     // Now upgrade should detect the outdated build version and reinstall
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.[LATEST] in [TIME]
      ~ cpython-3.12.[LATEST]-[PLATFORM]
@@ -831,10 +655,7 @@ fn python_upgrade_build_version() {
 
     // Should be a no-op again after upgrade
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Python 3.12 is already on the latest supported patch release
     ");
@@ -885,10 +706,7 @@ fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
 
     // The sync should not report removing or creating the environment.
     uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.10"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
@@ -896,12 +714,9 @@ fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
 
     // The reused environment should run the upgraded Python patch.
     uv_snapshot!(context.filters(), context.python_command().arg("--version"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.[LATEST]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -935,10 +750,7 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.17 in [TIME]
      + cpython-3.10.17-[PLATFORM] (python3.10)
@@ -946,20 +758,14 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
 
     // Pin the project to the older patch version before the environment exists
     uv_snapshot!(context.filters(), context.python_pin().arg("3.10.17"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Pinned `.python-version` to `3.10.17`
-
-    ----- stderr -----
     ");
 
     // Create the environment via `uv sync`
     uv_snapshot!(context.filters(), context.sync(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.10.17
     Creating virtual environment at: .venv
@@ -983,10 +789,7 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
     // Install a newer patch version, which moves the mutable `cpython-3.10`
     // minor-version link to the newer release.
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.[LATEST] in [TIME]
      + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
@@ -994,8 +797,7 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
 
     // The environment should continue to report the pinned patch version.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.10.17
 

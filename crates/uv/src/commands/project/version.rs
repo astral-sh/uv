@@ -19,7 +19,7 @@ use uv_normalize::DefaultExtras;
 use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
-use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
@@ -90,7 +90,7 @@ pub(crate) async fn project_version(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -353,7 +353,7 @@ pub(crate) async fn project_version(
             python_downloads,
             installer_metadata,
             &concurrency,
-            no_config,
+            config_discovery,
             cache,
             printer,
             preview,
@@ -549,7 +549,7 @@ async fn lock_and_sync(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: &Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -575,7 +575,7 @@ async fn lock_and_sync(
             Some(project.workspace()),
             &groups,
             project_dir,
-            no_config,
+            config_discovery,
         )
         .await?;
         let interpreter = ProjectInterpreter::discover(
@@ -606,7 +606,7 @@ async fn lock_and_sync(
             python_preference,
             python_downloads,
             no_sync,
-            no_config,
+            config_discovery,
             active,
             cache,
             DryRun::Disabled,

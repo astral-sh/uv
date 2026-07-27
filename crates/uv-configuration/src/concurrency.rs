@@ -20,6 +20,10 @@ pub struct Concurrency {
     ///
     /// Note this value must be non-zero.
     pub installs: usize,
+    /// The maximum number of concurrent cache reads.
+    ///
+    /// Note this value must be non-zero.
+    pub cache_reads: usize,
     /// A global semaphore to limit the number of concurrent downloads.
     pub downloads_semaphore: Arc<Semaphore>,
     /// A global semaphore to limit the number of concurrent builds.
@@ -34,13 +38,19 @@ impl fmt::Debug for Concurrency {
             .field("downloads", &self.downloads)
             .field("builds", &self.builds)
             .field("installs", &self.installs)
+            .field("cache_reads", &self.cache_reads)
             .finish()
     }
 }
 
 impl Default for Concurrency {
     fn default() -> Self {
-        Self::new(Self::DEFAULT_DOWNLOADS, Self::threads(), Self::threads())
+        Self::new(
+            Self::DEFAULT_DOWNLOADS,
+            Self::threads(),
+            Self::threads(),
+            Self::DEFAULT_CACHE_READS,
+        )
     }
 }
 
@@ -48,12 +58,16 @@ impl Concurrency {
     // The default concurrent downloads limit.
     pub const DEFAULT_DOWNLOADS: usize = 50;
 
+    // The default concurrent cache reads limit.
+    pub const DEFAULT_CACHE_READS: usize = 4;
+
     /// Create a new [`Concurrency`] with the given limits.
-    pub fn new(downloads: usize, builds: usize, installs: usize) -> Self {
+    pub fn new(downloads: usize, builds: usize, installs: usize, cache_reads: usize) -> Self {
         Self {
             downloads,
             builds,
             installs,
+            cache_reads,
             downloads_semaphore: Arc::new(Semaphore::new(downloads)),
             builds_semaphore: Arc::new(Semaphore::new(builds)),
         }

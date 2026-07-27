@@ -26,10 +26,7 @@ fn branching_urls_disjoint() -> Result<()> {
     make_project(context.temp_dir.path(), "a", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     "
@@ -60,10 +57,7 @@ fn branching_urls_overlapping() -> Result<()> {
     make_project(context.temp_dir.path(), "a", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to resolve dependencies for `a` (v0.1.0)
       ╰─▶ Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version == '3.11.*'`:
@@ -128,10 +122,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to resolve dependencies for `b2` (v0.1.0)
       ╰─▶ Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version >= '3.12'`:
@@ -150,8 +141,8 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
 ///
 /// Requirements:
 /// ```text
-/// a -> anyio==4.4.0 ; python_version >= '3.12'
-///  a -> anyio==4.3.0 ; python_version < '3.12'
+/// a -> anyio==4.3.0 ; python_version >= '3.12'
+///  a -> anyio==4.2.0 ; python_version < '3.12'
 /// a -> b -> b1 ; python_version < '3.12' -> https://../iniconfig-1.1.1-py3-none-any.whl
 /// a -> b -> b2 ; python_version >= '3.12' -> https://../iniconfig-2.0.0-py3-none-any.whl
 /// ```
@@ -200,10 +191,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
     "
@@ -356,8 +344,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
 ///
 /// Requirements:
 /// ```
-/// a -> anyio==4.4.0 ; python_version >= '3.12'
-/// a -> anyio==4.3.0 ; python_version < '3.12'
+/// a -> anyio==4.3.0 ; python_version >= '3.12'
+/// a -> anyio==4.2.0 ; python_version < '3.12'
 /// a -> b1 ; python_version < '3.12' -> iniconfig==1.1.1
 /// a -> b2 ; python_version >= '3.12' -> iniconfig==2.0.0
 /// ```
@@ -397,10 +385,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 9 packages in [TIME]
     "
@@ -559,10 +544,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     make_project(context.temp_dir.path(), "a", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     "
@@ -646,10 +628,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     make_project(context.temp_dir.path(), "a", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     "
@@ -730,10 +709,7 @@ fn branching_urls_of_different_sources_conflict() -> Result<()> {
     make_project(context.temp_dir.path(), "a", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to resolve dependencies for `a` (v0.1.0)
       ╰─▶ Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version == '3.11.*'`:
@@ -777,10 +753,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     make_project(&context.temp_dir.join("c"), "c", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&context.temp_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     "

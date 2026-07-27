@@ -1167,13 +1167,13 @@ pub enum BumpCommand {
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 struct VersionSmall {
+    /// The representation discussed above.
+    repr: u64,
     /// The number of segments in the release component.
     ///
     /// PEP 440 considers `1.2`  equivalent to `1.2.0.0`, but we want to preserve trailing zeroes
     /// in roundtrips, as the "full" version representation also does.
     len: u8,
-    /// The representation discussed above.
-    repr: u64,
     /// Force a niche into the aligned type so the [`Version`] enum is two words instead of three.
     _force_niche: NonZero<u8>,
 }
@@ -4373,6 +4373,11 @@ mod tests {
     fn type_size() {
         assert_eq!(size_of::<VersionSmall>(), size_of::<usize>() * 2);
         assert_eq!(size_of::<Version>(), size_of::<usize>() * 2);
+        #[cfg(feature = "rkyv")]
+        {
+            assert_eq!(size_of::<rkyv::Archived<VersionSmall>>(), 16);
+            assert_eq!(size_of::<rkyv::Archived<Version>>(), 24);
+        }
     }
 
     /// Test major bumping

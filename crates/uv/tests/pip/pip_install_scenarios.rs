@@ -60,10 +60,7 @@ fn backtrack_to_missing_package() {
         .arg("a")
         .arg("b")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because c was not found in the package registry and a<=1.0.0 depends on c, we can conclude that a<=1.0.0 cannot be used.
@@ -110,10 +107,7 @@ fn backtrack_with_missing_package() {
         .arg("a")
         .arg("b")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -146,10 +140,7 @@ fn requires_exact_version_does_not_exist() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==2.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of a==2.0.0 and you require a==2.0.0, we can conclude that your requirements are unsatisfiable.
@@ -179,10 +170,7 @@ fn requires_greater_version_does_not_exist() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a<=1.0.0 is available and you require a>1.0.0, we can conclude that your requirements are unsatisfiable.
@@ -213,10 +201,7 @@ fn requires_less_version_does_not_exist() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<2.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a>=2.0.0 is available and you require a<2.0.0, we can conclude that your requirements are unsatisfiable.
@@ -243,10 +228,7 @@ fn requires_package_does_not_exist() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because a was not found in the package registry and you require a, we can conclude that your requirements are unsatisfiable.
@@ -278,10 +260,7 @@ fn transitive_requires_package_does_not_exist() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because b was not found in the package registry and all versions of a depend on b, we can conclude that all versions of a cannot be used.
@@ -361,10 +340,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
         .arg("b>=2.0.0,<3.0.0")
         .arg("c")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because a<=1.0.0 depends on b==1.0.0 and c<=1.0.0 depends on a<2.0.0, we can conclude that c<=1.0.0 depends on b==1.0.0.
@@ -442,10 +418,7 @@ fn dependency_excludes_range_of_compatible_versions() {
         .arg("b>=2.0.0,<3.0.0")
         .arg("c")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because a<=1.0.0 depends on b==1.0.0 and c<=1.0.0 depends on a<2.0.0, we can conclude that c<=1.0.0 depends on b==1.0.0.
@@ -498,10 +471,7 @@ fn excluded_only_compatible_version() {
         .arg("a!=2.0.0")
         .arg("b>=2.0.0,<3.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because a<=1.0.0 depends on b==1.0.0 and a>=3.0.0 depends on b==3.0.0, we can conclude that all of:
@@ -542,10 +512,7 @@ fn excluded_only_version() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a!=1.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.0.0 is available and you require one of:
@@ -602,10 +569,7 @@ fn all_extras_required() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[all]")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -650,10 +614,7 @@ fn extra_does_not_exist_backtrack() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra]")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -697,10 +658,7 @@ fn extra_incompatible_with_extra_not_requested() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra-c]")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -745,10 +703,7 @@ fn extra_incompatible_with_extra() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra-b,extra-c]")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of a[extra-c] depend on b==2.0.0 and all versions of a[extra-b] depend on b==1.0.0, we can conclude that all versions of a[extra-b] and all versions of a[extra-c] are incompatible.
@@ -789,10 +744,7 @@ fn extra_incompatible_with_root() {
         .arg("a[extra]")
         .arg("b==2.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of a[extra] depend on b==1.0.0 and you require a[extra], we can conclude that you require b==1.0.0.
@@ -830,10 +782,7 @@ fn extra_required() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra]")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -866,10 +815,7 @@ fn missing_extra() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra]")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -914,10 +860,7 @@ fn multiple_extras_required() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a[extra-b,extra-c]")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -956,10 +899,7 @@ fn direct_incompatible_versions() {
         .arg("a==1.0.0")
         .arg("a==2.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because you require a==1.0.0 and a==2.0.0, we can conclude that your requirements are unsatisfiable.
@@ -993,10 +933,7 @@ fn transitive_incompatible_versions() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of a depend on b==2.0.0 and b==1.0.0, we can conclude that all versions of a cannot be used.
@@ -1035,10 +972,7 @@ fn transitive_incompatible_with_root_version() {
         .arg("a")
         .arg("b==1.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of a depend on b==2.0.0 and you require a, we can conclude that you require b==2.0.0.
@@ -1082,10 +1016,7 @@ fn transitive_incompatible_with_transitive() {
         .arg("a")
         .arg("b")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of b depend on c==2.0.0 and all versions of a depend on c==1.0.0, we can conclude that all versions of a and all versions of b are incompatible.
@@ -1118,10 +1049,7 @@ fn local_greater_than_or_equal() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1.2.3")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1153,10 +1081,7 @@ fn local_greater_than() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.2.3+foo is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
@@ -1187,10 +1112,7 @@ fn local_less_than_or_equal() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<=1.2.3")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1222,10 +1144,7 @@ fn local_less_than() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<1.2.3")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.2.3+foo is available and you require a<1.2.3, we can conclude that your requirements are unsatisfiable.
@@ -1258,10 +1177,7 @@ fn local_not_latest() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1294,10 +1210,7 @@ fn local_not_used_with_sdist() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1331,10 +1244,7 @@ fn local_simple() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1379,10 +1289,7 @@ fn local_transitive_backtrack() {
         .arg("a")
         .arg("b==2.0.0+foo")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -1424,10 +1331,7 @@ fn local_transitive_conflicting() {
         .arg("a")
         .arg("b==2.0.0+foo")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of a depend on b==2.0.0+bar and you require a, we can conclude that you require b==2.0.0+bar.
@@ -1466,10 +1370,7 @@ fn local_transitive_confounding() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -1512,10 +1413,7 @@ fn local_transitive_greater_than_or_equal() {
         .arg("a")
         .arg("b==2.0.0+foo")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -1557,10 +1455,7 @@ fn local_transitive_greater_than() {
         .arg("a")
         .arg("b==2.0.0+foo")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of a depend on b>2.0.0 and you require a, we can conclude that you require b>2.0.0.
@@ -1600,10 +1495,7 @@ fn local_transitive_less_than_or_equal() {
         .arg("a")
         .arg("b==2.0.0+foo")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -1645,10 +1537,7 @@ fn local_transitive_less_than() {
         .arg("a")
         .arg("b==2.0.0+foo")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of a depend on b<2.0.0 and you require a, we can conclude that you require b<2.0.0.
@@ -1688,10 +1577,7 @@ fn local_transitive() {
         .arg("a")
         .arg("b==2.0.0+foo")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -1727,10 +1613,7 @@ fn local_used_without_sdist() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1763,10 +1646,7 @@ fn post_equal_available() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3.post0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1799,10 +1679,7 @@ fn post_equal_not_available() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3.post0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of a==1.2.3.post0 and you require a==1.2.3.post0, we can conclude that your requirements are unsatisfiable.
@@ -1833,10 +1710,7 @@ fn post_greater_than_or_equal_post() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1.2.3.post0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1868,10 +1742,7 @@ fn post_greater_than_or_equal() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1.2.3")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1905,10 +1776,7 @@ fn post_greater_than_post_not_available() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3.post2")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a<=1.2.3.post1 is available and you require a>1.2.3.post2, we can conclude that your requirements are unsatisfiable.
@@ -1939,10 +1807,7 @@ fn post_greater_than_post_prerelease_ordering() {
         .arg("--prerelease=allow")
         .arg("a>1.2.3.post0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1975,10 +1840,7 @@ fn post_greater_than_post() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3.post0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2010,10 +1872,7 @@ fn post_greater_than() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.2.3.post1 is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
@@ -2042,10 +1901,7 @@ fn post_less_than_or_equal() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<=1.2.3")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.2.3.post1 is available and you require a<=1.2.3, we can conclude that your requirements are unsatisfiable.
@@ -2075,10 +1931,7 @@ fn post_less_than_post_prerelease_ordering() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<1.2.3.post1")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2110,10 +1963,7 @@ fn post_less_than() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<1.2.3")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.2.3.post1 is available and you require a<1.2.3, we can conclude that your requirements are unsatisfiable.
@@ -2143,10 +1993,7 @@ fn post_local_greater_than_post() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3.post1")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a<=1.2.3.post1 is available and you require a>1.2.3.post1, we can conclude that your requirements are unsatisfiable.
@@ -2176,10 +2023,7 @@ fn post_local_greater_than() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>1.2.3")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a<=1.2.3.post1+local is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
@@ -2208,10 +2052,7 @@ fn post_simple() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.2.3")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of a==1.2.3 and you require a==1.2.3, we can conclude that your requirements are unsatisfiable.
@@ -2245,10 +2086,7 @@ fn post_transitive_less_than_post_prerelease_ordering() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -2286,10 +2124,7 @@ fn package_multiple_prereleases_kinds() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1.0.0a1")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2325,10 +2160,7 @@ fn package_multiple_prereleases_numbers() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=1.0.0a1")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2362,10 +2194,7 @@ fn package_only_prereleases_boundary() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<0.2.0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2398,10 +2227,7 @@ fn package_only_prereleases_in_range() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>0.1.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
@@ -2433,10 +2259,7 @@ fn package_only_prereleases() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2474,10 +2297,7 @@ fn package_prerelease_specified_mixed_available() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=0.1.0a1")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2514,10 +2334,7 @@ fn package_prerelease_specified_only_final_available() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=0.1.0a1")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2555,10 +2372,7 @@ fn package_prerelease_specified_only_prerelease_available() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=0.1.0a1")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2593,10 +2407,7 @@ fn package_prereleases_boundary() {
         .arg("--prerelease=allow")
         .arg("a<0.2.0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2631,10 +2442,7 @@ fn package_prereleases_global_boundary() {
         .arg("--prerelease=allow")
         .arg("a<0.2.0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2672,10 +2480,7 @@ fn package_prereleases_specifier_boundary() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<0.2.0a2")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2711,10 +2516,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
         .arg("--prerelease=allow")
         .arg("a>0.1.0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2747,10 +2549,7 @@ fn requires_package_prerelease_and_final_any() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -2792,10 +2591,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
         .arg("a")
         .arg("b>0.0.0a1")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -2834,10 +2630,7 @@ fn transitive_package_only_prereleases_in_range() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only b<=0.1 is available and all versions of a depend on b>0.1, we can conclude that all versions of a cannot be used.
@@ -2874,10 +2667,7 @@ fn transitive_package_only_prereleases() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -2968,10 +2758,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
         .arg("a")
         .arg("b")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of c are available:
@@ -3075,10 +2862,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
         .arg("a")
         .arg("b")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of b depend on c and only c<2.0.0b1 is available, we can conclude that all versions of b depend on c<2.0.0b1.
@@ -3131,10 +2915,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
         .arg("b")
         .arg("c>=0.0.0a1")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -3183,10 +2964,7 @@ fn transitive_prerelease_and_stable_dependency() {
         .arg("a")
         .arg("b")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
@@ -3229,10 +3007,7 @@ fn python_greater_than_current_backtrack() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3271,10 +3046,7 @@ fn python_greater_than_current_excluded() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=2.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==2.0.0 depends on Python>=3.10, we can conclude that a==2.0.0 cannot be used.
@@ -3338,10 +3110,7 @@ fn python_greater_than_current_many() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of a==1.0.0 and you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
@@ -3372,10 +3141,7 @@ fn python_greater_than_current_patch() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.13) does not satisfy Python>=3.13.2 and a==1.0.0 depends on Python>=3.13.2, we can conclude that a==1.0.0 cannot be used.
@@ -3406,10 +3172,7 @@ fn python_greater_than_current() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
@@ -3440,10 +3203,7 @@ fn python_less_than_current() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3475,10 +3235,7 @@ fn python_version_does_not_exist() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a==1.0.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.30 and a==1.0.0 depends on Python>=3.30, we can conclude that a==1.0.0 cannot be used.
@@ -3523,10 +3280,7 @@ fn dependency_groups() {
         .arg("sortedcontainers==2.4.0")
         .arg("typing-extensions==4.10.0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -3565,10 +3319,7 @@ fn single_package() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3600,10 +3351,7 @@ fn canonical_empty_requirement() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a<0.dev0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ you require a<0.dev0, which does not allow any versions
@@ -3644,10 +3392,7 @@ fn equivalent_dependency_ranges() {
         .arg("a")
         .arg("c>=2.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of a depend on c<=1.0 and you require a, we can conclude that you require c<=1.0.
@@ -3681,10 +3426,7 @@ fn no_binary() {
         .arg("a")
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3717,10 +3459,7 @@ fn no_build() {
         .arg("a")
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3752,10 +3491,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp312`), we can conclude that all versions of a cannot be used.
@@ -3788,10 +3524,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`), we can conclude that all versions of a cannot be used.
@@ -3824,10 +3557,7 @@ fn no_sdist_no_wheels_with_matching_python() {
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp312`), we can conclude that all versions of a cannot be used.
@@ -3861,10 +3591,7 @@ fn no_wheels_no_build() {
         .arg("a")
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no usable wheels, we can conclude that all versions of a cannot be used.
@@ -3896,10 +3623,7 @@ fn no_wheels_with_matching_platform() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3928,10 +3652,7 @@ fn no_wheels() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -3962,10 +3683,7 @@ fn only_wheels_no_binary() {
         .arg("a")
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no source distribution, we can conclude that all versions of a cannot be used.
@@ -3997,10 +3715,7 @@ fn only_wheels() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4029,10 +3744,7 @@ fn specific_tag_and_default() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4062,10 +3774,7 @@ fn package_only_yanked_in_range() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>0.1.0")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of a are available:
@@ -4099,10 +3808,7 @@ fn package_only_yanked() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only a==1.0.0 is available and a==1.0.0 was yanked, we can conclude that all versions of a cannot be used.
@@ -4137,10 +3843,7 @@ fn package_yanked_specified_mixed_available() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>=0.1.0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4173,10 +3876,7 @@ fn requires_package_yanked_and_unyanked_any() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -4216,10 +3916,7 @@ fn transitive_package_only_yanked_in_range_opt_in() {
         .arg("a")
         .arg("b==1.0.0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -4259,10 +3956,7 @@ fn transitive_package_only_yanked_in_range() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of b are available:
@@ -4300,10 +3994,7 @@ fn transitive_package_only_yanked() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only b==1.0.0 is available and b==1.0.0 was yanked, we can conclude that all versions of b cannot be used.
@@ -4349,10 +4040,7 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
         .arg("b")
         .arg("c==2.0.0")
         , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -4401,10 +4089,7 @@ fn transitive_yanked_and_unyanked_dependency() {
         .arg("a")
         .arg("b")
         , @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because c==2.0.0 was yanked and all versions of a depend on c==2.0.0, we can conclude that all versions of a cannot be used.

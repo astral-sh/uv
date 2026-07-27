@@ -443,14 +443,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 self.options.resolution_mode,
                                 ResolutionMode::Lowest | ResolutionMode::Highest
                             ) {
+                                let marker = resolution
+                                    .env
+                                    .try_universal_markers()
+                                    .unwrap_or(UniversalMarker::TRUE);
                                 for (package, version) in &resolution.nodes {
                                     preferences.insert(
                                         package.name.clone(),
                                         package.index.clone(),
-                                        resolution
-                                            .env
-                                            .try_universal_markers()
-                                            .unwrap_or(UniversalMarker::TRUE),
+                                        marker,
                                         version.clone(),
                                         PreferenceSource::Resolver,
                                     );
@@ -622,11 +623,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 self.on_progress(next_package, &version);
 
-                if !state
+                if state
                     .added_dependencies
-                    .entry(next_id)
-                    .or_default()
-                    .insert(version.clone())
+                    .get(&next_id)
+                    .is_some_and(|versions| versions.contains(&version))
                 {
                     // `dep_incompats` are already in `incompatibilities` so we know there are not satisfied
                     // terms and can add the decision directly.
@@ -662,6 +662,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             ));
                     }
                     ForkedDependencies::Unforked(dependencies) => {
+                        state
+                            .added_dependencies
+                            .entry(next_id)
+                            .or_default()
+                            .insert(version.clone());
+
                         // Enrich the state with any URLs, etc.
                         state
                             .visit_package_version_dependencies(
@@ -697,6 +703,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         mut forks,
                         diverging_packages,
                     } => {
+                        state
+                            .added_dependencies
+                            .entry(next_id)
+                            .or_default()
+                            .insert(version.clone());
+
                         debug!(
                             "Pre-fork {} took {:.3}s",
                             state.env,
@@ -735,6 +747,55 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             forked_states.push(new_fork_state?);
                         }
                         continue 'FORK;
+                    }
+                    ForkedDependencies::RequiresPython(requires_python) => {
+                        if matches!(self.options.fork_strategy, ForkStrategy::RequiresPython)
+                            && state.env.marker_environment().is_none()
+                        {
+                            let forks = fork_version_by_python_requirement(
+                                &requires_python,
+                                &state.python_requirement,
+                                &state.env,
+                            );
+                            if !forks.is_empty() {
+                                debug!(
+                                    "Forking Python requirement `{}` on `{}` for {}=={} ({})",
+                                    state.python_requirement.target(),
+                                    &requires_python,
+                                    next_package,
+                                    version,
+                                    forks
+                                        .iter()
+                                        .map(ToString::to_string)
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                );
+
+                                // Revisit the version in each fork so its dependencies are added
+                                // under the narrowed Python requirement.
+                                let forks = forks
+                                    .into_iter()
+                                    .map(|env| VersionFork {
+                                        env,
+                                        id: next_id,
+                                        version: None,
+                                    })
+                                    .collect();
+                                forked_states
+                                    .extend(self.version_forks_to_fork_states(state, forks));
+                                continue 'FORK;
+                            }
+                        }
+
+                        state
+                            .pubgrub
+                            .add_incompatibility(Incompatibility::custom_version(
+                                next_id,
+                                version.clone(),
+                                UnavailableReason::Version(UnavailableVersion::RequiresPython(
+                                    requires_python,
+                                )),
+                            ));
                     }
                 }
             }
@@ -1643,7 +1704,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // ...and the non-local version has greater platform support...
         let mut remainder = {
             let mut remainder = base_dist.implied_markers();
-            remainder.and(dist.implied_markers().negate());
+            remainder = remainder.and(dist.implied_markers().negate());
             remainder
         };
         if remainder.is_false() {
@@ -1712,7 +1773,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if dist.implied_markers().is_disjoint(sys_platform)
                 && !remainder.is_disjoint(sys_platform)
             {
-                remainder.or(sys_platform);
+                remainder = remainder.or(sys_platform);
             }
         }
 
@@ -1860,6 +1921,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Available(deps) | Dependencies::Unforkable(deps) => {
                     ForkedDependencies::Unforked(deps)
                 }
+                Dependencies::RequiresPython(requires_python) => {
+                    ForkedDependencies::RequiresPython(requires_python)
+                }
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
             })
         } else {
@@ -1982,12 +2046,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 };
 
                 // If there was no requires-python on the index page, we may have an incompatible
-                // distribution.
+                // distribution or need to fork.
                 if let Some(requires_python) = &metadata.requires_python {
                     if !python_requirement.target().is_contained_by(requires_python) {
-                        return Ok(Dependencies::Unavailable(
-                            UnavailableVersion::RequiresPython(requires_python.clone()),
-                        ));
+                        return Ok(Dependencies::RequiresPython(requires_python.clone()));
                     }
                 }
 
@@ -2197,12 +2259,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 ) {
                     let requirement = match requirement {
                         Cow::Owned(mut requirement) => {
-                            requirement.marker.and(marker);
+                            requirement.marker = requirement.marker.and(marker);
                             requirement
                         }
                         Cow::Borrowed(requirement) => {
                             let mut marker = marker;
-                            marker.and(requirement.marker);
+                            marker = marker.and(requirement.marker);
                             Requirement {
                                 name: requirement.name.clone(),
                                 extras: requirement.extras.clone(),
@@ -2276,6 +2338,35 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .excludes
                     .contains_for_package(exclusion_package, &requirement.name)
             })
+            .map(move |mut requirement| {
+                // Split the marker into production and optional components. If we have e.g.
+                // `foo; sys_platform == 'win32' or extra == 'feature'`
+                // we split it into
+                // `foo; sys_platform == 'win32'` (production) when `extra` is `None`,
+                // `foo; extra == 'feature'` (optional) when `extra` is `Some("feature")`.
+                // The requirements are then separately tracked in production and optional
+                // dependencies respectively.
+
+                let marker = match extra {
+                    Some(extra) => requirement
+                        .marker
+                        .simplify_extras(slice::from_ref(extra))
+                        .simplify_not_extras_with(|candidate| candidate != extra)
+                        .and(
+                            requirement
+                                .marker
+                                .simplify_not_extras_with(|_| true)
+                                .negate(),
+                        ),
+                    None => requirement.marker.simplify_not_extras_with(|_| true),
+                };
+
+                if requirement.marker != marker {
+                    requirement.to_mut().marker = marker;
+                }
+
+                requirement
+            })
             .filter(move |requirement| {
                 Self::is_requirement_applicable(
                     requirement,
@@ -2308,15 +2399,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // If the requirement isn't relevant for the current platform, skip it.
         match extra {
             Some(source_extra) => {
-                // Only include requirements that are relevant for the current extra.
-                if requirement.evaluate_markers(env.marker_environment(), &[]) {
+                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
                     return false;
                 }
-                if !requirement
-                    .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
-                {
-                    return false;
-                }
+
                 if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
                 {
                     return false;
@@ -2377,7 +2463,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         Cow::Borrowed(constraint)
                     } else {
                         let mut marker = constraint.marker;
-                        marker.and(requirement.marker);
+                        marker = marker.and(requirement.marker);
 
                         if marker.is_false() {
                             trace!(
@@ -2401,7 +2487,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let requires_python = python_requirement.target();
 
                     let mut marker = constraint.marker;
-                    marker.and(requirement.marker);
+                    marker = marker.and(requirement.marker);
 
                     if marker.is_false() {
                         trace!(
@@ -3831,6 +3917,8 @@ enum Dependencies {
     /// `PubGrubPackage` values in this list to have the same package name.
     /// These conflicts are resolved via `Dependencies::fork`.
     Available(Vec<PubGrubDependency>),
+    /// Package metadata has a `Requires-Python` specifier that is incompatible with the target.
+    RequiresPython(VersionSpecifiers),
     /// Dependencies that should never result in a fork.
     ///
     /// For example, the dependencies of a `Marker` package will have the
@@ -3855,6 +3943,9 @@ impl Dependencies {
         let deps = match self {
             Self::Available(deps) => deps,
             Self::Unforkable(deps) => return ForkedDependencies::Unforked(deps),
+            Self::RequiresPython(requires_python) => {
+                return ForkedDependencies::RequiresPython(requires_python);
+            }
             Self::Unavailable(err) => return ForkedDependencies::Unavailable(err),
         };
         let mut name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>> = BTreeMap::new();
@@ -3907,6 +3998,8 @@ enum ForkedDependencies {
         /// The package(s) with different requirements for disjoint markers.
         diverging_packages: Vec<PackageName>,
     },
+    /// Package metadata has a `Requires-Python` specifier that is incompatible with the target.
+    RequiresPython(VersionSpecifiers),
 }
 
 /// A list of forks determined from the dependencies of a single package.
@@ -4410,11 +4503,11 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
             }
 
             let mut next_environment = state.package_store[*child].marker();
-            next_environment.and(current_environment);
+            next_environment = next_environment.and(current_environment);
 
             let entry = environments.entry(*child).or_insert(MarkerTree::FALSE);
             let mut combined = *entry;
-            combined.or(next_environment);
+            combined = combined.or(next_environment);
             if combined != *entry {
                 *entry = combined;
                 queue.push_back(*child);

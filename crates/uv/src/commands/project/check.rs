@@ -10,10 +10,11 @@ use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
     InstallOptions,
 };
+use uv_fs::normalize_path;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
 };
 use uv_scripts::Pep723Script;
@@ -33,6 +34,7 @@ use crate::commands::project::{
     validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::workspace::list::find_scripts;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
@@ -48,6 +50,8 @@ pub(crate) async fn check(
     frozen: Option<FrozenSource>,
     no_sync: bool,
     isolated: bool,
+    all_packages: bool,
+    package: Vec<PackageName>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     python: Option<String>,
@@ -66,13 +70,13 @@ pub(crate) async fn check(
     printer: Printer,
     preview: Preview,
     no_project: bool,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeature::Check) {
+    if !preview.is_enabled(PreviewFeature::CheckCommand) {
         warn_user!(
             "`uv check` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::Check
+            PreviewFeature::CheckCommand
         );
     }
 
@@ -80,22 +84,47 @@ pub(crate) async fn check(
     let project = if no_project || script.is_some() {
         None
     } else {
-        match VirtualProject::discover(
-            project_dir,
-            &DiscoveryOptions::default(),
-            cache,
-            workspace_cache,
-        )
-        .await
-        {
-            Ok(project) => Some(project),
+        let discovery = if let [name] = package.as_slice() {
+            VirtualProject::discover_with_package(
+                project_dir,
+                &DiscoveryOptions::default(),
+                cache,
+                workspace_cache,
+                name.clone(),
+            )
+            .await
+        } else {
+            VirtualProject::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                cache,
+                workspace_cache,
+            )
+            .await
+        };
+
+        match discovery {
+            Ok(project) => {
+                for name in &package {
+                    if !project.workspace().packages().contains_key(name) {
+                        anyhow::bail!("Package `{name}` not found in workspace");
+                    }
+                }
+                Some(project)
+            }
             Err(err) => {
-                if matches!(
-                    err.as_ref(),
-                    WorkspaceErrorKind::MissingPyprojectToml
-                        | WorkspaceErrorKind::MissingProject(_)
-                        | WorkspaceErrorKind::NonWorkspace(_),
-                ) {
+                if let WorkspaceErrorKind::NoSuchMember(name, _) = err.as_ref() {
+                    anyhow::bail!("Package `{name}` not found in workspace");
+                }
+                if !all_packages
+                    && package.is_empty()
+                    && matches!(
+                        err.as_ref(),
+                        WorkspaceErrorKind::MissingPyprojectToml
+                            | WorkspaceErrorKind::MissingProject(_)
+                            | WorkspaceErrorKind::NonWorkspace(_),
+                    )
+                {
                     None
                 } else {
                     return Err(err.into());
@@ -138,12 +167,123 @@ pub(crate) async fn check(
         }
     }
 
+    let is_virtual_workspace = project
+        .as_ref()
+        .is_some_and(|project| project.project_name().is_none());
+    let defacto_all_packages = all_packages || (is_virtual_workspace && package.is_empty());
+
     let target_dir = script
         .as_ref()
         .and_then(|script| script.path.parent())
         .map(Path::to_path_buf)
-        .or_else(|| project.as_ref().map(|project| project.root().to_owned()))
+        .or_else(|| {
+            project.as_ref().map(|project| {
+                // If multiple packages are selected, or the package is outside the workspace dir,
+                // require analysis to run in the workspace dir.
+                if defacto_all_packages
+                    || package.len() > 1
+                    || !normalize_path(project.root())
+                        .starts_with(project.workspace().install_path())
+                {
+                    project.workspace().install_path().to_owned()
+                } else {
+                    project.root().to_owned()
+                }
+            })
+        })
         .unwrap_or_else(|| project_dir.to_owned());
+
+    let check_targets = if let Some(script) = script.as_ref() {
+        vec![script.path.clone()]
+    } else if let Some(project) = project.as_ref() {
+        if defacto_all_packages {
+            // In --all-packages mode, and anything equivalent like virtual workspaces,
+            // we can't just pass ty the root of the project because:
+            //
+            // * It excludes members of the workspace that aren't nested under the root,
+            //   as constructs like `members = ["../foo"]` are legal.
+            // * For virtual workspaces, this can include files that are not strictly
+            //   part of any member, such as `scripts/myscript.py`
+            //
+            // The first issue is definitely important to handle, but the second issue
+            // is debatable. It is in fact Useful for ty to find and check all your
+            // random scripts, and indeed this is the default ty behaviour. Attempting
+            // to manually suppress this behaviour is an attempt to maintain "uv-like"
+            // behaviour, but if anyone disagrees we can change this by just always
+            // including the workspace root, even for virtual workspaces.
+            project
+                .workspace()
+                .packages()
+                .values()
+                .map(|member| member.root().clone())
+                .collect()
+        } else if !package.is_empty() {
+            // If the user has specified a list of packages, tell ty to only check those packages.
+            package
+                .iter()
+                .map(|name| {
+                    project
+                        .workspace()
+                        .packages()
+                        .get(name)
+                        .map(|member| member.root().clone())
+                        .ok_or_else(|| anyhow::anyhow!("Package `{name}` not found in workspace"))
+                })
+                .collect::<Result<Vec<_>>>()?
+        } else {
+            // Otherwise we're checking just this one package (nearest ancestor).
+            vec![project.root().to_owned()]
+        }
+    } else {
+        Vec::new()
+    };
+
+    // Any selected package can contain other workspace members, even in a virtual workspace.
+    // Explicitly exclude any workspace members that aren't selected *and are nested under
+    // a selected one*, so ty doesn't emit diagnostics for them (if they're dependencies
+    // of selected packages that's fine, ty will still find them for those purposes).
+    //
+    // The most common case this is handling is a non-virtual workspace, where the root
+    // package will almost always have the other packages nested under it, and we need a
+    // way to select just the workspace root.
+    let mut excluded_targets = if let Some(project) = project.as_ref()
+        && !defacto_all_packages
+    {
+        project
+            .workspace()
+            .packages()
+            .iter()
+            .filter(|(name, member)| {
+                let selected = if package.is_empty() {
+                    project.project_name() == Some(*name)
+                } else {
+                    package.contains(name)
+                };
+                !selected
+                    && check_targets
+                        .iter()
+                        .any(|target| member.root().starts_with(target))
+            })
+            .map(|(_, member)| member.root().clone())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    // PEP 723 scripts have independent environments and must be checked explicitly with
+    // `uv check --script`. Reuse `uv workspace list --scripts` discovery so scripts nested in
+    // selected workspace members are not checked against the project environment.
+    if let Some(project) = project.as_ref() {
+        excluded_targets.extend(
+            find_scripts(project.workspace().install_path(), cache)?
+                .into_iter()
+                .filter(|script| {
+                    check_targets
+                        .iter()
+                        .any(|target| script.starts_with(target))
+                }),
+        );
+    }
 
     let groups = if let Some(project) = &project {
         groups.with_defaults(default_dependency_groups(project.pyproject_toml())?)
@@ -165,7 +305,7 @@ pub(crate) async fn check(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
+                config_discovery,
                 Some(false),
                 cache,
                 printer,
@@ -183,7 +323,7 @@ pub(crate) async fn check(
                 workspace,
                 &groups,
                 project_dir,
-                no_config,
+                config_discovery,
             )
             .await?;
 
@@ -223,7 +363,7 @@ pub(crate) async fn check(
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             false,
-            false,
+            uv_virtualenv::Seed::Disabled,
             false,
         )?)
     } else {
@@ -231,7 +371,6 @@ pub(crate) async fn check(
     };
 
     // Select an environment and, if we found a project, sync it before running checks.
-    let mut workspace_metadata = None;
     let mut locked_ty_path = None;
     let venv_path = if let Some(script) = &script {
         let extras = extras.with_defaults(DefaultExtras::default());
@@ -246,7 +385,7 @@ pub(crate) async fn check(
                 python_downloads,
                 &install_mirrors,
                 no_sync,
-                no_config,
+                config_discovery,
                 Some(false),
                 cache,
                 DryRun::Disabled,
@@ -365,24 +504,10 @@ pub(crate) async fn check(
             );
         }
 
-        let lock = result.into_lock();
-        let metadata = crate::commands::workspace::metadata::metadata_from_target(
-            Some(&venv),
-            InstallTarget::Script {
-                script,
-                lock: &lock,
-            },
-            &extras,
-            &groups,
-            &settings.resolver,
-        )?;
-        let mut metadata = metadata.to_json()?;
-        metadata.push('\n');
-        workspace_metadata = Some(metadata);
-
         Some(venv.root().to_owned())
     } else if let Some(project) = &project {
         let extras = extras.with_defaults(DefaultExtras::default());
+        let mut malware_context = project::sync::MalwareCheckContext::from(&malware_settings);
 
         let venv = if let Some(venv) = isolated_venv {
             venv
@@ -396,7 +521,7 @@ pub(crate) async fn check(
                 python_preference,
                 python_downloads,
                 no_sync,
-                no_config,
+                config_discovery,
                 None,
                 cache,
                 DryRun::Disabled,
@@ -415,7 +540,7 @@ pub(crate) async fn check(
                 Some(project.workspace()),
                 &groups,
                 project_dir,
-                no_config,
+                config_discovery,
             )
             .await?;
             Some(
@@ -491,17 +616,12 @@ pub(crate) async fn check(
             Err(err) => return Err(err.into()),
         };
 
-        let target = match project {
-            VirtualProject::Project(project) => InstallTarget::Project {
-                workspace: project.workspace(),
-                name: project.project_name(),
-                lock: result.lock(),
-            },
-            VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-                workspace,
-                lock: result.lock(),
-            },
-        };
+        let target = project::sync::identify_project_installation_target(
+            project,
+            result.lock(),
+            all_packages,
+            &package,
+        );
 
         target.validate_extras(&extras)?;
         target.validate_groups(&groups)?;
@@ -543,6 +663,7 @@ pub(crate) async fn check(
                         .build_constraints(project.workspace().install_path()),
                     &base_interpreter,
                     &settings,
+                    &malware_settings,
                     &client_builder,
                     &ty_state,
                     Box::new(SummaryInstallLogger),
@@ -562,6 +683,7 @@ pub(crate) async fn check(
                     }
                     Err(err) => return Err(err.into()),
                 };
+                malware_context.record_resolution(&resolution);
                 PythonEnvironment::from(environment)
                     .scripts()
                     .join(format!("ty{}", std::env::consts::EXE_SUFFIX))
@@ -592,7 +714,7 @@ pub(crate) async fn check(
                 DryRun::Disabled,
                 printer,
                 preview,
-                &malware_settings,
+                malware_context,
             )
             .await
             {
@@ -605,30 +727,6 @@ pub(crate) async fn check(
                 Err(err) => return Err(err.into()),
             }
         }
-
-        let lock = result.into_lock();
-
-        let target = match project {
-            VirtualProject::Project(project) => InstallTarget::Project {
-                workspace: project.workspace(),
-                name: project.project_name(),
-                lock: &lock,
-            },
-            VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-                workspace,
-                lock: &lock,
-            },
-        };
-        let metadata = crate::commands::workspace::metadata::metadata_from_target(
-            (!no_sync).then_some(&venv),
-            target,
-            &extras,
-            &groups,
-            &settings.resolver,
-        )?;
-        let mut metadata = metadata.to_json()?;
-        metadata.push('\n');
-        workspace_metadata = Some(metadata);
 
         Some(venv.root().to_owned())
     } else {
@@ -645,9 +743,9 @@ pub(crate) async fn check(
         ty_version,
         ty_path.or(locked_ty_path),
         &target_dir,
-        script.as_ref().map(|script| script.path.as_path()),
+        &check_targets,
+        &excluded_targets,
         venv_path.as_deref(),
-        workspace_metadata,
         exclude_newer,
         show_version,
         &client_builder,

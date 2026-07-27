@@ -21,7 +21,7 @@ use uv_git::GIT;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
     VersionRequest,
 };
@@ -61,7 +61,7 @@ pub(crate) async fn init(
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -86,7 +86,7 @@ pub(crate) async fn init(
                 author_from,
                 pin_python,
                 package,
-                no_config,
+                config_discovery,
             )
             .await?;
 
@@ -160,7 +160,7 @@ pub(crate) async fn init(
                 client_builder,
                 python_preference,
                 python_downloads,
-                no_config,
+                config_discovery,
                 cache,
                 printer,
             ))
@@ -213,7 +213,7 @@ async fn init_script(
     author_from: Option<AuthorFrom>,
     pin_python: bool,
     package: bool,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
 ) -> Result<()> {
     if no_workspace {
         warn_user_once!("`--no-workspace` is a no-op for Python scripts, which are standalone");
@@ -262,7 +262,7 @@ async fn init_script(
         !pin_python,
         python_preference,
         python_downloads,
-        no_config,
+        config_discovery,
         client_builder,
         cache,
         &reporter,
@@ -300,7 +300,7 @@ async fn init_project(
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     printer: Printer,
 ) -> Result<()> {
@@ -381,7 +381,7 @@ async fn init_project(
                     .map(Workspace::install_path)
                     .map(PathBuf::as_ref),
             )
-            .with_no_config(no_config),
+            .with_config_discovery(config_discovery),
     )
     .await?
     {

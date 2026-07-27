@@ -4,11 +4,9 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{
-    Concurrency, DependencyGroupsWithDefaults, DryRun, ExtrasSpecificationWithDefaults,
-};
+use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::Metadata;
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -27,7 +25,7 @@ use crate::commands::{ExitStatus, UvError, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
-use super::module_owners::{collect_module_owners, find_module_owners};
+use super::module_owners::collect_module_owners;
 
 /// Display metadata about the workspace.
 pub(crate) async fn metadata(
@@ -37,6 +35,7 @@ pub(crate) async fn metadata(
     dry_run: DryRun,
     refresh: Refresh,
     sync: bool,
+    active: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     malware_settings: MalwareCheckSettings,
@@ -46,7 +45,7 @@ pub(crate) async fn metadata(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -90,8 +89,8 @@ pub(crate) async fn metadata(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
-                Some(false),
+                config_discovery,
+                Some(active),
                 cache,
                 printer,
             )
@@ -103,7 +102,7 @@ pub(crate) async fn metadata(
                     Some(workspace),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
@@ -115,7 +114,7 @@ pub(crate) async fn metadata(
                     python_downloads,
                     &install_mirrors,
                     false,
-                    Some(false),
+                    Some(active),
                     cache,
                     printer,
                 )
@@ -170,8 +169,8 @@ pub(crate) async fn metadata(
                 },
             };
             let mut export = metadata_for_target(install_target)?;
-            if sync {
-                let environment = match target {
+            let environment = if sync {
+                Some(match target {
                     LockTarget::Workspace(workspace) => ProjectEnvironment::get_or_init(
                         workspace,
                         &groups,
@@ -181,8 +180,8 @@ pub(crate) async fn metadata(
                         python_preference,
                         python_downloads,
                         false,
-                        no_config,
-                        Some(false),
+                        config_discovery,
+                        Some(active),
                         cache,
                         DryRun::Disabled,
                         LinkErrorReporting::User,
@@ -198,15 +197,27 @@ pub(crate) async fn metadata(
                         python_downloads,
                         &install_mirrors,
                         false,
-                        no_config,
-                        Some(false),
+                        config_discovery,
+                        Some(active),
                         cache,
                         DryRun::Disabled,
                         printer,
                     )
                     .await?
                     .into_environment()?,
-                };
+                })
+            } else {
+                match target {
+                    LockTarget::Workspace(workspace) => {
+                        ProjectInterpreter::discover_existing(workspace, Some(active), cache)?
+                    }
+                    LockTarget::Script(script) => {
+                        ScriptInterpreter::discover_existing(script.into(), Some(active), cache)
+                    }
+                }
+            };
+
+            if let Some(environment) = environment {
                 let _lock = environment
                     .lock()
                     .await
@@ -225,11 +236,12 @@ pub(crate) async fn metadata(
                     workspace_cache,
                     preview,
                     &malware_settings,
+                    sync,
                 )
                 .await
                 .context("Failed to collect module owners")?;
                 export = export
-                    .with_environment_root(environment.root())
+                    .with_environment(&environment)
                     .with_module_owners(module_owners);
             }
 
@@ -241,26 +253,6 @@ pub(crate) async fn metadata(
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
-}
-
-/// Build metadata from an existing lock and environment without synchronizing it.
-pub(crate) fn metadata_from_target(
-    environment: Option<&PythonEnvironment>,
-    target: InstallTarget<'_>,
-    extras: &ExtrasSpecificationWithDefaults,
-    groups: &DependencyGroupsWithDefaults,
-    settings: &ResolverSettings,
-) -> Result<Metadata> {
-    let mut export = metadata_for_target(target)?;
-    if let Some(environment) = environment {
-        let module_owners = find_module_owners(target, environment, extras, groups, settings)
-            .context("Failed to collect module owners")?;
-        export = export
-            .with_environment_root(environment.root())
-            .with_module_owners(module_owners);
-    }
-
-    Ok(export)
 }
 
 fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {

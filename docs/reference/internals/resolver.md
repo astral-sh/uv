@@ -181,10 +181,10 @@ security concern (`C` has not been reviewed, neither was `B==3`). It's possible 
 installation if that happens, but a late error, possibly during deployment, is a bad user
 experience. There is already a case where uv fails on installation, packages with no source
 distribution and only platform specific wheels incompatible with the current platform. While uv has
-[required environments](https://docs.astral.sh/uv/concepts/resolution/#required-environments) as
-mitigation, this requires a not well known configuration option, and questions around (un)supported
-environments are one of the most common problem for uv users. A similar situation with source
-distributions should be avoided.
+[required environments](../../concepts/resolution.md#required-environments) as mitigation, this
+requires a not well known configuration option, and questions around (un)supported environments are
+one of the most common problem for uv users. A similar situation with source distributions should be
+avoided.
 
 While older versions of torch and tensorflow had inconsistent metadata, all recent versions have
 consistent metadata, and we are not aware of any major package with inconsistent metadata. There is
@@ -198,7 +198,7 @@ are constrained to a specific torch version, and the runtime torch version must 
 version. These are currently a pain point across all package managers, as all major package managers
 from pip to uv cache source distribution builds. uv supports multiple builds depending on the
 version of the already installed package using
-[ `tool.uv.extra-build-dependencies`](https://docs.astral.sh/uv/concepts/projects/config/#augmenting-build-dependencies)
+[ `tool.uv.extra-build-dependencies`](../../concepts/projects/config.md#augmenting-build-dependencies)
 with `match-runtime = true`. This is a workaround that needs to be made on the user side for each
 affected package, instead of library developers declaring this requirement, which would be possible
 with native standards support.

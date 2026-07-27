@@ -17,7 +17,7 @@ use uv_configuration::{
 use uv_distribution_types::Verbatim;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
-use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_scripts::Pep723Script;
@@ -84,7 +84,7 @@ pub(crate) async fn export(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     quiet: bool,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
@@ -162,8 +162,8 @@ pub(crate) async fn export(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
-                no_config,
                 false,
+                config_discovery,
                 Some(false),
                 cache,
                 printer,
@@ -176,7 +176,7 @@ pub(crate) async fn export(
                     Some(project.workspace()),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(

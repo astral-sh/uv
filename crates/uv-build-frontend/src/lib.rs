@@ -378,7 +378,7 @@ impl SourceBuild {
                     uv_virtualenv::RemovalReason::TemporaryEnvironment,
                 ),
                 false,
-                false,
+                uv_virtualenv::Seed::Disabled,
                 false,
             )?
         };
@@ -611,11 +611,12 @@ impl SourceBuild {
             .as_ref()
             .and_then(|build_system| build_system.build_backend.as_deref());
 
-        if let Some(backend_path) = pyproject_toml
+        let backend_path = pyproject_toml
             .build_system
             .as_ref()
-            .and_then(|build_system| build_system.backend_path.as_ref())
-        {
+            .and_then(|build_system| build_system.backend_path.as_ref());
+
+        if let Some(backend_path) = backend_path {
             let source_tree = fs_err::canonicalize(source_tree).map_err(Error::Io)?;
             for path in backend_path.iter() {
                 if Path::new(path).is_absolute() {
@@ -639,8 +640,10 @@ impl SourceBuild {
         }
 
         // Only show the warning for first party and URL dependencies, not for registry dependencies
-        // (which have sources disabled).
+        // (which have sources disabled). In-tree build backends may wrap `uv_build`, so we don't
+        // warn for them either.
         if !no_sources.all()
+            && backend_path.is_none()
             && pyproject_toml
                 .tool
                 .as_ref()
@@ -818,16 +821,16 @@ impl SourceBuild {
 
             prepare_metadata_for_build = getattr(backend, "prepare_metadata_for_build_{}", None)
             if prepare_metadata_for_build:
-                dirname = prepare_metadata_for_build("{}", {})
+                dirname = prepare_metadata_for_build({}, {})
             else:
                 dirname = None
 
-            with open("{}", "w") as fp:
+            with open({}, "w") as fp:
                 fp.write(dirname or "")
             "#,
             self.pep517_backend.backend_import(),
             self.build_kind,
-            escape_path_for_python(&metadata_directory),
+            metadata_directory.escape_for_python(),
             self.config_settings.escape_for_python(),
             outfile.escape_for_python(),
         };
@@ -899,7 +902,7 @@ impl SourceBuild {
         let script = match self.build_kind {
             BuildKind::Sdist => {
                 debug!(
-                    r#"Calling `{}.build_{}("{}", {})`"#,
+                    r"Calling `{}.build_{}({}, {})`",
                     self.pep517_backend.backend,
                     self.build_kind,
                     output_dir.escape_for_python(),
@@ -909,8 +912,8 @@ impl SourceBuild {
                     r#"
                     {}
 
-                    sdist_filename = backend.build_{}("{}", {})
-                    with open("{}", "w") as fp:
+                    sdist_filename = backend.build_{}({}, {})
+                    with open({}, "w") as fp:
                         fp.write(sdist_filename)
                     "#,
                     self.pep517_backend.backend_import(),
@@ -924,11 +927,9 @@ impl SourceBuild {
                 let metadata_directory = self
                     .metadata_directory
                     .as_deref()
-                    .map_or("None".to_string(), |path| {
-                        format!(r#""{}""#, path.escape_for_python())
-                    });
+                    .map_or("None".to_string(), |path| path.escape_for_python());
                 debug!(
-                    r#"Calling `{}.build_{}("{}", {}, {})`"#,
+                    r"Calling `{}.build_{}({}, {}, {})`",
                     self.pep517_backend.backend,
                     self.build_kind,
                     output_dir.escape_for_python(),
@@ -939,8 +940,8 @@ impl SourceBuild {
                     r#"
                     {}
 
-                    wheel_filename = backend.build_{}("{}", {}, {})
-                    with open("{}", "w") as fp:
+                    wheel_filename = backend.build_{}({}, {}, {})
+                    with open({}, "w") as fp:
                         fp.write(wheel_filename)
                     "#,
                     self.pep517_backend.backend_import(),
@@ -1011,12 +1012,6 @@ impl SourceBuildTrait for SourceBuild {
     }
 }
 
-fn escape_path_for_python(path: &Path) -> String {
-    path.to_string_lossy()
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-}
-
 /// Not a method because we call it before the builder is completely initialized
 async fn create_pep517_build_environment(
     runner: &PythonRunner,
@@ -1062,7 +1057,7 @@ async fn create_pep517_build_environment(
             else:
                 requires = []
 
-            with open("{}", "w") as fp:
+            with open({}, "w") as fp:
                 json.dump(requires, fp)
         "#,
         pep517_backend.backend_import(),

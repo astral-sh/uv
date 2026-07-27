@@ -265,7 +265,7 @@ impl ResolverEnvironment {
                 ref exclude,
             } => {
                 let mut markers = *lhs;
-                markers.and(rhs);
+                markers = markers.and(rhs);
                 let kind = Kind::Universal {
                     initial_forks: Arc::clone(initial_forks),
                     markers,
@@ -598,7 +598,7 @@ impl Forker<'_> {
         envs.push(env.narrow_environment(self.marker));
 
         let mut remaining_marker = self.marker;
-        remaining_marker.and(env_marker.negate());
+        remaining_marker = remaining_marker.and(env_marker.negate());
         let remaining_forker = Forker {
             package: self.package,
             marker: remaining_marker,

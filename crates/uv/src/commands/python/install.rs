@@ -30,7 +30,7 @@ use uv_python::managed::{
     compare_build_versions, create_link_to_executable, python_executable_dir,
 };
 use uv_python::{
-    ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
+    ConfigDiscovery, ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
     PythonInstallationMinorVersionKey, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
@@ -194,7 +194,7 @@ pub(crate) async fn install(
     client_builder: BaseClientBuilder<'_>,
     default: bool,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     compile_bytecode: bool,
     concurrency: &Concurrency,
     cache: &Cache,
@@ -242,7 +242,7 @@ pub(crate) async fn install(
         cache,
         default,
         python_downloads,
-        no_config,
+        config_discovery,
         compile_bytecode.then_some(sender),
         concurrency,
         preview,
@@ -285,7 +285,6 @@ pub(crate) async fn install(
     installer_result
 }
 
-#[expect(clippy::fn_params_excessive_bools)]
 async fn perform_install(
     project_dir: &Path,
     install_dir: Option<PathBuf>,
@@ -302,7 +301,7 @@ async fn perform_install(
     cache: &Cache,
     default: bool,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     bytecode_compilation_sender: Option<mpsc::UnboundedSender<ManagedPythonInstallation>>,
     concurrency: &Concurrency,
     preview: Preview,
@@ -374,7 +373,7 @@ async fn perform_install(
             PythonVersionFile::discover(
                 project_dir,
                 &VersionFileDiscoveryOptions::default()
-                    .with_no_config(no_config)
+                    .with_config_discovery(config_discovery)
                     .with_preference(VersionFilePreference::Versions),
             )
             .await?

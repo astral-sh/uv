@@ -22,8 +22,8 @@ use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, InstalledDist, Name, Requirement, RequiresPython,
-    Resolution, UnresolvedRequirement,
+    DependencyMetadata, HashGeneration, Index, IndexLocations, InstalledDist, Name, Requirement,
+    RequiresPython, Resolution, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
@@ -36,9 +36,9 @@ use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_resolver::{
@@ -178,7 +178,7 @@ impl ToolPython {
     pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
         requirement: Option<&UnresolvedRequirement>,
-        no_config: bool,
+        config_discovery: ConfigDiscovery,
         lfs: GitLfsSetting,
         git_resolver: &GitResolver,
         client_builder: &BaseClientBuilder<'_>,
@@ -207,7 +207,7 @@ impl ToolPython {
         } else if let Some(file) = PythonVersionFile::discover(
             &*CWD,
             &VersionFileDiscoveryOptions::default()
-                .with_no_config(no_config)
+                .with_config_discovery(config_discovery)
                 .with_no_local(true),
         )
         .await?
@@ -336,8 +336,9 @@ impl ToolLock {
         root: &Path,
         resolution: &ResolverOutput,
         manifest: &ResolverManifest,
+        index_locations: &IndexLocations,
     ) -> anyhow::Result<Self> {
-        let lock = Lock::from_resolution(resolution, root, Vec::new())?;
+        let lock = Lock::from_resolution(resolution, root, Vec::new(), index_locations)?;
         let manifest = manifest.clone().relative_to(root)?;
         Ok(Self {
             root: root.to_path_buf(),
@@ -542,6 +543,7 @@ impl ToolLock {
             &hasher,
             state.index(),
             &database,
+            preview,
             printer,
         )
         .await?;

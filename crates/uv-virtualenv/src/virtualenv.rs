@@ -62,7 +62,6 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
 }
 
 /// Create a [`VirtualEnvironment`] at the given location.
-#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) fn create(
     location: &Path,
     interpreter: &Interpreter,
@@ -70,7 +69,7 @@ pub(crate) fn create(
     system_site_packages: bool,
     on_existing: OnExisting,
     relocatable: bool,
-    seed: bool,
+    seed: Seed,
     upgradeable: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
@@ -100,6 +99,12 @@ pub(crate) fn create(
         Prompt::None => None,
     };
     let absolute = std::path::absolute(location)?;
+
+    // Validate the path before creating the virtual environment, since some filesystems, e.g.,
+    // APFS, reject non-UTF-8 paths before the activation scripts are generated.
+    if absolute.simplified().to_str().is_none() {
+        return Err(Error::NonUtf8Path { path: absolute });
+    }
 
     // Validate the existing location.
     match location.metadata() {
@@ -480,6 +485,12 @@ pub(crate) fn create(
         .map(|path| path.simplified().to_str().unwrap().replace('\\', "\\\\"))
         .join(path_sep);
 
+        let location_string = location
+            .simplified()
+            .to_str()
+            .ok_or_else(|| Error::NonUtf8Path {
+                path: location.clone(),
+            })?;
         let virtual_env_dir = match (relocatable, name.to_owned()) {
             (true, "activate") => Cow::Borrowed(
                 r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#,
@@ -491,10 +502,10 @@ pub(crate) fn create(
             (true, "activate.nu") => Cow::Borrowed(r"(path self | path dirname | path dirname)"),
             (false, "activate.nu") => Cow::Owned(format!(
                 "'{}'",
-                escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
+                escape_posix_for_single_quotes(location_string)
             )),
             // Note: `activate.ps1` is already relocatable by default.
-            _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
+            _ => escape_posix_for_single_quotes(location_string),
         };
 
         let activator = template
@@ -544,8 +555,9 @@ pub(crate) fn create(
         pyvenv_cfg_data.push(("relocatable".to_string(), "true".to_string()));
     }
 
-    if seed {
-        pyvenv_cfg_data.push(("seed".to_string(), "true".to_string()));
+    match seed {
+        Seed::Enabled => pyvenv_cfg_data.push(("seed".to_string(), "true".to_string())),
+        Seed::Disabled => {}
     }
 
     if let Some(prompt) = prompt {
@@ -692,6 +704,22 @@ impl OnExisting {
         } else {
             Self::Prompt
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
+pub enum Seed {
+    /// Seed the virtual environment with one or more of `pip`, `setuptools`, and `wheel`.
+    Enabled,
+    /// Do not seed the virtual environment.
+    #[default]
+    Disabled,
+}
+
+impl Seed {
+    /// Determine the [`Seed`] setting based on the command-line arguments.
+    pub fn from_args(seed: bool) -> Self {
+        if seed { Self::Enabled } else { Self::Disabled }
     }
 }
 

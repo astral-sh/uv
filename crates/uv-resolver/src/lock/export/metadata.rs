@@ -7,8 +7,9 @@ use uv_distribution_types::{Name, Requirement, RequiresPython, ResolvedDist, Url
 use uv_fs::PortablePathBuf;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, StringVersion};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, ModuleName};
+use uv_python::{Interpreter, LenientImplementationName, PythonEnvironment};
 use uv_workspace::Workspace;
 
 use crate::lock::{
@@ -64,7 +65,7 @@ pub struct Metadata {
     /// Ideally absolute paths to things that are found in subdirs of this should have exactly
     /// this as a prefix so it can be stripped to get relative paths if one wants.
     workspace_root: PortablePathBuf,
-    /// Information about the synchronized environment, when `--sync` was used.
+    /// Information about the existing or synchronized environment, when available.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     environment: Option<MetadataEnvironment>,
     /// Information about the script root, when metadata was requested for a script.
@@ -108,11 +109,48 @@ struct SchemaReport {
     version: SchemaVersion,
 }
 
-/// Information about the environment synchronized for the workspace.
+/// Information about the existing or synchronized environment for the workspace.
 #[derive(Debug, serde::Serialize)]
 struct MetadataEnvironment {
     /// Absolute path to the environment root.
     root: PortablePathBuf,
+    /// Information about the Python interpreter in the environment.
+    python: PythonReport,
+}
+
+/// Information about the Python interpreter in an existing environment.
+#[derive(Debug, serde::Serialize)]
+pub struct PythonReport {
+    /// Absolute path to the Python executable.
+    path: PortablePathBuf,
+    /// Full Python version.
+    version: StringVersion,
+    /// Python implementation name.
+    implementation: LenientImplementationName,
+}
+
+impl From<&Interpreter> for PythonReport {
+    fn from(interpreter: &Interpreter) -> Self {
+        Self {
+            path: PortablePathBuf::from(interpreter.sys_executable()),
+            version: interpreter.python_full_version().clone(),
+            implementation: LenientImplementationName::from(interpreter.implementation_name()),
+        }
+    }
+}
+
+impl PythonReport {
+    /// Return the path to the Python executable.
+    pub fn path(&self) -> &Path {
+        self.path.as_ref()
+    }
+
+    /// Set the path to the Python executable.
+    #[must_use]
+    pub fn with_path(mut self, path: PortablePathBuf) -> Self {
+        self.path = path;
+        self
+    }
 }
 
 /// The script entry-point.
@@ -348,7 +386,7 @@ impl MetadataNode {
         parent_reachability: MarkerTree,
     ) {
         let mut marker = dependency.simplified_marker.as_simplified_marker_tree();
-        marker.and(parent_reachability);
+        marker = marker.and(parent_reachability);
         let marker = marker.try_to_string();
         let extras = dependency.extra();
         if extras.is_empty() {
@@ -616,7 +654,7 @@ fn metadata_reachability(
         for dependency in dependencies {
             let mut dependency_reachability =
                 dependency.simplified_marker.as_simplified_marker_tree();
-            dependency_reachability.and(parent_reachability);
+            dependency_reachability = dependency_reachability.and(parent_reachability);
             let dependency_package = lock.find_by_id(&dependency.package_id);
             if dependency.extra.is_empty() {
                 add_metadata_reachability(
@@ -656,7 +694,7 @@ fn add_metadata_reachability<'lock>(
     let id = MetadataNodeId::from_package_id(workspace_root, &package.id, kind.clone()).to_flat();
     let changed = if let Some(existing) = reachability.get_mut(&id) {
         let previous = *existing;
-        existing.or(marker);
+        *existing = existing.or(marker);
         *existing != previous
     } else {
         reachability.insert(id, marker);
@@ -1430,9 +1468,10 @@ impl Metadata {
     }
 
     #[must_use]
-    pub fn with_environment_root(mut self, environment_root: &Path) -> Self {
+    pub fn with_environment(mut self, environment: &PythonEnvironment) -> Self {
         self.environment = Some(MetadataEnvironment {
-            root: PortablePathBuf::from(environment_root),
+            root: PortablePathBuf::from(environment.root()),
+            python: PythonReport::from(environment.interpreter()),
         });
         self
     }

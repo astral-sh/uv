@@ -144,6 +144,18 @@ impl FileLocation {
         }
     }
 
+    /// Returns the final raw URL path component after removing any query or fragment.
+    ///
+    /// The filename is not percent-decoded.
+    pub fn raw_filename(&self) -> &str {
+        let path = match self {
+            Self::RelativeUrl(_, path) => path.as_ref(),
+            Self::AbsoluteUrl(url) => url.as_ref(),
+        };
+        let path = path.split_once(['?', '#']).map_or(path, |(path, _)| path);
+        path.rsplit_once('/').map_or(path, |(_, filename)| filename)
+    }
+
     /// Convert this location to a URL.
     ///
     /// A relative URL has its base joined to the path. An absolute URL is
@@ -308,6 +320,23 @@ pub struct Zstd {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn raw_filename() {
+        let base = SmallString::from("https://example.com/simple/");
+
+        let location = FileLocation::new(
+            SmallString::from("files/example%20pkg.whl?download=1#fragment"),
+            &base,
+        );
+        assert_eq!(location.raw_filename(), "example%20pkg.whl");
+
+        let location = FileLocation::new(
+            SmallString::from("https://files.example.com/example.whl#sha256=digest"),
+            &base,
+        );
+        assert_eq!(location.raw_filename(), "example.whl");
+    }
 
     #[test]
     fn base_str() {

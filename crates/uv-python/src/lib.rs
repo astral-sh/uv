@@ -24,8 +24,9 @@ pub use crate::prefix::Prefix;
 pub use crate::python_version::{BuildVersionError, PythonVersion};
 pub use crate::target::Target;
 pub use crate::version_files::{
-    DiscoveryOptions as VersionFileDiscoveryOptions, FilePreference as VersionFilePreference,
-    PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME, PythonVersionFile,
+    ConfigDiscovery, DiscoveryOptions as VersionFileDiscoveryOptions,
+    FilePreference as VersionFilePreference, PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME,
+    PythonVersionFile,
 };
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
 

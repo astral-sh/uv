@@ -594,11 +594,7 @@
   },
   "additionalProperties": false,
   "not": {
-    "properties": {
-      "preview": {},
-      "preview-features": {}
-    },
-    "required": ["preview", "preview-features"]
+    "$ref": "#/definitions/ConflictingPreviewOptions"
   },
   "definitions": {
     "AddBoundsKind": {
@@ -657,6 +653,21 @@
           "items": {
             "type": "string"
           }
+        },
+        "malware-check": {
+          "description": "Whether to run the automatic malware check during sync operations.",
+          "type": ["boolean", "null"]
+        },
+        "malware-check-url": {
+          "description": "The vulnerability service URL to use for automatic malware checks.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DisplaySafeUrl"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -825,6 +836,14 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettingValue"
       }
+    },
+    "ConflictingPreviewOptions": {
+      "type": "object",
+      "properties": {
+        "preview": {},
+        "preview-features": {}
+      },
+      "required": ["preview", "preview-features"]
     },
     "DefaultGroups": {
       "description": "Either the literal \"all\" or a list of groups",
@@ -1023,6 +1042,17 @@
           ],
           "default": "simple"
         },
+        "hash-algorithm": {
+          "description": "The hash algorithm that must be used for distributions resolved from this index.\n\nIf a distribution does not advertise a hash using this algorithm, lockfile generation\nwill fail.\n\nThis option is in preview and may change in any future release.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nhash-algorithm = \"sha256\"\n```",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexHashAlgorithm"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "ignore-error-codes": {
           "description": "Status codes that uv should ignore when deciding whether to continue resolution after a\nrequest to this index fails.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nignore-error-codes = [401, 403]\n```",
           "type": ["array", "null"],
@@ -1091,6 +1121,11 @@
           "const": "flat"
         }
       ]
+    },
+    "IndexHashAlgorithm": {
+      "description": "A hash algorithm that can be required for distributions resolved from an index.",
+      "type": "string",
+      "enum": ["md5", "sha256", "sha384", "sha512", "blake2b"]
     },
     "IndexName": {
       "description": "The normalized name of an index.\n\nIndex names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
@@ -1730,7 +1765,6 @@
         {
           "enum": [
             "python-install-default",
-            "python-upgrade",
             "json-output",
             "pylock",
             "add-bounds",
@@ -1767,7 +1801,10 @@
             "centralized-project-envs",
             "tool-install-locks",
             "workspace-list-scripts",
-            "no-distutils-patch"
+            "no-distutils-patch",
+            "index-hash-algorithm",
+            "lockfile-format-check",
+            "lock-without-metadata"
           ]
         },
         {
@@ -2156,8 +2193,12 @@
               "$ref": "#/definitions/MarkerTree"
             },
             "workspace": {
-              "description": "When set to `false`, the package will be fetched from the remote index, rather than\nincluded as a workspace package.",
-              "type": "boolean"
+              "description": "`true` selects the current workspace. A string selects another workspace discovered\nfrom the given path.\n\nWhen set to `false`, the package will be fetched from the remote index, rather than\nincluded as a workspace package.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/WorkspaceReference"
+                }
+              ]
             }
           },
           "additionalProperties": false,
@@ -2782,6 +2823,17 @@
         }
       },
       "additionalProperties": false
+    },
+    "WorkspaceReference": {
+      "description": "A reference to either the current workspace or a workspace discovered from a path.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/definitions/PortablePathBuf"
+        }
+      ]
     }
   }
 }
