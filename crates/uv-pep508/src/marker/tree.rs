@@ -839,26 +839,27 @@ impl MarkerTree {
         Self(self.0.not())
     }
 
-    /// Combine this marker tree with the one given via a conjunction.
-    pub fn and(&mut self, tree: Self) {
-        self.0 = INTERNER.lock().and(self.0, tree.0);
+    /// Returns a new marker tree that combines this one with the given one via a conjunction.
+    #[must_use]
+    pub fn and(self, tree: Self) -> Self {
+        Self(INTERNER.lock().and(self.0, tree.0))
     }
 
-    /// Combine this marker tree with the one given via a disjunction.
-    pub fn or(&mut self, tree: Self) {
-        self.0 = INTERNER.lock().or(self.0, tree.0);
+    /// Returns a new marker tree that combines this one with the given one via a disjunction.
+    #[must_use]
+    pub fn or(self, tree: Self) -> Self {
+        Self(INTERNER.lock().or(self.0, tree.0))
     }
 
-    /// Sets this to a marker equivalent to the implication of this one and the
-    /// given consequent.
+    /// Returns a marker equivalent to the implication of this one and the given consequent.
     ///
     /// If the marker set is always `true`, then it can be said that `self`
     /// implies `consequent`.
-    pub fn implies(&mut self, consequent: Self) {
+    #[must_use]
+    pub fn implies(self, consequent: Self) -> Self {
         // This could probably be optimized, but is clearly
         // correct, since logical implication is `-P or Q`.
-        *self = self.negate();
-        self.or(consequent);
+        self.negate().or(consequent)
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
@@ -1969,8 +1970,7 @@ mod test {
         let simplified = marker.restrict(environment);
         assert_eq!(simplified, m("python_version < '3.11'"));
 
-        let mut reconstructed = simplified;
-        reconstructed.and(environment);
+        let reconstructed = simplified.and(environment);
         assert_eq!(reconstructed, marker);
         assert_eq!(environment.restrict(environment), MarkerTree::TRUE);
 
@@ -1995,10 +1995,8 @@ mod test {
             let assumption = m(assumption);
             let simplified = marker.restrict(assumption);
 
-            let mut expected = marker;
-            expected.and(assumption);
-            let mut reconstructed = simplified;
-            reconstructed.and(assumption);
+            let expected = marker.and(assumption);
+            let reconstructed = simplified.and(assumption);
             assert_eq!(reconstructed, expected);
         }
     }
@@ -3342,9 +3340,7 @@ mod test {
     }
 
     fn implies(antecedent: &str, consequent: &str) -> bool {
-        let mut marker = m(antecedent);
-        marker.implies(m(consequent));
-        marker.is_true()
+        m(antecedent).implies(m(consequent)).is_true()
     }
 
     #[test]

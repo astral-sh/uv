@@ -1110,8 +1110,7 @@ impl TryFrom<SourcesWire> for Sources {
                             return Err(SourceError::MissingMarkers);
                         };
 
-                        let mut hint = lhs.negate();
-                        hint.and(rhs);
+                        let hint = lhs.negate().and(rhs);
                         let hint = hint
                             .contents()
                             .map(|contents| contents.to_string())

@@ -96,7 +96,7 @@ impl UniversalMarker {
 
     /// Creates a new universal marker from its constituent pieces.
     pub(crate) fn new(mut pep508_marker: MarkerTree, conflict_marker: ConflictMarker) -> Self {
-        pep508_marker.and(conflict_marker.marker);
+        pep508_marker = pep508_marker.and(conflict_marker.marker);
         Self::from_combined(pep508_marker)
     }
 
@@ -113,16 +113,16 @@ impl UniversalMarker {
     /// them. That is, the updated marker will evaluate to `true` if `self` or
     /// `other` evaluate to `true`.
     pub(crate) fn or(&mut self, other: Self) {
-        self.marker.or(other.marker);
-        self.pep508.or(other.pep508);
+        self.marker = self.marker.or(other.marker);
+        self.pep508 = self.pep508.or(other.pep508);
     }
 
     /// Combine this universal marker with the one given in a way that
     /// intersects them. That is, the updated marker will evaluate to `true` if
     /// `self` and `other` evaluate to `true`.
     pub(crate) fn and(&mut self, other: Self) {
-        self.marker.and(other.marker);
-        self.pep508.and(other.pep508);
+        self.marker = self.marker.and(other.marker);
+        self.pep508 = self.pep508.and(other.pep508);
     }
 
     /// Imbibes the world knowledge expressed by `conflicts` into this marker.
@@ -137,7 +137,7 @@ impl UniversalMarker {
         }
         let self_marker = self.marker;
         self.marker = conflicts.marker;
-        self.marker.implies(self_marker);
+        self.marker = self.marker.implies(self_marker);
         self.pep508 = self.marker.without_extras();
     }
 
@@ -404,7 +404,7 @@ impl UniversalMarker {
             for expression in conjunction {
                 match expression {
                     expression @ MarkerExpression::Extra { .. } => {
-                        conflict.and(MarkerTree::expression(expression));
+                        conflict = conflict.and(MarkerTree::expression(expression));
                     }
                     expression => {
                         if !MarkerTree::expression(expression).evaluate(env, &[]) {
@@ -413,7 +413,7 @@ impl UniversalMarker {
                     }
                 }
             }
-            remaining.or(conflict);
+            remaining = remaining.or(conflict);
         }
 
         ConflictMarker { marker: remaining }
@@ -510,18 +510,18 @@ impl ConflictMarker {
     /// `other`.
     #[must_use]
     fn or(self, other: Self) -> Self {
-        let mut marker = self.marker;
-        marker.or(other.marker);
-        Self { marker }
+        Self {
+            marker: self.marker.or(other.marker),
+        }
     }
 
     /// Returns a new conflict marker corresponding to the intersection of
     /// `self` and `other`.
     #[must_use]
     pub(crate) fn and(self, other: Self) -> Self {
-        let mut marker = self.marker;
-        marker.and(other.marker);
-        Self { marker }
+        Self {
+            marker: self.marker.and(other.marker),
+        }
     }
 
     /// Returns true if this conflict marker will always evaluate to `true`.
@@ -759,12 +759,12 @@ pub(crate) fn resolve_activated_extras(
                 ref name,
             } = marker
             else {
-                or.and(MarkerTree::expression(marker));
+                or = or.and(MarkerTree::expression(marker));
                 continue;
             };
 
             let Some(name) = name.as_extra() else {
-                or.and(MarkerTree::expression(marker));
+                or = or.and(MarkerTree::expression(marker));
                 continue;
             };
 
@@ -780,12 +780,12 @@ pub(crate) fn resolve_activated_extras(
                     if encoded == *name {
                         match operator {
                             ExtraOperator::Equal => {
-                                or.and(*conflict_marker);
+                                or = or.and(*conflict_marker);
                                 found = true;
                                 break;
                             }
                             ExtraOperator::NotEqual => {
-                                or.and(conflict_marker.negate());
+                                or = or.and(conflict_marker.negate());
                                 found = true;
                                 break;
                             }
@@ -800,12 +800,12 @@ pub(crate) fn resolve_activated_extras(
                     if encoded == *name {
                         match operator {
                             ExtraOperator::Equal => {
-                                or.and(*conflict_marker);
+                                or = or.and(*conflict_marker);
                                 found = true;
                                 break;
                             }
                             ExtraOperator::NotEqual => {
-                                or.and(conflict_marker.negate());
+                                or = or.and(conflict_marker.negate());
                                 found = true;
                                 break;
                             }
@@ -820,12 +820,12 @@ pub(crate) fn resolve_activated_extras(
                     if encoded == *name {
                         match operator {
                             ExtraOperator::Equal => {
-                                or.and(*conflict_marker);
+                                or = or.and(*conflict_marker);
                                 found = true;
                                 break;
                             }
                             ExtraOperator::NotEqual => {
-                                or.and(conflict_marker.negate());
+                                or = or.and(conflict_marker.negate());
                                 found = true;
                                 break;
                             }
@@ -841,11 +841,11 @@ pub(crate) fn resolve_activated_extras(
                     if let Some(conflict_marker) = known_conflicts.get(&conflict_item) {
                         match operator {
                             ExtraOperator::Equal => {
-                                or.and(*conflict_marker);
+                                or = or.and(*conflict_marker);
                                 found = true;
                             }
                             ExtraOperator::NotEqual => {
-                                or.and(conflict_marker.negate());
+                                or = or.and(conflict_marker.negate());
                                 found = true;
                             }
                         }
@@ -858,16 +858,16 @@ pub(crate) fn resolve_activated_extras(
             if !found {
                 match operator {
                     ExtraOperator::Equal => {
-                        or.and(MarkerTree::FALSE);
+                        or = or.and(MarkerTree::FALSE);
                     }
                     ExtraOperator::NotEqual => {
-                        or.and(MarkerTree::TRUE);
+                        or = or.and(MarkerTree::TRUE);
                     }
                 }
             }
         }
 
-        transformed.or(or);
+        transformed = transformed.or(or);
     }
 
     transformed

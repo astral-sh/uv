@@ -456,7 +456,7 @@ fn conflict_marker_reachability<'lock>(
         fork_markers
             .iter()
             .fold(MarkerTree::FALSE, |mut acc, edge| {
-                acc.or(*edge.marker());
+                acc = acc.or(*edge.marker());
                 acc
             })
     };
@@ -508,11 +508,11 @@ fn conflict_marker_reachability<'lock>(
 
                     // Propagate the edge to the known conflicts.
                     for value in parent_map.values_mut() {
-                        value.and(marker);
+                        *value = value.and(marker);
                     }
 
                     // Propagate the edge to the node itself.
-                    parent_marker.and(marker);
+                    parent_marker = parent_marker.and(marker);
                 }
                 Edge::Optional { extra, marker, .. } => {
                     // The optional edge is only active when its extra is active. Preserve the
@@ -527,15 +527,15 @@ fn conflict_marker_reachability<'lock>(
 
                     // Resolve any active extras on the edge.
                     let mut marker = resolve_activated_extras(*marker, scope_package, &parent_map);
-                    marker.and(active_marker);
+                    marker = marker.and(active_marker);
 
                     // Propagate the edge to the known conflicts.
                     for value in parent_map.values_mut() {
-                        value.and(marker);
+                        *value = value.and(marker);
                     }
 
                     // Propagate the edge to the node itself.
-                    parent_marker.and(marker);
+                    parent_marker = parent_marker.and(marker);
                 }
                 Edge::Dev { group, marker, .. } => {
                     // The dependency group is active for this edge itself, so add it before
@@ -550,11 +550,11 @@ fn conflict_marker_reachability<'lock>(
 
                     // Propagate the edge to the known conflicts.
                     for value in parent_map.values_mut() {
-                        value.and(marker);
+                        *value = value.and(marker);
                     }
 
                     // Propagate the edge to the node itself.
-                    parent_marker.and(marker);
+                    parent_marker = parent_marker.and(marker);
                 }
             }
 
@@ -564,8 +564,9 @@ fn conflict_marker_reachability<'lock>(
                     let child_map = existing.get_mut();
                     for (key, value) in parent_map {
                         let mut after = child_map.get(&key).copied().unwrap_or(MarkerTree::FALSE);
-                        after.or(value);
-                        child_map.entry(key).or_insert(MarkerTree::FALSE).or(value);
+                        after = after.or(value);
+                        let child_marker = child_map.entry(key).or_insert(MarkerTree::FALSE);
+                        *child_marker = child_marker.or(value);
                     }
                 }
                 Entry::Vacant(vacant) => {
@@ -578,7 +579,7 @@ fn conflict_marker_reachability<'lock>(
                 Entry::Occupied(mut existing) => {
                     // If the marker is a subset of the existing marker (A ⊆ B exactly if
                     // A ∪ B = A), updating the child wouldn't change child's marker.
-                    parent_marker.or(*existing.get());
+                    parent_marker = parent_marker.or(*existing.get());
                     if parent_marker != *existing.get() {
                         existing.insert(parent_marker);
                         queue.push(child_edge.target());

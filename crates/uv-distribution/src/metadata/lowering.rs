@@ -165,12 +165,12 @@ impl LoweredRequirement {
             // Determine the space covered by the sources.
             let mut total = MarkerTree::FALSE;
             for source in sources.iter() {
-                total.or(source.marker());
+                total = total.or(source.marker());
             }
 
             // Determine the space covered by the requirement.
             let mut remaining = total.negate();
-            remaining.and(requirement.marker);
+            remaining = remaining.and(requirement.marker);
 
             Self(Requirement {
                 marker: remaining,
@@ -301,7 +301,7 @@ impl LoweredRequirement {
                         }
                     };
 
-                    marker.and(requirement.marker);
+                    marker = marker.and(requirement.marker);
 
                     Ok(Self(Requirement {
                         name: requirement.name.clone(),
@@ -361,12 +361,12 @@ impl LoweredRequirement {
             // Determine the space covered by the sources.
             let mut total = MarkerTree::FALSE;
             for source in source.iter() {
-                total.or(source.marker());
+                total = total.or(source.marker());
             }
 
             // Determine the space covered by the requirement.
             let mut remaining = total.negate();
-            remaining.and(requirement.marker);
+            remaining = remaining.and(requirement.marker);
 
             Self(Requirement {
                 marker: remaining,
@@ -481,7 +481,7 @@ impl LoweredRequirement {
                         }
                     };
 
-                    marker.and(requirement.marker);
+                    marker = marker.and(requirement.marker);
 
                     Ok(Self(Requirement {
                         name: requirement.name.clone(),
