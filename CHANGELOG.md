@@ -119,16 +119,25 @@ Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend als
   You cannot opt out while the directive is present. Pin every requirement with `==` and provide
   its hash, or remove `--require-hashes` if hash checking is not intended.
 
-- **Require package entries in `pylock.toml` files**
-  ([#20402](https://github.com/astral-sh/uv/pull/20402))
+- **Reject invalid `pylock.toml` files and artifacts**
+  ([#20402](https://github.com/astral-sh/uv/pull/20402),
+  [#20440](https://github.com/astral-sh/uv/pull/20440),
+  [#20443](https://github.com/astral-sh/uv/pull/20443))
 
-  The [`pylock.toml` specification](https://packaging.python.org/en/latest/specifications/pylock-toml/#packages)
-  requires a `packages` array. Previously, uv interpreted a missing array as an empty lockfile;
-  passing such a file to `uv pip sync` could therefore uninstall an environment instead of
-  rejecting the invalid input.
+  uv now validates additional requirements from the
+  [`pylock.toml` specification](https://packaging.python.org/en/latest/specifications/pylock-toml/):
 
-  uv now rejects `pylock.toml` files without `packages`. You cannot opt out of this behavior.
-  Regenerate the lockfile, or use `packages = []` if it intentionally contains no packages.
+  - The `packages` array must be present. Previously, uv interpreted a missing array as an empty
+    lockfile, so `uv pip sync` could uninstall an environment instead of rejecting malformed
+    input. An explicitly empty `packages = []` array remains valid.
+  - Lockfile filenames must be `pylock.toml` or a single-name variant such as `pylock.dev.toml`.
+    Names such as `pylock..toml` and `pylock.foo.bar.toml` are rejected.
+  - If a wheel, source distribution, or other artifact declares a `size`, the downloaded or cached
+    artifact must match. Previously, an incorrect size was accepted when the hash was correct.
+    Sizes reported by package indexes remain advisory.
+
+  You cannot opt out of these checks. Regenerate malformed lockfiles, rename invalid filenames, and
+  either correct or remove an incorrect optional `size` value.
 
 - **Support pip-compatible `--cert` handling in `uv pip`**
   ([#20418](https://github.com/astral-sh/uv/pull/20418))
