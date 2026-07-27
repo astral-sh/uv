@@ -47,6 +47,7 @@ pub(crate) async fn wheel_metadata(
                 filename,
                 location: Box::new(archive.url),
                 url: args.url,
+                size: None,
             }),
             &resolver,
             &capabilities,
