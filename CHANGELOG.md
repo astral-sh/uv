@@ -225,8 +225,8 @@ Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend als
   preview feature was enabled. Now, even a TOML 1.0 input is normalized and the source distribution
   gains an additional `pyproject.toml.orig` file.
 
-  You cannot opt out of this behavior. If you compare source distributions byte-for-byte or depend
-  on their exact file list, update those expectations.
+  You cannot opt out of this behavior. If a tool needs the original contents or formatting, read
+  `pyproject.toml.orig` from the source distribution instead.
 
 - **Classify Conda environments named `base` and `root` by their paths**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
