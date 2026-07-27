@@ -8574,19 +8574,15 @@ fn prefer_editable() -> Result<()> {
     Ok(())
 }
 
-/// Resolve against a local directory laid out as a PEP 503-compatible index.
-#[test]
-fn local_index_absolute() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let root = context.temp_dir.child("simple-html");
-    fs_err::create_dir_all(&root)?;
-
-    let tqdm = root.child("tqdm");
+/// Create a local PEP 503-compatible index containing the `tqdm` test wheel.
+fn create_local_index_with_tqdm(context: &TestContext, root: &Path) -> Result<()> {
+    let tqdm = root.join("tqdm");
     fs_err::create_dir_all(&tqdm)?;
 
-    let index = tqdm.child("index.html");
-    index.write_str(&indoc::formatdoc! {r#"
+    let index = tqdm.join("index.html");
+    fs_err::write(
+        index,
+        indoc::formatdoc! {r#"
         <!DOCTYPE html>
         <html>
           <head>
@@ -8602,7 +8598,18 @@ fn local_index_absolute() -> Result<()> {
             </a>
           </body>
         </html>
-    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()})?;
+    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()},
+    )?;
+    Ok(())
+}
+
+/// Resolve against a local directory laid out as a PEP 503-compatible index.
+#[test]
+fn local_index_absolute() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root = context.temp_dir.child("simple-html");
+    create_local_index_with_tqdm(&context, root.path())?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -8628,29 +8635,7 @@ fn local_index_relative() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let root = context.temp_dir.child("simple-html");
-    fs_err::create_dir_all(&root)?;
-
-    let tqdm = root.child("tqdm");
-    fs_err::create_dir_all(&tqdm)?;
-
-    let index = tqdm.child("index.html");
-    index.write_str(&indoc::formatdoc! {r#"
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta name="pypi:repository-version" content="1.1" />
-          </head>
-          <body>
-            <h1>Links for tqdm</h1>
-            <a
-              href="{}/tqdm-1000.0.0-py3-none-any.whl"
-              data-requires-python=">=3.8"
-            >
-              tqdm-1000.0.0-py3-none-any.whl
-            </a>
-          </body>
-        </html>
-    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()})?;
+    create_local_index_with_tqdm(&context, root.path())?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -8676,29 +8661,7 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let root = context.temp_dir.child("simple-html");
-    fs_err::create_dir_all(&root)?;
-
-    let tqdm = root.child("tqdm");
-    fs_err::create_dir_all(&tqdm)?;
-
-    let index = tqdm.child("index.html");
-    index.write_str(&indoc::formatdoc! {r#"
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta name="pypi:repository-version" content="1.1" />
-          </head>
-          <body>
-            <h1>Links for tqdm</h1>
-            <a
-              href="{}/tqdm-1000.0.0-py3-none-any.whl"
-              data-requires-python=">=3.8"
-            >
-              tqdm-1000.0.0-py3-none-any.whl
-            </a>
-          </body>
-        </html>
-    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()})?;
+    create_local_index_with_tqdm(&context, root.path())?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
@@ -8729,29 +8692,7 @@ fn local_index_requirements_txt_relative() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let root = context.temp_dir.child("simple-html");
-    fs_err::create_dir_all(&root)?;
-
-    let tqdm = root.child("tqdm");
-    fs_err::create_dir_all(&tqdm)?;
-
-    let index = tqdm.child("index.html");
-    index.write_str(&indoc::formatdoc! {r#"
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta name="pypi:repository-version" content="1.1" />
-          </head>
-          <body>
-            <h1>Links for tqdm</h1>
-            <a
-              href="{}/tqdm-1000.0.0-py3-none-any.whl"
-              data-requires-python=">=3.8"
-            >
-              tqdm-1000.0.0-py3-none-any.whl
-            </a>
-          </body>
-        </html>
-    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()})?;
+    create_local_index_with_tqdm(&context, root.path())?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
