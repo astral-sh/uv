@@ -11,8 +11,10 @@
 - ALWAYS write `SAFETY` comments following our usual style when writing `unsafe` code
 - PREFER `#[expect()]` over `[allow()]` if clippy must be disabled
 - PREFER let chains (`if let` combined with `&&`) over nested `if let` statements
-- NEVER update all dependencies in the lockfile and ALWAYS use `cargo update --precise` to make lockfile changes
-- NEVER assume clippy warnings or test failures are pre-existing, it is very rare that `main` has warnings
+- NEVER update all dependencies in the lockfile and ALWAYS use `cargo update --precise` to make
+  lockfile changes
+- NEVER assume clippy warnings or test failures are pre-existing, it is very rare that `main` has
+  warnings
 - PREFER top-level imports over local imports or fully qualified names
 - AVOID shortening variable names, e.g., use `version` instead of `ver`, and `requires_python`
   instead of `rp`
