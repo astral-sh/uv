@@ -14258,10 +14258,7 @@ fn reject_case_variant_reserved_wheel_entrypoint_name() -> Result<()> {
     let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "Python")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14273,10 +14270,7 @@ fn reject_case_variant_reserved_wheel_entrypoint_name() -> Result<()> {
     let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "Python.PY")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -14288,10 +14282,7 @@ fn reject_case_variant_reserved_wheel_entrypoint_name() -> Result<()> {
     let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "python.Py")?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
