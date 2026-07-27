@@ -754,7 +754,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         let source_matches = package
             .id
             .source
-            .satisfies_requirement(&requirement.source, workspace_root)?
+            .satisfies_requirement_source(&requirement.source, workspace_root)?
             || package.id == parent_package.id
                 && matches!(
                     requirement.source,
@@ -4762,7 +4762,7 @@ impl Source {
     }
 
     /// Returns whether this locked source can satisfy a refreshed requirement.
-    fn satisfies_requirement(
+    fn satisfies_requirement_source(
         &self,
         requirement: &RequirementSource,
         root: &Path,
