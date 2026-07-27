@@ -188,7 +188,7 @@ jobs:
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
           UPSTREAM_NUMBER: ${{ steps.promote.outputs.number }}
         run: |
-          pull_request=$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,isDraft)
+          pull_request=$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,isDraft,headRefOid)
           if ! jq --exit-status \
             '.state == "OPEN" and (.isDraft | not)' \
             <<< "$pull_request" > /dev/null; then
@@ -197,8 +197,15 @@ jobs:
           fi
 
           upstream_url="https://github.com/astral-sh/uv/pull/$UPSTREAM_NUMBER"
+          source_head=$(jq --raw-output '.headRefOid' <<< "$pull_request")
+          promoted_head=$(gh pr view "$UPSTREAM_NUMBER" --repo astral-sh/uv --json headRefOid --jq .headRefOid)
+          comment="Promoted to [#$UPSTREAM_NUMBER]($upstream_url)."
+          if [ "$source_head" != "$promoted_head" ]; then
+            comment="Closed with un-sync'd commits. $comment"
+          fi
+
           gh pr close "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
-            --comment "Promoted to [#$UPSTREAM_NUMBER]($upstream_url)."
+            --comment "$comment"
 
           echo "Promoted uv-dev pull request #$PULL_REQUEST_NUMBER to [#$UPSTREAM_NUMBER]($upstream_url)." >> "$GITHUB_STEP_SUMMARY"
