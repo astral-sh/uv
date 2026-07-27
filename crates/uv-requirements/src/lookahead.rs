@@ -2,7 +2,7 @@ use std::{collections::VecDeque, sync::Arc};
 
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
 
 use uv_configuration::{Constraints, Excludes, Overrides};
@@ -101,11 +101,53 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .map(|requirement| (*requirement).clone())
             .collect();
 
+        // Track the non-registry requirement seen for each package, so that registry-form
+        // requirements (e.g., `target[feature]` in `Requires-Dist`) can be mapped back to a
+        // direct URL source when the resolver will use that source for the package anyway
+        // (e.g., via `tool.uv.sources`).
+        let mut direct = FxHashMap::default();
+        for requirement in &queue {
+            if !matches!(requirement.source, RequirementSource::Registry { .. }) {
+                direct
+                    .entry(requirement.name.clone())
+                    .or_insert_with(|| requirement.clone());
+            }
+        }
+
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {
                 if !matches!(requirement.source, RequirementSource::Registry { .. }) {
+                    direct
+                        .entry(requirement.name.clone())
+                        .or_insert_with(|| requirement.clone());
                     if seen.insert(requirement.clone()) {
                         futures.push(self.lookahead(requirement, hasher.clone()));
+                    }
+                } else if let Some(direct_requirement) = direct.get(&requirement.name) {
+                    // The package will resolve to a known direct URL source, so re-run the
+                    // lookahead for that source with the additional extras (and groups)
+                    // activated, to discover any dependencies gated behind them.
+                    let mut candidate = direct_requirement.clone();
+                    let mut extras: Vec<_> = candidate
+                        .extras
+                        .iter()
+                        .cloned()
+                        .chain(requirement.extras.iter().cloned())
+                        .collect();
+                    extras.sort_unstable();
+                    extras.dedup();
+                    candidate.extras = extras.into_boxed_slice();
+                    let mut groups: Vec<_> = candidate
+                        .groups
+                        .iter()
+                        .cloned()
+                        .chain(requirement.groups.iter().cloned())
+                        .collect();
+                    groups.sort_unstable();
+                    groups.dedup();
+                    candidate.groups = groups.into_boxed_slice();
+                    if seen.insert(candidate.clone()) {
+                        futures.push(self.lookahead(candidate, hasher.clone()));
                     }
                 }
             }
