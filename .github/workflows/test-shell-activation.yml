@@ -138,7 +138,8 @@ jobs:
           ACTIVATION_STDERR="activation-${ACTIVATION_SHELL}-${ACTIVATION_ENVIRONMENT}-${ACTIVATION_OSTYPE}.stderr"
           export ACTIVATION_STDERR
 
-          "${activation_command[@]}" <<'ACTIVATION'
+          activation_status=0
+          "${activation_command[@]}" <<'ACTIVATION' || activation_status=$?
           set -eu
 
           original_path=$PATH
@@ -153,12 +154,10 @@ jobs:
           fi
 
           if ! . "./$ACTIVATION_DIRECTORY/bin/activate" 2>"$ACTIVATION_STDERR"; then
-            cat "$ACTIVATION_STDERR" >&2
             exit 1
           fi
 
           if [ -s "$ACTIVATION_STDERR" ]; then
-            cat "$ACTIVATION_STDERR" >&2
             exit 1
           fi
 
@@ -173,6 +172,17 @@ jobs:
           test "$SCRIPT_PATH" = original-script-path
           test -z "${VIRTUAL_ENV-}"
           ACTIVATION
+
+          if [ "$activation_status" -ne 0 ]; then
+            printf 'Activation failed for %s (%s, OSTYPE %s) with exit code %s\n' \
+              "$ACTIVATION_SHELL" "$ACTIVATION_ENVIRONMENT" "$ACTIVATION_OSTYPE" "$activation_status" >&2
+
+            if [ -s "$ACTIVATION_STDERR" ]; then
+              cat "$ACTIVATION_STDERR" >&2
+            fi
+
+            exit "$activation_status"
+          fi
 
   activation-alpine:
     name: "Alpine BusyBox activation (OSTYPE ${{ matrix.ostype }})"
