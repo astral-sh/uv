@@ -17523,6 +17523,102 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Validate a metadata-free lock without expanding independent conflict sets.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_many_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let extra_declarations = (1..=12)
+        .map(|conflict_number| format!("a{conflict_number} = []\nb{conflict_number} = []"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let project_conflicts = (1..=12)
+        .map(|conflict_number| {
+            format!(
+                "  [{{ extra = \"a{conflict_number}\" }}, {{ extra = \"b{conflict_number}\" }}],"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let lock_conflicts = (1..=12)
+        .map(|conflict_number| {
+            format!(
+                "[{{ package = \"project\", extra = \"a{conflict_number}\" }}, {{ package = \"project\", extra = \"b{conflict_number}\" }}]"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [project.optional-dependencies]
+        {extra_declarations}
+
+        [tool.uv]
+        conflicts = [
+        {project_conflicts}
+        ]
+
+        [tool.uv.workspace]
+        members = ["dep"]
+
+        [tool.uv.sources]
+        dep = {{ workspace = true }}
+        "#})?;
+    let dependency = context.temp_dir.child("dep");
+    dependency.create_dir_all()?;
+    dependency.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+        conflicts = [
+        {lock_conflicts}
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = ["dep", "project"]
+
+        [[package]]
+        name = "dep"
+        version = "1.0.0"
+        source = {{ editable = "dep" }}
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [{{ name = "dep" }}]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// An empty extra remains selectable when its lockfile omits package metadata.
 #[cfg(feature = "test-universal")]
 #[test]
