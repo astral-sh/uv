@@ -27,6 +27,8 @@ if ! [ -z "${SCRIPT_PATH+_}" ] ; then
 fi
 
 # Get script path (only used if environment is relocatable).
+# Use eval to hide shell-specific expansions from other shells' parsers.
+# Yash rejects Zsh and KornShell expansions even in branches it does not execute.
 if [ -n "${BASH_VERSION:+x}" ] ; then
     SCRIPT_PATH="${BASH_SOURCE[0]}"
     if [ "$SCRIPT_PATH" = "$0" ]; then
@@ -35,9 +37,9 @@ if [ -n "${BASH_VERSION:+x}" ] ; then
         exit 33
     fi
 elif [ -n "${ZSH_VERSION:+x}" ] ; then
-    SCRIPT_PATH="${(%):-%x}"
+    eval 'SCRIPT_PATH="${(%):-%x}"'
 elif [ -n "${KSH_VERSION:+x}" ] ; then
-    SCRIPT_PATH="${.sh.file}"
+    eval 'SCRIPT_PATH="${.sh.file}"'
 fi
 
 deactivate () {
