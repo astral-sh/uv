@@ -10,6 +10,14 @@ accumulated changes that improve correctness, safety, and compatibility, but cou
 workflows. This release contains those changes; many have been marked as breaking out of an
 abundance of caution. We expect most users to be able to upgrade without making changes.
 
+The most visible change is to `uv init`, which now creates a packaged project by default. When uv's
+project interface stabilized in 0.3, the default application layout was kept intentionally simple:
+a flat `main.py` file and no build system. This allowed projects to declare dependencies and
+participate in workspaces without requiring packaging, but became limiting when users wanted to
+import their own code, write tests, define commands, or distribute a project. New projects now use
+a `src` layout and the uv build backend; the previous flat layout remains available with
+`uv init --no-package` or `uv init --app`.
+
 This release also stabilizes preview behavior for project discovery, virtual environment safety,
 publishing, Conda environments, and source distributions.
 
@@ -18,6 +26,28 @@ The [`uv_build` build backend](https://docs.astral.sh/uv/concepts/build-backend/
 `[build-system]` table, you should update it, e.g., from `<0.12` to `<0.13`.
 
 ### Breaking changes
+
+- **Create packaged projects by default with `uv init`**
+  ([#19197](https://github.com/astral-sh/uv/pull/19197))
+
+  Previously, `uv init example` created an unpackaged application containing `main.py` and a
+  `pyproject.toml` without a build system. The project could declare dependencies but was not itself
+  installed into its virtual environment.
+
+  Now, `uv init example` creates a packaged application with source code in `src/example`, a
+  `[build-system]` using `uv_build`, and a `[project.scripts]` entry named `example`. The project
+  can be imported from tests or other code, installed as a dependency, and run as a command:
+
+  ```console
+  $ uv init example
+  $ cd example
+  $ uv run example
+  Hello from example!
+  ```
+
+  Existing projects are unaffected. You can opt out of the new layout with
+  `uv init --no-package example` or `uv init --app example`, which create the previous flat
+  application layout.
 
 - **Reject unsupported source distribution and wheel archive formats**
   ([#18927](https://github.com/astral-sh/uv/pull/18927))
