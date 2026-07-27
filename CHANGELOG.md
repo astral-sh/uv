@@ -260,8 +260,7 @@ Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend als
   workspace-level dependency groups.
 
   You cannot opt out of this behavior. Correct the group name or add it to `[dependency-groups]`.
-  Legacy `tool.uv.dev-dependencies` still satisfies `--upgrade-group dev`, and `--frozen` continues
-  to ignore upgrade requests.
+  Legacy `tool.uv.dev-dependencies` still satisfies `--upgrade-group dev`.
 
 - **Preserve absolute paths provided to `uv add`**
   ([#18402](https://github.com/astral-sh/uv/pull/18402))
