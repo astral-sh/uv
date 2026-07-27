@@ -17441,6 +17441,184 @@ fn lock_rename_project() -> Result<()> {
     Ok(())
 }
 
+/// Write metadata-free revision 1.4 locks without invalidating fresh revision 1.3 locks.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_writes_without_package_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = []
+
+        [dependency-groups]
+        dev = []
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let preview_lock = context.read("uv.lock");
+    assert_snapshot!(preview_lock, @r#"
+    version = 1
+    revision = 4
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    "#);
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--check").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let standard_lock = context.read("uv.lock");
+    let standard_document = standard_lock.parse::<toml_edit::DocumentMut>()?;
+    assert_eq!(standard_document["revision"].as_integer(), Some(3));
+    assert!(
+        standard_document["package"]
+            .as_array_of_tables()
+            .unwrap()
+            .iter()
+            .all(|package| package.get("metadata").is_some())
+    );
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--check").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), standard_lock);
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), standard_lock);
+
+    Ok(())
+}
+
+/// Validate a metadata-free lock without expanding independent conflict sets.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_many_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let extra_declarations = (1..=12)
+        .map(|conflict_number| format!("a{conflict_number} = []\nb{conflict_number} = []"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let project_conflicts = (1..=12)
+        .map(|conflict_number| {
+            format!(
+                "  [{{ extra = \"a{conflict_number}\" }}, {{ extra = \"b{conflict_number}\" }}],"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let lock_conflicts = (1..=12)
+        .map(|conflict_number| {
+            format!(
+                "[{{ package = \"project\", extra = \"a{conflict_number}\" }}, {{ package = \"project\", extra = \"b{conflict_number}\" }}]"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [project.optional-dependencies]
+        {extra_declarations}
+
+        [tool.uv]
+        conflicts = [
+        {project_conflicts}
+        ]
+
+        [tool.uv.workspace]
+        members = ["dep"]
+
+        [tool.uv.sources]
+        dep = {{ workspace = true }}
+        "#})?;
+    let dependency = context.temp_dir.child("dep");
+    dependency.create_dir_all()?;
+    dependency.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+        conflicts = [
+        {lock_conflicts}
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = ["dep", "project"]
+
+        [[package]]
+        name = "dep"
+        version = "1.0.0"
+        source = {{ editable = "dep" }}
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [{{ name = "dep" }}]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// An empty extra remains selectable when its lockfile omits package metadata.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -17600,7 +17778,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
         exclude-dependencies = ["urllib3"]
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
@@ -17610,7 +17788,15 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     let lockfile = context.temp_dir.child("uv.lock");
 
     // Ensure the preview feature gets enforced.
-    let mut lock = lock_without_package_metadata(&context.read("uv.lock"))?;
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_eq!(lock["revision"].as_integer(), Some(4));
+    assert!(
+        lock["package"]
+            .as_array_of_tables()
+            .unwrap()
+            .iter()
+            .all(|package| package.get("metadata").is_none())
+    );
     lock["revision"] = toml_edit::value(3);
     lockfile.write_str(&lock.to_string())?;
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
@@ -18158,9 +18344,15 @@ fn lock_regenerates_scoped_workspace_overrides() -> Result<()> {
     Resolved 8 packages in [TIME]
     ");
 
-    let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
-    let lockfile = context.temp_dir.child("uv.lock");
-    lockfile.write_str(&lock.to_string())?;
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_eq!(lock["revision"].as_integer(), Some(4));
+    assert!(
+        lock["package"]
+            .as_array_of_tables()
+            .unwrap()
+            .iter()
+            .all(|package| package.get("metadata").is_none())
+    );
 
     uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
@@ -18190,15 +18382,22 @@ fn lock_regenerates_marker_specific_requested_extras() -> Result<()> {
             "httpx ; sys_platform == 'win32'",
         ]
         "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 
-    let mut lock = lock_without_package_metadata(&context.read("uv.lock"))?;
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_eq!(lock["revision"].as_integer(), Some(4));
+    assert!(
+        lock["package"]
+            .as_array_of_tables()
+            .unwrap()
+            .iter()
+            .all(|package| package.get("metadata").is_none())
+    );
     let lockfile = context.temp_dir.child("uv.lock");
-    lockfile.write_str(&lock.to_string())?;
     uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
