@@ -214,10 +214,7 @@ fn reject_wheel_data_distribution_metadata() -> Result<()> {
     let overwrite = context.temp_dir.join("overwrite-1.0.0-py3-none-any.whl");
     write_data_metadata_wheel(&overwrite, "overwrite", "overwrite-1.0.0.dist-info", false)?;
     uv_snapshot!(context.filters(), context.pip_install().arg(&overwrite), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -234,10 +231,7 @@ fn reject_wheel_data_distribution_metadata() -> Result<()> {
     let inject = context.temp_dir.join("inject-1.0.0-py3-none-any.whl");
     write_data_metadata_wheel(&inject, "inject", "phantom-9.9.9.DIST-INFO", false)?;
     uv_snapshot!(context.filters(), context.pip_install().arg(&inject), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -254,10 +248,7 @@ fn reject_wheel_data_distribution_metadata() -> Result<()> {
     let egg_info = context.temp_dir.join("egg-1.0.0-py3-none-any.whl");
     write_data_metadata_wheel(&egg_info, "egg", "phantom-9.9.9.EGG-INFO", false)?;
     uv_snapshot!(context.filters(), context.pip_install().arg(&egg_info), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -279,10 +270,7 @@ fn reject_wheel_data_distribution_metadata() -> Result<()> {
         true,
     )?;
     uv_snapshot!(context.filters(), context.pip_install().arg(&egg_info_file), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
