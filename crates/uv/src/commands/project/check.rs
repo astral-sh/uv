@@ -34,6 +34,7 @@ use crate::commands::project::{
     validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::workspace::list::find_scripts;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
@@ -245,7 +246,7 @@ pub(crate) async fn check(
     // The most common case this is handling is a non-virtual workspace, where the root
     // package will almost always have the other packages nested under it, and we need a
     // way to select just the workspace root.
-    let excluded_targets = if let Some(project) = project.as_ref()
+    let mut excluded_targets = if let Some(project) = project.as_ref()
         && !defacto_all_packages
     {
         project
@@ -268,6 +269,21 @@ pub(crate) async fn check(
     } else {
         Vec::new()
     };
+
+    // PEP 723 scripts have independent environments and must be checked explicitly with
+    // `uv check --script`. Reuse `uv workspace list --scripts` discovery so scripts nested in
+    // selected workspace members are not checked against the project environment.
+    if let Some(project) = project.as_ref() {
+        excluded_targets.extend(
+            find_scripts(project.workspace().install_path(), cache)?
+                .into_iter()
+                .filter(|script| {
+                    check_targets
+                        .iter()
+                        .any(|target| script.starts_with(target))
+                }),
+        );
+    }
 
     let groups = if let Some(project) = &project {
         groups.with_defaults(default_dependency_groups(project.pyproject_toml())?)
