@@ -11,12 +11,12 @@ workflows. This release contains those changes; many have been marked as breakin
 abundance of caution. We expect most users to be able to upgrade without making changes.
 
 Projects created with `uv init` are now packaged by default. When uv's project interface stabilized
-in 0.3, the default application layout was kept intentionally simple: a flat `main.py` file and no
-build system. This allowed projects to declare dependencies and participate in workspaces without
-requiring packaging, but became limiting when users wanted to import their own code, write tests,
-define commands, or distribute a project. New projects now use a `src` layout and the uv build
-backend; the previous flat layout remains available with `uv init --no-package` or
-`uv init --app`.
+in 0.3, `uv init` created packaged projects using Hatchling. In 0.4, the default was changed to a
+flat, unpackaged application because requiring a build backend confused users whose projects did
+not need to be distributed. Since then, uv has introduced its own build backend, `uv_build`, which
+integrates with uv and provides a simpler packaging experience. New projects now use a `src` layout
+and `uv_build`, making their code importable, testable, and distributable. The previous flat layout
+remains available with `uv init --no-package` or `uv init --app`.
 
 This release also stabilizes preview behavior for project discovery, virtual environment safety,
 publishing, Conda environments, source distributions, and Unix resource limits.
