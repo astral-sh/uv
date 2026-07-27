@@ -2348,19 +2348,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // dependencies respectively.
 
                 let marker = match extra {
-                    Some(extra) => {
-                        let mut marker = requirement
-                            .marker
-                            .simplify_extras(slice::from_ref(extra))
-                            .simplify_not_extras_with(|candidate| candidate != extra);
-                        marker.and(
+                    Some(extra) => requirement
+                        .marker
+                        .simplify_extras(slice::from_ref(extra))
+                        .simplify_not_extras_with(|candidate| candidate != extra)
+                        .and(
                             requirement
                                 .marker
                                 .simplify_not_extras_with(|_| true)
                                 .negate(),
-                        );
-                        marker
-                    }
+                        ),
                     None => requirement.marker.simplify_not_extras_with(|_| true),
                 };
 
