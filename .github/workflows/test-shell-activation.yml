@@ -37,11 +37,13 @@ jobs:
             command: dash
             environment: standard
             ostype: absent
-          - name: dash (relocatable)
-            package: dash
-            command: dash
-            environment: relocatable
-            ostype: present
+          # Dash does not expose the path of a sourced activation script, so
+          # relocatable activation is not currently supported.
+          # - name: dash (relocatable)
+          #   package: dash
+          #   command: dash
+          #   environment: relocatable
+          #   ostype: present
           - name: zsh
             package: zsh
             command: zsh
@@ -67,11 +69,13 @@ jobs:
             command: yash
             environment: standard
             ostype: present
-          - name: yash (relocatable)
-            package: yash
-            command: yash
-            environment: relocatable
-            ostype: present
+          # Yash does not expose the path of a sourced activation script, so
+          # relocatable activation is not currently supported.
+          # - name: yash (relocatable)
+          #   package: yash
+          #   command: yash
+          #   environment: relocatable
+          #   ostype: present
           - name: busybox
             package: busybox
             command: busybox
@@ -82,11 +86,13 @@ jobs:
             command: busybox
             environment: standard
             ostype: absent
-          - name: busybox (relocatable)
-            package: busybox
-            command: busybox
-            environment: relocatable
-            ostype: present
+          # BusyBox ash does not expose the path of a sourced activation script,
+          # so relocatable activation is not currently supported.
+          # - name: busybox (relocatable)
+          #   package: busybox
+          #   command: busybox
+          #   environment: relocatable
+          #   ostype: present
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
