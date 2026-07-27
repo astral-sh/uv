@@ -2231,8 +2231,7 @@ async fn run_project(
     match *project_command {
         ProjectCommand::Init(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args =
-                settings::InitSettings::resolve(args, filesystem, environment, globals.preview)?;
+            let args = settings::InitSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // The `--project` argument is not supported for `init`.
@@ -2254,7 +2253,6 @@ async fn run_project(
                 project_dir,
                 args.path,
                 args.name,
-                args.package,
                 args.kind,
                 args.bare,
                 args.description,
