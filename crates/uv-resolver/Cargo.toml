@@ -58,6 +58,7 @@ hashbrown = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }
+memchr = { workspace = true }
 owo-colors = { workspace = true }
 percent-encoding = { workspace = true }
 petgraph = { workspace = true }
@@ -76,6 +77,7 @@ tokio = { workspace = true }
 tokio-stream = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
+toml_parser = { workspace = true }
 toml_writer = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
