@@ -12858,10 +12858,7 @@ fn reject_reserved_wheel_data_script_name() -> Result<()> {
             fs_err::write(&wheel, block_on(writer.close())?)?;
 
             uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
-        success: false
-        exit_code: 2
-        ----- stdout -----
-
+        exit_code: 2 (failure)
         ----- stderr -----
         Resolved 1 package in [TIME]
         Prepared 1 package in [TIME]
