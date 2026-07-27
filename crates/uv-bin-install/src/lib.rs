@@ -21,6 +21,7 @@ use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
 use uv_client::retryable_on_request_failure;
+use uv_distribution_filename::LegacySourceDistExtension;
 use uv_distribution_filename::SourceDistExtension;
 use uv_static::{astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url};
 
@@ -230,7 +231,7 @@ impl ArchiveFormat {
 impl From<ArchiveFormat> for SourceDistExtension {
     fn from(val: ArchiveFormat) -> Self {
         match val {
-            ArchiveFormat::Zip => Self::Zip,
+            ArchiveFormat::Zip => Self::Legacy(LegacySourceDistExtension::Zip),
             ArchiveFormat::TarGz => Self::TarGz,
         }
     }
@@ -841,14 +842,9 @@ async fn download_and_unpack(
 
     let id = reporter.on_download_start(binary.name(), version, size);
     let mut progress_reader = ProgressReader::new(reader, id, reporter);
-    stream::archive(
-        &download_url,
-        &mut progress_reader,
-        format.into(),
-        temp_dir.path(),
-    )
-    .await
-    .map_err(|e| Error::Extract { source: e })?;
+    stream::archive(&mut progress_reader, format.into(), temp_dir.path())
+        .await
+        .map_err(|e| Error::Extract { source: e })?;
     reporter.on_download_complete(id);
 
     // Find the binary in the extracted files
