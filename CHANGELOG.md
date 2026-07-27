@@ -55,12 +55,17 @@ Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend als
   ([#18927](https://github.com/astral-sh/uv/pull/18927))
 
   [PEP 625](https://peps.python.org/pep-0625/) requires source distributions to use `.tar.gz`
-  archives. Previously, uv also accepted legacy formats such as `.tar.bz2`, `.tar.xz`, and
-  `.tar.zst`. Those formats are now rejected, including when referenced by an existing lockfile.
-  Legacy `.zip` source distributions remain supported for backwards compatibility.
+  archives. Previously, uv also accepted legacy formats such as `.tar.bz2` and `.tar.xz`. Those
+  formats are now rejected, including when referenced by an existing lockfile. Legacy `.zip` source
+  distributions remain supported for backwards compatibility.
 
   Wheels and other ZIP archives can no longer contain entries compressed with bzip2, LZMA, or XZ.
-  Entries must use the stored, DEFLATE, or zstd compression methods.
+  Entries must use the stored, DEFLATE, or zstd compression methods. zstd remains supported for
+  wheels and other archives; `.tar.zst` is not accepted specifically as a source distribution
+  because PEP 625 requires `.tar.gz`.
+
+  Removing support for uncommon compression methods reduces uv's compression dependencies and the
+  attack surface exposed when processing untrusted packages.
 
   You cannot opt out of this behavior. Rebuild source distributions as `.tar.gz` archives and
   wheels with a supported ZIP compression method. If an existing `uv.lock` references an
