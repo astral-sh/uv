@@ -974,8 +974,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         let download = |response| {
-            let query_url = url.clone();
-
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
                 // new revision, to collect the source and built artifacts.
@@ -986,7 +984,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 let entry = cache_shard.shard(revision.id()).entry(SOURCE);
                 let algorithms = http_hash_algorithms(hashes);
                 let hashes = self
-                    .download_archive(query_url, response, source, ext, entry.path(), &algorithms)
+                    .download_archive(response, source, ext, entry.path(), &algorithms)
                     .await?;
 
                 Ok(revision.with_hashes(HashDigests::from(hashes)))
@@ -2749,8 +2747,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         let download = |response| {
-            let query_url = url.clone();
-
             async {
                 // Take the union of the requested and existing hash algorithms.
                 let algorithms = {
@@ -2764,7 +2760,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 };
 
                 let hashes = self
-                    .download_archive(query_url, response, source, ext, entry.path(), &algorithms)
+                    .download_archive(response, source, ext, entry.path(), &algorithms)
                     .await?;
                 for existing in revision.hashes() {
                     if !hashes.contains(existing) {
@@ -2798,7 +2794,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Download and unzip a source distribution into the cache from an HTTP response.
     async fn download_archive(
         &self,
-        query_url: DisplaySafeUrl,
         response: Response,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
@@ -2827,7 +2822,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Download and unzip the source distribution into a temporary directory.
         let span = info_span!("download_source_dist", source_dist = %source);
-        uv_extract::stream::archive(query_url, &mut hasher, ext, temp_dir.path())
+        uv_extract::stream::archive(&mut hasher, ext, temp_dir.path())
             .await
             .map_err(|err| Error::Extract(source.to_string(), err))?;
         drop(span);
@@ -2896,7 +2891,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         // Unzip the archive into a temporary directory.
-        uv_extract::stream::archive(path.display(), &mut hasher, ext, &temp_dir.path())
+        uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path())
             .await
             .map_err(|err| Error::Extract(temp_dir.path().to_string_lossy().into_owned(), err))?;
 

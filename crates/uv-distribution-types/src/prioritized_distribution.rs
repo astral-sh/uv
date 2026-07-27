@@ -144,6 +144,7 @@ impl IncompatibleDist {
                 IncompatibleSource::RequiresPython(..) => {
                     format!("requires {self}")
                 }
+                IncompatibleSource::NotPep625Filename => format!("has {self}"),
             },
             Self::Unavailable => format!("has {self}"),
         }
@@ -172,6 +173,7 @@ impl IncompatibleDist {
                 IncompatibleSource::RequiresPython(..) => {
                     format!("require {self}")
                 }
+                IncompatibleSource::NotPep625Filename => format!("have {self}"),
             },
             Self::Unavailable => format!("have {self}"),
         }
@@ -277,6 +279,9 @@ impl Display for IncompatibleDist {
                 IncompatibleSource::RequiresPython(python, _) => {
                     write!(f, "Python {python}")
                 }
+                IncompatibleSource::NotPep625Filename => {
+                    f.write_str("a non-PEP 625-compliant source distribution filename")
+                }
             },
             Self::Unavailable => f.write_str("no available distributions"),
         }
@@ -327,6 +332,8 @@ pub enum IncompatibleSource {
     RequiresPython(VersionSpecifiers, PythonRequirementKind),
     Yanked(Yanked),
     NoBuild,
+    /// The source distribution's filename does not confirm to PEP 625.
+    NotPep625Filename,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -737,21 +744,26 @@ impl IncompatibleSource {
             Self::ExcludeNewer(timestamp_self) => match other {
                 // Smaller timestamps are closer to the cut-off time
                 Self::ExcludeNewer(timestamp_other) => timestamp_other < timestamp_self,
-                Self::NoBuild | Self::RequiresPython(_, _) | Self::Yanked(_) => true,
+                Self::NoBuild
+                | Self::RequiresPython(_, _)
+                | Self::Yanked(_)
+                | Self::NotPep625Filename => true,
             },
             Self::RequiresPython(_, _) => match other {
                 Self::ExcludeNewer(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_, _) => false,
-                Self::NoBuild | Self::Yanked(_) => true,
+                Self::NoBuild | Self::Yanked(_) | Self::NotPep625Filename => true,
             },
             Self::Yanked(_) => match other {
-                Self::ExcludeNewer(_) | Self::RequiresPython(_, _) => false,
+                Self::ExcludeNewer(_) | Self::RequiresPython(_, _) | Self::NotPep625Filename => {
+                    false
+                }
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
                 Self::NoBuild => true,
             },
-            Self::NoBuild => false,
+            Self::NoBuild | Self::NotPep625Filename => false,
         }
     }
 }
