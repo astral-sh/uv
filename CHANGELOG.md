@@ -91,9 +91,14 @@ Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend als
 
   You can opt out of automatic pre-release selection with `--prerelease disallow`. Alternatively,
   `--prerelease allow` considers pre-releases without first preferring stable releases, while
-  `--prerelease explicit` only allows them for direct requirements that mention a pre-release. If you
-  explicitly configured `if-necessary-or-explicit`, replace it with `if-necessary`; the old name
-  remains available as a deprecated alias.
+  `--prerelease explicit` only allows them for direct requirements that mention a pre-release.
+
+  The old `if-necessary-or-explicit` mode distinguished between explicitly requested pre-releases
+  and packages with no stable releases. That distinction is unnecessary now that `if-necessary`
+  handles both cases, including transitive requirements. The old name remains available as an alias
+  but emits a deprecation warning and will be removed in a future release. Replace
+  `--prerelease if-necessary-or-explicit` with `--prerelease if-necessary`, and update any
+  corresponding `prerelease` configuration values.
 
 - **Respect `--require-hashes` directives in `requirements.txt`**
   ([#19336](https://github.com/astral-sh/uv/pull/19336))
