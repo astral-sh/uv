@@ -2319,9 +2319,7 @@ fn build_list_files() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
-        .arg("--list")
-        .arg("--preview-features")
-        .arg("toml-backwards-compatibility"), @"
+        .arg("--list"), @"
     exit_code: 0 (success)
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
@@ -2378,9 +2376,7 @@ fn build_list_files() -> Result<()> {
         .arg(context.temp_dir.join("output2"))
         .arg("--list")
         .arg("--sdist")
-        .arg("--wheel")
-        .arg("--preview-features")
-        .arg("toml-backwards-compatibility"), @"
+        .arg("--wheel"), @"
     exit_code: 0 (success)
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
