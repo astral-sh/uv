@@ -233,6 +233,8 @@ pub struct RegistryBuiltWheel {
     pub filename: WheelFilename,
     pub file: Box<File>,
     pub index: IndexUrl,
+    /// Whether the recorded size must be validated when the wheel is downloaded.
+    pub size_is_authoritative: bool,
 }
 
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
@@ -275,6 +277,8 @@ pub struct DirectUrlBuiltDist {
     pub location: Box<DisplaySafeUrl>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
+    /// The expected size of the archive, if provided by a lockfile.
+    pub size: Option<u64>,
 }
 
 /// A built distribution (wheel) that exists in a local directory.
@@ -316,6 +320,8 @@ pub struct RegistrySourceDist {
     /// skip emitting wheels to the lockfile just because the host generating
     /// the lockfile didn't have any compatible wheels available.
     pub wheels: Vec<RegistryBuiltWheel>,
+    /// Whether the recorded size must be validated when the source distribution is downloaded.
+    pub size_is_authoritative: bool,
 }
 
 /// A source distribution that exists at an arbitrary URL.
@@ -332,6 +338,8 @@ pub struct DirectUrlSourceDist {
     pub ext: SourceDistExtension,
     /// The URL as it was provided by the user, including the subdirectory fragment.
     pub url: VerbatimUrl,
+    /// The expected size of the archive, if provided by a lockfile.
+    pub size: Option<u64>,
 }
 
 /// A source distribution that exists at the root or in a subdirectory of a Git repository.
@@ -414,6 +422,7 @@ impl Dist {
                     filename,
                     location: Box::new(location),
                     url,
+                    size: None,
                 })))
             }
             DistExtension::Source(ext) => {
@@ -426,6 +435,7 @@ impl Dist {
                     subdirectory,
                     ext,
                     url,
+                    size: None,
                 })))
             }
         }
@@ -1256,7 +1266,7 @@ impl RemoteSource for DirectUrlBuiltDist {
     }
 
     fn size(&self) -> Option<u64> {
-        self.url.size()
+        self.size
     }
 }
 
@@ -1266,7 +1276,7 @@ impl RemoteSource for DirectUrlSourceDist {
     }
 
     fn size(&self) -> Option<u64> {
-        self.url.size()
+        self.size
     }
 }
 
