@@ -125,27 +125,12 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     }
                 } else if let Some(direct_requirement) = direct.get(&requirement.name) {
                     // The package will resolve to a known direct URL source, so re-run the
-                    // lookahead for that source with the additional extras (and groups)
+                    // lookahead for that source with the extras (or groups) from this request
                     // activated, to discover any dependencies gated behind them.
-                    let mut candidate = direct_requirement.clone();
-                    let mut extras: Vec<_> = candidate
-                        .extras
-                        .iter()
-                        .cloned()
-                        .chain(requirement.extras.iter().cloned())
-                        .collect();
-                    extras.sort_unstable();
-                    extras.dedup();
-                    candidate.extras = extras.into_boxed_slice();
-                    let mut groups: Vec<_> = candidate
-                        .groups
-                        .iter()
-                        .cloned()
-                        .chain(requirement.groups.iter().cloned())
-                        .collect();
-                    groups.sort_unstable();
-                    groups.dedup();
-                    candidate.groups = groups.into_boxed_slice();
+                    let candidate = Requirement {
+                        source: direct_requirement.source.clone(),
+                        ..requirement
+                    };
                     if seen.insert(candidate.clone()) {
                         futures.push(self.lookahead(candidate, hasher.clone()));
                     }
