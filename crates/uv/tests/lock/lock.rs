@@ -15198,6 +15198,154 @@ fn lock_transitive_extra_path_dependency() -> Result<()> {
     Ok(())
 }
 
+/// A marker-disabled registry-form extra must not activate the extra-gated path dependency.
+#[test]
+fn lock_transitive_extra_path_dependency_disabled_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [project.optional-dependencies]
+        feature = ["target[feature] ; python_version < '3.12'"]
+    "#})?;
+
+    let target = context.temp_dir.child("packages").child("target");
+    target.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+    "#})?;
+
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(!lock.contains("[[package]]\nname = \"leaf\""));
+
+    Ok(())
+}
+
+/// Mapping a registry-form extra back to a known path source must not hide a conflicting path
+/// source for the same package.
+#[test]
+fn lock_transitive_extra_path_dependency_conflicting_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target", "other"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target-a" }
+        other = { path = "packages/other" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    let other = context.temp_dir.child("packages").child("other");
+    other.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "other"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [tool.uv.sources]
+        target = { path = "../target-b" }
+    "#})?;
+
+    for directory in ["target-a", "target-b"] {
+        let target = context.temp_dir.child("packages").child(directory);
+        target.child("pyproject.toml").write_str(indoc! {r#"
+            [project]
+            name = "target"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = []
+        "#})?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to resolve dependencies for `other` (v0.1.0)
+      ╰─▶ Requirements contain conflicting URLs for package `target` in all marker environments:
+          - file://[TEMP_DIR]/packages/target-a
+          - file://[TEMP_DIR]/packages/target-b
+
+    hint: `other` (v0.1.0) was included because `project` (v0.1.0) depends on `other`
+    ");
+
+    Ok(())
+}
+
 /// If a source is provided via `tool.uv.sources` _and_ a URL is provided in `project.dependencies`,
 /// we accept the source in `tool.uv.sources`, unless `--no-sources` is provided.
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
