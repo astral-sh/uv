@@ -14,8 +14,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, ExcludeDependency, Excludes,
-    ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DependencyModifiers,
+    DependencyOverride, DryRun, ExtrasSpecification, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -102,8 +102,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    lowered_overrides: Vec<Override<Requirement>>,
-    excludes: Vec<ExcludeDependency>,
+    mut modifiers: DependencyModifiers,
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
@@ -302,21 +301,16 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides
     };
 
-    // Collect constraints, overrides, and excludes.
+    // Collect constraints and dependency modifiers.
     let constraints = Constraints::from_requirements(
         constraints
             .into_iter()
             .map(|constraint| constraint.requirement)
             .chain(upgrade.constraints().cloned()),
     );
-    let overrides = Overrides::from_entries(
-        lowered_overrides
-            .into_iter()
-            .chain(overrides.into_iter().map(Override::Requirement))
-            .collect(),
-    )
-    .map_err(anyhow::Error::from)?;
-    let excludes = Excludes::from_entries(excludes);
+    modifiers
+        .extend_overrides(overrides.into_iter().map(DependencyOverride::requirement))
+        .map_err(anyhow::Error::from)?;
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
@@ -325,8 +319,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             let (lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
-                &overrides,
-                &excludes,
+                &modifiers,
                 &hasher,
                 index,
                 DistributionDatabase::new(
@@ -351,8 +344,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let manifest = Manifest::new(
         requirements,
         constraints,
-        overrides,
-        excludes,
+        modifiers,
         preferences,
         project,
         workspace_members,
@@ -1371,6 +1363,9 @@ pub(crate) fn diagnose_environment<'a>(
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
+    #[error(transparent)]
+    ScopedOverride(#[from] uv_configuration::ScopedOverrideSourceError),
+
     #[error("Failed to prepare distributions")]
     Prepare(#[from] uv_installer::PrepareError),
 

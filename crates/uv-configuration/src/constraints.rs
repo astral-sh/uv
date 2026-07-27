@@ -47,7 +47,7 @@ impl Constraints {
 
     /// Apply the constraints to a set of requirements.
     ///
-    /// NB: Change this method together with [`Overrides::apply`].
+    /// NB: Change this method together with [`DependencyModifiers::apply`](crate::DependencyModifiers::apply).
     pub fn apply<'a>(
         &'a self,
         requirements: impl IntoIterator<Item = Cow<'a, Requirement>>,

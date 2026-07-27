@@ -11,17 +11,15 @@ use thiserror::Error;
 use tracing::instrument;
 use url::Url;
 
-use uv_configuration::NoSources;
+use uv_configuration::{DependencyExclusion, NoSources};
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerSchema};
 use uv_warnings::warn_user;
+pub use uv_workspace::pyproject::UnresolvedDependencyOverride;
 use uv_workspace::pyproject::{ExtraBuildDependency, Sources};
-
-pub use uv_configuration::ExcludeDependency;
-pub use uv_workspace::pyproject::OverrideDependency;
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
 
@@ -425,8 +423,8 @@ pub struct ToolUv {
     pub globals: GlobalOptions,
     #[serde(flatten)]
     pub top_level: ResolverInstallerSchema,
-    pub override_dependencies: Option<Vec<OverrideDependency>>,
-    pub exclude_dependencies: Option<Vec<ExcludeDependency>>,
+    pub override_dependencies: Option<Vec<UnresolvedDependencyOverride>>,
+    pub exclude_dependencies: Option<Vec<DependencyExclusion>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub extra_build_dependencies: Option<BTreeMap<PackageName, Vec<ExtraBuildDependency>>>,
