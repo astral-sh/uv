@@ -15153,8 +15153,8 @@ fn lock_transitive_extra_path_dependency() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "target", directory = "packages/target" },
-            { name = "target", extras = ["feature"], marker = "extra == 'feature'", directory = "packages/target" },
+            { name = "target" },
+            { name = "target", extras = ["feature"], marker = "extra == 'feature'" },
         ]
         provides-extras = ["feature"]
 
@@ -15162,6 +15162,21 @@ fn lock_transitive_extra_path_dependency() -> Result<()> {
         name = "leaf"
         version = "0.1.0"
         source = { directory = "packages/leaf" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "bridge", extra = ["feature"] },
+            { name = "target" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "bridge", extras = ["feature"], directory = "packages/bridge" },
+            { name = "target", directory = "packages/target" },
+        ]
 
         [[package]]
         name = "target"
