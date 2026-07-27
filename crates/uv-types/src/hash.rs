@@ -236,7 +236,18 @@ impl HashStrategy {
             }
 
             if mode.is_require() {
+                let has_md5 = digests
+                    .iter()
+                    .any(|digest| digest.algorithm() == HashAlgorithm::Md5);
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+
+                if digests.is_empty() && has_md5 {
+                    return Err(HashStrategyError::InsecureHashAlgorithm(
+                        requirement.to_string(),
+                        HashAlgorithm::Md5,
+                        mode,
+                    ));
+                }
             }
 
             let digests = if let Some(constraint) = constraint_hashes.remove(&id) {
@@ -485,6 +496,8 @@ pub enum HashStrategyError {
         "In `{1}` mode, all requirements must have their versions pinned with `==`, but found: {0}"
     )]
     UnpinnedRequirement(String, HashCheckingMode),
+    #[error("In `{2}` mode, `{1}` hashes are insecure and cannot be used for: {0}")]
+    InsecureHashAlgorithm(String, HashAlgorithm, HashCheckingMode),
     #[error("In `{1}` mode, all requirements must have a hash, but none were provided for: {0}")]
     MissingHashes(String, HashCheckingMode),
     #[error(

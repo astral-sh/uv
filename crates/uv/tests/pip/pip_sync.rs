@@ -4717,7 +4717,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: anyio==4.0.0
+    error: In `--require-hashes` mode, `md5` hashes are insecure and cannot be used for: anyio==4.0.0
     ");
 
     // Request `anyio` with a `sha256` hash.
@@ -4784,6 +4784,24 @@ fn require_hashes_at_least_one() -> Result<()> {
      ~ anyio==4.0.0
     "
     );
+
+    // MD5 remains supported when hash checking is not required.
+    let requirements_txt = context.temp_dir.child("requirements-md5.txt");
+
+    uv_snapshot!(context.pip_sync()
+        .arg(requirements_txt.path())
+        .arg("--reinstall"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ anyio==4.0.0
+    ");
 
     Ok(())
 }
