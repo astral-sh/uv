@@ -497,14 +497,11 @@ impl<'a> LockedDependencyBuilder<'a> {
             let production_marker = requirement.marker.simplify_not_extras_with(|_| true);
             let requirement_marker = match context {
                 DependencyContext::Production | DependencyContext::Group(_) => production_marker,
-                DependencyContext::Extra(extra) => {
-                    let mut marker = requirement
-                        .marker
-                        .simplify_extras(slice::from_ref(extra))
-                        .simplify_not_extras_with(|candidate| candidate != extra);
-                    marker.and(production_marker.negate());
-                    marker
-                }
+                DependencyContext::Extra(extra) => requirement
+                    .marker
+                    .simplify_extras(slice::from_ref(extra))
+                    .simplify_not_extras_with(|candidate| candidate != extra)
+                    .and(production_marker.negate()),
             };
             let mut required_marker = UniversalMarker::from_combined(requirement_marker);
             required_marker.and(self.parent_marker);
@@ -548,16 +545,18 @@ impl<'a> LockedDependencyBuilder<'a> {
 
                 let mut marker = UniversalMarker::from_combined(required_marker);
                 if !dependency.fork_markers.is_empty() {
-                    let mut dependency_marker = MarkerTree::FALSE;
-                    for fork_marker in &dependency.fork_markers {
-                        dependency_marker.or(fork_marker.combined());
-                    }
+                    let dependency_marker = dependency
+                        .fork_markers
+                        .iter()
+                        .fold(MarkerTree::FALSE, |marker, fork_marker| {
+                            marker.or(fork_marker.combined())
+                        });
                     marker.and(UniversalMarker::from_combined(dependency_marker));
                 }
                 if marker.is_false() {
                     continue;
                 }
-                covered_marker.or(marker.combined());
+                covered_marker = covered_marker.or(marker.combined());
 
                 activated_extras
                     .entry(dependency.id.clone())
@@ -705,10 +704,12 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         // would create an exponential marker product for ordinary production requirements.
         let mut package_marker = UniversalMarker::from_combined(lock.fork_markers_union());
         if !package.fork_markers.is_empty() {
-            let mut fork_marker = MarkerTree::FALSE;
-            for marker in &package.fork_markers {
-                fork_marker.or(marker.combined());
-            }
+            let fork_marker = package
+                .fork_markers
+                .iter()
+                .fold(MarkerTree::FALSE, |fork_marker, marker| {
+                    fork_marker.or(marker.combined())
+                });
             package_marker.and(UniversalMarker::from_combined(fork_marker));
         }
         if let Some(requires_python) = package_requires_python {
