@@ -157,7 +157,7 @@ impl ManagedPythonInstallations {
     /// The caller must hold the managed Python installation lock to avoid removing an active
     /// download from another process. Preserve the scratch directory itself, since another
     /// process may have initialized it before waiting for the same lock.
-    pub fn clear_scratch(&self) -> Result<Removal, Error> {
+    pub fn clear_scratch(&self, _lock: &LockedFile) -> Result<Removal, Error> {
         let mut removal = Removal::default();
 
         for entry in fs::read_dir(self.scratch())? {

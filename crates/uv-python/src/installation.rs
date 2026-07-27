@@ -327,8 +327,8 @@ impl PythonInstallation {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
         let scratch_dir = installations.scratch();
-        let _lock = installations.lock().await?;
-        installations.clear_scratch()?;
+        let lock = installations.lock().await?;
+        installations.clear_scratch(&lock)?;
 
         info!("Fetching requested Python...");
         let result = download

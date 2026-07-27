@@ -3,6 +3,7 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 
 use uv_cache::Cache;
+use uv_python::managed::ManagedPythonInstallations;
 use uv_static::EnvVars;
 
 use uv_test::uv_snapshot;
@@ -166,6 +167,42 @@ fn clean_package_preserves_python_temporary_directories() -> Result<()> {
     ");
 
     assert!(interrupted.child("download").is_file());
+
+    Ok(())
+}
+
+/// A cache clean, even with `--force`, must not remove an active managed Python download.
+#[tokio::test]
+async fn clean_python_temporary_directories_waits_for_installation_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_managed_python_dirs();
+
+    let managed = context.temp_dir.child("managed");
+    let scratch = managed.child(".temp");
+    let active = scratch.child(".tmp-active");
+    active.create_dir_all()?;
+    active
+        .child("download")
+        .write_str("active Python download")?;
+
+    let installations =
+        ManagedPythonInstallations::from_settings(Some(managed.to_path_buf()))?.init()?;
+    let _lock = installations.lock().await?;
+
+    uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Timeout ([TIME]) when waiting for lock on `managed` at `managed/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    ");
+
+    assert!(active.child("download").is_file());
+
+    uv_snapshot!(context.filters(), context.clean().arg("--force").env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Timeout ([TIME]) when waiting for lock on `managed` at `managed/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    ");
+
+    assert!(active.child("download").is_file());
 
     Ok(())
 }

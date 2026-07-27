@@ -28,8 +28,8 @@ pub(crate) async fn cache_clean(
         let scratch = installations.scratch();
 
         if scratch.is_dir() {
-            let _lock = installations.lock().await?;
-            python_removal = installations.clear_scratch().with_context(|| {
+            let lock = installations.lock().await?;
+            python_removal = installations.clear_scratch(&lock).with_context(|| {
                 format!(
                     "Failed to clear temporary Python downloads at: {}",
                     scratch.user_display()
