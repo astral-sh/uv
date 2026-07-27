@@ -5506,10 +5506,7 @@ fn pep_751_requires_packages() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
         .arg("pylock.toml"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Not a valid `pylock.toml` file: pylock.toml
       Caused by: TOML parse error at line 1, column 1
