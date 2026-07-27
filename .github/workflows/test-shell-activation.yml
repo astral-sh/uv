@@ -149,6 +149,7 @@ jobs:
           set -eu
 
           original_path=$PATH
+          original_directory=$PWD
           SCRIPT_PATH=original-script-path
           export SCRIPT_PATH
 
@@ -167,16 +168,19 @@ jobs:
             exit 1
           fi
 
-          test "$VIRTUAL_ENV" = "$PWD/$ACTIVATION_DIRECTORY"
+          test "$PWD" = "$original_directory"
+          test "$VIRTUAL_ENV" = "$original_directory/$ACTIVATION_DIRECTORY"
           test "$SCRIPT_PATH" = original-script-path
 
           python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
 
           deactivate
 
+          test "$PWD" = "$original_directory"
           test "$PATH" = "$original_path"
           test "$SCRIPT_PATH" = original-script-path
           test -z "${VIRTUAL_ENV-}"
+          test -z "${VIRTUAL_ENV_PROMPT-}"
           ACTIVATION
 
           if [ "$activation_status" -ne 0 ]; then
@@ -223,6 +227,7 @@ jobs:
           set -eu
 
           original_path=$PATH
+          original_directory=$PWD
           if [ "$ACTIVATION_OSTYPE" = absent ]; then
             unset OSTYPE
           else
@@ -242,14 +247,17 @@ jobs:
             exit 1
           fi
 
-          test "$VIRTUAL_ENV" = "$PWD/.venv"
+          test "$PWD" = "$original_directory"
+          test "$VIRTUAL_ENV" = "$original_directory/.venv"
 
           python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
 
           deactivate
 
+          test "$PWD" = "$original_directory"
           test "$PATH" = "$original_path"
           test -z "${VIRTUAL_ENV-}"
+          test -z "${VIRTUAL_ENV_PROMPT-}"
 
   activation-fish:
     name: "Fish activation"
@@ -280,11 +288,15 @@ jobs:
         shell: fish {0}
         run: |
           set original_path $PATH
+          set original_directory $PWD
 
           source ./.venv/bin/activate.fish
           or exit 1
 
-          test "$VIRTUAL_ENV" = "$PWD/.venv"
+          test "$PWD" = "$original_directory"
+          or exit 1
+
+          test "$VIRTUAL_ENV" = "$original_directory/.venv"
           or exit 1
 
           python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
@@ -293,10 +305,17 @@ jobs:
           deactivate
           or exit 1
 
+          test "$PWD" = "$original_directory"
+          or exit 1
+
           test (string join : $PATH) = (string join : $original_path)
           or exit 1
 
           if set -q VIRTUAL_ENV
+              exit 1
+          end
+
+          if set -q VIRTUAL_ENV_PROMPT
               exit 1
           end
 
@@ -308,10 +327,16 @@ jobs:
       - name: "Activate relocated virtual environment"
         shell: fish {0}
         run: |
+          set original_path $PATH
+          set original_directory $PWD
+
           source ./relocated/bin/activate.fish
           or exit 1
 
-          test "$VIRTUAL_ENV" = "$PWD/relocated"
+          test "$PWD" = "$original_directory"
+          or exit 1
+
+          test "$VIRTUAL_ENV" = "$original_directory/relocated"
           or exit 1
 
           python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
@@ -319,6 +344,20 @@ jobs:
 
           deactivate
           or exit 1
+
+          test "$PWD" = "$original_directory"
+          or exit 1
+
+          test (string join : $PATH) = (string join : $original_path)
+          or exit 1
+
+          if set -q VIRTUAL_ENV
+              exit 1
+          end
+
+          if set -q VIRTUAL_ENV_PROMPT
+              exit 1
+          end
 
   activation-nushell:
     name: "Nushell activation (${{ matrix.environment }})"
@@ -361,7 +400,16 @@ jobs:
         if: matrix.environment == 'standard'
         shell: nu {0}
         run: |
+          let original_path = $env.PATH
+          let original_directory = $env.PWD
+          let original_virtual_env = $env | get --optional VIRTUAL_ENV
+          let original_virtual_env_prompt = $env | get --optional VIRTUAL_ENV_PROMPT
+
           overlay use ${{ github.workspace }}/.venv/bin/activate.nu
+
+          if $env.PWD != $original_directory {
+              error make { msg: "activation changed the working directory" }
+          }
 
           if ($env.VIRTUAL_ENV | path expand) != (".venv" | path expand) {
               error make { msg: "VIRTUAL_ENV does not identify the activated environment" }
@@ -371,8 +419,20 @@ jobs:
 
           deactivate
 
-          if "VIRTUAL_ENV" in $env {
-              error make { msg: "deactivate did not remove VIRTUAL_ENV" }
+          if $env.PWD != $original_directory {
+              error make { msg: "deactivation changed the working directory" }
+          }
+
+          if $env.PATH != $original_path {
+              error make { msg: "deactivate did not restore PATH" }
+          }
+
+          if ($env | get --optional VIRTUAL_ENV) != $original_virtual_env {
+              error make { msg: "deactivate did not restore VIRTUAL_ENV" }
+          }
+
+          if ($env | get --optional VIRTUAL_ENV_PROMPT) != $original_virtual_env_prompt {
+              error make { msg: "deactivate did not restore VIRTUAL_ENV_PROMPT" }
           }
 
       - name: "Create relocatable virtual environment"
@@ -385,7 +445,16 @@ jobs:
         if: matrix.environment == 'relocatable'
         shell: nu {0}
         run: |
+          let original_path = $env.PATH
+          let original_directory = $env.PWD
+          let original_virtual_env = $env | get --optional VIRTUAL_ENV
+          let original_virtual_env_prompt = $env | get --optional VIRTUAL_ENV_PROMPT
+
           overlay use ${{ github.workspace }}/relocated/bin/activate.nu
+
+          if $env.PWD != $original_directory {
+              error make { msg: "activation changed the working directory" }
+          }
 
           if ($env.VIRTUAL_ENV | path expand) != ("relocated" | path expand) {
               error make { msg: "VIRTUAL_ENV does not identify the relocated environment" }
@@ -394,6 +463,22 @@ jobs:
           python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
 
           deactivate
+
+          if $env.PWD != $original_directory {
+              error make { msg: "deactivation changed the working directory" }
+          }
+
+          if $env.PATH != $original_path {
+              error make { msg: "deactivate did not restore PATH" }
+          }
+
+          if ($env | get --optional VIRTUAL_ENV) != $original_virtual_env {
+              error make { msg: "deactivate did not restore VIRTUAL_ENV" }
+          }
+
+          if ($env | get --optional VIRTUAL_ENV_PROMPT) != $original_virtual_env_prompt {
+              error make { msg: "deactivate did not restore VIRTUAL_ENV_PROMPT" }
+          }
 
   activation-cshell:
     name: "C shell activation"
@@ -424,18 +509,22 @@ jobs:
         shell: tcsh {0}
         run: |
           set original_path = "$PATH"
+          set original_directory = "$cwd"
 
           source ./.venv/bin/activate.csh
 
-          if ("$VIRTUAL_ENV" != "$cwd/.venv") exit 1
+          if ("$cwd" != "$original_directory") exit 1
+          if ("$VIRTUAL_ENV" != "$original_directory/.venv") exit 1
 
           python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
           if ($status != 0) exit 1
 
           deactivate
 
+          if ("$cwd" != "$original_directory") exit 1
           if ("$PATH" != "$original_path") exit 1
           if ($?VIRTUAL_ENV) exit 1
+          if ($?VIRTUAL_ENV_PROMPT) exit 1
 
       - name: "Verify relocatable environments omit the C shell activator"
         run: |
@@ -465,8 +554,13 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $originalPath = $env:PATH
+          $originalDirectory = (Get-Location).Path
 
           . .\.venv\Scripts\activate.ps1
+
+          if ((Get-Location).Path -ne $originalDirectory) {
+            throw "activation changed the working directory"
+          }
 
           if ($env:VIRTUAL_ENV -ne (Resolve-Path .\.venv).Path) {
             throw "VIRTUAL_ENV does not identify the activated environment"
@@ -479,12 +573,20 @@ jobs:
 
           deactivate
 
+          if ((Get-Location).Path -ne $originalDirectory) {
+            throw "deactivation changed the working directory"
+          }
+
           if ($env:PATH -ne $originalPath) {
             throw "deactivate did not restore PATH"
           }
 
           if (Test-Path Env:VIRTUAL_ENV) {
             throw "deactivate did not remove VIRTUAL_ENV"
+          }
+
+          if (Test-Path Env:VIRTUAL_ENV_PROMPT) {
+            throw "deactivate did not remove VIRTUAL_ENV_PROMPT"
           }
 
       - name: "Create relocatable virtual environment"
@@ -501,8 +603,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $originalPath = $env:PATH
+          $originalDirectory = (Get-Location).Path
 
           . .\relocated\Scripts\activate.ps1
+
+          if ((Get-Location).Path -ne $originalDirectory) {
+            throw "activation changed the working directory"
+          }
 
           if ($env:VIRTUAL_ENV -ne (Resolve-Path .\relocated).Path) {
             throw "VIRTUAL_ENV does not identify the relocated environment"
@@ -514,6 +622,22 @@ jobs:
           }
 
           deactivate
+
+          if ((Get-Location).Path -ne $originalDirectory) {
+            throw "deactivation changed the working directory"
+          }
+
+          if ($env:PATH -ne $originalPath) {
+            throw "deactivate did not restore PATH"
+          }
+
+          if (Test-Path Env:VIRTUAL_ENV) {
+            throw "deactivate did not remove VIRTUAL_ENV"
+          }
+
+          if (Test-Path Env:VIRTUAL_ENV_PROMPT) {
+            throw "deactivate did not remove VIRTUAL_ENV_PROMPT"
+          }
 
   activation-batch:
     name: "Windows batch activation"
@@ -534,11 +658,13 @@ jobs:
           $activationTest = @'
           @echo off
           set "ORIGINAL_PATH=%PATH%"
+          set "ORIGINAL_DIRECTORY=%CD%"
 
           call "%~1\Scripts\activate.bat"
           if errorlevel 1 exit /b 1
 
-          if /I not "%VIRTUAL_ENV%"=="%CD%\%~1" exit /b 1
+          if /I not "%CD%"=="%ORIGINAL_DIRECTORY%" exit /b 1
+          if /I not "%VIRTUAL_ENV%"=="%ORIGINAL_DIRECTORY%\%~1" exit /b 1
 
           python -c "import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ['VIRTUAL_ENV'])"
           if errorlevel 1 exit /b 1
@@ -546,8 +672,10 @@ jobs:
           call "%~1\Scripts\deactivate.bat"
           if errorlevel 1 exit /b 1
 
+          if /I not "%CD%"=="%ORIGINAL_DIRECTORY%" exit /b 1
           if not "%PATH%"=="%ORIGINAL_PATH%" exit /b 1
           if defined VIRTUAL_ENV exit /b 1
+          if defined VIRTUAL_ENV_PROMPT exit /b 1
           '@
 
           Set-Content -Path activation-test.cmd -Value $activationTest -Encoding ascii
