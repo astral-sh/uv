@@ -31,10 +31,7 @@ fn build_warns_cache_inside_source() -> Result<()> {
     context.cache_dir = project.child(".uv-cache");
 
     uv_snapshot!(context.filters(), context.build().arg("--sdist").arg("project"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The cache directory `project/.uv-cache` is inside the build source directory `project` and may be included in distributions
     Building source distribution (uv build backend)...
@@ -86,10 +83,7 @@ fn build_warns_symlinked_cache_inside_source() -> Result<()> {
     command.current_dir(context.temp_dir.path());
 
     uv_snapshot!(context.filters(), command, @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: The cache directory `cache-link` is inside the build source directory `project` and may be included in distributions
     Building source distribution (uv build backend)...
@@ -137,10 +131,7 @@ fn build_allows_cache_outside_selected_source() -> Result<()> {
         .arg("--package")
         .arg("member")
         .current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Building source distribution (uv build backend)...
     Successfully built dist/member-0.1.0.tar.gz
@@ -163,10 +154,7 @@ fn cache_current_dir_inside_cache() -> Result<()> {
         .arg("cache")
         .arg("dir")
         .current_dir(context.cache_dir.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The project directory `.` is inside the cache directory `.`
     ");
@@ -178,10 +166,7 @@ fn cache_current_dir_inside_cache() -> Result<()> {
         .arg("cache")
         .arg("dir")
         .current_dir(child.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The project directory `.` is inside the cache directory `[CACHE_DIR]/`
     ");
@@ -212,10 +197,7 @@ fn cache_current_dir_inside_symlinked_cache() -> Result<()> {
     command.current_dir(child.path());
 
     uv_snapshot!(context.filters(), command, @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The project directory `.` is inside the cache directory `[CACHE_DIR]/`
     ");
@@ -250,10 +232,7 @@ fn cache_workspace_inside_cache() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--project")
         .arg(workspace.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The project directory `[CACHE_DIR]/workspace` is inside the cache directory `[CACHE_DIR]/`
     ");
@@ -283,10 +262,7 @@ fn cache_project_inside_relative_parent_cache() -> Result<()> {
     command.current_dir(project.path());
 
     uv_snapshot!(context.filters(), command, @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The project directory `.` is inside the cache directory `[TEMP_DIR]/`
     ");
@@ -311,10 +287,7 @@ fn cache_project_inside_cache_no_cache() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--no-cache").current_dir(&project), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
@@ -372,10 +345,7 @@ fn cache_init_failure() -> Result<()> {
 
     // Running a command should fail with a chained error about cache initialization
     uv_snapshot!(context.filters(), command, @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to initialize cache at `[CACHE_DIR]`
       Caused by: failed to create directory `[CACHE_DIR]`: Permission denied (os error 13)

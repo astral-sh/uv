@@ -363,13 +363,20 @@ pub(crate) async fn run(
             if let Some(spec) = script_specification(
                 (&script).into(),
                 &settings.resolver,
+                &cache,
+                workspace_cache,
                 client_builder.credentials_cache(),
-            )? {
+            )
+            .await?
+            {
                 let script_extra_build_requires = script_extra_build_requires(
                     (&script).into(),
                     &settings.resolver,
+                    &cache,
+                    workspace_cache,
                     client_builder.credentials_cache(),
-                )?
+                )
+                .await?
                 .into_inner();
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
@@ -1083,7 +1090,7 @@ pub(crate) async fn run(
                     .chain(base_site_packages)
                     .dedup()
                     .inspect(|path| debug!("Adding `{}` to site packages", path.display()))
-                    .map(|path| format!("site.addsitedir(\"{}\")", path.escape_for_python()))
+                    .map(|path| format!("site.addsitedir({})", path.escape_for_python()))
                     .collect::<Vec<_>>()
                     .join("; ")
             );
@@ -1465,7 +1472,7 @@ impl ParsedRunCommand {
                 Ok((script, run_command))
             }
             Self::PendingRemote(remote_command) => {
-                let settings = GlobalSettings::resolve(global_args, filesystem, environment);
+                let settings = GlobalSettings::resolve(global_args, filesystem, environment)?;
                 let client_builder = BaseClientBuilder::new(
                     settings.network_settings.connectivity,
                     settings.network_settings.system_certs,

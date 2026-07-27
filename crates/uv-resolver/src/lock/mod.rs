@@ -46,6 +46,7 @@ use uv_pep508::{
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
     ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
@@ -53,6 +54,7 @@ use uv_pypi_types::{
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
+use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
@@ -302,6 +304,24 @@ pub struct Lock {
     manifest: ResolverManifest,
 }
 
+/// Return the marker domain covered by the supported environments and `requires-python`.
+pub fn implicit_constraints_marker(
+    requires_python: MarkerTree,
+    supported_environments: &[MarkerTree],
+) -> MarkerTree {
+    let mut environments_union = if supported_environments.is_empty() {
+        MarkerTree::TRUE
+    } else {
+        let mut environments_union = MarkerTree::FALSE;
+        for environment in supported_environments {
+            environments_union.or(*environment);
+        }
+        environments_union
+    };
+    environments_union.and(requires_python);
+    environments_union
+}
+
 /// A direct dependency selected from a [`Lock`].
 #[derive(Clone, Debug)]
 pub struct SelectedDependency<'lock> {
@@ -370,6 +390,14 @@ impl<'lock> DependencySelectionContext<'lock> {
     }
 }
 
+/// The dependency section in which a locked edge is stored.
+#[derive(Clone, Copy, Debug)]
+enum DependencyContext<'a> {
+    Production,
+    Extra(&'a ExtraName),
+    Group(&'a GroupName),
+}
+
 /// Direct dependency selections from a [`Lock`] for a named package.
 ///
 /// The dependency can come from the lock manifest, a dependency group, the production packages,
@@ -399,11 +427,15 @@ impl<'lock> DependencySelection<'lock> {
 }
 
 impl Lock {
-    /// Initialize a [`Lock`] from a [`ResolverOutput`].
+    /// Initialize a [`Lock`] from a [`ResolverOutput`], applying any index-specific hash
+    /// requirements to registry artifacts.
+    ///
+    /// Returns an error if an artifact does not advertise its index's required algorithm.
     pub fn from_resolution(
         resolution: &ResolverOutput,
         root: &Path,
         supported_environments: Vec<MarkerTree>,
+        index_locations: &IndexLocations,
     ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
@@ -453,7 +485,8 @@ impl Lock {
                 vec![]
             };
 
-            let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
+            let mut package =
+                Package::from_annotated_dist(dist, fork_markers, root, index_locations)?;
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
                 wheel_marker.and(supported_environments_marker);
@@ -468,20 +501,14 @@ impl Lock {
                 )
             });
 
-            // Add all dependencies
-            for edge in resolution.graph.edges(node_index) {
-                let ResolutionGraphNode::Dist(dependency_dist) = &resolution.graph[edge.target()]
-                else {
-                    continue;
-                };
-                let marker = simplify_dependency_marker(
-                    &requires_python,
-                    environment,
-                    dist.marker,
-                    *edge.weight(),
-                );
-                package.add_dependency(&requires_python, dependency_dist, marker, root)?;
-            }
+            package.add_dependencies(
+                DependencyContext::Production,
+                &requires_python,
+                resolution,
+                node_index,
+                environment,
+                root,
+            )?;
 
             let id = package.id.clone();
             if let Some(locked_dist) = packages.insert(id, package) {
@@ -506,26 +533,14 @@ impl Lock {
                     }
                     .into());
                 };
-                for edge in resolution.graph.edges(node_index) {
-                    let ResolutionGraphNode::Dist(dependency_dist) =
-                        &resolution.graph[edge.target()]
-                    else {
-                        continue;
-                    };
-                    let marker = simplify_dependency_marker(
-                        &requires_python,
-                        environment,
-                        dist.marker,
-                        *edge.weight(),
-                    );
-                    package.add_optional_dependency(
-                        &requires_python,
-                        extra.clone(),
-                        dependency_dist,
-                        marker,
-                        root,
-                    )?;
-                }
+                package.add_dependencies(
+                    DependencyContext::Extra(extra),
+                    &requires_python,
+                    resolution,
+                    node_index,
+                    environment,
+                    root,
+                )?;
             }
             if let Some(group) = dist.group.as_ref() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
@@ -536,26 +551,14 @@ impl Lock {
                     }
                     .into());
                 };
-                for edge in resolution.graph.edges(node_index) {
-                    let ResolutionGraphNode::Dist(dependency_dist) =
-                        &resolution.graph[edge.target()]
-                    else {
-                        continue;
-                    };
-                    let marker = simplify_dependency_marker(
-                        &requires_python,
-                        environment,
-                        dist.marker,
-                        *edge.weight(),
-                    );
-                    package.add_group_dependency(
-                        &requires_python,
-                        group.clone(),
-                        dependency_dist,
-                        marker,
-                        root,
-                    )?;
-                }
+                package.add_dependencies(
+                    DependencyContext::Group(group),
+                    &requires_python,
+                    resolution,
+                    node_index,
+                    environment,
+                    root,
+                )?;
             }
         }
 
@@ -690,39 +693,13 @@ impl Lock {
         // it implies we somehow have a dependency with no corresponding locked
         // package.
         for dist in &packages {
-            for dep in &dist.dependencies {
-                if !by_id.contains_key(&dep.package_id) {
+            for dependency in dist.all_dependencies() {
+                if !by_id.contains_key(&dependency.package_id) {
                     return Err(LockErrorKind::UnrecognizedDependency {
                         id: dist.id.clone(),
-                        dependency: dep.clone(),
+                        dependency: dependency.clone(),
                     }
                     .into());
-                }
-            }
-
-            // Perform the same validation for optional dependencies.
-            for dependencies in dist.optional_dependencies.values() {
-                for dep in dependencies {
-                    if !by_id.contains_key(&dep.package_id) {
-                        return Err(LockErrorKind::UnrecognizedDependency {
-                            id: dist.id.clone(),
-                            dependency: dep.clone(),
-                        }
-                        .into());
-                    }
-                }
-            }
-
-            // Perform the same validation for dev dependencies.
-            for dependencies in dist.dependency_groups.values() {
-                for dep in dependencies {
-                    if !by_id.contains_key(&dep.package_id) {
-                        return Err(LockErrorKind::UnrecognizedDependency {
-                            id: dist.id.clone(),
-                            dependency: dep.clone(),
-                        }
-                        .into());
-                    }
                 }
             }
 
@@ -817,6 +794,41 @@ impl Lock {
     /// Returns the [`Package`] entries in this lock.
     pub fn packages(&self) -> &[Package] {
         &self.packages
+    }
+
+    /// Return whether every registry artifact in the lockfile has a hash using its index's
+    /// required algorithm, if any.
+    pub fn satisfies_hash_algorithms(
+        &self,
+        root: &Path,
+        index_locations: &IndexLocations,
+    ) -> Result<bool, LockError> {
+        for package in &self.packages {
+            let Some(index) = package.index(root)? else {
+                continue;
+            };
+            let Some(algorithm) = index_locations.hash_algorithm_for(&index) else {
+                continue;
+            };
+            warn_index_hash_algorithm_preview();
+
+            let mismatched =
+                |hash: Option<&Hash>| hash.is_none_or(|hash| hash.0.algorithm != algorithm);
+
+            if package.sdist.iter().any(|sdist| mismatched(sdist.hash()))
+                || package.wheels.iter().any(|wheel| {
+                    mismatched(wheel.hash.as_ref())
+                        || wheel
+                            .zstd
+                            .as_ref()
+                            .is_some_and(|zstd| mismatched(zstd.hash.as_ref()))
+                })
+            {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
     }
 
     /// Returns the supported Python version range for the lockfile, if present.
@@ -1348,17 +1360,10 @@ impl Lock {
     /// Returns the actually covered and the expected marker space on validation error.
     pub fn check_marker_coverage(&self) -> Result<(), (MarkerTree, MarkerTree)> {
         let fork_markers_union = self.fork_markers_union();
-        let mut environments_union = if !self.supported_environments.is_empty() {
-            let mut environments_union = MarkerTree::FALSE;
-            for fork_marker in &self.supported_environments {
-                environments_union.or(*fork_marker);
-            }
-            environments_union
-        } else {
-            MarkerTree::TRUE
-        };
-        // When a user defines environments, they are implicitly constrained by requires-python.
-        environments_union.and(self.requires_python.to_marker_tree());
+        let environments_union = implicit_constraints_marker(
+            self.requires_python.to_marker_tree(),
+            &self.supported_environments,
+        );
         if fork_markers_union.negate().is_disjoint(environments_union) {
             Ok(())
         } else {
@@ -1451,7 +1456,7 @@ impl Lock {
     /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
     fn satisfies_provides_extra<'lock>(
         &self,
-        provides_extra: Box<[ExtraName]>,
+        provides_extra: &[ExtraName],
         package: &'lock Package,
     ) -> SatisfiesResult<'lock> {
         if !self.supports_provides_extra() {
@@ -1462,7 +1467,7 @@ impl Lock {
         let actual: BTreeSet<_> = package.metadata.provides_extra.iter().collect();
 
         if expected != actual {
-            let expected = Box::into_iter(provides_extra).collect();
+            let expected = provides_extra.iter().cloned().collect();
             return SatisfiesResult::MismatchedPackageProvidesExtra(
                 &package.id.name,
                 package.id.version.as_ref(),
@@ -1561,6 +1566,37 @@ impl Lock {
         }
 
         Ok(SatisfiesResult::Satisfied)
+    }
+
+    fn record_index(
+        requirement: &Requirement,
+        remotes: &mut Option<BTreeSet<UrlString>>,
+        locals: &mut Option<BTreeSet<Box<Path>>>,
+        root: &Path,
+    ) {
+        let RequirementSource::Registry {
+            index: Some(index), ..
+        } = &requirement.source
+        else {
+            return;
+        };
+
+        match &index.url {
+            IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                if let Some(remotes) = remotes.as_mut() {
+                    remotes.insert(UrlString::from(index.url().without_credentials().as_ref()));
+                }
+            }
+            IndexUrl::Path(url) => {
+                if let Some(locals) = locals.as_mut()
+                    && let Some(path) = url.to_file_path().ok().and_then(|path| {
+                        try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
+                    })
+                {
+                    locals.insert(path.into_boxed_path());
+                }
+            }
+        }
     }
 
     /// Check whether the lock matches the project structure, requirements and configuration.
@@ -1851,29 +1887,7 @@ impl Lock {
             .collect::<Vec<_>>();
 
         for requirement in &root_requirements {
-            if let RequirementSource::Registry {
-                index: Some(index), ..
-            } = &requirement.source
-            {
-                match &index.url {
-                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        if let Some(remotes) = remotes.as_mut() {
-                            remotes.insert(UrlString::from(
-                                index.url().without_credentials().as_ref(),
-                            ));
-                        }
-                    }
-                    IndexUrl::Path(url) => {
-                        if let Some(locals) = locals.as_mut() {
-                            if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
-                            }) {
-                                locals.insert(path.into_boxed_path());
-                            }
-                        }
-                    }
-                }
-            }
+            Self::record_index(requirement, &mut remotes, &mut locals, root);
         }
 
         if !root_requirements.is_empty() {
@@ -1998,7 +2012,7 @@ impl Lock {
                         }
 
                         // Validate the static `provides-extras` metadata.
-                        match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                        match self.satisfies_provides_extra(&metadata.provides_extra, package) {
                             SatisfiesResult::Satisfied => {}
                             result => return Ok(result),
                         }
@@ -2084,7 +2098,7 @@ impl Lock {
                     }
 
                     // Validate the `provides-extras` metadata.
-                    match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                    match self.satisfies_provides_extra(&metadata.provides_extra, package) {
                         SatisfiesResult::Satisfied => {}
                         result => return Ok(result),
                     }
@@ -2123,7 +2137,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extra, package, ) {
+                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(&metadata.provides_extra, package, ) {
                         debug!("Static `provides-extra` for `{}` is up-to-date", package.id);
                     } else {
                         debug!("Static `provides-extra` for `{}` is out-of-date; falling back to distribution database", package.id);
@@ -2205,7 +2219,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                    match self.satisfies_provides_extra(&metadata.provides_extra, package) {
                         SatisfiesResult::Satisfied => {}
                         result => return Ok(result),
                     }
@@ -2235,54 +2249,14 @@ impl Lock {
                 .iter()
                 .chain(package.metadata.dependency_groups.values().flatten())
             {
-                if let RequirementSource::Registry {
-                    index: Some(index), ..
-                } = &requirement.source
-                {
-                    match &index.url {
-                        IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                            if let Some(remotes) = remotes.as_mut() {
-                                remotes.insert(UrlString::from(
-                                    index.url().without_credentials().as_ref(),
-                                ));
-                            }
-                        }
-                        IndexUrl::Path(url) => {
-                            if let Some(locals) = locals.as_mut() {
-                                if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                    try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
-                                }) {
-                                    locals.insert(path.into_boxed_path());
-                                }
-                            }
-                        }
-                    }
-                }
+                Self::record_index(requirement, &mut remotes, &mut locals, root);
             }
 
             // Recurse.
-            for dep in &package.dependencies {
-                if seen.insert(&dep.package_id) {
-                    let dep_dist = self.find_by_id(&dep.package_id);
-                    queue.push_back(dep_dist);
-                }
-            }
-
-            for dependencies in package.optional_dependencies.values() {
-                for dep in dependencies {
-                    if seen.insert(&dep.package_id) {
-                        let dep_dist = self.find_by_id(&dep.package_id);
-                        queue.push_back(dep_dist);
-                    }
-                }
-            }
-
-            for dependencies in package.dependency_groups.values() {
-                for dep in dependencies {
-                    if seen.insert(&dep.package_id) {
-                        let dep_dist = self.find_by_id(&dep.package_id);
-                        queue.push_back(dep_dist);
-                    }
+            for dependency in package.all_dependencies() {
+                if seen.insert(&dependency.package_id) {
+                    let dependency_package = self.find_by_id(&dependency.package_id);
+                    queue.push_back(dependency_package);
                 }
             }
         }
@@ -2812,10 +2786,11 @@ impl Package {
         annotated_dist: &AnnotatedDist,
         fork_markers: Vec<UniversalMarker>,
         root: &Path,
+        index_locations: &IndexLocations,
     ) -> Result<Self, LockError> {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
-        let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
-        let wheels = Wheel::from_annotated_dist(annotated_dist)?;
+        let sdist = SourceDist::from_annotated_dist(&id, annotated_dist, index_locations)?;
+        let wheels = Wheel::from_annotated_dist(annotated_dist, index_locations)?;
         let requires_dist = if id.source.is_immutable() {
             BTreeSet::default()
         } else {
@@ -2876,18 +2851,55 @@ impl Package {
         })
     }
 
-    /// Add the [`AnnotatedDist`] as a dependency of the [`Package`].
+    /// Add the dependencies of a resolution node to the [`Package`] in the given context.
+    fn add_dependencies(
+        &mut self,
+        context: DependencyContext<'_>,
+        requires_python: &RequiresPython,
+        resolution: &ResolverOutput,
+        node_index: NodeIndex,
+        environment: SimplifiedMarkerTree,
+        root: &Path,
+    ) -> Result<(), LockError> {
+        let parent_marker = *resolution.graph[node_index].marker();
+        for edge in resolution.graph.edges(node_index) {
+            let ResolutionGraphNode::Dist(dependency_dist) = &resolution.graph[edge.target()]
+            else {
+                continue;
+            };
+            let marker = simplify_dependency_marker(
+                requires_python,
+                environment,
+                parent_marker,
+                *edge.weight(),
+            );
+            self.add_dependency(context, requires_python, dependency_dist, marker, root)?;
+        }
+        Ok(())
+    }
+
+    /// Add the [`AnnotatedDist`] as a dependency of the [`Package`] in the given context.
     fn add_dependency(
         &mut self,
+        context: DependencyContext<'_>,
         requires_python: &RequiresPython,
         annotated_dist: &AnnotatedDist,
         marker: UniversalMarker,
         root: &Path,
     ) -> Result<(), LockError> {
-        let new_dep =
+        let new_dependency =
             Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
-        for existing_dep in &mut self.dependencies {
-            if existing_dep.package_id == new_dep.package_id
+        let dependencies = match context {
+            DependencyContext::Production => &mut self.dependencies,
+            DependencyContext::Extra(extra) => {
+                self.optional_dependencies.entry(extra.clone()).or_default()
+            }
+            DependencyContext::Group(group) => {
+                self.dependency_groups.entry(group.clone()).or_default()
+            }
+        };
+        for existing_dependency in &mut *dependencies {
+            if existing_dependency.package_id == new_dependency.package_id
                 // It's important that we do a comparison on
                 // *simplified* markers here. In particular, when
                 // we write markers out to the lock file, we use
@@ -2910,66 +2922,14 @@ impl Package {
                 // how to do that. I think `pep508` would need to
                 // grow a concept of "requires python" and provide an
                 // operation specifically for that.
-                && existing_dep.simplified_marker == new_dep.simplified_marker
+                && existing_dependency.simplified_marker == new_dependency.simplified_marker
             {
-                existing_dep.extra.extend(new_dep.extra);
+                existing_dependency.extra.extend(new_dependency.extra);
                 return Ok(());
             }
         }
 
-        self.dependencies.push(new_dep);
-        Ok(())
-    }
-
-    /// Add the [`AnnotatedDist`] as an optional dependency of the [`Package`].
-    fn add_optional_dependency(
-        &mut self,
-        requires_python: &RequiresPython,
-        extra: ExtraName,
-        annotated_dist: &AnnotatedDist,
-        marker: UniversalMarker,
-        root: &Path,
-    ) -> Result<(), LockError> {
-        let dep = Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
-        let optional_deps = self.optional_dependencies.entry(extra).or_default();
-        for existing_dep in &mut *optional_deps {
-            if existing_dep.package_id == dep.package_id
-                // See note in add_dependency for why we use
-                // simplified markers here.
-                && existing_dep.simplified_marker == dep.simplified_marker
-            {
-                existing_dep.extra.extend(dep.extra);
-                return Ok(());
-            }
-        }
-
-        optional_deps.push(dep);
-        Ok(())
-    }
-
-    /// Add the [`AnnotatedDist`] to a dependency group of the [`Package`].
-    fn add_group_dependency(
-        &mut self,
-        requires_python: &RequiresPython,
-        group: GroupName,
-        annotated_dist: &AnnotatedDist,
-        marker: UniversalMarker,
-        root: &Path,
-    ) -> Result<(), LockError> {
-        let dep = Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
-        let deps = self.dependency_groups.entry(group).or_default();
-        for existing_dep in &mut *deps {
-            if existing_dep.package_id == dep.package_id
-                // See note in add_dependency for why we use
-                // simplified markers here.
-                && existing_dep.simplified_marker == dep.simplified_marker
-            {
-                existing_dep.extra.extend(dep.extra);
-                return Ok(());
-            }
-        }
-
-        deps.push(dep);
+        dependencies.push(new_dependency);
         Ok(())
     }
 
@@ -3604,6 +3564,14 @@ impl Package {
     /// Returns the dependencies of the package.
     pub fn dependencies(&self) -> &[Dependency] {
         &self.dependencies
+    }
+
+    /// Returns all production, optional, and development dependencies of the [`Package`].
+    fn all_dependencies(&self) -> impl Iterator<Item = &Dependency> {
+        self.dependencies
+            .iter()
+            .chain(self.optional_dependencies.values().flatten())
+            .chain(self.dependency_groups.values().flatten())
     }
 
     /// Returns the optional dependencies of the package.
@@ -4497,6 +4465,7 @@ impl SourceDist {
     fn from_annotated_dist(
         id: &PackageId,
         annotated_dist: &AnnotatedDist,
+        index_locations: &IndexLocations,
     ) -> Result<Option<Self>, LockError> {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
@@ -4506,6 +4475,7 @@ impl SourceDist {
                 dist,
                 annotated_dist.hashes.as_slice(),
                 annotated_dist.index(),
+                index_locations,
             ),
         }
     }
@@ -4515,16 +4485,19 @@ impl SourceDist {
         dist: &Dist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Option<Self>, LockError> {
         match *dist {
             Dist::Built(BuiltDist::Registry(ref built_dist)) => {
                 let Some(sdist) = built_dist.sdist.as_ref() else {
                     return Ok(None);
                 };
-                Self::from_registry_dist(sdist, index)
+                Self::from_registry_dist(sdist, index, index_locations)
             }
             Dist::Built(_) => Ok(None),
-            Dist::Source(ref source_dist) => Self::from_source_dist(id, source_dist, hashes, index),
+            Dist::Source(ref source_dist) => {
+                Self::from_source_dist(id, source_dist, hashes, index, index_locations)
+            }
         }
     }
 
@@ -4533,10 +4506,11 @@ impl SourceDist {
         source_dist: &uv_distribution_types::SourceDist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Option<Self>, LockError> {
         match *source_dist {
             uv_distribution_types::SourceDist::Registry(ref reg_dist) => {
-                Self::from_registry_dist(reg_dist, index)
+                Self::from_registry_dist(reg_dist, index, index_locations)
             }
             uv_distribution_types::SourceDist::DirectUrl(_) => {
                 Self::from_direct_dist(id, hashes).map(Some)
@@ -4555,6 +4529,7 @@ impl SourceDist {
     fn from_registry_dist(
         reg_dist: &RegistrySourceDist,
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Option<Self>, LockError> {
         // Reject distributions from registries that don't match the index URL, as can occur with
         // `--find-links`.
@@ -4562,12 +4537,18 @@ impl SourceDist {
             return Ok(None);
         }
 
+        let hash = select_registry_hash(
+            &reg_dist.file.hashes,
+            &reg_dist.index,
+            index_locations,
+            reg_dist.file.filename.as_ref(),
+        )?;
+
         match &reg_dist.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&reg_dist.file.url)
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
-                let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = reg_dist.file.size;
                 let upload_time = reg_dist
                     .file
@@ -4602,7 +4583,6 @@ impl SourceDist {
                         try_relative_to_if(&reg_dist_path, index_path, !path.was_given_absolute())
                             .map_err(LockErrorKind::DistributionRelativePath)?
                             .into_boxed_path();
-                    let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                     let size = reg_dist.file.size;
                     let upload_time = reg_dist
                         .file
@@ -4622,7 +4602,6 @@ impl SourceDist {
                     let url = normalize_file_location(&reg_dist.file.url)
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
-                    let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                     let size = reg_dist.file.size;
                     let upload_time = reg_dist
                         .file
@@ -4856,7 +4835,10 @@ struct Wheel {
 }
 
 impl Wheel {
-    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Vec<Self>, LockError> {
+    fn from_annotated_dist(
+        annotated_dist: &AnnotatedDist,
+        index_locations: &IndexLocations,
+    ) -> Result<Vec<Self>, LockError> {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
@@ -4864,6 +4846,7 @@ impl Wheel {
                 dist,
                 annotated_dist.hashes.as_slice(),
                 annotated_dist.index(),
+                index_locations,
             ),
         }
     }
@@ -4872,9 +4855,12 @@ impl Wheel {
         dist: &Dist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Vec<Self>, LockError> {
         match *dist {
-            Dist::Built(ref built_dist) => Self::from_built_dist(built_dist, hashes, index),
+            Dist::Built(ref built_dist) => {
+                Self::from_built_dist(built_dist, hashes, index, index_locations)
+            }
             Dist::Source(uv_distribution_types::SourceDist::Registry(ref source_dist)) => {
                 source_dist
                     .wheels
@@ -4884,7 +4870,7 @@ impl Wheel {
                         // `--find-links`.
                         index.is_some_and(|index| *index == wheel.index)
                     })
-                    .map(Self::from_registry_wheel)
+                    .map(|wheel| Self::from_registry_wheel(wheel, index_locations))
                     .collect()
             }
             Dist::Source(_) => Ok(vec![]),
@@ -4895,9 +4881,12 @@ impl Wheel {
         built_dist: &BuiltDist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Vec<Self>, LockError> {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => Self::from_registry_dist(reg_dist, index),
+            BuiltDist::Registry(ref reg_dist) => {
+                Self::from_registry_dist(reg_dist, index, index_locations)
+            }
             BuiltDist::DirectUrl(ref direct_dist) => {
                 Ok(vec![Self::from_direct_dist(direct_dist, hashes)])
             }
@@ -4911,6 +4900,7 @@ impl Wheel {
     fn from_registry_dist(
         reg_dist: &RegistryBuiltDist,
         index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Vec<Self>, LockError> {
         reg_dist
             .wheels
@@ -4920,11 +4910,14 @@ impl Wheel {
                 // `--find-links`.
                 index.is_some_and(|index| *index == wheel.index)
             })
-            .map(Self::from_registry_wheel)
+            .map(|wheel| Self::from_registry_wheel(wheel, index_locations))
             .collect()
     }
 
-    fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Self, LockError> {
+    fn from_registry_wheel(
+        wheel: &RegistryBuiltWheel,
+        index_locations: &IndexLocations,
+    ) -> Result<Self, LockError> {
         let url = match &wheel.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&wheel.file.url)
@@ -4956,7 +4949,12 @@ impl Wheel {
             }
         };
         let filename = wheel.filename.clone();
-        let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
+        let hash = select_registry_hash(
+            &wheel.file.hashes,
+            &wheel.index,
+            index_locations,
+            wheel.file.filename.as_ref(),
+        )?;
         let size = wheel.file.size;
         let upload_time = wheel
             .file
@@ -4964,10 +4962,19 @@ impl Wheel {
             .map(Timestamp::from_millisecond)
             .transpose()
             .map_err(LockErrorKind::InvalidTimestamp)?;
-        let zstd = wheel.file.zstd.as_ref().map(|zstd| ZstdWheel {
-            hash: zstd.hashes.iter().max().cloned().map(Hash::from),
-            size: zstd.size,
-        });
+        let zstd = if let Some(zstd) = wheel.file.zstd.as_ref() {
+            Some(ZstdWheel {
+                hash: select_registry_hash(
+                    &zstd.hashes,
+                    &wheel.index,
+                    index_locations,
+                    wheel.file.filename.as_ref(),
+                )?,
+                size: zstd.size,
+            })
+        } else {
+            None
+        };
         Ok(Self {
             url,
             hash,
@@ -5355,6 +5362,47 @@ struct Hash(HashDigest);
 impl From<HashDigest> for Hash {
     fn from(hd: HashDigest) -> Self {
         Self(hd)
+    }
+}
+
+/// Select the configured hash algorithm for a registry artifact, preserving the default hash
+/// selection when the index has no requirement.
+///
+/// Returns an error if the required algorithm is not advertised.
+fn select_registry_hash(
+    hashes: &HashDigests,
+    index: &IndexUrl,
+    index_locations: &IndexLocations,
+    filename: &str,
+) -> Result<Option<Hash>, LockError> {
+    let Some(algorithm) = index_locations.hash_algorithm_for(index) else {
+        return Ok(hashes.iter().max().cloned().map(Hash::from));
+    };
+    warn_index_hash_algorithm_preview();
+
+    hashes
+        .iter()
+        .find(|hash| hash.algorithm == algorithm)
+        .cloned()
+        .map(Hash::from)
+        .map(Some)
+        .ok_or_else(|| {
+            LockErrorKind::MissingHashAlgorithm {
+                index: index.clone(),
+                filename: filename.to_string(),
+                algorithm,
+            }
+            .into()
+        })
+}
+
+/// Warn if an index-specific hash algorithm is used without its preview feature enabled.
+fn warn_index_hash_algorithm_preview() {
+    if !uv_preview::is_enabled(PreviewFeature::IndexHashAlgorithm) {
+        warn_user_once!(
+            "Setting `hash-algorithm` on configured indexes is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::IndexHashAlgorithm
+        );
     }
 }
 
@@ -6175,6 +6223,16 @@ enum LockErrorKind {
         artifact_type: &'static str,
         /// Whether a hash was expected.
         expected: bool,
+    },
+    /// An error that occurs when an index requires a hash algorithm that an artifact does not
+    /// advertise.
+    #[error(
+        "The index `{index}` requires `{algorithm}` hashes, but `{filename}` does not provide one"
+    )]
+    MissingHashAlgorithm {
+        index: IndexUrl,
+        filename: String,
+        algorithm: HashAlgorithm,
     },
     /// An error that occurs when a package is included with an extra name,
     /// but no corresponding base package (i.e., without the extra) exists.

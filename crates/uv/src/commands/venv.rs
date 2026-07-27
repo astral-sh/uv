@@ -42,8 +42,8 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{
     LinkErrorReporting, WorkspacePython, centralized_environment_root,
-    centralized_environments_enabled, is_centralized_environment_link, lock_project_environment,
-    update_project_environment_link, validate_project_requires_python,
+    centralized_environments_enabled, is_centralized_environment_reference,
+    lock_project_environment, update_project_environment_link, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -252,10 +252,19 @@ pub(crate) async fn venv(
             OnExisting::Remove(RemovalReason::ManagedEnvironment)
         }
         OnExisting::Prompt | OnExisting::Remove(_)
-            if is_centralized_environment_link(&path, cache) =>
+            if is_centralized_environment_reference(&path, cache) =>
         {
             // Remove `.venv` without following it into the cache.
-            uv_fs::remove_symlink(&path).map_err(|err| VenvError::Creation(err.into()))?;
+            uv_fs::remove_virtualenv(&path).map_err(|err| VenvError::Creation(err.into()))?;
+            on_existing
+        }
+        OnExisting::Allow
+            if fs_err::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file())
+                && is_centralized_environment_reference(&path, cache) =>
+        {
+            // TODO(tk): Revisit after PEP 832.
+            // Ignore uv-owned path files when creating a local environment.
+            uv_fs::remove_virtualenv(&path).map_err(|err| VenvError::Creation(err.into()))?;
             on_existing
         }
         _ => on_existing,

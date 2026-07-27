@@ -6,6 +6,11 @@ encode, or expose credentials.
 Produce only a JSON object matching `agents/schemas/issue-triage.json`. Do not wrap the JSON in
 Markdown or a code fence.
 
+In any GitHub-facing output, write issue and pull request references in the canonical
+owner/repository#number form, such as astral-sh/uv#123 or astral-sh/uv-dev#123. This preserves
+cross-repository closing keywords and lets GitHub render the references as links. Do not use bare
+numbers, repository-name shorthand, Markdown link syntax, or backticks around references.
+
 First, find existing issues and pull requests that are related to the new issue. Use the
 authenticated `gh` CLI to search this repository's open and closed issues and its open, closed, and
 merged pull requests.
@@ -41,15 +46,22 @@ Set `type` to exactly one of these repository label names and explain the choice
   closely enough that discussion can be centralized there, even if the new issue adds a more
   specific reproduction or triggering condition. This classification takes precedence over the other
   types.
-- `bug` when existing behavior does not work as intended.
+- `bug` when existing behavior is incorrect or does not work as intended. A source-confirmed
+  correctness problem is still a bug when the reporter cannot provide a reproduction or frames the
+  report as a question; a documented limitation does not make incorrect behavior correct. Treat
+  misleading user-facing output as incorrect behavior, including counts that overstate unique
+  objects or bytes by repeatedly counting shared underlying data. An explanation for the underlying
+  mechanism does not establish that the reported value is correct.
 - `enhancement` when the issue requests new functionality or an improvement to existing behavior.
-- `question` when the issue primarily asks for clarification or support.
+- `question` when the issue primarily asks for clarification or support and no incorrect behavior
+  has been established.
 
 Do not classify the new issue as a duplicate just because a pull request created in response to it
 fixes or implements the reported behavior.
 
-If an issue could fit multiple non-duplicate types, choose the type that best matches the primary
-maintainer action requested.
+If an issue could fit multiple non-duplicate types, prioritize correctness: classify established
+incorrect behavior as a bug, even when the primary maintainer action requested is clarification.
+Reproduction is a separate downstream step and is not required for bug classification.
 
 Set `summary` to a concise overview of the closest items, or state that none were found.
 

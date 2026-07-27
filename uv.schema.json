@@ -421,7 +421,7 @@
       ]
     },
     "prerelease": {
-      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will accept pre-releases for packages that _only_ publish pre-releases,\nalong with first-party requirements that contain an explicit pre-release marker in the\ndeclared specifiers (`if-necessary-or-explicit`).",
+      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected\n(`if-necessary`).",
       "anyOf": [
         {
           "$ref": "#/definitions/PrereleaseMode"
@@ -653,6 +653,21 @@
           "items": {
             "type": "string"
           }
+        },
+        "malware-check": {
+          "description": "Whether to run the automatic malware check during sync operations.",
+          "type": ["boolean", "null"]
+        },
+        "malware-check-url": {
+          "description": "The vulnerability service URL to use for automatic malware checks.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DisplaySafeUrl"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -1027,6 +1042,17 @@
           ],
           "default": "simple"
         },
+        "hash-algorithm": {
+          "description": "The hash algorithm that must be used for distributions resolved from this index.\n\nIf a distribution does not advertise a hash using this algorithm, lockfile generation\nwill fail.\n\nThis option is in preview and may change in any future release.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nhash-algorithm = \"sha256\"\n```",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexHashAlgorithm"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "ignore-error-codes": {
           "description": "Status codes that uv should ignore when deciding whether to continue resolution after a\nrequest to this index fails.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nignore-error-codes = [401, 403]\n```",
           "type": ["array", "null"],
@@ -1095,6 +1121,11 @@
           "const": "flat"
         }
       ]
+    },
+    "IndexHashAlgorithm": {
+      "description": "A hash algorithm that can be required for distributions resolved from an index.",
+      "type": "string",
+      "enum": ["md5", "sha256", "sha384", "sha512", "blake2b"]
     },
     "IndexName": {
       "description": "The normalized name of an index.\n\nIndex names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
@@ -1589,7 +1620,7 @@
           "type": ["string", "null"]
         },
         "prerelease": {
-          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will accept pre-releases for packages that _only_ publish pre-releases,\nalong with first-party requirements that contain an explicit pre-release marker in the\ndeclared specifiers (`if-necessary-or-explicit`).",
+          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected\n(`if-necessary`).",
           "anyOf": [
             {
               "$ref": "#/definitions/PrereleaseMode"
@@ -1712,19 +1743,20 @@
           "const": "allow"
         },
         {
-          "description": "Allow pre-release versions if all versions of a package are pre-release.",
+          "description": "Prefer stable versions, falling back to pre-release versions when necessary.",
           "type": "string",
           "const": "if-necessary"
         },
         {
-          "description": "Allow pre-release versions for first-party packages with explicit pre-release markers in\ntheir version requirements.",
+          "description": "Prefer stable versions for first-party packages with explicit pre-release specifiers,\nfalling back to pre-release versions when necessary. Disallow pre-release versions for all\nother packages.",
           "type": "string",
           "const": "explicit"
         },
         {
-          "description": "Allow pre-release versions if all versions of a package are pre-release, or if the package\nhas an explicit pre-release marker in its version requirements.",
+          "description": "Deprecated alias for `if-necessary`.",
           "type": "string",
-          "const": "if-necessary-or-explicit"
+          "const": "if-necessary-or-explicit",
+          "deprecated": true
         }
       ]
     },
@@ -1734,7 +1766,6 @@
         {
           "enum": [
             "python-install-default",
-            "python-upgrade",
             "json-output",
             "pylock",
             "add-bounds",
@@ -1771,7 +1802,9 @@
             "centralized-project-envs",
             "tool-install-locks",
             "workspace-list-scripts",
-            "no-distutils-patch"
+            "no-distutils-patch",
+            "index-hash-algorithm",
+            "lockfile-format-check"
           ]
         },
         {
@@ -2160,8 +2193,12 @@
               "$ref": "#/definitions/MarkerTree"
             },
             "workspace": {
-              "description": "When set to `false`, the package will be fetched from the remote index, rather than\nincluded as a workspace package.",
-              "type": "boolean"
+              "description": "`true` selects the current workspace. A string selects another workspace discovered\nfrom the given path.\n\nWhen set to `false`, the package will be fetched from the remote index, rather than\nincluded as a workspace package.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/WorkspaceReference"
+                }
+              ]
             }
           },
           "additionalProperties": false,
@@ -2786,6 +2823,17 @@
         }
       },
       "additionalProperties": false
+    },
+    "WorkspaceReference": {
+      "description": "A reference to either the current workspace or a workspace discovered from a path.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/definitions/PortablePathBuf"
+        }
+      ]
     }
   }
 }

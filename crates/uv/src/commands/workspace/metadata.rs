@@ -169,8 +169,8 @@ pub(crate) async fn metadata(
                 },
             };
             let mut export = metadata_for_target(install_target)?;
-            if sync {
-                let environment = match target {
+            let environment = if sync {
+                Some(match target {
                     LockTarget::Workspace(workspace) => ProjectEnvironment::get_or_init(
                         workspace,
                         &groups,
@@ -205,7 +205,19 @@ pub(crate) async fn metadata(
                     )
                     .await?
                     .into_environment()?,
-                };
+                })
+            } else {
+                match target {
+                    LockTarget::Workspace(workspace) => {
+                        ProjectInterpreter::discover_existing(workspace, Some(active), cache)?
+                    }
+                    LockTarget::Script(script) => {
+                        ScriptInterpreter::discover_existing(script.into(), Some(active), cache)
+                    }
+                }
+            };
+
+            if let Some(environment) = environment {
                 let _lock = environment
                     .lock()
                     .await
@@ -224,6 +236,7 @@ pub(crate) async fn metadata(
                     workspace_cache,
                     preview,
                     &malware_settings,
+                    sync,
                 )
                 .await
                 .context("Failed to collect module owners")?;

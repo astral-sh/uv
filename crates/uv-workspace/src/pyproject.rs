@@ -22,7 +22,7 @@ use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{Index, IndexName, RequirementSource};
-use uv_fs::{PortablePathBuf, relative_to};
+use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
@@ -1223,9 +1223,12 @@ pub enum Source {
     },
     /// A dependency on another package in the workspace.
     Workspace {
+        /// `true` selects the current workspace. A string selects another workspace discovered
+        /// from the given path.
+        ///
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
-        workspace: bool,
+        workspace: WorkspaceReference,
         /// Whether the package should be installed as editable. Defaults to `true`.
         editable: Option<bool>,
         #[serde(
@@ -1237,6 +1240,15 @@ pub enum Source {
         extra: Option<ExtraName>,
         group: Option<GroupName>,
     },
+}
+
+/// A reference to either the current workspace or a workspace discovered from a path.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
+#[serde(untagged)]
+pub enum WorkspaceReference {
+    Bool(bool),
+    Path(PortablePathBuf),
 }
 
 /// A custom deserialization implementation for [`Source`]. This is roughly equivalent to
@@ -1260,7 +1272,7 @@ impl<'de> Deserialize<'de> for Source {
             editable: Option<bool>,
             package: Option<bool>,
             index: Option<IndexName>,
-            workspace: Option<bool>,
+            workspace: Option<WorkspaceReference>,
             #[serde(
                 skip_serializing_if = "uv_pep508::marker::ser::is_empty",
                 serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1726,7 +1738,7 @@ impl Source {
             return match source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
                     Ok(Some(Self::Workspace {
-                        workspace: true,
+                        workspace: WorkspaceReference::Bool(true),
                         editable,
                         marker: MarkerTree::TRUE,
                         extra: None,
@@ -1761,12 +1773,13 @@ impl Source {
                 }
             }
             RequirementSource::Registry { index: None, .. } => return Ok(None),
-            RequirementSource::Path { install_path, .. } => Self::Path {
+            RequirementSource::Path {
+                install_path, url, ..
+            } => Self::Path {
                 editable: None,
                 package: None,
                 path: PortablePathBuf::from(
-                    relative_to(&install_path, root)
-                        .or_else(|_| std::path::absolute(&install_path))
+                    try_relative_to_if(&install_path, root, !url.was_given_absolute())
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),
@@ -1777,13 +1790,13 @@ impl Source {
             RequirementSource::Directory {
                 install_path,
                 editable: is_editable,
+                url,
                 ..
             } => Self::Path {
                 editable: editable.or(is_editable),
                 package: None,
                 path: PortablePathBuf::from(
-                    relative_to(&install_path, root)
-                        .or_else(|_| std::path::absolute(&install_path))
+                    try_relative_to_if(&install_path, root, !url.was_given_absolute())
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),

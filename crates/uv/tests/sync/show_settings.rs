@@ -37,8 +37,7 @@ fn pip_compile_baseline() {
     capture_uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     GlobalSettings {
         required_version: None,
@@ -161,7 +160,7 @@ fn pip_compile_baseline() {
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
-            prerelease: IfNecessaryOrExplicit,
+            prerelease: IfNecessary,
             fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
@@ -208,8 +207,6 @@ fn pip_compile_baseline() {
             reinstall: None,
         },
     }
-
-    ----- stderr -----
     "#);
 }
 
@@ -238,8 +235,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.publish())
         .arg("--show-settings")
         .env(EnvVars::UV_PUBLISH_TOKEN, "publish-secret-token"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     GlobalSettings {
         required_version: None,
@@ -380,6 +376,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
                     authenticate: Auto,
                     ignore_error_codes: None,
                     cache_control: None,
+                    hash_algorithm: None,
                     exclude_newer: None,
                 },
             ],
@@ -387,8 +384,6 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
             no_index: false,
         },
     }
-
-    ----- stderr -----
     "#);
 
     Ok(())
@@ -406,8 +401,7 @@ fn pip_install_baseline() {
         .arg("--show-settings")
         .arg("-r")
         .arg("requirements.in"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     GlobalSettings {
         required_version: None,
@@ -528,7 +522,7 @@ fn pip_install_baseline() {
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
-            prerelease: IfNecessaryOrExplicit,
+            prerelease: IfNecessary,
             fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
@@ -575,8 +569,6 @@ fn pip_install_baseline() {
             reinstall: None,
         },
     }
-
-    ----- stderr -----
     "#);
 }
 
@@ -590,8 +582,7 @@ fn lock_baseline() {
 
     capture_uv_snapshot!(context.filters(), add_shared_args(context.lock())
         .arg("--show-settings"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     GlobalSettings {
         required_version: None,
@@ -686,7 +677,7 @@ fn lock_baseline() {
             extra_build_variables: ExtraBuildVariables(
                 {},
             ),
-            prerelease: IfNecessaryOrExplicit,
+            prerelease: IfNecessary,
             resolution: Highest,
             sources: None,
             torch_backend: None,
@@ -698,8 +689,6 @@ fn lock_baseline() {
             },
         },
     }
-
-    ----- stderr -----
     "#);
 }
 
@@ -713,8 +702,7 @@ fn version_baseline() {
 
     capture_uv_snapshot!(context.filters(), add_shared_args(context.version())
         .arg("--show-settings"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     GlobalSettings {
         required_version: None,
@@ -816,7 +804,7 @@ fn version_baseline() {
                 extra_build_variables: ExtraBuildVariables(
                     {},
                 ),
-                prerelease: IfNecessaryOrExplicit,
+                prerelease: IfNecessary,
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
@@ -835,8 +823,6 @@ fn version_baseline() {
             malware_check_url: None,
         },
     }
-
-    ----- stderr -----
     "#);
 }
 
@@ -851,8 +837,7 @@ fn tool_install_baseline() {
     capture_uv_snapshot!(context.filters(), add_shared_args(context.tool_install())
         .arg("--show-settings")
         .arg("anyio"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     GlobalSettings {
         required_version: None,
@@ -984,7 +969,7 @@ fn tool_install_baseline() {
                 extra_build_variables: ExtraBuildVariables(
                     {},
                 ),
-                prerelease: IfNecessaryOrExplicit,
+                prerelease: IfNecessary,
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
@@ -1006,8 +991,6 @@ fn tool_install_baseline() {
             python_downloads_json_url: None,
         },
     }
-
-    ----- stderr -----
     "#);
 }
 
@@ -1084,6 +1067,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +            ],
@@ -1096,7 +1080,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -1124,7 +1108,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: LowestDirect,
     +        resolution: Highest,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -1237,6 +1221,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +            ],
@@ -1249,7 +1234,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -1393,6 +1378,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +                Index {
@@ -1428,6 +1414,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +            ],
@@ -1483,6 +1470,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +                Index {
@@ -1571,6 +1559,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +            ],
@@ -1624,7 +1613,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -1692,6 +1681,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +                Index {
@@ -1727,6 +1717,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +            ],
@@ -1749,7 +1740,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -1798,7 +1789,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -1904,7 +1895,7 @@ fn resolve_system_configuration_can_be_disabled() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -1976,7 +1967,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     ...
                      {},
                  ),
-                 prerelease: IfNecessaryOrExplicit,
+                 prerelease: IfNecessary,
     -            resolution: Highest,
     +            resolution: LowestDirect,
                  sources: None,
@@ -2038,7 +2029,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -2139,6 +2130,7 @@ fn resolve_both() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +            ],
@@ -2151,7 +2143,7 @@ fn resolve_both() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -2164,9 +2156,11 @@ fn resolve_both() -> anyhow::Result<()> {
                  {},
              ),
     ...
+             reinstall: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     +warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
     +- offline
@@ -2270,6 +2264,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +            ],
@@ -2282,7 +2277,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -2295,9 +2290,11 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
                  {},
              ),
     ...
+             reinstall: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     ...
     "#
@@ -2348,9 +2345,11 @@ fn resolve_both_preview() -> anyhow::Result<()> {
          python_preference: Managed,
          python_downloads: Automatic,
     ...
+             malware_check_url: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
     +- preview
     ...
@@ -2416,10 +2415,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
 
     // The file should be rejected for violating the schema.
     uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 7, column 13
@@ -2443,10 +2439,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
 
     // The file should be rejected for violating the schema.
     uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 7, column 13
@@ -2472,10 +2465,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
 
     // The file should be rejected for violating the schema.
     uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 7, column 13
@@ -2501,10 +2491,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
 
     // The file should be rejected for violating the schema.
     uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Each set of conflicts must have at least two entries, but found only one
     "
@@ -2534,10 +2521,7 @@ fn valid_conflicts() -> anyhow::Result<()> {
     "#})?;
     uv_snapshot!(context.filters(), add_shared_args(context.lock())
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     "
@@ -2624,6 +2608,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +            ],
@@ -2636,7 +2621,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -2670,10 +2655,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--config-file")
         .arg(config.path())
         .arg("requirements.in"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `[CACHE_DIR]/uv.toml`
       Caused by: TOML parse error at line 1, column 2
@@ -2704,10 +2686,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--config-file")
         .arg(config.path())
         .arg("requirements.in"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.
     error: Failed to parse: `[CACHE_DIR]/pyproject.toml`
@@ -2771,7 +2750,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessaryOrExplicit,
+             prerelease: IfNecessary,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
     ...
@@ -2922,6 +2901,7 @@ fn index_priority() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +                Index {
@@ -2959,6 +2939,7 @@ fn index_priority() -> anyhow::Result<()> {
     +                    authenticate: Auto,
     +                    ignore_error_codes: None,
     +                    cache_control: None,
+    +                    hash_algorithm: None,
     +                    exclude_newer: None,
     +                },
     +            ],
@@ -3206,14 +3187,13 @@ fn preview_features() {
     -        flags: [],
     +        flags: [
     +            PythonInstallDefault,
-    +            PythonUpgrade,
     +            JsonOutput,
     +            Pylock,
     +            AddBounds,
     +            PackageConflicts,
     +            ExtraBuildDependencies,
     +            DetectModuleConflicts,
-    +            Format,
+    +            FormatCommand,
     +            NativeAuth,
     +            S3Endpoint,
     +            CacheSize,
@@ -3231,19 +3211,21 @@ fn preview_features() {
     +            SpecialCondaEnvNames,
     +            RelocatableEnvsDefault,
     +            PublishRequireNormalized,
-    +            Audit,
+    +            AuditCommand,
     +            ProjectDirectoryMustExist,
     +            IndexExcludeNewer,
     +            AzureEndpoint,
     +            TomlBackwardsCompatibility,
     +            MalwareCheck,
     +            VenvSafeClear,
-    +            Check,
+    +            CheckCommand,
     +            PackagedInit,
     +            CentralizedProjectEnvs,
     +            ToolInstallLocks,
     +            WorkspaceListScripts,
     +            NoDistutilsPatch,
+    +            IndexHashAlgorithm,
+    +            LockfileFormatCheck,
     +        ],
          },
          python_preference: Managed,
@@ -3263,7 +3245,7 @@ fn preview_features() {
     diff_uv_snapshot!(context.filters(), &preview, add_shared_args(context.version()).arg("--show-settings").arg("--preview").arg("--preview-features").arg("python-install-default"), @""
     );
 
-    let preview_features = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default,python-upgrade"), @"
+    let preview_features = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default,json-output"), @"
     ...
          },
          show_settings: true,
@@ -3271,7 +3253,7 @@ fn preview_features() {
     -        flags: [],
     +        flags: [
     +            PythonInstallDefault,
-    +            PythonUpgrade,
+    +            JsonOutput,
     +        ],
          },
          python_preference: Managed,
@@ -3280,18 +3262,39 @@ fn preview_features() {
     "
     );
 
+    let canonical_command_features = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview-features")
+            .arg("format-command,audit-command,check-command")
+    );
+
+    // Preview feature aliases select the same settings as their canonical names.
+    diff_uv_snapshot!(
+        context.filters(),
+        &canonical_command_features,
+        add_shared_args(context.version())
+            .arg("--show-settings")
+            .arg("--preview-features")
+            .arg("format,audit,check"),
+        @""
+    );
+
     diff_uv_snapshot!(
         context.filters(),
         &preview_features,
         add_shared_args(context.version())
             .arg("--show-settings")
             .arg("--preview-features")
-            .arg("python-install-default,unknown-preview-feature,python-upgrade"),
+            .arg("python-install-default,unknown-preview-feature,json-output"),
         @"
     ...
+             malware_check_url: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: Unknown preview feature: `unknown-preview-feature`
     ...
     "
@@ -3304,27 +3307,29 @@ fn preview_features() {
             .arg("--show-settings")
             .env(
                 EnvVars::UV_PREVIEW_FEATURES,
-                "python-install-default,unknown-preview-feature,python-upgrade",
+                "python-install-default,unknown-preview-feature,json-output",
             ),
         @"
     ...
+             malware_check_url: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: Unknown preview feature: `unknown-preview-feature`
     ...
     "
     );
 
     // Compare against output with both features passed to one `--preview-features` option.
-    diff_uv_snapshot!(context.filters(), &preview_features, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade"), @""
+    diff_uv_snapshot!(context.filters(), &preview_features, add_shared_args(context.version()).arg("--show-settings").arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("json-output"), @""
     );
 
     diff_uv_snapshot!(
         context.filters(),
         &baseline,
         add_shared_args(context.version()).arg("--show-settings")
-        .arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade")
+        .arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("json-output")
         .arg("--no-preview"),
         @""
     );
@@ -3334,12 +3339,9 @@ fn preview_features() {
         add_shared_args(context.version())
             .arg("--show-settings")
             .arg("--preview-features")
-            .arg("python-install-default,,python-upgrade"),
+            .arg("python-install-default,,json-output"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: invalid value '' for '--preview-features <PREVIEW_FEATURES>': preview feature name cannot be empty
 
@@ -3353,13 +3355,10 @@ fn preview_features() {
             .arg("--show-settings")
             .env(
                 EnvVars::UV_PREVIEW_FEATURES,
-                "python-install-default,,python-upgrade",
+                "python-install-default,,json-output",
             ),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: invalid value '' for '--preview-features <PREVIEW_FEATURES>': preview feature name cannot be empty
 
@@ -3502,7 +3501,7 @@ fn preview_precedence() -> anyhow::Result<()> {
          preview: Preview {
     -        flags: [],
     +        flags: [
-    +            Format,
+    +            FormatCommand,
     +        ],
          },
          python_preference: Managed,
@@ -3553,7 +3552,7 @@ fn preview_precedence() -> anyhow::Result<()> {
          show_settings: true,
          preview: Preview {
              flags: [
-    -            Format,
+    -            FormatCommand,
     +            Pylock,
              ],
          },
@@ -3589,9 +3588,11 @@ fn preview_precedence() -> anyhow::Result<()> {
         show_settings(),
         @"
     ...
+             malware_check_url: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: Unknown preview feature: `unknown-preview-feature`
     ...
     "
@@ -3670,7 +3671,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
          preview: Preview {
     -        flags: [],
     +        flags: [
-    +            Format,
+    +            FormatCommand,
     +        ],
          },
          python_preference: Managed,
@@ -3719,10 +3720,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
 
     // The two settings should be rejected when used together.
     uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: cannot specify both `preview` and `preview-features`
@@ -3738,9 +3736,11 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
         add_shared_args(context.version()).arg("--show-settings"),
         @"
     ...
+             malware_check_url: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: Unknown preview feature: `unknown-preview-feature`
     ...
     "
@@ -3750,10 +3750,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
 
     // Empty preview feature names should be rejected.
     uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: TOML parse error at line 1, column 20
@@ -3767,10 +3764,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
 
     // Invalid preview feature types should be rejected.
     uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: TOML parse error at line 1, column 20
@@ -3817,7 +3811,7 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
          preview: Preview {
     -        flags: [],
     +        flags: [
-    +            Format,
+    +            FormatCommand,
     +        ],
          },
          python_preference: Managed,
@@ -3840,9 +3834,11 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
         add_shared_args(context.version()).arg("--show-settings"),
         @"
     ...
+             malware_check_url: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: Failed to parse `pyproject.toml` during settings discovery:
     +  TOML parse error at line 1, column 1
     +    |
@@ -3867,9 +3863,11 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
         add_shared_args(context.version()).arg("--show-settings"),
         @"
     ...
+             malware_check_url: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: Failed to parse `pyproject.toml` during settings discovery:
     +  TOML parse error at line 2, column 20
     +    |
@@ -3945,7 +3943,7 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
          preview: Preview {
     -        flags: [],
     +        flags: [
-    +            Format,
+    +            FormatCommand,
     +        ],
          },
          python_preference: Managed,
@@ -3975,9 +3973,11 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
         show_settings(),
         @"
     ...
+             malware_check_url: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: Unknown preview feature: `unknown-preview-feature`
     ...
     "
@@ -4020,10 +4020,7 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
 
     // The diagnostic should reject a non-string preview feature name.
     uv_snapshot!(context.filters(), show_settings(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: TOML parse error at line 4, column 1
       |
@@ -4074,10 +4071,7 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
 
     // The two settings should be rejected when used together.
     uv_snapshot!(context.filters(), show_settings(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: TOML parse error at line 4, column 1
       |
@@ -4107,9 +4101,11 @@ fn system_certs_cli_aliases_override_env() {
         .arg("--no-native-tls")
         .env(EnvVars::UV_SYSTEM_CERTS, "1"), @"
     ...
+             malware_check_url: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: The `--no-native-tls` flag is deprecated and will be removed in a future release. Use `--no-system-certs` instead.
     ...
     "
@@ -4120,9 +4116,11 @@ fn system_certs_cli_aliases_override_env() {
         .arg("--no-system-certs")
         .env(EnvVars::UV_NATIVE_TLS, "1"), @"
     ...
+             malware_check_url: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
     ...
     "
@@ -4168,9 +4166,11 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
         .arg("--show-settings"), @"
     ...
+             malware_check_url: None,
+         },
      }
-
-     ----- stderr -----
+    +
+    +----- stderr -----
     +warning: The `native-tls` setting is deprecated and will be removed in a future release. Use `system-certs` instead.
     ...
     "
@@ -4281,12 +4281,10 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     -                        "sniffio",
     -                    ),
     -                },
-    -                {},
-    -            ),
-    +            strategy: All,
+    +            strategy: All(
+                     {},
+                 ),
                  constraints: {},
-             },
-             reinstall: None,
     ...
     "#
     );
@@ -4339,12 +4337,10 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     -                        "sniffio",
     -                    ),
     -                },
-    -                {},
-    -            ),
-    +            strategy: All,
+    +            strategy: All(
+                     {},
+                 ),
                  constraints: {},
-             },
-             reinstall: None,
     ...
     "#
     );
@@ -4483,12 +4479,10 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     -                        "sniffio",
     -                    ),
     -                },
-    -                {},
-    -            ),
-    +            strategy: All,
+    +            strategy: All(
+                     {},
+                 ),
                  constraints: {},
-             },
-         },
     ...
     "#
     );
@@ -4543,12 +4537,10 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     -                        "sniffio",
     -                    ),
     -                },
-    -                {},
-    -            ),
-    +            strategy: All,
+    +            strategy: All(
+                     {},
+                 ),
                  constraints: {},
-             },
-         },
     ...
     "#
     );

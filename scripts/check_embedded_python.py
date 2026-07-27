@@ -9,6 +9,8 @@ import subprocess
 import sys
 import tempfile
 
+logger = logging.getLogger(__name__)
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -23,7 +25,7 @@ if __name__ == "__main__":
     # Create a temporary directory.
     with tempfile.TemporaryDirectory() as temp_dir:
         # Create a virtual environment with `uv`.
-        logging.info("Creating virtual environment with `uv`...")
+        logger.info("Creating virtual environment with `uv`...")
         subprocess.run(
             [uv, "venv", ".venv", "--seed", "--python", sys.executable],
             cwd=temp_dir,
@@ -35,14 +37,14 @@ if __name__ == "__main__":
         else:
             executable = os.path.join(temp_dir, ".venv", "bin", "python")
 
-        logging.info("Querying virtual environment...")
+        logger.info("Querying virtual environment...")
         subprocess.run(
             [executable, "--version"],
             cwd=temp_dir,
             check=True,
         )
 
-        logging.info("Installing into `uv` virtual environment...")
+        logger.info("Installing into `uv` virtual environment...")
 
         # Disable the `CONDA_PREFIX` and `VIRTUAL_ENV` environment variables, so that
         # we only rely on virtual environment discovery via the `.venv` directory.
@@ -54,7 +56,7 @@ if __name__ == "__main__":
         # Install, verify, and uninstall a few packages.
         for package in ["pylint", "numpy"]:
             # Install the package.
-            logging.info(
+            logger.info(
                 f"Installing the package `{package}` into the virtual environment..."
             )
             subprocess.run(
@@ -65,18 +67,19 @@ if __name__ == "__main__":
             )
 
             # Ensure that the package is installed in the virtual environment.
-            logging.info(f"Checking that `{package}` is installed.")
+            logger.info(f"Checking that `{package}` is installed.")
             code = subprocess.run(
                 [executable, "-c", f"import {package}"],
                 cwd=temp_dir,
+                check=False,
             )
             if code.returncode != 0:
-                raise Exception(
+                raise RuntimeError(
                     f"The package `{package}` isn't installed in the virtual environment."
                 )
 
             # Uninstall the package.
-            logging.info(f"Uninstalling the package `{package}`.")
+            logger.info(f"Uninstalling the package `{package}`.")
             subprocess.run(
                 [uv, "pip", "uninstall", package, "--verbose"],
                 cwd=temp_dir,
@@ -85,12 +88,13 @@ if __name__ == "__main__":
             )
 
             # Ensure that the package isn't installed in the virtual environment.
-            logging.info(f"Checking that `{package}` isn't installed.")
+            logger.info(f"Checking that `{package}` isn't installed.")
             code = subprocess.run(
                 [executable, "-m", "pip", "show", package],
                 cwd=temp_dir,
+                check=False,
             )
             if code.returncode == 0:
-                raise Exception(
+                raise RuntimeError(
                     f"The package `{package}` is installed in the virtual environment (but shouldn't be)."
                 )

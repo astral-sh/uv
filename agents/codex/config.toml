@@ -56,6 +56,17 @@ enabled = true
 "api.github.com" = "allow"
 "github.com" = "allow"
 
+[permissions.workflow-failure]
+description = "Read-only workflow failure diagnosis with GitHub API access."
+extends = ":read-only"
+
+[permissions.workflow-failure.network]
+enabled = true
+
+[permissions.workflow-failure.network.domains]
+"api.github.com" = "allow"
+"github.com" = "allow"
+
 [permissions.pull-request-rebase]
 description = "Pull request rebase with workspace and Git metadata access."
 extends = ":workspace"

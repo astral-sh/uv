@@ -4,6 +4,7 @@ use proc_macro::TokenStream;
 use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{Attribute, DeriveInput, ImplItem, ItemImpl, LitStr, parse_macro_input};
+use textwrap::dedent;
 
 #[proc_macro_derive(OptionsMetadata, attributes(option, option_group))]
 pub fn derive_options_metadata(input: TokenStream) -> TokenStream {
@@ -12,6 +13,89 @@ pub fn derive_options_metadata(input: TokenStream) -> TokenStream {
     options_metadata::derive_impl(input)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
+}
+
+#[proc_macro_derive(PreviewMetadata, attributes(preview))]
+pub fn derive_preview_metadata(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    impl_preview_metadata(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+fn impl_preview_metadata(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let name = &input.ident;
+
+    let syn::Data::Enum(data) = &input.data else {
+        return Err(syn::Error::new_spanned(
+            name,
+            "PreviewMetadata can only be derived for enums",
+        ));
+    };
+
+    let names = data.variants.iter().map(|variant| {
+        let variant_name = &variant.ident;
+        let mut feature_name = String::new();
+
+        for (index, character) in variant_name.to_string().chars().enumerate() {
+            if index > 0 && character.is_uppercase() {
+                feature_name.push('-');
+            }
+            feature_name.extend(character.to_lowercase());
+        }
+
+        quote! { Self::#variant_name => #feature_name }
+    });
+
+    let entries = data
+        .variants
+        .iter()
+        .map(|variant| {
+            let documentation = get_doc_comment(&variant.attrs);
+            if documentation.is_empty() {
+                return Err(syn::Error::new_spanned(
+                    variant,
+                    "PreviewMetadata variants must have documentation",
+                ));
+            }
+
+            let mut aliases = Vec::new();
+            for attribute in variant
+                .attrs
+                .iter()
+                .filter(|attribute| attribute.path().is_ident("preview"))
+            {
+                attribute.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("alias") {
+                        aliases.push(meta.value()?.parse::<LitStr>()?);
+                        Ok(())
+                    } else {
+                        Err(meta.error("expected `alias`"))
+                    }
+                })?;
+            }
+
+            let variant_name = &variant.ident;
+            Ok(quote! { (Self::#variant_name, #documentation, &[#(#aliases),*]) })
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+
+    Ok(quote! {
+        impl #name {
+            /// Returns the canonical name of a single preview feature.
+            fn as_str(self) -> &'static str {
+                match self {
+                    #(#names),*
+                }
+            }
+
+            /// Returns each enum variant, its documentation, and its aliases.
+            pub const fn metadata() -> &'static [(Self, &'static str, &'static [&'static str])] {
+                &[#(#entries),*]
+            }
+        }
+    })
 }
 
 #[proc_macro_derive(CombineOptions)]
@@ -52,7 +136,7 @@ fn impl_combine(ast: &DeriveInput) -> TokenStream {
 }
 
 fn get_doc_comment(attrs: &[Attribute]) -> String {
-    attrs
+    let documentation = attrs
         .iter()
         .filter_map(|attr| {
             if attr.path().is_ident("doc")
@@ -60,12 +144,14 @@ fn get_doc_comment(attrs: &[Attribute]) -> String {
                 && let syn::Expr::Lit(expr) = &meta.value
                 && let syn::Lit::Str(str) = &expr.lit
             {
-                return Some(str.value().trim().to_string());
+                return Some(str.value());
             }
             None
         })
         .collect::<Vec<_>>()
-        .join("\n")
+        .join("\n");
+
+    dedent(&documentation).trim_matches('\n').to_string()
 }
 
 fn get_env_var_pattern_from_attr(attrs: &[Attribute]) -> Option<String> {

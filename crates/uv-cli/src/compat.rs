@@ -136,7 +136,7 @@ impl CompatArgs for PipCompileCompatArgs {
 
         if self.emit_options {
             return Err(anyhow!(
-                "pip-compile's `--emit-options` is unsupported (uv never emits options)"
+                "pip-compile's `--emit-options` is unsupported (try `--emit-build-options` instead)"
             ));
         }
 

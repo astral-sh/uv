@@ -51,10 +51,12 @@ Run the repository utility with the GitHub Actions run URL:
 ./agent/scripts/load-github-action-thread.sh https://github.com/astral-sh/uv/actions/runs/123456789
 ```
 
-The utility downloads every matching `codex-thread-*` artifact, finds its saved rollouts, and forks
-each rollout into an interactive local Codex thread, using the first line of its preview as the task
-title. Forking is required because `codex-action` uses `codex exec`; copying an `exec` rollout into
-`~/.codex/sessions` alone does not make it visible in the Codex app.
+The utility downloads every matching `codex-thread-*` artifact, finds the root `codex exec` rollout
+for each step, and forks it into an interactive local Codex thread. Subagent rollouts are ignored;
+they inherit the root prompt and would otherwise produce duplicate-looking tasks. The first line of
+the root preview becomes the task title, including the step, source number, and issue or pull
+request title. Forking is required because `codex-action` uses `codex exec`; copying an `exec`
+rollout into `~/.codex/sessions` alone does not make it visible in the Codex app.
 
 For a numeric run ID, pass the repository when it cannot be inferred from the current checkout:
 
@@ -72,15 +74,15 @@ imported history to a different local checkout:
   --cwd /path/to/uv
 ```
 
-The utility requires `gh`, `jq`, and `codex`. It prints a `codex://threads/<id>` link for every
-imported task and automatically opens the Codex app when exactly one task is imported on macOS. For
-multiple tasks, return a Markdown list with a clickable link labeled by the corresponding artifact
-type without repeatedly switching the app:
+The utility requires `gh`, `jq`, and `codex`, plus `zstd` for compressed rollouts. It prints the
+resolved title and a `codex://threads/<id>` link for every imported task and automatically opens the
+Codex app when exactly one task is imported on macOS. For multiple steps, return a Markdown list
+with a clickable link labeled by the corresponding task title without repeatedly switching the app:
 
 ```markdown
-- [Issue triage](codex://threads/<id>)
-- [Bug reproduction](codex://threads/<id>)
+- [Issue triage for #20477: Example issue](codex://threads/<id>)
+- [Bug reproduction for #20477: Example issue](codex://threads/<id>)
 ```
 
-Use **Pull request security review** for `codex-thread-pull-request-security-review-*` and **Release
-preparation** for `codex-thread-release-prepare-*`.
+Use the matching step title for `codex-thread-pull-request-security-review-*` and
+`codex-thread-release-prepare-*`.

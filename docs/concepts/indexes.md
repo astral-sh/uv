@@ -288,6 +288,25 @@ that otherwise disable caching, often unintentionally. We typically recommend fo
 approach to caching headers, i.e., setting `api = "max-age=600"` and
 `files = "max-age=365000000, immutable"`.
 
+### Requiring a hash algorithm
+
+When an index advertises multiple hashes for a distribution, uv selects a single hash to record in
+the lockfile. To require a specific algorithm for distributions resolved from an index, use the
+`hash-algorithm` setting:
+
+```toml
+[tool.uv]
+preview-features = ["index-hash-algorithm"]
+
+[[tool.uv.index]]
+name = "private-index"
+url = "https://private-index.com/simple"
+hash-algorithm = "sha256"
+```
+
+If a locked distribution does not advertise the required algorithm, uv will fail instead of falling
+back to another hash algorithm.
+
 ### Configuring `exclude-newer` for an index
 
 If you're using [`exclude-newer`](./resolution.md#reproducible-resolutions), you can configure a

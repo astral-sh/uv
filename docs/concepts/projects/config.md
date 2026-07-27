@@ -86,7 +86,7 @@ Then, in `example`, plugins would be loaded with:
 ```python title="example/__init__.py"
 from importlib.metadata import entry_points
 
-for plugin in entry_points(group='example.plugins'):
+for plugin in entry_points(group="example.plugins"):
     plugin.load()
 ```
 

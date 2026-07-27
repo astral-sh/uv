@@ -30,6 +30,8 @@ use uv_torch::TorchMode;
 use uv_workspace::pyproject::{ExtraBuildDependencies, OverrideDependency};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
+use crate::{EnvironmentOptions, FilesystemOptions};
+
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -868,11 +870,11 @@ pub struct ResolverInstallerSchema {
     pub resolution: Option<ResolutionMode>,
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
-    /// along with first-party requirements that contain an explicit pre-release marker in the
-    /// declared specifiers (`if-necessary-or-explicit`).
+    /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
+    /// stable candidate that satisfies the active constraints is rejected
+    /// (`if-necessary`).
     #[option(
-        default = "\"if-necessary-or-explicit\"",
+        default = "\"if-necessary\"",
         value_type = "str",
         example = r#"
             prerelease = "allow"
@@ -1617,11 +1619,11 @@ pub struct PipOptions {
     pub resolution: Option<ResolutionMode>,
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
-    /// along with first-party requirements that contain an explicit pre-release marker in the
-    /// declared specifiers (`if-necessary-or-explicit`).
+    /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
+    /// stable candidate that satisfies the active constraints is rejected
+    /// (`if-necessary`).
     #[option(
-        default = "\"if-necessary-or-explicit\"",
+        default = "\"if-necessary\"",
         value_type = "str",
         example = r#"
             prerelease = "allow"
@@ -2799,6 +2801,26 @@ pub struct AddOptions {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct AuditOptions {
+    /// Whether to run the automatic malware check during sync operations.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            malware-check = true
+        "#
+    )]
+    pub malware_check: Option<bool>,
+
+    /// The vulnerability service URL to use for automatic malware checks.
+    #[option(
+        default = "\"https://api.osv.dev/\"",
+        value_type = "str",
+        example = r#"
+            malware-check-url = "https://example.com"
+        "#
+    )]
+    pub malware_check_url: Option<DisplaySafeUrl>,
+
     /// A list of vulnerability IDs to ignore during auditing.
     ///
     /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
@@ -2835,11 +2857,23 @@ pub struct MalwareCheckSettings {
     pub malware_check_url: Option<DisplaySafeUrl>,
 }
 
-impl From<&crate::EnvironmentOptions> for MalwareCheckSettings {
-    fn from(options: &crate::EnvironmentOptions) -> Self {
+impl MalwareCheckSettings {
+    pub fn resolve(
+        filesystem: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
+        let audit = filesystem.and_then(|options| options.audit.as_ref());
+
         Self {
-            enabled: options.malware_check.value == Some(true),
-            malware_check_url: options.malware_check_url.clone(),
+            enabled: environment
+                .malware_check
+                .value
+                .or(audit.and_then(|audit| audit.malware_check))
+                .unwrap_or_default(),
+            malware_check_url: environment
+                .malware_check_url
+                .clone()
+                .or_else(|| audit.and_then(|audit| audit.malware_check_url.clone())),
         }
     }
 }
@@ -2892,7 +2926,7 @@ struct PreviewOptionsDefinition {
         example = r#"
             preview-features = true
             # or
-            preview-features = ["python-upgrade"]
+            preview-features = ["json-output"]
         "#
     )]
     preview_features: Option<PreviewFeaturesOption>,

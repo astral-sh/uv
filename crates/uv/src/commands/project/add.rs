@@ -437,8 +437,11 @@ pub(crate) async fn add(
                     project.workspace(),
                     &settings.resolver.index_locations,
                     &settings.resolver.sources,
+                    cache,
+                    &WorkspaceCache::default(),
                     client.credentials_cache(),
-                )?
+                )
+                .await?
             } else {
                 LoweredExtraBuildDependencies::from_non_lowered(
                     settings.resolver.extra_build_dependencies.clone(),

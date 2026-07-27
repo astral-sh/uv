@@ -4,11 +4,20 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      pull_request:
+        description: "The uv-dev pull request number to rebase"
+        required: false
+        type: string
+      head_sha:
+        description: "The expected uv-dev pull request head SHA"
+        required: false
+        type: string
 
 permissions: {}
 
 concurrency:
-  group: pull-request-conflicts-main
+  group: pull-request-conflicts-${{ inputs.pull_request || 'main' }}
   # Let an in-progress rebase finish; newer pushes replace the single pending run.
   cancel-in-progress: false
 
@@ -34,15 +43,36 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
         run: |
-          if [[ "$GH_REPO" == "astral-sh/uv" ]]; then
+          if [ -n "$PULL_REQUEST_NUMBER" ]; then
+            if ! [[ "$PULL_REQUEST_NUMBER" =~ ^[1-9][0-9]*$ ]] || ! [[ "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "The dispatched pull request context is invalid." >&2
+              exit 1
+            fi
+
+            pull_request=$(gh api "repos/$GH_REPO/pulls/$PULL_REQUEST_NUMBER")
+            if ! jq --exit-status \
+              --arg repository "$GH_REPO" \
+              --argjson repository_id "$GITHUB_REPOSITORY_ID" \
+              --arg head_sha "$EXPECTED_HEAD_SHA" \
+              '.state == "open" and .base.repo.full_name == $repository and .base.repo.id == $repository_id and .head.repo.full_name == $repository and .head.repo.id == $repository_id and .head.sha == $head_sha' \
+              <<< "$pull_request" > /dev/null; then
+              echo "The uv-dev pull request is no longer open at the expected head; refusing to rebase it." >&2
+              exit 1
+            fi
+
+            pull_requests=$(jq --compact-output '[{number, url: .html_url, base_ref: .base.ref, head_ref: .head.ref, head_sha: .head.sha, head_repository: .head.repo.full_name}]' <<< "$pull_request")
+          elif [[ "$GH_REPO" == "astral-sh/uv" ]]; then
             pull_requests=$(./scripts/find-conflicted-pull-requests.sh --author app/astral-automations-bot)
           else
             pull_requests=$(./scripts/find-conflicted-pull-requests.sh)
           fi
-          conflicted=$(jq 'length' <<< "$pull_requests")
+
+          pull_request_count=$(jq 'length' <<< "$pull_requests")
           rebasable=$(jq '[.[] | select(.head_repository == "astral-sh/uv-dev")] | length' <<< "$pull_requests")
-          unavailable=$(( conflicted - rebasable ))
+          unavailable=$(( pull_request_count - rebasable ))
 
           if (( rebasable > 256 )); then
             echo "Found $rebasable rebasable pull requests, which exceeds the GitHub Actions matrix limit of 256." >&2
@@ -56,16 +86,16 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           {
-            echo "## Conflicted pull requests"
+            echo "## Pull requests to rebase"
             echo
-            echo "Found $conflicted conflicted pull requests."
+            echo "Found $pull_request_count pull requests to rebase."
 
             if (( unavailable > 0 )); then
               echo
               echo "Skipping $unavailable pull requests whose heads cannot be updated by the uv-dev app token."
             fi
 
-            if (( conflicted > 0 )); then
+            if (( pull_request_count > 0 )); then
               echo
               jq --raw-output '.[] | "- \(.url)"' <<< "$pull_requests"
             fi

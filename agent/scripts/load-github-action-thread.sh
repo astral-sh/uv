@@ -101,11 +101,33 @@ if ! gh run download "$run_id" --repo "$repository" --pattern "$artifact_pattern
 fi
 
 rollouts=()
+rollout_count=0
 while IFS= read -r -d '' rollout; do
-    rollouts+=("$rollout")
+    rollout_count=$((rollout_count + 1))
+
+    if [[ "$rollout" == *.zst ]]; then
+        command -v zstd >/dev/null 2>&1 || fail "zstd is required to read compressed Codex rollouts"
+        session_meta="$(zstd --decompress --stdout -- "$rollout" | sed -n '1p')" || fail "could not read $rollout"
+    else
+        session_meta="$(sed -n '1p' "$rollout")" || fail "could not read $rollout"
+    fi
+
+    jq -e '.type == "session_meta" and .payload.source != null' >/dev/null 2>&1 <<<"$session_meta" || fail "invalid Codex session metadata in $rollout"
+
+    # Subagent rollouts inherit the root prompt and preview. Only expose the root `codex exec`
+    # session for each Codex step so the imported tasks remain distinct.
+    if jq -e '.payload.source == "exec"' >/dev/null <<<"$session_meta"; then
+        rollouts+=("$rollout")
+    fi
 done < <(find "$download_directory" -type f \( -name 'rollout-*.jsonl' -o -name 'rollout-*.jsonl.zst' \) -print0)
 
-((${#rollouts[@]})) || fail "no Codex rollout files were found in the downloaded artifacts"
+((rollout_count)) || fail "no Codex rollout files were found in the downloaded artifacts"
+((${#rollouts[@]})) || fail "no root Codex exec rollouts were found in the downloaded artifacts"
+
+ignored_rollout_count=$((rollout_count - ${#rollouts[@]}))
+if ((ignored_rollout_count)); then
+    printf 'Ignoring %s non-root Codex rollout(s).\n' "$ignored_rollout_count"
+fi
 
 server_log="$download_directory/app-server.stderr"
 # Keep stdin open while waiting for responses; closing it makes app-server exit before the fork.
@@ -174,6 +196,9 @@ for rollout in "${rollouts[@]}"; do
     fi
 
     printf 'Loaded Codex thread %s' "$thread_id"
+    if [[ -n "$thread_title" ]]; then
+        printf ' (%s)' "$thread_title"
+    fi
     if [[ -n "$source_id" ]]; then
         printf ' (forked from %s)' "$source_id"
     fi

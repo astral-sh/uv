@@ -284,14 +284,6 @@ reason = "read by the AWS request signer"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_pypi_types"
-item = "dependency_groups::DependencyGroups::iter"
-kind = "inherent_method"
-level = "expect"
-reason = "required alongside IntoIterator by Clippy"
-
-[[override]]
-lint = "hawk::dead_public"
 crate = "uv_resolver"
 item = "lock::Lock::is_empty"
 kind = "inherent_method"

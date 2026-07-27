@@ -733,7 +733,12 @@ pub(crate) async fn install(
                     }
                     Err(err) => return Err(err.into()),
                 };
-                let tool_lock = ToolLock::from_resolution(&tool_dir, &resolution, &lock_manifest)?;
+                let tool_lock = ToolLock::from_resolution(
+                    &tool_dir,
+                    &resolution,
+                    &lock_manifest,
+                    &settings.resolver.index_locations,
+                )?;
                 let resolution = tool_lock.to_resolution(
                     Some(package_name),
                     environment.interpreter(),
@@ -995,7 +1000,12 @@ pub(crate) async fn install(
             };
 
             if tool_locks {
-                let tool_lock = ToolLock::from_resolution(&tool_dir, &resolution, &lock_manifest)?;
+                let tool_lock = ToolLock::from_resolution(
+                    &tool_dir,
+                    &resolution,
+                    &lock_manifest,
+                    &settings.resolver.index_locations,
+                )?;
                 let resolution = tool_lock.to_resolution(
                     Some(package_name),
                     &interpreter,

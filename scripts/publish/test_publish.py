@@ -413,6 +413,7 @@ def wait_for_index(
             input=f"{plan.configuration.project_name}",
             stdout=PIPE,
             env=plan.full_env(),
+            check=False,
         )
         # codeberg sometimes times out
         if result.returncode != 0:
@@ -670,7 +671,12 @@ def test_reupload_modified_files(
         *plan.extra_args,
     ]
     result = run(
-        args, cwd=modified_project_dir, env=plan.full_env(), text=True, stderr=PIPE
+        args,
+        cwd=modified_project_dir,
+        env=plan.full_env(),
+        text=True,
+        stderr=PIPE,
+        check=False,
     )
 
     if (

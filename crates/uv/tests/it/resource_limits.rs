@@ -25,11 +25,8 @@ fn adjust_open_file_limit() {
         .env(EnvVars::UV_PYTHON_DOWNLOADS, "never");
 
     uv_snapshot!(context.filters(), command, @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     True
-
-    ----- stderr -----
     ");
 }

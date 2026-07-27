@@ -40,10 +40,7 @@ fn test_albatross_in_examples_bird_feeder() {
         .join("bird-feeder");
 
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -57,10 +54,7 @@ fn test_albatross_in_examples_bird_feeder() {
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
@@ -81,10 +75,7 @@ fn test_albatross_in_examples() {
     let current_dir = workspace.join("albatross-in-example");
 
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -98,10 +89,7 @@ fn test_albatross_in_examples() {
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
@@ -122,10 +110,7 @@ fn test_albatross_just_project() {
     let current_dir = workspace.join("albatross-just-project");
 
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -139,10 +124,7 @@ fn test_albatross_just_project() {
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
@@ -163,10 +145,7 @@ fn test_albatross_project_in_excluded() {
     let current_dir = workspace.join("albatross-project-in-excluded");
 
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -184,10 +163,7 @@ fn test_albatross_project_in_excluded() {
         .join("bird-feeder");
 
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -201,10 +177,7 @@ fn test_albatross_project_in_excluded() {
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
@@ -218,10 +191,7 @@ fn test_albatross_project_in_excluded() {
         .join("packages")
         .join("seeds");
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The project is marked as unmanaged: [TEMP_DIR]/workspace/albatross-project-in-excluded/packages/seeds
     "
@@ -239,10 +209,7 @@ fn test_albatross_root_workspace() {
     let current_dir = workspace.join("albatross-root-workspace");
 
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
@@ -259,10 +226,7 @@ fn test_albatross_root_workspace() {
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked 5 packages in [TIME]
@@ -286,10 +250,7 @@ fn test_albatross_root_workspace_bird_feeder() {
         .join("bird-feeder");
 
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: [TEMP_DIR]/workspace/albatross-root-workspace/.venv
@@ -305,10 +266,7 @@ fn test_albatross_root_workspace_bird_feeder() {
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -332,10 +290,7 @@ fn test_albatross_root_workspace_albatross() {
         .join("bird-feeder");
 
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: [TEMP_DIR]/workspace/albatross-root-workspace/.venv
@@ -351,10 +306,7 @@ fn test_albatross_root_workspace_albatross() {
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -378,10 +330,7 @@ fn test_albatross_virtual_workspace() {
         .join("bird-feeder");
 
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: [TEMP_DIR]/workspace/albatross-virtual-workspace/.venv
@@ -398,10 +347,7 @@ fn test_albatross_virtual_workspace() {
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
     uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Checked 5 packages in [TIME]
@@ -436,8 +382,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
         .arg("bird-feeder")
         .arg("packages/bird-feeder/check_installed_bird_feeder.py")
         .current_dir(&work_dir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Success
 
@@ -462,8 +407,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
         .arg("albatross")
         .arg("packages/albatross/check_installed_albatross.py")
         .current_dir(&work_dir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Success
 
@@ -497,8 +441,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
         .run()
         .arg("packages/albatross/check_installed_albatross.py")
         .current_dir(&work_dir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Success
 
@@ -543,8 +486,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
         .arg("bird-feeder")
         .arg("packages/bird-feeder/check_installed_bird_feeder.py")
         .current_dir(&work_dir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Success
 
@@ -568,8 +510,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
         .arg("albatross")
         .arg("check_installed_albatross.py")
         .current_dir(&work_dir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Success
 
@@ -607,8 +548,7 @@ fn test_uv_run_isolate() -> Result<()> {
         .arg("albatross")
         .arg("check_installed_albatross.py")
         .current_dir(&work_dir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Success
 
@@ -636,8 +576,7 @@ fn test_uv_run_isolate() -> Result<()> {
         .arg("bird-feeder")
         .arg("check_installed_albatross.py")
         .current_dir(&work_dir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Success
 
@@ -659,10 +598,7 @@ fn test_uv_run_isolate() -> Result<()> {
         .arg("bird-feeder")
         .arg("check_installed_albatross.py")
         .current_dir(&work_dir), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -823,10 +759,7 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
     make_project(&other_workspace.join("packages").join("e"), "e", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&main_workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -887,10 +820,7 @@ fn workspace_empty_member() -> Result<()> {
     fs_err::create_dir_all(workspace.join("packages").join("c"))?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
@@ -942,10 +872,7 @@ fn workspace_gitignored_member() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
@@ -1018,10 +945,7 @@ fn workspace_gitignored_member_in_subdirectory() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
@@ -1087,10 +1011,7 @@ fn workspace_ignored_member() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
@@ -1152,10 +1073,7 @@ fn workspace_nonempty_member_no_pyproject() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Workspace member `[TEMP_DIR]/workspace/packages/c` is missing a `pyproject.toml` (matches: `packages/*`)
     "
@@ -1195,10 +1113,7 @@ fn workspace_hidden_files() -> Result<()> {
     fs_err::create_dir_all(workspace.join("packages").join(".c"))?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
@@ -1259,10 +1174,7 @@ fn workspace_hidden_member() -> Result<()> {
     make_project(&workspace.join("packages").join(".c"), "c", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
@@ -1324,10 +1236,7 @@ fn workspace_non_included_member() -> Result<()> {
 
     // Locking from `c` should not include any workspace members.
     uv_snapshot!(context.filters(), context.lock().current_dir(workspace.join("c")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
@@ -1406,10 +1315,7 @@ fn workspace_inherit_sources() -> Result<()> {
 
     // As-is, resolving should fail.
     uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
@@ -1438,10 +1344,7 @@ fn workspace_inherit_sources() -> Result<()> {
 
     // Resolving should succeed.
     uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
@@ -1481,10 +1384,7 @@ fn workspace_inherit_sources() -> Result<()> {
 
     // Resolving should succeed.
     uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
@@ -1573,10 +1473,7 @@ fn workspace_inherit_sources() -> Result<()> {
     // Resolving should succeed; the member should still use the root's source, despite defining
     // some of its own
     uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
@@ -1626,10 +1523,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
 
     // Resolving should fail.
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
@@ -1694,10 +1588,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
 
     // Resolving should fail.
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
@@ -1777,10 +1668,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
 
     // Resolving should fail.
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
@@ -1847,10 +1735,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
 
     // Resolving should fail.
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
@@ -1917,10 +1802,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
 
     // Resolving should fail.
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `packages/bar/pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -1989,10 +1871,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
     // We should fail
     // TODO(zanieb): This error message is bad?
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × Failed to build `foo @ file://[TEMP_DIR]/workspace/packages/foo`
@@ -2034,10 +1913,7 @@ fn test_path_hopping() -> Result<()> {
     make_project(&context.temp_dir.join("libs").join("bar"), "bar", "")?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&main_project_dir), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
@@ -2269,10 +2145,7 @@ fn transitive_dep_in_git_workspace_with_cache_inside_workspace() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -2353,10 +2226,7 @@ fn workspace_members_with_leading_dot_slash() -> Result<()> {
     make_project(&workspace.join("packages").join("bar"), "bar", deps)?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
@@ -2378,10 +2248,7 @@ fn workspace_members_with_leading_dot_slash() -> Result<()> {
 
     // Test syncing from within foo works correctly
     uv_snapshot!(context.filters(), context.sync().current_dir(workspace.join("packages").join("foo")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: [TEMP_DIR]/workspace/.venv
@@ -2419,10 +2286,7 @@ fn workspace_members_with_parent_directory() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
@@ -2465,10 +2329,7 @@ fn workspace_members_with_complex_relative_paths() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]

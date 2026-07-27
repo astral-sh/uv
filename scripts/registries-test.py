@@ -40,7 +40,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict
 
 import colorama
 from colorama import Fore
@@ -66,7 +65,7 @@ KNOWN_REGISTRIES = [
 ]
 
 
-def fetch_op_items(vault_name: str, env: Dict[str, str]) -> Dict[str, str]:
+def fetch_op_items(vault_name: str, env: dict[str, str]) -> dict[str, str]:
     """Fetch items from the specified 1Password vault and add them to the environment.
 
     For each item named UV_TEST_XXX in the vault:
@@ -135,9 +134,9 @@ def fetch_op_items(vault_name: str, env: Dict[str, str]) -> Dict[str, str]:
     return updated_env
 
 
-def get_registries(env: Dict[str, str]) -> Dict[str, str]:
+def get_registries(env: dict[str, str]) -> dict[str, str]:
     pattern = re.compile(r"^UV_TEST_(.+)_URL$")
-    registries: Dict[str, str] = {}
+    registries: dict[str, str] = {}
 
     for env_var, value in env.items():
         match = pattern.match(env_var)
@@ -254,7 +253,7 @@ def run_test(
             print(f"{Fore.RED}{registry_name}: TIMEOUT{Fore.RESET} (>{timeout}s)")
         except FileNotFoundError:
             print(f"{Fore.RED}{registry_name}: ERROR{Fore.RESET} - uv not found")
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError, ValueError) as e:
             print(f"{Fore.RED}{registry_name}: ERROR{Fore.RESET} - {e}")
 
         if result:
@@ -336,7 +335,7 @@ def main() -> None:
         print(f"Fetching credentials from 1Password vault '{args.op_vault}'...")
         try:
             env = fetch_op_items(args.op_vault, env)
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError, ValueError) as e:
             print(f"{Fore.RED}Error accessing 1Password: {e}{Fore.RESET}")
             print(
                 f"{Fore.YELLOW}Hint: If you're not authenticated, run 'op signin' first.{Fore.RESET}"
@@ -348,7 +347,7 @@ def main() -> None:
         # absolutize the path.
         uv = Path.cwd().joinpath(args.uv)
     else:
-        subprocess.run(["cargo", "build"])
+        subprocess.run(["cargo", "build"], check=False)
         executable_suffix = ".exe" if os.name == "nt" else ""
         uv = cwd.parent.joinpath(f"target/debug/uv{executable_suffix}")
 

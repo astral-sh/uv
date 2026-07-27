@@ -65,7 +65,7 @@ jobs:
       - name: "Prepare Codex prompt"
         run: |
           {
-            printf 'Release preparation automation for %s\n\n' "$(uv version --short)"
+            printf 'Release preparation for %s: Rewrite changelog\n\n' "$(uv version --short)"
             cat agents/prompts/editorialize-changelog.md
           } > "$RUNNER_TEMP/editorialize-changelog-prompt.md"
 

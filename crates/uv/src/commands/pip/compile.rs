@@ -213,6 +213,7 @@ pub(crate) async fn pip_compile(
         index_url,
         extra_index_urls,
         no_index,
+        require_hashes: _,
         find_links,
         no_binary,
         no_build,
@@ -775,7 +776,7 @@ pub(crate) async fn pip_compile(
         .into_iter()
         .filter(|name| resolution.contains(name))
         .collect::<Vec<_>>();
-    if !excluded.is_empty() {
+    if include_annotations && !excluded.is_empty() {
         writeln!(writer)?;
         writeln!(
             writer,

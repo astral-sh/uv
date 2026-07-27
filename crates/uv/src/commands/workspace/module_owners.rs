@@ -27,7 +27,7 @@ use crate::commands::project::sync::do_sync;
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverSettings};
 
-/// Sync all locked extras and groups as needed, then map importable modules to package IDs.
+/// Map importable modules to package IDs, optionally syncing all locked extras and groups first.
 ///
 /// This uses a sufficient (inexact) sync so required distributions are available to inspect
 /// without removing unrelated packages from an existing environment. Only distributions in the
@@ -43,54 +43,57 @@ pub(crate) async fn collect_module_owners(
     workspace_cache: &WorkspaceCache,
     preview: Preview,
     malware_settings: &MalwareCheckSettings,
+    sync: bool,
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
     let (extras, groups) = target_selection(target);
     let Some(package_ids) = selected_package_ids(target, venv, &extras, &groups, settings)? else {
         return Ok(BTreeMap::new());
     };
 
-    let reinstall = Reinstall::None;
-    let installer_settings = InstallerSettingsRef {
-        index_locations: &settings.index_locations,
-        index_strategy: settings.index_strategy,
-        keyring_provider: settings.keyring_provider,
-        dependency_metadata: &settings.dependency_metadata,
-        config_setting: &settings.config_setting,
-        config_settings_package: &settings.config_settings_package,
-        build_isolation: &settings.build_isolation,
-        extra_build_dependencies: &settings.extra_build_dependencies,
-        extra_build_variables: &settings.extra_build_variables,
-        exclude_newer: &settings.exclude_newer,
-        link_mode: settings.link_mode,
-        compile_bytecode: false,
-        reinstall: &reinstall,
-        build_options: &settings.build_options,
-        sources: settings.sources.clone(),
-    };
+    if sync {
+        let reinstall = Reinstall::None;
+        let installer_settings = InstallerSettingsRef {
+            index_locations: &settings.index_locations,
+            index_strategy: settings.index_strategy,
+            keyring_provider: settings.keyring_provider,
+            dependency_metadata: &settings.dependency_metadata,
+            config_setting: &settings.config_setting,
+            config_settings_package: &settings.config_settings_package,
+            build_isolation: &settings.build_isolation,
+            extra_build_dependencies: &settings.extra_build_dependencies,
+            extra_build_variables: &settings.extra_build_variables,
+            exclude_newer: &settings.exclude_newer,
+            link_mode: settings.link_mode,
+            compile_bytecode: false,
+            reinstall: &reinstall,
+            build_options: &settings.build_options,
+            sources: settings.sources.clone(),
+        };
 
-    do_sync(
-        target,
-        venv,
-        &extras,
-        &groups,
-        None,
-        InstallOptions::default(),
-        Modifications::Sufficient,
-        None,
-        installer_settings,
-        client_builder,
-        &state.fork(),
-        Box::new(DefaultInstallLogger),
-        false,
-        concurrency,
-        cache,
-        workspace_cache,
-        DryRun::Disabled,
-        Printer::Silent,
-        preview,
-        malware_settings,
-    )
-    .await?;
+        do_sync(
+            target,
+            venv,
+            &extras,
+            &groups,
+            None,
+            InstallOptions::default(),
+            Modifications::Sufficient,
+            None,
+            installer_settings,
+            client_builder,
+            &state.fork(),
+            Box::new(DefaultInstallLogger),
+            false,
+            concurrency,
+            cache,
+            workspace_cache,
+            DryRun::Disabled,
+            Printer::Silent,
+            preview,
+            malware_settings,
+        )
+        .await?;
+    }
 
     find_module_owners_in_environment(venv, &package_ids)
 }

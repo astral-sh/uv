@@ -65,7 +65,7 @@ pub struct Metadata {
     /// Ideally absolute paths to things that are found in subdirs of this should have exactly
     /// this as a prefix so it can be stripped to get relative paths if one wants.
     workspace_root: PortablePathBuf,
-    /// Information about the synchronized environment, when `--sync` was used.
+    /// Information about the existing or synchronized environment, when available.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     environment: Option<MetadataEnvironment>,
     /// Information about the script root, when metadata was requested for a script.
@@ -109,7 +109,7 @@ struct SchemaReport {
     version: SchemaVersion,
 }
 
-/// Information about the environment synchronized for the workspace.
+/// Information about the existing or synchronized environment for the workspace.
 #[derive(Debug, serde::Serialize)]
 struct MetadataEnvironment {
     /// Absolute path to the environment root.
@@ -118,7 +118,7 @@ struct MetadataEnvironment {
     python: PythonReport,
 }
 
-/// Information about the Python interpreter in a synchronized environment.
+/// Information about the Python interpreter in an existing environment.
 #[derive(Debug, serde::Serialize)]
 pub struct PythonReport {
     /// Absolute path to the Python executable.

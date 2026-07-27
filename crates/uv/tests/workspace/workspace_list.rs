@@ -22,8 +22,7 @@ fn workspace_list_reuses_settings_discovery() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.workspace_list()
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     member
 
@@ -37,8 +36,7 @@ fn workspace_list_reuses_settings_discovery() -> Result<()> {
     uv_snapshot!(context.filters(), context.workspace_list()
         .arg("--no-cache")
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     member
 
@@ -67,22 +65,16 @@ fn workspace_list_simple() {
     let workspace = context.temp_dir.child("foo");
 
     uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     foo
-
-    ----- stderr -----
     "
     );
 
     uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/foo
-
-    ----- stderr -----
     "
     );
 }
@@ -101,14 +93,11 @@ fn workspace_list_root_workspace() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     albatross
     bird-feeder
     seeds
-
-    ----- stderr -----
     "
     );
 
@@ -129,14 +118,11 @@ fn workspace_list_virtual_workspace() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     albatross
     bird-feeder
     seeds
-
-    ----- stderr -----
     "
     );
 
@@ -159,14 +145,11 @@ fn workspace_list_from_member() -> Result<()> {
     let member_dir = workspace.join("packages").join("bird-feeder");
 
     uv_snapshot!(context.filters(), context.workspace_list().current_dir(&member_dir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     albatross
     bird-feeder
     seeds
-
-    ----- stderr -----
     "
     );
 
@@ -199,26 +182,20 @@ fn workspace_list_multiple_members() {
         .success();
 
     uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace_root), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pkg-a
     pkg-b
     pkg-c
-
-    ----- stderr -----
     "
     );
 
     uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace_root), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/pkg-a
     [TEMP_DIR]/pkg-a/pkg-b
     [TEMP_DIR]/pkg-a/pkg-c
-
-    ----- stderr -----
     "
     );
 }
@@ -233,12 +210,9 @@ fn workspace_list_single_project() {
     let project = context.temp_dir.child("my-project");
 
     uv_snapshot!(context.filters(), context.workspace_list().current_dir(&project), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     my-project
-
-    ----- stderr -----
     "
     );
 }
@@ -257,12 +231,9 @@ fn workspace_list_with_excluded() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     albatross
-
-    ----- stderr -----
     "
     );
 
@@ -275,10 +246,7 @@ fn workspace_list_no_project() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.workspace_list(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
     "
@@ -337,8 +305,7 @@ fn workspace_list_scripts() -> Result<()> {
     uv_snapshot!(context.filters(), context.workspace_list()
         .arg("--scripts")
         .current_dir(&project), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     .github/hidden.py
     script.py
@@ -354,23 +321,19 @@ fn workspace_list_scripts() -> Result<()> {
         .arg("--preview-features")
         .arg("workspace-list-scripts")
         .current_dir(&project), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     .github/hidden.py
     script.py
     scripts/nested.py
     tool
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.workspace_list()
         .arg("--scripts")
         .arg("--paths")
         .current_dir(&project), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     .github/hidden.py
     script.py
@@ -388,8 +351,7 @@ fn workspace_list_scripts() -> Result<()> {
     uv_snapshot!(context.filters(), context.workspace_list()
         .arg("--scripts")
         .current_dir(&project), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     .github/hidden.py
     script.py

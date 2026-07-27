@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -143,6 +144,11 @@ impl From<FrozenSource> for MissingLockfileSource {
 pub(crate) enum ProjectError {
     #[error("The lockfile at `uv.lock` needs to be updated, but `{2}` was provided.")]
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
+
+    #[error(
+        "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."
+    )]
+    LockFormat(PathBuf, usize, LockCheckSource),
 
     #[error(
         "Unable to find lockfile at `{1}`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
@@ -406,6 +412,9 @@ impl uv_errors::Hint for ProjectError {
             Self::LockMismatch(..) | Self::LockWorkspaceMismatch(..) => {
                 uv_errors::Hints::from("To update the lockfile, run `uv lock`.")
             }
+            Self::LockFormat(..) => uv_errors::Hints::from(
+                "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
+            ),
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }
@@ -784,6 +793,23 @@ impl ScriptInterpreter {
         cache_env
     }
 
+    /// Discover an existing script environment without selecting or downloading an interpreter.
+    pub(crate) fn discover_existing(
+        script: Pep723ItemRef<'_>,
+        active: Option<bool>,
+        cache: &Cache,
+    ) -> Option<PythonEnvironment> {
+        let root = Self::root(script, active, cache);
+        match PythonEnvironment::from_root(&root, cache) {
+            Ok(environment) => Some(environment),
+            Err(uv_python::Error::MissingEnvironment(_)) => None,
+            Err(err) => {
+                warn!("Ignoring existing script environment: {err}");
+                None
+            }
+        }
+    }
+
     /// Discover the interpreter to use for the current [`Pep723Item`].
     pub(crate) async fn discover(
         script: Pep723ItemRef<'_>,
@@ -807,34 +833,29 @@ impl ScriptInterpreter {
             requires_python,
         } = ScriptPython::from_request(python_request, workspace, script, config_discovery).await?;
 
-        let root = Self::root(script, active, cache);
-        match PythonEnvironment::from_root(&root, cache) {
-            Ok(venv) => {
-                match check_environment_compatibility(
-                    &venv,
-                    EnvironmentKind::Script,
-                    python_request.as_ref(),
-                    python_preference,
-                    requires_python
-                        .as_ref()
-                        .map(|(requires_python, _)| requires_python),
-                    cache,
-                ) {
-                    Ok(()) => return Ok(Self::Environment(venv)),
-                    Err(err) if keep_incompatible => {
-                        warn_user!(
-                            "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
-                            root.user_display().cyan(),
-                        );
-                        return Ok(Self::Environment(venv));
-                    }
-                    Err(err) => {
-                        debug!("{err}");
-                    }
+        if let Some(environment) = Self::discover_existing(script, active, cache) {
+            match check_environment_compatibility(
+                &environment,
+                EnvironmentKind::Script,
+                python_request.as_ref(),
+                python_preference,
+                requires_python
+                    .as_ref()
+                    .map(|(requires_python, _)| requires_python),
+                cache,
+            ) {
+                Ok(()) => return Ok(Self::Environment(environment)),
+                Err(err) if keep_incompatible => {
+                    warn_user!(
+                        "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
+                        environment.root().user_display().cyan(),
+                    );
+                    return Ok(Self::Environment(environment));
+                }
+                Err(err) => {
+                    debug!("{err}");
                 }
             }
-            Err(uv_python::Error::MissingEnvironment(_)) => {}
-            Err(err) => warn!("Ignoring existing script environment: {err}"),
         }
 
         let reporter = PythonDownloadReporter::single(printer);
@@ -1005,13 +1026,9 @@ fn check_environment_compatibility(
     Ok(())
 }
 
-/// Discover a compatible project environment at `root`.
-fn discover_project_environment(
+/// Discover an existing project environment at `root` without validating its compatibility.
+fn existing_project_environment(
     root: &Path,
-    python_request: Option<&PythonRequest>,
-    python_preference: PythonPreference,
-    requires_python: Option<&RequiresPython>,
-    keep_incompatible: bool,
     centralized: bool,
     cache: &Cache,
 ) -> Result<Option<PythonEnvironment>, ProjectError> {
@@ -1069,6 +1086,23 @@ fn discover_project_environment(
         Err(err) => return Err(err.into()),
     };
 
+    Ok(Some(environment))
+}
+
+/// Discover a compatible project environment at `root`.
+fn discover_project_environment(
+    root: &Path,
+    python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
+    requires_python: Option<&RequiresPython>,
+    keep_incompatible: bool,
+    centralized: bool,
+    cache: &Cache,
+) -> Result<Option<PythonEnvironment>, ProjectError> {
+    let Some(environment) = existing_project_environment(root, centralized, cache)? else {
+        return Ok(None);
+    };
+
     match check_environment_compatibility(
         &environment,
         EnvironmentKind::Project,
@@ -1120,28 +1154,56 @@ pub(crate) fn centralized_environments_enabled(
     true
 }
 
-/// Return whether `path` is a link into the current cache's environment bucket.
-pub(crate) fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
-    let Ok(target) = fs_err::read_link(path) else {
-        return false;
-    };
+/// Return whether `path` is lexically within `base`.
+fn is_path_lexically_within(path: &Path, base: &Path) -> bool {
+    // Normally only longer paths must be in the verbatim namespace, normalise both so the
+    // comparison works correctly regardless.
+    verbatim_path(path).starts_with(verbatim_path(base).as_ref())
+}
+
+/// Return whether `path` looks like a path we wrote and references our environment cache.
+///
+/// This isn't fully robust, and cannot be, as the path may not exist.
+fn is_centralized_environment_path(path: &Path, cache: &Cache) -> bool {
     let Ok(environments) = std::path::absolute(cache.bucket(CacheBucket::Environments)) else {
-        // If we can't resolve the cache directory, the environment can't be in the cache.
         return false;
     };
-    // Compare Windows paths in the verbatim namespace so long targets returned with `\\?\` match
-    // the cache root.
-    let starts_with =
-        |path: &Path, base: &Path| verbatim_path(path).starts_with(verbatim_path(base).as_ref());
-    if starts_with(&target, &environments) {
+    if is_path_lexically_within(path, &environments) {
         return true;
     }
 
-    // Resolve existing relative or indirect links; only lexical targets can be dangling.
-    fs_err::canonicalize(path).is_ok_and(|target| {
+    // Resolve existing relative or indirect paths; only the lexical check can handle dangling
+    // paths.
+    fs_err::canonicalize(path).is_ok_and(|path| {
         fs_err::canonicalize(&environments)
-            .is_ok_and(|environments| starts_with(&target, &environments))
+            .is_ok_and(|environments| is_path_lexically_within(&path, &environments))
     })
+}
+
+/// Return whether `path` appears to link into the current cache's environment bucket.
+fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
+    let Ok(target) = fs_err::read_link(path) else {
+        return false;
+    };
+    is_centralized_environment_path(&target, cache) || is_centralized_environment_path(path, cache)
+}
+
+/// Read an environment path from a file.
+fn read_environment_path_file(path: &Path) -> io::Result<PathBuf> {
+    let target = PathBuf::from(fs_err::read_to_string(path)?);
+    Ok(if target.is_absolute() {
+        target
+    } else {
+        path.parent().unwrap_or(Path::new("")).join(target)
+    })
+}
+
+/// Return whether `path` refers to an environment in the current cache's environment bucket.
+pub(crate) fn is_centralized_environment_reference(path: &Path, cache: &Cache) -> bool {
+    is_centralized_environment_link(path, cache)
+        || read_environment_path_file(path)
+            .ok()
+            .is_some_and(|target| is_centralized_environment_path(&target, cache))
 }
 
 /// Return the centralized environment path for a given workspace and interpreter.
@@ -1217,38 +1279,60 @@ pub(crate) fn update_project_environment_link(
     link_error_reporting: LinkErrorReporting,
 ) -> bool {
     let link = workspace.install_path().join(".venv");
-    let report_error = |message: &str, err: &std::io::Error| match link_error_reporting {
-        LinkErrorReporting::User => {
-            warn_user_once!("{message} at `{}`: {err}", link.user_display());
-        }
-        LinkErrorReporting::Log => warn!("{message} at `{}`: {err}", link.user_display()),
+    let report_error = |message: std::fmt::Arguments<'_>| match link_error_reporting {
+        LinkErrorReporting::User => warn_user_once!("{message}"),
+        LinkErrorReporting::Log => warn!("{message}"),
     };
 
     if fs_err::symlink_metadata(&link).is_ok_and(|metadata| metadata.is_dir()) {
         if uv_fs::is_virtualenv_base(&link) {
             if let Err(err) = uv_fs::remove_virtualenv(&link) {
-                report_error("Failed to remove existing local virtual environment", &err);
+                report_error(format_args!(
+                    "Failed to remove existing local virtual environment: {err}"
+                ));
                 return false;
             }
         } else {
             // On Windows, copying a junction can produce an empty directory.
             #[cfg(windows)]
             if let Err(err) = fs_err::remove_dir(&link) {
-                report_error("Failed to create link to project environment", &err);
+                report_error(format_args!(
+                    "Failed to create link to project environment: {err}"
+                ));
                 return false;
             }
         }
     }
 
-    // TODO(tk): When directory links are unavailable, write `.venv` as a file containing the
-    // environment path.
-    match uv_fs::replace_symlink(environment.root(), &link) {
-        Ok(()) => true,
-        Err(err) => {
-            report_error("Failed to create link to project environment", &err);
-            false
-        }
+    // On Windows replace_symlink won't replace a file, but we want to try to upgrade to a junction
+    // if possible.
+    if cfg!(windows) {
+        let _ = fs_err::remove_file(&link);
     }
+
+    let Err(link_error) = uv_fs::replace_symlink(environment.root(), &link) else {
+        return true;
+    };
+    warn!("Failed to create link to project environment: {link_error}");
+
+    let Some(target) = environment.root().to_str() else {
+        report_error(format_args!(
+            "Failed to write the environment path to `{}`: the path is not valid UTF-8",
+            link.simplified_display()
+        ));
+        return false;
+    };
+
+    if let Err(err) = uv_fs::write_atomic_sync(&link, target.as_bytes()) {
+        report_error(format_args!("Failed to write the environment path: {err}"));
+        return false;
+    }
+
+    report_error(format_args!(
+        "Failed to create link to project environment; wrote the environment path to `{}` instead",
+        link.simplified_display()
+    ));
+    false
 }
 
 /// An interpreter suitable for the project.
@@ -1262,6 +1346,28 @@ pub(crate) enum ProjectInterpreter {
 }
 
 impl ProjectInterpreter {
+    /// Discover an existing project environment without selecting or downloading an interpreter.
+    pub(crate) fn discover_existing(
+        workspace: &Workspace,
+        active: Option<bool>,
+        cache: &Cache,
+    ) -> Result<Option<PythonEnvironment>, ProjectError> {
+        let selection = workspace.environment_selection(active);
+        let root = selection
+            .explicit_path()
+            .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf);
+        let root = read_environment_path_file(&root).unwrap_or(root);
+        let centralized = centralized_environments_enabled(&selection, cache)
+            || is_centralized_environment_reference(&root, cache);
+        let root = if centralized {
+            fs_err::canonicalize(&root).unwrap_or(root)
+        } else {
+            root
+        };
+
+        existing_project_environment(&root, centralized, cache)
+    }
+
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
         workspace: &Workspace,
@@ -1292,7 +1398,13 @@ impl ProjectInterpreter {
         // the cache root instead of trusting the link target.
         if centralized {
             let project_environment_path = workspace.install_path().join(".venv");
-            if let Ok(candidate) = PythonEnvironment::from_root(&project_environment_path, cache) {
+            if let Ok(candidate) = PythonEnvironment::from_root(
+                read_environment_path_file(&project_environment_path)
+                    .ok()
+                    .as_deref()
+                    .unwrap_or(&project_environment_path),
+                cache,
+            ) {
                 let root = centralized_environment_root(
                     workspace,
                     candidate.interpreter(),
@@ -1311,18 +1423,28 @@ impl ProjectInterpreter {
                     return Ok(Self::Environment(environment));
                 }
             }
-        } else if let Some(environment) = discover_project_environment(
-            &environment_selection
+        } else {
+            let project_environment_path = environment_selection
                 .explicit_path()
-                .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf),
-            python_request.as_ref(),
-            python_preference,
-            requires_python.as_ref(),
-            keep_incompatible,
-            centralized,
-            cache,
-        )? {
-            return Ok(Self::Environment(environment));
+                .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf);
+            // TODO(tk): Revisit after PEP 832.
+            // A centralized path file is not a local environment; let initialization replace it.
+            if !(environment_selection.is_default()
+                && read_environment_path_file(&project_environment_path)
+                    .ok()
+                    .is_some_and(|target| is_centralized_environment_path(&target, cache)))
+                && let Some(environment) = discover_project_environment(
+                    &project_environment_path,
+                    python_request.as_ref(),
+                    python_preference,
+                    requires_python.as_ref(),
+                    keep_incompatible,
+                    centralized,
+                    cache,
+                )?
+            {
+                return Ok(Self::Environment(environment));
+            }
         }
 
         let reporter = PythonDownloadReporter::single(printer);
@@ -1741,12 +1863,12 @@ impl ProjectEnvironment {
                         .explicit_path()
                         .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf)
                 };
-                let centralized_environment_link =
-                    !centralized && is_centralized_environment_link(&root, cache);
+                let centralized_environment_reference =
+                    !centralized && is_centralized_environment_reference(&root, cache);
 
                 // Avoid removing things that are not virtual environments and are outside the
                 // environment cache.
-                let replace_environment = if centralized_environment_link {
+                let replace_environment = if centralized_environment_reference {
                     true
                 } else {
                     match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {
@@ -1823,9 +1945,8 @@ impl ProjectEnvironment {
                 }
 
                 if replace_environment {
-                    // `clear_virtualenv` follows directory links, so unlink centralized links
-                    // directly to preserve their cached targets.
-                    let removed = if centralized_environment_link {
+                    // Remove centralized references directly to preserve their cached targets.
+                    let removed = if centralized_environment_reference {
                         match uv_fs::remove_virtualenv(&root) {
                             Ok(()) => true,
                             Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
@@ -1835,7 +1956,7 @@ impl ProjectEnvironment {
                         uv_fs::clear_virtualenv(&root).map_err(uv_virtualenv::Error::from)?
                     };
                     if removed {
-                        let removed_entry = if centralized_environment_link {
+                        let removed_entry = if centralized_environment_reference {
                             "link to project environment"
                         } else {
                             "virtual environment"
@@ -3142,9 +3263,11 @@ pub(crate) fn detect_conflicts(
 }
 
 /// Determine the [`RequirementsSpecification`] for a script.
-pub(crate) fn script_specification(
+pub(crate) async fn script_specification(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
 ) -> Result<Option<RequirementsSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
@@ -3155,22 +3278,25 @@ pub(crate) fn script_specification(
     let script_indexes = script.indexes(&settings.sources);
     let script_sources = script.sources(&settings.sources);
 
-    let requirements = dependencies
-        .iter()
-        .cloned()
-        .flat_map(|requirement| {
+    let mut requirements = Vec::new();
+    for requirement in dependencies.iter().cloned() {
+        requirements.extend(
             LoweredRequirement::from_non_workspace_requirement(
                 requirement,
                 script_dir.as_ref(),
                 script_sources.as_ref(),
                 script_indexes,
                 &settings.index_locations,
+                cache,
+                workspace_cache,
                 credentials_cache,
             )
+            .await
             .map_ok(LoweredRequirement::into_inner)
-        })
-        .collect::<Result<_, _>>()?;
-    let constraints = script
+            .collect::<Result<Vec<_>, _>>()?,
+        );
+    }
+    let constraint_dependencies = script
         .metadata()
         .tool
         .as_ref()
@@ -3178,19 +3304,25 @@ pub(crate) fn script_specification(
         .and_then(|uv| uv.constraint_dependencies.as_ref())
         .into_iter()
         .flatten()
-        .cloned()
-        .flat_map(|requirement| {
+        .cloned();
+    let mut constraints = Vec::new();
+    for requirement in constraint_dependencies {
+        constraints.extend(
             LoweredRequirement::from_non_workspace_requirement(
                 requirement,
                 script_dir.as_ref(),
                 script_sources.as_ref(),
                 script_indexes,
                 &settings.index_locations,
+                cache,
+                workspace_cache,
                 credentials_cache,
             )
+            .await
             .map_ok(LoweredRequirement::into_inner)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?,
+        );
+    }
     let overrides = {
         let override_entries = script
             .metadata()
@@ -3212,30 +3344,35 @@ pub(crate) fn script_specification(
                             script_sources.as_ref(),
                             script_indexes,
                             &settings.index_locations,
+                            cache,
+                            workspace_cache,
                             credentials_cache,
                         )
+                        .await
                         .map_ok(LoweredRequirement::into_inner)
                         .map_ok(Override::Requirement)
                         .collect::<Result<Vec<_>, _>>()?,
                     );
                 }
                 Override::Package(package) => {
-                    let dependencies = package
-                        .dependencies
-                        .into_vec()
-                        .into_iter()
-                        .flat_map(|requirement| {
+                    let mut dependencies = Vec::new();
+                    for requirement in package.dependencies.into_vec() {
+                        dependencies.extend(
                             LoweredRequirement::from_non_workspace_requirement(
                                 requirement,
                                 script_dir.as_ref(),
                                 script_sources.as_ref(),
                                 script_indexes,
                                 &settings.index_locations,
+                                cache,
+                                workspace_cache,
                                 credentials_cache,
                             )
+                            .await
                             .map_ok(LoweredRequirement::into_inner)
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
+                            .collect::<Result<Vec<_>, _>>()?,
+                        );
+                    }
                     overrides.push(Override::Package(PackageOverride {
                         package: package.package,
                         dependencies: dependencies.into_boxed_slice(),
@@ -3264,9 +3401,11 @@ pub(crate) fn script_specification(
 }
 
 /// Determine the extra build requires for a script.
-pub(crate) fn script_extra_build_requires(
+pub(crate) async fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
 ) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
@@ -3286,29 +3425,31 @@ pub(crate) fn script_extra_build_requires(
     // Lower the extra build dependencies.
     let mut extra_build_requires = ExtraBuildRequires::default();
     for (name, requirements) in script_extra_build_dependencies {
-        let lowered_requirements: Vec<_> = requirements
-            .iter()
-            .cloned()
-            .flat_map(
-                |ExtraBuildDependency {
-                     requirement,
-                     match_runtime,
-                 }| {
-                    LoweredRequirement::from_non_workspace_requirement(
-                        requirement,
-                        script_dir.as_ref(),
-                        script_sources.as_ref(),
-                        script_indexes,
-                        &settings.index_locations,
-                        credentials_cache,
-                    )
-                    .map_ok(move |requirement| ExtraBuildRequirement {
-                        requirement: requirement.into_inner(),
-                        match_runtime,
-                    })
-                },
-            )
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut lowered_requirements = Vec::new();
+        for ExtraBuildDependency {
+            requirement,
+            match_runtime,
+        } in requirements.iter().cloned()
+        {
+            lowered_requirements.extend(
+                LoweredRequirement::from_non_workspace_requirement(
+                    requirement,
+                    script_dir.as_ref(),
+                    script_sources.as_ref(),
+                    script_indexes,
+                    &settings.index_locations,
+                    cache,
+                    workspace_cache,
+                    credentials_cache,
+                )
+                .await
+                .map_ok(|requirement| ExtraBuildRequirement {
+                    requirement: requirement.into_inner(),
+                    match_runtime,
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            );
+        }
         extra_build_requires.insert(name.clone(), lowered_requirements);
     }
 

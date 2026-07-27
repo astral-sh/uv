@@ -28,7 +28,7 @@ use uv_warnings::warn_user_once;
 use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups};
 use crate::pyproject::{
     OverrideDependency, Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources,
-    ToolUvWorkspace,
+    ToolUvWorkspace, WorkspaceReference,
 };
 
 /// The workspace project environment selected by configuration and command-line options.
@@ -625,7 +625,12 @@ impl Workspace {
             )
         {
             for source in sources.iter() {
-                let Source::Workspace { editable, .. } = &source else {
+                let Source::Workspace {
+                    workspace: WorkspaceReference::Bool(true),
+                    editable,
+                    ..
+                } = &source
+                else {
                     continue;
                 };
                 let existing = required_members.insert(package.clone(), *editable);

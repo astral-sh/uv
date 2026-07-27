@@ -11,12 +11,9 @@ fn cache_size_empty_raw() {
     context.clean().assert().success();
 
     uv_snapshot!(context.cache_size().arg("--preview"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     0
-
-    ----- stderr -----
     ");
 }
 
@@ -30,12 +27,9 @@ fn cache_size_with_packages_raw() {
 
     // Check cache size is now positive (raw bytes).
     uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--preview"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [SIZE]
-
-    ----- stderr -----
     ");
 }
 
@@ -49,11 +43,8 @@ fn cache_size_with_packages_human() {
 
     // Check cache size with --human flag
     uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--preview").arg("--human"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [SIZE]
-
-    ----- stderr -----
     ");
 }

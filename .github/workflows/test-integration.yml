@@ -952,7 +952,7 @@ jobs:
     name: "registries"
     timeout-minutes: 10
     runs-on: ubuntu-latest
-    if: ${{ github.event.pull_request.head.repo.fork != true }}
+    if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true }}
     environment:
       name: uv-test-registries
       deployment: false

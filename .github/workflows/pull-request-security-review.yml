@@ -51,7 +51,9 @@ jobs:
             > .pull-request-review.diff
 
           {
-            printf 'Pull request security review automation for #%s\n\n' "$PULL_REQUEST_NUMBER"
+            printf 'Pull request security review for #%s: %s\n\n' \
+              "$(jq -r '.number' .pull-request-review-event.json)" \
+              "$(jq -r '.title | gsub("[\r\n]+"; " ")' .pull-request-review-event.json)"
             cat agents/prompts/pull-request-security-review.md
           } > "$RUNNER_TEMP/pull-request-security-review-prompt.md"
         env:

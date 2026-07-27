@@ -3,6 +3,55 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.32
+
+Released on 2026-07-23.
+
+### Preview features
+
+- Add `--package` and `--all-packages` selection to `uv check` ([#20628](https://github.com/astral-sh/uv/pull/20628))
+- Allow `uv upgrade` to update multiple marker-specific declarations of the same package ([#20335](https://github.com/astral-sh/uv/pull/20335))
+- Reject non-canonically formatted lockfiles in `uv lock --check` and commands using `--locked` ([#20646](https://github.com/astral-sh/uv/pull/20646))
+- Regenerate non-canonically formatted lockfiles with `uv lock --refresh` ([#20634](https://github.com/astral-sh/uv/pull/20634))
+- Include best-effort information about the active environment in `uv workspace metadata` by default ([#20643](https://github.com/astral-sh/uv/pull/20643))
+
+### Performance
+
+- Skip dependency-group conflict expansion when no additional conflicts can be inferred ([#20611](https://github.com/astral-sh/uv/pull/20611))
+
+### Bug fixes
+
+- Fork universal resolutions when `Requires-Python` is discovered only from distribution metadata ([#20586](https://github.com/astral-sh/uv/pull/20586))
+
+## 0.11.31
+
+Released on 2026-07-21.
+
+### Enhancements
+
+- Allow workspace sources to reference members in another workspace by path ([#18401](https://github.com/astral-sh/uv/pull/18401))
+- Support `.venv` files containing paths to centralized project environments ([#20022](https://github.com/astral-sh/uv/pull/20022))
+- Update bundled Windows timezone data to IANA 2026c ([#20554](https://github.com/astral-sh/uv/pull/20554))
+
+### Preview features
+
+- Add an index-specific `hash-algorithm` setting for lockfile generation ([#20605](https://github.com/astral-sh/uv/pull/20605))
+
+### Configuration
+
+- Add `audit.malware-check` and `audit.malware-check-url` settings ([#20587](https://github.com/astral-sh/uv/pull/20587))
+
+### Performance
+
+- Avoid quadratic work when deduplicating transitive conflicts ([#20578](https://github.com/astral-sh/uv/pull/20578))
+
+### Bug fixes
+
+- Suggest `--emit-build-options` for unsupported `uv pip compile --emit-options` ([#20582](https://github.com/astral-sh/uv/pull/20582))
+- Reject source distributions and wheels with mismatched package names ([#20432](https://github.com/astral-sh/uv/pull/20432))
+- Avoid retrying TLS certificate verification failures ([#16245](https://github.com/astral-sh/uv/pull/16245))
+- Avoid warnings about `uv_build` settings for in-tree build backends ([#20153](https://github.com/astral-sh/uv/pull/20153))
+
 ## 0.11.30
 
 Released on 2026-07-20.
@@ -1010,3 +1059,4 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+

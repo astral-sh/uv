@@ -44,10 +44,7 @@ fn find_uv_bin_venv() {
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -60,12 +57,9 @@ fn find_uv_bin_venv() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }
@@ -86,10 +80,7 @@ fn find_uv_bin_target() {
         .arg(context.workspace_root.join("test/packages/fake-uv"))
         .arg("--target")
         .arg("target"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
@@ -104,12 +95,9 @@ fn find_uv_bin_target() {
         .arg("-c")
         .arg(TEST_SCRIPT)
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/target/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }
@@ -132,10 +120,7 @@ fn find_uv_bin_prefix() {
         .arg(context.workspace_root.join("test/packages/fake-uv"))
         .arg("--prefix")
         .arg(prefix.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
@@ -153,12 +138,9 @@ fn find_uv_bin_prefix() {
             EnvVars::PYTHONPATH,
             site_packages_path(&context.temp_dir.join("prefix"), "python3.12"),
         ), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/prefix/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }
@@ -184,10 +166,7 @@ fn find_uv_bin_base_prefix() {
         .arg("--python")
         .arg(base_venv.path())
         .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using Python 3.12.[X] environment at: base-venv
     Resolved 1 package in [TIME]
@@ -204,12 +183,9 @@ fn find_uv_bin_base_prefix() {
         .arg("-c")
         .arg(format!(r#"import sys, uv; sys.base_prefix = "{}"; print(uv.find_uv_bin())"#, base_venv.path().portable_display()))
         .env(EnvVars::PYTHONPATH, site_packages_path(base_venv.path(), "python3.12")), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/base-venv/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }
@@ -243,8 +219,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
         .arg("python")
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [CACHE_DIR]/archive-v0/[HASH]/[BIN]/uv
 
@@ -296,8 +271,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
         .arg("-c")
         .arg(TEST_SCRIPT),
      @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
 
@@ -347,10 +321,7 @@ fn find_uv_bin_user_bin() {
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -363,12 +334,9 @@ fn find_uv_bin_user_bin() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 
@@ -384,12 +352,9 @@ fn find_uv_bin_user_bin() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [USER_SCHEME]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }
@@ -431,10 +396,7 @@ fn find_uv_bin_error_message() {
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -454,10 +416,7 @@ fn find_uv_bin_error_message() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Traceback (most recent call last):
       File "<string>", line 6, in <module>
@@ -487,10 +446,7 @@ fn find_uv_bin_py38() {
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -503,12 +459,9 @@ fn find_uv_bin_py38() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }
@@ -527,10 +480,7 @@ fn find_uv_bin_py39() {
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -543,12 +493,9 @@ fn find_uv_bin_py39() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }
@@ -567,10 +514,7 @@ fn find_uv_bin_py310() {
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -583,12 +527,9 @@ fn find_uv_bin_py310() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }
@@ -607,10 +548,7 @@ fn find_uv_bin_py311() {
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -623,12 +561,9 @@ fn find_uv_bin_py311() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }
@@ -647,10 +582,7 @@ fn find_uv_bin_py312() {
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -663,12 +595,9 @@ fn find_uv_bin_py312() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }
@@ -687,10 +616,7 @@ fn find_uv_bin_py313() {
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -703,12 +629,9 @@ fn find_uv_bin_py313() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }
@@ -727,10 +650,7 @@ fn find_uv_bin_py314() {
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -743,12 +663,9 @@ fn find_uv_bin_py314() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 }

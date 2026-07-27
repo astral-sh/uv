@@ -1,0 +1,205 @@
+name: plan
+
+on:
+  workflow_call:
+    inputs:
+      base-sha:
+        description: "The base SHA used to determine changed files"
+        required: false
+        type: string
+      head-sha:
+        description: "The head SHA used to determine changed files"
+        required: false
+        type: string
+    outputs:
+      test-code:
+        description: "Whether code tests should run"
+        value: ${{ jobs.plan.outputs.test-code }}
+      review-security:
+        description: "Whether the security review should run"
+        value: ${{ jobs.plan.outputs.review-security }}
+      check-schema:
+        description: "Whether the schema check should run"
+        value: ${{ jobs.plan.outputs.check-schema }}
+      build-release-binaries:
+        description: "Whether release binaries should be built"
+        value: ${{ jobs.plan.outputs.build-release-binaries }}
+      run-checks:
+        description: "Whether checks should run"
+        value: ${{ jobs.plan.outputs.run-checks }}
+      test-publish:
+        description: "Whether publish tests should run"
+        value: ${{ jobs.plan.outputs.test-publish }}
+      test-windows-trampoline:
+        description: "Whether Windows trampoline tests should run"
+        value: ${{ jobs.plan.outputs.test-windows-trampoline }}
+      test-windows-trampoline-check-binary:
+        description: "Whether the Windows trampoline binary check should run"
+        value: ${{ jobs.plan.outputs.test-windows-trampoline-check-binary }}
+      save-rust-cache:
+        description: "Whether the Rust cache should be saved"
+        value: ${{ jobs.plan.outputs.save-rust-cache }}
+      run-bench:
+        description: "Whether benchmarks should run"
+        value: ${{ jobs.plan.outputs.run-bench }}
+      test-smoke:
+        description: "Whether smoke tests should run"
+        value: ${{ jobs.plan.outputs.test-smoke }}
+      test-ecosystem:
+        description: "Whether ecosystem tests should run"
+        value: ${{ jobs.plan.outputs.test-ecosystem }}
+      test-integration:
+        description: "Whether integration tests should run"
+        value: ${{ jobs.plan.outputs.test-integration }}
+      test-system:
+        description: "Whether system tests should run"
+        value: ${{ jobs.plan.outputs.test-system }}
+      test-macos:
+        description: "Whether macOS tests should run"
+        value: ${{ jobs.plan.outputs.test-macos }}
+      build-docker:
+        description: "Whether the Docker image should be built"
+        value: ${{ jobs.plan.outputs.build-docker }}
+      push-docker:
+        description: "Whether the Docker image should be pushed"
+        value: ${{ jobs.plan.outputs.push-docker }}
+
+permissions: {}
+
+jobs:
+  plan:
+    runs-on: depot-ubuntu-24.04
+    outputs:
+      test-code: ${{ steps.plan.outputs.test_code }}
+      review-security: ${{ steps.plan.outputs.review_security }}
+      check-schema: ${{ steps.plan.outputs.check_schema }}
+      build-release-binaries: ${{ steps.plan.outputs.build_release_binaries }}
+      run-checks: ${{ steps.plan.outputs.run_checks }}
+      test-publish: ${{ steps.plan.outputs.test_publish }}
+      test-windows-trampoline: ${{ steps.plan.outputs.test_windows_trampoline }}
+      test-windows-trampoline-check-binary: ${{ steps.plan.outputs.test_windows_trampoline_check_binary }}
+      save-rust-cache: ${{ steps.plan.outputs.save_rust_cache }}
+      run-bench: ${{ steps.plan.outputs.run_bench }}
+      test-smoke: ${{ steps.plan.outputs.test_smoke }}
+      test-ecosystem: ${{ steps.plan.outputs.test_ecosystem }}
+      test-integration: ${{ steps.plan.outputs.test_integration }}
+      test-system: ${{ steps.plan.outputs.test_system }}
+      test-macos: ${{ steps.plan.outputs.test_macos }}
+      build-docker: ${{ steps.plan.outputs.build_docker }}
+      push-docker: ${{ steps.plan.outputs.push_docker }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.head-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Plan"
+        id: plan
+        shell: bash
+        env:
+          GH_REF: ${{ github.ref }}
+          HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:skip') }}
+          HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
+          HAS_SYSTEM_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
+          HAS_EXTENDED_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:extended') }}
+          HAS_MACOS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:macos') }}
+          HAS_PUBLISH_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:publish') }}
+          HAS_BUILD_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip') }}
+          HAS_BUILD_SKIP_DOCKER_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-docker') }}
+          HAS_BUILD_SKIP_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
+          HAS_BUILD_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:release') }}
+          HAS_BUILD_PUSH_DOCKER_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:push-docker') }}
+          HAS_BUILD_WINDOWS_TRAMPOLINE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:windows-trampoline') }}
+          BASE_SHA: ${{ inputs.base-sha || github.event.pull_request.base.sha }}
+        run: |
+          [[ "$GH_REF" == "refs/heads/main" ]] && on_main_branch=1
+          [[ "$HAS_SKIP_LABEL" == "true" ]] && has_skip_label=1
+          [[ "$HAS_INTEGRATION_LABEL" == "true" ]] && has_integration_label=1
+          [[ "$HAS_SYSTEM_LABEL" == "true" ]] && has_system_label=1
+          [[ "$HAS_EXTENDED_LABEL" == "true" ]] && has_extended_label=1
+          [[ "$HAS_MACOS_LABEL" == "true" ]] && has_macos_label=1
+          [[ "$HAS_PUBLISH_LABEL" == "true" ]] && has_publish_label=1
+          [[ "$HAS_BUILD_SKIP_LABEL" == "true" ]] && has_build_skip_label=1
+          [[ "$HAS_BUILD_SKIP_DOCKER_LABEL" == "true" ]] && has_build_skip_docker_label=1
+          [[ "$HAS_BUILD_SKIP_RELEASE_LABEL" == "true" ]] && has_build_skip_release_label=1
+          [[ "$HAS_BUILD_RELEASE_LABEL" == "true" ]] && has_build_release_label=1
+          [[ "$HAS_BUILD_PUSH_DOCKER_LABEL" == "true" ]] && has_build_push_docker_label=1
+          [[ "$HAS_BUILD_WINDOWS_TRAMPOLINE_LABEL" == "true" ]] && has_build_windows_trampoline_label=1
+
+          # Detect changed files
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            [[ "$file" =~ \.rs$ ]] && rust_code_changed=1
+            [[ "$file" == "Cargo.toml" || "$file" == "Cargo.lock" || "$file" =~ ^crates/.*/Cargo\.toml$ ]] && rust_deps_changed=1
+            [[ "$file" == "rust-toolchain.toml" || "$file" == "crates/uv-build/rust-toolchain.toml" || "$file" =~ ^\.cargo/ ]] && rust_config_changed=1
+            [[ "$file" == "pyproject.toml" || "$file" =~ ^crates/.*/pyproject\.toml$ ]] && python_config_changed=1
+            [[ "$file" =~ ^\.github/workflows/.*\.yml$ ]] && workflow_changed=1
+            [[ "$file" == ".github/workflows/build-release-binaries.yml" || "$file" == ".github/workflows/release.yml" ]] && release_workflow_changed=1
+            [[ "$file" == "scripts/check_uv_wheel_contents.py" || "$file" == "scripts/patch-dist-manifest-checksums.py" || "$file" == "scripts/repair-sdist-cargo-lock.py" ]] && release_build_changed=1
+            [[ "$file" == ".github/workflows/ci.yml" ]] && ci_workflow_changed=1
+            [[ "$file" == "uv.schema.json" ]] && schema_changed=1
+            [[ "$file" =~ ^crates/uv-publish/ || "$file" =~ ^scripts/publish/ || "$file" == "crates/uv/src/commands/publish.rs" ]] && publish_code_changed=1
+            [[ "$file" == ".github/workflows/test-windows-trampolines.yml" ]] && trampoline_workflow_changed=1
+            [[ "$file" =~ ^crates/uv-trampoline/ || "$file" =~ ^crates/uv-trampoline-builder/ ]] && trampoline_code_changed=1
+            [[ "$file" =~ ^crates/uv-trampoline/.*\.rs$ || "$file" =~ ^crates/uv-trampoline-builder/trampolines/ ]] && trampoline_repro_changed=1
+            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" ]] && trampoline_build_scripts_changed=1
+            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" || "$file" == "scripts/check-trampoline-version-consistency.py" ]] && trampoline_scripts_changed=1
+            [[ "$file" =~ ^crates/uv-build/ ]] && uv_build_changed=1
+            [[ "$file" == "Dockerfile" ]] && dockerfile_changed=1
+            [[ "$file" == ".github/workflows/build-docker.yml" ]] && docker_workflow_changed=1
+            [[ "$file" == ".github/workflows/bench.yml" ]] && bench_workflow_changed=1
+            [[ "$file" == ".github/workflows/test-integration.yml" || "$file" =~ ^test/integration/ || "$file" == "scripts/check_registry.py" || "$file" == "scripts/check_cache_compat.py" || "$file" == "scripts/registries-test.py" ]] && integration_changed=1
+            [[ "$file" == ".github/workflows/test-system.yml" ]] && system_workflow_changed=1
+            [[ "$file" == "scripts/check_system_python.py" || "$file" == "scripts/check_embedded_python.py" ]] && system_test_changed=1
+            [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ || "$file" =~ ^agents/ || "$file" =~ ^\.claude/ || "$file" =~ ^\.codex/ ]] && continue
+            any_code_changed=1
+          done <<< "$(git diff --no-ext-diff --no-textconv --name-only "${BASE_SHA:-origin/main}...HEAD")"
+
+          # Derived groups
+          [[ $rust_code_changed || $rust_deps_changed || $rust_config_changed ]] && any_rust_changed=1
+          [[ $python_config_changed || $rust_deps_changed || $rust_config_changed || $uv_build_changed || $release_workflow_changed ]] && release_build_changed=1
+          [[ $publish_code_changed || $ci_workflow_changed ]] && publish_changed=1
+          [[ $rust_deps_changed || $rust_config_changed || $workflow_changed ]] && cache_relevant_changed=1
+          [[ $python_config_changed || $rust_deps_changed || $rust_config_changed || $dockerfile_changed || $docker_workflow_changed ]] && docker_build_changed=1
+
+          # Decisions
+          [[ ! $has_skip_label && ($any_code_changed || $on_main_branch) ]] && test_code=1
+          [[ $any_code_changed ]] && review_security=1
+          [[ $schema_changed ]] && check_schema=1
+          [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
+          [[ ! $has_skip_label ]] && run_checks=1
+          [[ $publish_changed || $has_publish_label || $has_extended_label || $on_main_branch ]] && test_publish=1
+          [[ ! $has_skip_label && ($trampoline_code_changed || $trampoline_scripts_changed || $trampoline_workflow_changed || $rust_deps_changed || $has_build_windows_trampoline_label || $on_main_branch) ]] && test_windows_trampoline=1
+          [[ ! $has_skip_label && ($trampoline_repro_changed || $trampoline_build_scripts_changed || $has_build_windows_trampoline_label) ]] && test_windows_trampoline_check_binary=1
+          [[ $on_main_branch || $cache_relevant_changed ]] && save_rust_cache=1
+          [[ ! $has_skip_label && ($any_rust_changed || $bench_workflow_changed || $on_main_branch) ]] && run_bench=1
+          [[ ! $has_skip_label ]] && test_smoke=1
+          [[ ! $has_skip_label ]] && test_ecosystem=1
+          [[ $has_integration_label || $has_extended_label || $on_main_branch || $integration_changed ]] && test_integration=1
+          [[ $has_system_label || $has_extended_label || $on_main_branch || $system_workflow_changed || $system_test_changed ]] && test_system=1
+          [[ $has_macos_label || $has_extended_label || $on_main_branch || $build_release_binaries ]] && test_macos=1
+          [[ ! $has_build_skip_label && ! $has_build_skip_docker_label && ($docker_build_changed || $has_build_push_docker_label) ]] && build_docker=1
+          [[ $has_build_push_docker_label ]] && push_docker=1
+
+          # Output (convert 1/empty to true/false for GHA)
+          out() { [[ "$2" ]] && echo "$1=true" || echo "$1=false"; }
+          {
+            out test_code               "$test_code"
+            out review_security         "$review_security"
+            out check_schema            "$check_schema"
+            out build_release_binaries  "$build_release_binaries"
+            out run_checks              "$run_checks"
+            out test_publish            "$test_publish"
+            out test_windows_trampoline "$test_windows_trampoline"
+            out test_windows_trampoline_check_binary "$test_windows_trampoline_check_binary"
+            out save_rust_cache         "$save_rust_cache"
+            out run_bench               "$run_bench"
+            out test_smoke              "$test_smoke"
+            out test_ecosystem          "$test_ecosystem"
+            out test_integration        "$test_integration"
+            out test_system             "$test_system"
+            out test_macos              "$test_macos"
+            out build_docker            "$build_docker"
+            out push_docker             "$push_docker"
+          } >> "$GITHUB_OUTPUT"

@@ -60,6 +60,8 @@ import tempfile
 
 from benchmark import Command, Hyperfine
 
+logger = logging.getLogger(__name__)
+
 
 class Benchmark(enum.Enum):
     """Enumeration of the benchmarks to run."""
@@ -1372,7 +1374,7 @@ def main():
 
     args = parser.parse_args()
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARN,
+        level=logging.INFO if args.verbose else logging.WARNING,
         format="%(asctime)s %(levelname)s %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
@@ -1441,12 +1443,12 @@ def main():
         else list(Benchmark)
     )
 
-    logging.info(f"Reading requirements from: {requirements_file}")
-    logging.info("```")
+    logger.info(f"Reading requirements from: {requirements_file}")
+    logger.info("```")
     with open(args.file) as f:
         for line in f:
-            logging.info(line.rstrip())
-    logging.info("```")
+            logger.info(line.rstrip())
+    logger.info("```")
 
     with tempfile.TemporaryDirectory() as cwd:
         for benchmark in benchmarks:
