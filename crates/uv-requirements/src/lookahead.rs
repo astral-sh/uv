@@ -8,29 +8,31 @@ use tracing::trace;
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra};
-use uv_pypi_types::Conflicts;
+use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts};
 use uv_resolver::{InMemoryIndex, MetadataResponse, PythonRequirement, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
 use crate::{Error, required_dist};
 
-/// A requirement and the project-extra scope in which it was discovered.
+/// A requirement and the project scope in which it was discovered.
 ///
-/// Dependency extras are local to their declaring package, so project-extra scopes must be tracked
-/// separately instead of intersecting their markers with transitive dependency markers.
+/// Dependency extras are local to their declaring package, so project extras and groups must be
+/// tracked separately from the environment markers inherited through transitive dependencies.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ScopedRequirement {
     requirement: Requirement,
     scope: Option<ExtraScope>,
+    environment: MarkerTree,
 }
 
-/// The package whose extras select the source and the conditions under which it applies.
+/// The package whose extras or dependency groups select the source.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ExtraScope {
     package: PackageName,
     marker: MarkerTree,
+    groups: Box<[GroupName]>,
 }
 
 /// A resolver for resolving lookahead requirements from direct URLs.
@@ -120,9 +122,31 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| !self.excludes.contains(&requirement.name))
             .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
-            .map(|requirement| ScopedRequirement {
-                requirement: (*requirement).clone(),
-                scope: None,
+            .flat_map(|requirement| {
+                let requirement = (*requirement).clone();
+                let environment = requirement.marker.without_extras();
+
+                if requirement.groups.len() <= 1 {
+                    return vec![ScopedRequirement {
+                        requirement,
+                        scope: None,
+                        environment,
+                    }];
+                }
+
+                requirement
+                    .groups
+                    .iter()
+                    .cloned()
+                    .map(|group| ScopedRequirement {
+                        requirement: Requirement {
+                            groups: Box::new([group]),
+                            ..requirement.clone()
+                        },
+                        scope: None,
+                        environment,
+                    })
+                    .collect()
             })
             .collect();
 
@@ -196,7 +220,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             }
 
             while let Some(result) = futures.next().await {
-                if let Some((lookahead, scope)) = result? {
+                if let Some((lookahead, scope, environment)) = result? {
                     hasher = hasher.augment_with_requirements(
                         lookahead.requirements().iter().filter(|requirement| {
                             !self.excludes.contains_for(
@@ -223,7 +247,9 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                                 scope: Some(scope.clone().unwrap_or_else(|| ExtraScope {
                                     package: lookahead.package().clone(),
                                     marker: requirement.marker.only_extras(),
+                                    groups: Box::default(),
                                 })),
+                                environment: environment.and(requirement.marker.without_extras()),
                             });
                         }
                     }
@@ -258,7 +284,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         if left.package() != &scope.package {
                             continue;
                         }
-                        let Some(left_extra) = left.extra() else {
+                        let Some(left_marker) = Self::conflict_marker(left, scope, direct_scope)
+                        else {
                             continue;
                         };
 
@@ -266,18 +293,12 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                             if right.package() != &scope.package {
                                 continue;
                             }
-                            let Some(right_extra) = right.extra() else {
+                            let Some(right_marker) =
+                                Self::conflict_marker(right, scope, direct_scope)
+                            else {
                                 continue;
                             };
 
-                            let left_marker = MarkerTree::expression(MarkerExpression::Extra {
-                                operator: ExtraOperator::Equal,
-                                name: MarkerValueExtra::Extra(left_extra.clone()),
-                            });
-                            let right_marker = MarkerTree::expression(MarkerExpression::Extra {
-                                operator: ExtraOperator::Equal,
-                                name: MarkerValueExtra::Extra(right_extra.clone()),
-                            });
                             let compatible = left_marker.negate().or(right_marker.negate());
                             marker = marker.and(compatible);
                         }
@@ -287,17 +308,30 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 if marker.is_false() {
                     return None;
                 }
+
+                let mut groups = scope
+                    .groups
+                    .iter()
+                    .chain(direct_scope.groups.iter())
+                    .cloned()
+                    .collect::<Vec<_>>();
+                groups.sort_unstable();
+                groups.dedup();
+
                 Some(ExtraScope {
                     package: scope.package.clone(),
                     marker,
+                    groups: groups.into_boxed_slice(),
                 })
             }
             (Some(scope), _) | (None, Some(scope)) => Some(scope.clone()),
             (None, None) => None,
         };
 
-        let marker = requirement
-            .marker
+        let marker = scoped_requirement
+            .environment
+            .and(scoped_direct_requirement.environment)
+            .and(requirement.marker)
             .and(direct_requirement.marker.without_extras());
 
         if !env.supports_marker(marker, python_requirement) {
@@ -311,7 +345,30 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 ..requirement.clone()
             },
             scope,
+            environment: marker.without_extras(),
         })
+    }
+
+    /// Returns the marker indicating whether a conflicting project extra or group is active.
+    fn conflict_marker(
+        item: &ConflictItem,
+        scope: &ExtraScope,
+        direct_scope: &ExtraScope,
+    ) -> Option<MarkerTree> {
+        match item.kind() {
+            ConflictKind::Extra(extra) => Some(MarkerTree::expression(MarkerExpression::Extra {
+                operator: ExtraOperator::Equal,
+                name: MarkerValueExtra::Extra(extra.clone()),
+            })),
+            ConflictKind::Group(group) => Some(
+                if scope.groups.contains(group) || direct_scope.groups.contains(group) {
+                    MarkerTree::TRUE
+                } else {
+                    MarkerTree::FALSE
+                },
+            ),
+            ConflictKind::Project => None,
+        }
     }
 
     /// Infer the package name for a given "unnamed" requirement.
@@ -319,9 +376,21 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         &self,
         scoped_requirement: ScopedRequirement,
         hasher: HashStrategy,
-    ) -> Result<Option<(RequestedRequirements, Option<ExtraScope>)>, Error> {
-        let ScopedRequirement { requirement, scope } = scoped_requirement;
+    ) -> Result<Option<(RequestedRequirements, Option<ExtraScope>, MarkerTree)>, Error> {
+        let ScopedRequirement {
+            requirement,
+            scope,
+            environment,
+        } = scoped_requirement;
         trace!("Performing lookahead for {requirement}");
+
+        let scope = scope.or_else(|| {
+            requirement.groups.first().map(|group| ExtraScope {
+                package: requirement.name.clone(),
+                marker: MarkerTree::TRUE,
+                groups: Box::new([group.clone()]),
+            })
+        });
 
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
@@ -396,6 +465,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         Ok(Some((
             RequestedRequirements::new(package, version, requirement.extras, requires_dist, direct),
             scope,
+            environment,
         )))
     }
 }

@@ -15287,6 +15287,104 @@ fn lock_transitive_extra_path_dependency_marker_scoped_sources() -> Result<()> {
     Ok(())
 }
 
+/// Preserve ancestor environment markers when replaying a transitive registry-form extra.
+#[test]
+fn lock_transitive_extra_path_dependency_ancestor_marker_scoped_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = [
+            { path = "packages/target-linux", marker = "sys_platform == 'linux'" },
+            { path = "packages/target-other", marker = "sys_platform != 'linux'" },
+        ]
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["intermediate ; sys_platform != 'linux'"]
+
+        [tool.uv.sources]
+        intermediate = { path = "../intermediate" }
+    "#})?;
+
+    let intermediate = context.temp_dir.child("packages").child("intermediate");
+    intermediate.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "intermediate"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target[feature]"]
+    "#})?;
+
+    let target_linux = context.temp_dir.child("packages").child("target-linux");
+    target_linux.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["missing-leaf"]
+
+        [tool.uv.sources]
+        missing-leaf = { path = "../missing-leaf" }
+    "#})?;
+
+    let target_other = context.temp_dir.child("packages").child("target-other");
+    target_other.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+    "#})?;
+
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Ignore source and dependency markers outside the project's supported Python versions.
 #[test]
 fn lock_transitive_extra_path_dependency_outside_requires_python() -> Result<()> {
@@ -15386,6 +15484,97 @@ fn lock_transitive_extra_path_dependency_conflicting_extra_scoped_sources() -> R
         target = [
             { path = "packages/target-foo", extra = "foo" },
             { path = "packages/target-bar", extra = "bar" },
+        ]
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    let target_foo = context.temp_dir.child("packages").child("target-foo");
+    target_foo.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+    "#})?;
+
+    let target_bar = context.temp_dir.child("packages").child("target-bar");
+    target_bar.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["missing-leaf"]
+
+        [tool.uv.sources]
+        missing-leaf = { path = "../missing-leaf" }
+    "#})?;
+
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Replay registry extras only against direct sources from compatible dependency groups.
+#[test]
+fn lock_transitive_extra_path_dependency_conflicting_group_scoped_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        foo = ["bridge[feature]", "target"]
+        bar = ["target"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ group = "foo" }, { group = "bar" }]]
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge", group = "foo" }
+        target = [
+            { path = "packages/target-foo", group = "foo" },
+            { path = "packages/target-bar", group = "bar" },
         ]
     "#})?;
 
