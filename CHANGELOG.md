@@ -5,6 +5,8 @@
 
 ## 0.12.0
 
+Released on 2026-07-28.
+
 Since we released uv [0.11.0](https://github.com/astral-sh/uv/releases/tag/0.11.0) in March, we've
 accumulated changes that improve correctness, safety, and compatibility with specifications, but
 could break some workflows. This release contains those changes; many have been marked as breaking
@@ -406,6 +408,14 @@ requires = ["uv_build>=0.11.32,<0.13"]
   running with the existing limit.
 
   This stabilizes the `adjust-ulimit` preview feature.
+
+### Preview features
+
+- Allow `uv upgrade` to target multiple packages, upgrade all production dependencies, and exclude selected dependencies ([#20338](https://github.com/astral-sh/uv/pull/20338))
+
+### Bug fixes
+
+- Include extras activated by dependency groups when evaluating conflicts ([#20237](https://github.com/astral-sh/uv/pull/20237))
 
 ## 0.11.33
 
@@ -1484,4 +1494,3 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
-
