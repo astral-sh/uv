@@ -133,6 +133,26 @@ Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend als
   You cannot opt out while the directive is present. Pin every requirement with `==` and provide
   its hash, or remove `--require-hashes` if hash checking is not intended.
 
+- **Reject MD5-only hashes in hash-checking mode**
+  ([#20758](https://github.com/astral-sh/uv/pull/20758))
+
+  Previously, `uv pip install --require-hashes` and `uv pip sync --require-hashes` accepted
+  requirements whose only available digest used MD5. MD5 is not collision-resistant, so relying on
+  it undermined explicitly integrity-enforced installations and differed from pip's behavior.
+
+  Hash-checking mode now requires at least one secure digest for every requirement. For example,
+  the following requirement is rejected unless a secure hash, such as SHA-256, is also supplied:
+
+  ```text
+  anyio==4.0.0 --hash=md5:420d85e19168705cdf0223621b18831a
+  ```
+
+  A secure hash can be supplied directly on the requirement or in a matching constraints file.
+  Ordinary hash verification without `--require-hashes` continues to support MD5.
+
+  You cannot opt out while hash checking is required. Regenerate affected hashes with SHA-256 or
+  another supported secure hash.
+
 - **Reject invalid `pylock.toml` files and artifacts**
   ([#20402](https://github.com/astral-sh/uv/pull/20402),
   [#20440](https://github.com/astral-sh/uv/pull/20440),
