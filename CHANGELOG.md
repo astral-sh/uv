@@ -3,6 +3,28 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.0
+
+Released on 2026-07-28.
+
+### Breaking changes
+
+- Reject MD5-only requirements in hash-checking mode ([#20758](https://github.com/astral-sh/uv/pull/20758))
+
+### Preview features
+
+- Allow multiple packages in `uv upgrade` ([#20338](https://github.com/astral-sh/uv/pull/20338))
+
+### Bug fixes
+
+- Fix inclusion of extra specified in dependency group when listed in a conflict ([#20237](https://github.com/astral-sh/uv/pull/20237))
+
+### Other changes
+
+- Reject case-variant reserved wheel entry points ([#20748](https://github.com/astral-sh/uv/pull/20748))
+- Reject interpreter files in wheel data directories ([#20749](https://github.com/astral-sh/uv/pull/20749))
+- Release 0.12.0 ([#20355](https://github.com/astral-sh/uv/pull/20355))
+
 ## 0.11.33
 
 Released on 2026-07-28.
@@ -1080,3 +1102,4 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+

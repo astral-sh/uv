@@ -64,7 +64,7 @@ dependencies = []
 example-app = "example_app:main"
 
 [build-system]
-requires = ["uv_build>=0.11.33,<0.12"]
+requires = ["uv_build>=0.12.0,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -87,7 +87,7 @@ dependencies = []
 example-app = "example_app:main"
 
 [build-system]
-requires = ["uv_build>=0.11.33,<0.12"]
+requires = ["uv_build>=0.12.0,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -147,7 +147,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [build-system]
-requires = ["uv_build>=0.11.33,<0.12"]
+requires = ["uv_build>=0.12.0,<0.12"]
 build-backend = "uv_build"
 ```
 
