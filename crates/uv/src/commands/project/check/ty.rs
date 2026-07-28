@@ -9,10 +9,13 @@ use tracing::debug;
 use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_fs::Simplified;
+use uv_pep440::Version;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::reporters::BinaryDownloadReporter;
+use crate::commands::workspace::list::{ScriptDiscoveryError, find_scripts};
 use crate::printer::Printer;
 
 /// Run a type check powered by ty.
@@ -20,6 +23,7 @@ pub(super) async fn run(
     version: Option<String>,
     ty_path: Option<PathBuf>,
     target_dir: &Path,
+    workspace_root: Option<&Path>,
     check_targets: &[PathBuf],
     excluded_targets: &[PathBuf],
     venv_path: Option<&Path>,
@@ -29,20 +33,28 @@ pub(super) async fn run(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let ty_path = if let Some(ty_path) = ty_path {
+    let (ty_path, ty_version) = if let Some(ty_path) = ty_path {
+        let output = Command::new(&ty_path)
+            .arg("--version")
+            .output()
+            .await
+            .context("Failed to query ty version")?;
+        if !output.status.success() {
+            anyhow::bail!("Failed to query ty version");
+        }
+        let version = String::from_utf8_lossy(&output.stdout);
+        let ty_version = version
+            .split_whitespace()
+            .nth(1)
+            .context("Failed to parse ty version")?
+            .parse::<Version>()
+            .context("Failed to parse ty version")?;
+
         if show_version {
-            let output = Command::new(&ty_path)
-                .arg("--version")
-                .output()
-                .await
-                .context("Failed to query ty version")?;
-            if !output.status.success() {
-                anyhow::bail!("Failed to query ty version");
-            }
-            let version = String::from_utf8_lossy(&output.stdout);
             writeln!(printer.stderr(), "Using {}", version.trim())?;
         }
-        ty_path
+
+        (ty_path, ty_version)
     } else {
         let retry_policy = client_builder.retry_policy();
         let ty_client = client_builder.clone().retries(0).build()?;
@@ -111,7 +123,7 @@ pub(super) async fn run(
             writeln!(printer.stderr(), "Using ty {}", resolved.version)?;
         }
 
-        bin_install(
+        let ty_path = bin_install(
             Binary::Ty,
             &resolved,
             &ty_client,
@@ -120,7 +132,9 @@ pub(super) async fn run(
             &reporter,
         )
         .await
-        .with_context(|| format!("Failed to install ty {}", resolved.version))?
+        .with_context(|| format!("Failed to install ty {}", resolved.version))?;
+
+        (ty_path, resolved.version)
     };
 
     let mut command = Command::new(&ty_path);
@@ -128,8 +142,43 @@ pub(super) async fn run(
     command.arg("check");
     // PEP 723 scripts have independent environments and must be checked explicitly with
     // `uv check --script`. This still allows explicitly selected script paths to be checked.
-    command.arg("--exclude-scripts");
-    for excluded_target in excluded_targets {
+    // Older versions of ty do not support `--exclude-scripts`, so discover and exclude their
+    // workspace scripts individually instead.
+    let mut excluded_scripts = Vec::new();
+    if ty_version >= Version::new([0, 0, 64]) {
+        command.arg("--exclude-scripts");
+    } else if let Some(workspace_root) = workspace_root {
+        excluded_scripts.extend(
+            find_scripts(workspace_root, cache)
+                .filter_map(|script| match script {
+                    Ok(script) => check_targets
+                        .iter()
+                        .any(|target| script.starts_with(target))
+                        .then_some(Ok(script)),
+                    Err(ScriptDiscoveryError::Parse { path, source }) => {
+                        debug!(
+                            "Excluding invalid PEP 723 script `{}` while checking project root `{}`: {source}",
+                            path.simplified_display(),
+                            target_dir.simplified_display(),
+                        );
+                        check_targets
+                            .iter()
+                            .any(|target| path.starts_with(target))
+                            .then_some(Ok(path))
+                    }
+                    Err(error) => Some(Err(error)),
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|| {
+                    format!(
+                        "Failed to discover PEP 723 scripts while checking project root `{}`",
+                        target_dir.simplified_display()
+                    )
+                })?,
+        );
+    }
+
+    for excluded_target in excluded_targets.iter().chain(&excluded_scripts) {
         command.arg("--exclude");
         command.arg(
             excluded_target

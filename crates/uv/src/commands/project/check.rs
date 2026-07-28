@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -10,7 +10,7 @@ use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
     InstallOptions,
 };
-use uv_fs::{Simplified, normalize_path};
+use uv_fs::normalize_path;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
@@ -727,6 +727,9 @@ pub(crate) async fn check(
         ty_version,
         ty_path.or(locked_ty_path),
         &target_dir,
+        project
+            .as_ref()
+            .map(|project| project.workspace().install_path().as_path()),
         &check_targets,
         &excluded_targets,
         venv_path.as_deref(),
