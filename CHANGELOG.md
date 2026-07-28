@@ -60,6 +60,12 @@ build-backend = "uv_build"
   Existing projects are unaffected. Use `uv init --no-package example` to create the previous flat
   layout without a build system.
 
+  See the
+  [project creation documentation](https://docs.astral.sh/uv/concepts/projects/init/#applications)
+  for more details.
+
+  This stabilizes the `packaged-init` preview feature.
+
 - **Reject unsupported source distribution and wheel archive formats**
   ([#18927](https://github.com/astral-sh/uv/pull/18927))
 
@@ -217,6 +223,8 @@ build-backend = "uv_build"
   You can opt out of script-relative discovery by selecting a project explicitly, e.g.,
   `uv run --project . other-project/script.py`.
 
+  This stabilizes the `target-workspace-discovery` preview feature.
+
 - **Require `--force` before clearing a directory that is not a virtual environment**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
 
@@ -226,6 +234,8 @@ build-backend = "uv_build"
 
   You can opt out of this safety check by explicitly passing `--force`, e.g.,
   `uv venv --clear --force ./not-a-virtualenv`.
+
+  This stabilizes the `venv-safe-clear` preview feature.
 
 - **Reject `--project` when initializing a project**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
@@ -237,6 +247,8 @@ build-backend = "uv_build"
   This usage is now an error. Use `uv init example` to initialize a project at the requested path,
   or `uv init --directory example` to change the working directory first.
 
+  This stabilizes the `init-project-flag` preview feature.
+
 - **Require `--project` paths to exist and refer to directories**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
 
@@ -247,6 +259,8 @@ build-backend = "uv_build"
   Now, `uv run --project missing python` fails immediately instead of continuing. You cannot opt
   out of this behavior. Create the directory first or select an existing project. Passing
   `--project path/to/pyproject.toml` remains supported and selects the file's parent directory.
+
+  This stabilizes the `project-directory-must-exist` preview feature.
 
 - **Skip distributions with non-normalized filenames when publishing**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
@@ -261,6 +275,8 @@ build-backend = "uv_build"
   You cannot opt out of this behavior. Rebuild distributions with normalized filenames before
   publishing.
 
+  This stabilizes the `publish-require-normalized` preview feature.
+
 - **Classify Conda environments named `base` and `root` by their paths**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
 
@@ -271,6 +287,8 @@ build-backend = "uv_build"
   A child environment at a path such as `/envs/base` can therefore be discovered as a virtual
   environment instead of being ignored. You can opt out of automatic interpreter selection by
   requesting an interpreter explicitly with `--python /path/to/python`.
+
+  This stabilizes the `special-conda-env-names` preview feature.
 
 - **Reinstall matching installed Python patch versions instead of upgrading implicitly**
   ([#20659](https://github.com/astral-sh/uv/pull/20659))
@@ -335,17 +353,6 @@ build-backend = "uv_build"
 
 ### Stabilizations
 
-- **Build systems for projects created by `uv init`**
-  ([#19197](https://github.com/astral-sh/uv/pull/19197))
-
-  `uv init` now defines a build system using `uv_build`, places application source code in a `src`
-  directory, and includes a command-line entry point by default. Existing projects are unaffected.
-  Use `uv init --no-package` to create a flat layout without a build system.
-
-  See the
-  [project creation documentation](https://docs.astral.sh/uv/concepts/projects/init/#applications)
-  for more details.
-
 - **TOML 1.0-compatible source distributions**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
 
@@ -353,46 +360,7 @@ build-backend = "uv_build"
   allowing older Python build frontends to consume projects that use newer TOML syntax. The
   original project file remains available in the archive as `pyproject.toml.orig`.
 
-- **Script-relative project and workspace discovery**
-  ([#20225](https://github.com/astral-sh/uv/pull/20225))
-
-  `uv run path/to/project/script.py` now discovers the target project or workspace from the
-  script's directory. This allows scripts to use their own project's dependencies even when they
-  are invoked from another directory. An explicit `--project` still takes precedence.
-
-- **Safer virtual environment clearing**
-  ([#20225](https://github.com/astral-sh/uv/pull/20225))
-
-  `uv venv --clear` now protects directories that are not virtual environments from accidental
-  deletion. Existing virtual environments can still be replaced normally; use `--force` when
-  clearing another directory is intentional.
-
-- **Validation of `--project` paths**
-  ([#20225](https://github.com/astral-sh/uv/pull/20225))
-
-  Project commands now validate `--project` before proceeding, providing an immediate error when
-  the selected path does not exist or is not a directory. Paths to a `pyproject.toml` file remain
-  supported and select the containing project.
-
-- **Project paths for `uv init`**
-  ([#20225](https://github.com/astral-sh/uv/pull/20225))
-
-  `uv init` now rejects `--project`, which is intended to select an existing project. Use a
-  positional path to create a project in another directory, or `--directory` to change the working
-  directory before initialization.
-
-- **Normalized distribution filenames in `uv publish`**
-  ([#20225](https://github.com/astral-sh/uv/pull/20225))
-
-  `uv publish` now skips wheels and source distributions whose package names or versions are not
-  normalized, preventing invalid artifacts from being uploaded to package indexes.
-
-- **Conda environments named `base` and `root`**
-  ([#20225](https://github.com/astral-sh/uv/pull/20225))
-
-  uv now determines whether a Conda environment is the base environment from its location instead
-  of treating `base` and `root` as reserved names. Child environments with either name can be
-  discovered and used normally.
+  This stabilizes the `toml-backwards-compatibility` preview feature.
 
 - **Automatic open-file limit adjustment on Unix**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
@@ -400,6 +368,8 @@ build-backend = "uv_build"
   On Linux and macOS, uv now raises the soft open-file limit at startup toward the hard limit,
   capped at 1,048,576 descriptors. The higher limit is inherited by subprocesses and helps prevent
   open-file exhaustion during large dependency installations and builds.
+
+  This stabilizes the `adjust-ulimit` preview feature.
 
 ## 0.11.33
 
