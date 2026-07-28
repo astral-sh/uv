@@ -97,11 +97,10 @@ requires = ["uv_build>=0.11.32,<0.13"]
 - **Prefer stable releases before falling back to pre-releases**
   ([#19993](https://github.com/astral-sh/uv/pull/19993))
 
-  Pre-releases are difficult to model during resolution because requirements are discovered
-  incrementally. uv previously required each package's pre-release eligibility to be known before
-  resolution began: the default `if-necessary-or-explicit` mode allowed them for direct
-  requirements that explicitly requested a pre-release, or for packages that only published
-  pre-releases.
+  A dependency can introduce a pre-release requirement after resolution starts. uv previously
+  required each package's pre-release eligibility to be known before resolution began: the default
+  `if-necessary-or-explicit` mode allowed them for direct requirements that explicitly requested a
+  pre-release, or for packages that only published pre-releases.
 
   This meant that a pre-release requirement discovered in a dependency's metadata, e.g.,
   `example>=2.0.0b1`, would fail to resolve even when a compatible pre-release existed. To resolve
@@ -146,8 +145,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
   Previously, `uv pip install --require-hashes` and `uv pip sync --require-hashes` accepted
   requirements whose only available digest used MD5. MD5 is not collision-resistant, so relying on
-  it undermined installations that explicitly require hash verification and differed from pip's
-  behavior.
+  it undermined installations that require hash verification and differed from pip's behavior.
 
   Hash-checking mode now requires at least one secure digest for every requirement. For example,
   the following requirement is rejected unless a secure hash, such as SHA-256, is also supplied:
@@ -196,9 +194,8 @@ requires = ["uv_build>=0.11.32,<0.13"]
   no certificates are trusted. This applies to package downloads and remote scripts, including
   GitHub Gists.
 
-  To restore connectivity, fix the configured certificate file or directory, or unset the
-  variable to use the default trust store. Empty environment-variable values continue to be
-  ignored.
+  Fix or unset the certificate override. Unsetting it restores the default trust store; empty
+  environment-variable values continue to be ignored.
 
 - **Support pip-compatible `--cert` handling in `uv pip`**
   ([#20418](https://github.com/astral-sh/uv/pull/20418))
@@ -211,8 +208,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
   As in pip, the provided PEM bundle replaces all other certificate sources for that invocation,
   including system certificates and `SSL_CERT_FILE` or `SSL_CERT_DIR`. This change has no effect
-  unless you pass `--cert`. If a connection fails after adding the option, ensure the bundle
-  contains every required certificate authority.
+  unless you pass `--cert`. Include the necessary certificate authorities in the bundle.
 
   `--cert` is only supported by `uv pip` commands; other uv commands continue to use their existing
   certificate configuration.
@@ -289,12 +285,11 @@ requires = ["uv_build>=0.11.32,<0.13"]
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
 
   Conda environments named `base` or `root` were previously assumed to be the base Conda
-  environment, even when they were ordinary child environments. uv now determines whether these
-  environments are base environments from their paths, as it already does for other names.
+  environment, even when they were ordinary child environments. uv now recognizes child Conda
+  environments named `base` or `root` based on their paths, as it already does for other names.
 
-  A child environment at a path such as `/envs/base` can therefore be discovered as a virtual
-  environment instead of being ignored. You can opt out of automatic interpreter selection by
-  requesting an interpreter explicitly with `--python /path/to/python`.
+  You can opt out of automatic interpreter selection by requesting an interpreter explicitly with
+  `--python /path/to/python`.
 
   This stabilizes the `special-conda-env-names` preview feature.
 
@@ -367,16 +362,14 @@ requires = ["uv_build>=0.11.32,<0.13"]
   $ uv add /projects/library      # remains absolute
   ```
 
-  Absolute paths make a project less portable. You can opt out of absolute-path recording by
-  providing a relative path instead. URLs containing expanded variables retain their existing
-  relative-path behavior.
+  Absolute paths make a project less portable. Use a relative path to avoid recording an absolute
+  path. URLs containing expanded variables retain their existing relative-path behavior.
 
 - **Remove older PyPy distributions that are only available as bzip2 archives**
   ([#20423](https://github.com/astral-sh/uv/pull/20423))
 
   Older PyPy patch releases that are only distributed as `.tar.bz2` archives are no longer
-  available through `uv python install`. This follows the removal of bzip2 archive support
-  described above.
+  available through `uv python install`. These releases require unsupported bzip2 archives.
 
   The latest PyPy release for each supported Python minor version is available as a gzip-compressed
   archive and remains supported. For example, `uv python list 3.10 --all-versions` still includes
@@ -408,9 +401,9 @@ requires = ["uv_build>=0.11.32,<0.13"]
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
 
   On Linux and macOS, uv now attempts to raise the soft open-file limit at startup toward the hard
-  limit, capped at 1,048,576 descriptors. The higher limit is inherited by subprocesses and helps
-  prevent open-file exhaustion during large dependency installations and builds. If the limit
-  cannot be raised, uv continues running with the existing limit.
+  limit, capped at 1,048,576 descriptors. The new limit also applies to subprocesses and reduces
+  failures caused by running out of file descriptors. If the limit cannot be raised, uv continues
+  running with the existing limit.
 
   This stabilizes the `adjust-ulimit` preview feature.
 
