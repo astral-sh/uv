@@ -109,7 +109,7 @@ fn init_bare() {
     });
 }
 
-/// Run `uv init --app` to create an application project
+/// Run `uv init --app` to create a packaged application project
 #[test]
 fn init_application() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -118,7 +118,7 @@ fn init_application() -> Result<()> {
     child.create_dir_all()?;
 
     let pyproject_toml = child.join("pyproject.toml");
-    let main_py = child.join("main.py");
+    let init_py = child.join("src").join("foo").join("__init__.py");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app"), @"
     exit_code: 0 (success)
@@ -139,27 +139,30 @@ fn init_application() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
 
-    let hello = fs_err::read_to_string(main_py)?;
+    let init = fs_err::read_to_string(init_py)?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            hello, @r#"
-        def main():
+            init, @r#"
+        def main() -> None:
             print("Hello from foo!")
-
-
-        if __name__ == "__main__":
-            main()
         "#
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("main.py"), @"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo"), @"
     exit_code: 0 (success)
     ----- stdout -----
     Hello from foo!
@@ -169,15 +172,17 @@ fn init_application() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Checked in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
     ");
 
     Ok(())
 }
 
-/// When `main.py` already exists, we don't create it again
+/// When `main.py` already exists in an unpackaged application, we don't create it again
 #[test]
-fn init_application_hello_exists() -> Result<()> {
+fn init_application_no_package_main_exists() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
@@ -187,7 +192,7 @@ fn init_application_hello_exists() -> Result<()> {
     let main_py = child.child("main.py");
     main_py.touch()?;
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app"), @"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--no-package"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `foo`
@@ -222,9 +227,9 @@ fn init_application_hello_exists() -> Result<()> {
     Ok(())
 }
 
-/// When other Python files already exists, we still create `main.py`
+/// When other Python files already exist in an unpackaged application, we still create `main.py`
 #[test]
-fn init_application_other_python_exists() -> Result<()> {
+fn init_application_no_package_other_python_exists() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
@@ -235,7 +240,7 @@ fn init_application_other_python_exists() -> Result<()> {
     let other_py = child.child("foo.py");
     other_py.touch()?;
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app"), @"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--no-package"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `foo`
@@ -1232,7 +1237,7 @@ fn init_application_current_dir() -> Result<()> {
     ");
 
     let pyproject = fs_err::read_to_string(dir.join("pyproject.toml"))?;
-    let main_py = fs_err::read_to_string(dir.join("main.py"))?;
+    let init_py = fs_err::read_to_string(dir.join("src/foo/__init__.py"))?;
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1246,6 +1251,13 @@ fn init_application_current_dir() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -1254,13 +1266,9 @@ fn init_application_current_dir() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            main_py, @r#"
-        def main():
+            init_py, @r#"
+        def main() -> None:
             print("Hello from foo!")
-
-
-        if __name__ == "__main__":
-            main()
         "#
         );
     });
@@ -1734,6 +1742,7 @@ fn init_normalized_names() -> Result<()> {
 
     let child = context.temp_dir.child("bar_baz");
     let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    let _ = fs_err::read_to_string(child.join("src/bar_baz/__init__.py"))?;
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1747,6 +1756,13 @@ fn init_normalized_names() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        bar-baz = "bar_baz:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
