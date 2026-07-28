@@ -346,6 +346,13 @@ build-backend = "uv_build"
   [project creation documentation](https://docs.astral.sh/uv/concepts/projects/init/#applications)
   for more details.
 
+- **TOML 1.0-compatible source distributions**
+  ([#20225](https://github.com/astral-sh/uv/pull/20225))
+
+  `uv_build` now writes a TOML 1.0-compatible `pyproject.toml` when building source distributions,
+  allowing older Python build frontends to consume projects that use newer TOML syntax. The
+  original project file remains available in the archive as `pyproject.toml.orig`.
+
 - **Script-relative project and workspace discovery**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
 
@@ -386,13 +393,6 @@ build-backend = "uv_build"
   uv now determines whether a Conda environment is the base environment from its location instead
   of treating `base` and `root` as reserved names. Child environments with either name can be
   discovered and used normally.
-
-- **TOML 1.0-compatible source distributions**
-  ([#20225](https://github.com/astral-sh/uv/pull/20225))
-
-  `uv_build` now writes a TOML 1.0-compatible `pyproject.toml` when building source distributions,
-  allowing older Python build frontends to consume projects that use newer TOML syntax. The
-  original project file remains available in the archive as `pyproject.toml.orig`.
 
 - **Automatic open-file limit adjustment on Unix**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
