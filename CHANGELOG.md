@@ -16,9 +16,6 @@ build system was confusing to newcomers and consequently dropped use of a build 
 in v0.4. Since then, we've created our own build system (`uv_build`) with tight integration with
 uv and are excited to restore the default to a best-practice project layout.
 
-This release also stabilizes preview behavior for project discovery, virtual environment safety,
-publishing, Conda environments, source distributions, and Unix resource limits.
-
 The [`uv_build` build backend](https://docs.astral.sh/uv/concepts/build-backend/) follows uv's
 breaking-release versioning policy. If your `[build-system]` table includes an upper bound such as
 `uv_build>=0.11.32,<0.12`, it will continue selecting an older build backend after upgrading uv.
