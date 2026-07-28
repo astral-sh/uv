@@ -192,6 +192,24 @@ build-backend = "uv_build"
   You cannot opt out of these checks. Regenerate malformed lockfiles, rename invalid filenames, and
   either correct or remove an incorrect optional `size` value.
 
+- **Honor explicit certificate overrides even when no certificates can be loaded**
+  ([#20741](https://github.com/astral-sh/uv/pull/20741),
+  [#20767](https://github.com/astral-sh/uv/pull/20767))
+
+  Previously, uv ignored `SSL_CERT_FILE` or `SSL_CERT_DIR` values that pointed to missing or
+  inaccessible paths, empty files or directories, or sources without valid certificates. Instead,
+  it fell back to its default trust roots, potentially allowing HTTPS connections that the
+  configured override was intended to reject.
+
+  Now, any non-empty `SSL_CERT_FILE` or `SSL_CERT_DIR` value replaces uv's default certificate
+  roots, even when no valid certificates can be loaded. In that case, HTTPS requests fail because
+  no certificates are trusted. This applies to package downloads and remote scripts, including
+  GitHub Gists.
+
+  To restore connectivity, fix the configured certificate file or directory, or unset the
+  variable to use the default trust store. Empty environment-variable values continue to be
+  ignored.
+
 - **Support pip-compatible `--cert` handling in `uv pip`**
   ([#20418](https://github.com/astral-sh/uv/pull/20418))
 
