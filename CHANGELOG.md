@@ -298,6 +298,20 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
   This stabilizes the `special-conda-env-names` preview feature.
 
+- **Reject broken `.venv` symlinks during environment discovery**
+  ([#20433](https://github.com/astral-sh/uv/pull/20433))
+
+  Previously, uv could ignore a broken `.venv` symlink and continue searching parent directories
+  for another virtual environment. As a result, commands such as `uv pip install` could
+  unexpectedly modify an unrelated ancestor environment.
+
+  uv now stops at a broken `.venv` symlink and reports its exact path. Errors encountered while
+  reading virtual environment metadata, including permission failures, are also reported
+  immediately instead of being ignored.
+
+  You cannot opt out of this behavior. Repair or remove the broken `.venv` symlink and correct
+  any permissions that prevent uv from inspecting the environment.
+
 - **Reinstall matching installed Python patch versions instead of upgrading implicitly**
   ([#20659](https://github.com/astral-sh/uv/pull/20659))
 
