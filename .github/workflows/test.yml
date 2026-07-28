@@ -44,8 +44,9 @@ jobs:
         id: rust-cache
         with:
           prefix-key: v1-rust-workspace
+          add-rust-environment-hash-key: "false"
           cache-workspace-crates: "true"
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          save-if: "false"
 
       - name: "Record Cargo cache freshness"
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
@@ -115,7 +116,7 @@ jobs:
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
-            --features test-python-patch,test-universal,native-auth,secret-service \
+            --features test-python-patch,test-universal,native-auth,secret-service,uv-dev/dev \
             --workspace \
             --profile ci-linux
 
