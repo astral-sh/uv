@@ -611,10 +611,9 @@ async fn test_ssl_cert_file_wrong_cert_rejected() -> Result<()> {
     Ok(())
 }
 
-/// A nonexistent `SSL_CERT_FILE` is ignored; the client falls back to webpki
-/// roots which don't include our test CA.
+/// A nonexistent `SSL_CERT_FILE` replaces the default roots with an empty trust store.
 #[tokio::test]
-async fn test_ssl_cert_file_nonexistent_falls_back() -> Result<()> {
+async fn test_ssl_cert_file_nonexistent_overrides_default_roots() -> Result<()> {
     let cert = TestCertificate::new()?;
     let dir = TempDir::new()?;
     let missing = dir.path().join("missing.pem");
@@ -622,19 +621,26 @@ async fn test_ssl_cert_file_nonexistent_falls_back() -> Result<()> {
         .ssl_cert_file(&missing)
         .expect_https_connect_fails(&cert)
         .await;
+    client()
+        .ssl_cert_file(&missing)
+        .expect_index_fetch_system_certs_hint(&cert, false)
+        .await;
     Ok(())
 }
 
-/// A nonexistent `SSL_CERT_DIR` is ignored; the client falls back to webpki
-/// roots which don't include our test CA.
+/// A nonexistent `SSL_CERT_DIR` replaces the default roots with an empty trust store.
 #[tokio::test]
-async fn test_ssl_cert_dir_nonexistent_falls_back() -> Result<()> {
+async fn test_ssl_cert_dir_nonexistent_overrides_default_roots() -> Result<()> {
     let cert = TestCertificate::new()?;
     let dir = TempDir::new()?;
     let missing = dir.path().join("missing-certs");
     client()
         .ssl_cert_dir(&missing)
         .expect_https_connect_fails(&cert)
+        .await;
+    client()
+        .ssl_cert_dir(&missing)
+        .expect_index_fetch_system_certs_hint(&cert, false)
         .await;
     Ok(())
 }
