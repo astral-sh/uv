@@ -10,13 +10,11 @@ accumulated changes that improve correctness, safety, and compatibility with spe
 could break some workflows. This release contains those changes; many have been marked as breaking
 out of an abundance of caution. We expect most users to be able to upgrade without making changes.
 
-Projects created with `uv init` are now packaged by default. When uv's project interface stabilized
-in 0.3, `uv init` created packaged projects using Hatchling. In 0.4, the default was changed to a
-flat, unpackaged application because requiring a build backend confused users whose projects did
-not need to be distributed. Since then, uv has introduced its own build backend, `uv_build`, which
-integrates with uv and provides a simpler packaging experience. New projects now use a `src` layout
-and `uv_build`, making their code importable, testable, and distributable. The previous flat layout
-remains available with `uv init --no-package` or `uv init --app`.
+Projects created with `uv init` now declare a build system and are packaged by default. This was
+the default project layout all the way back in v0.3, but we found that the use of the `hatchling`
+build system was confusing to newcomers and consequently dropped use of a build system by default
+in v0.4. Since then, we've created our own build system (`uv_build`) with tight integration with
+uv and are excited to restore the default to a best-practice project layout.
 
 This release also stabilizes preview behavior for project discovery, virtual environment safety,
 publishing, Conda environments, source distributions, and Unix resource limits.
