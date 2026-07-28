@@ -711,6 +711,13 @@ async fn build_package(
         }
     };
 
+    if matches!(build_action, BuildAction::DirectBuild | BuildAction::List) {
+        debug!(
+            "Using bundled `uv_build` backend for `{}`",
+            source.path().user_display()
+        );
+    }
+
     // Prepare some common arguments for the build.
     let dist = None;
     let subdirectory = None;
@@ -984,7 +991,7 @@ async fn build_sdist(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "{}Building {} (uv build backend)...",
+                    "{}Building {}...",
                     source.message_prefix(),
                     build_kind_message
                 )
@@ -1093,7 +1100,7 @@ async fn build_wheel(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "{}Building {} (uv build backend)...",
+                    "{}Building {}...",
                     source.message_prefix(),
                     build_kind_message
                 )
