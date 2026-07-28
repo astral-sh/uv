@@ -20,18 +20,32 @@ use crate::resolver::ForkState;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{PythonRequirement, ResolveError};
 
-// NEW: helper to check policy against python_full_version
 fn policy_allows(version: &Version, policy: &ResolutionPolicy) -> bool {
     match policy {
         ResolutionPolicy::Only(v) => {
-            // parse exact string to Version; if invalid, be conservative and disallow
             if let Ok(spec_version) = v.parse::<Version>() { version == &spec_version } else { false }
         }
         ResolutionPolicy::Range(spec) => {
-            // if specifiers parse, check containment; otherwise, conservatively allow
             if let Ok(specs) = spec.parse::<VersionSpecifiers>() { specs.contains(version) } else { true }
         }
     }
 }
 
-// ... rest of file unchanged until initial_forked_states
+#[cfg(test)]
+mod tests_policy {
+    use super::*;
+
+    #[test]
+    fn allows_only_exact_match() {
+        let v = "3.12.3".parse::<Version>().unwrap();
+        assert!(policy_allows(&v, &ResolutionPolicy::Only("3.12.3".into())));
+        assert!(!policy_allows(&v, &ResolutionPolicy::Only("3.12.4".into())));
+    }
+
+    #[test]
+    fn allows_range_spec() {
+        let v = "3.12.3".parse::<Version>().unwrap();
+        assert!(policy_allows(&v, &ResolutionPolicy::Range(">=3.12,<3.13".into())));
+        assert!(!policy_allows(&v, &ResolutionPolicy::Range(">=3.13".into())));
+    }
+}
