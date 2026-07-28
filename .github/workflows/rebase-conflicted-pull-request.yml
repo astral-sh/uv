@@ -46,7 +46,7 @@ jobs:
         run: cargo fetch --locked
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        uses: taiki-e/install-action@a6b2e2dcd845ddd7f509ce4f3ed3d922b80cc5d9 # v2.84.0
         with:
           tool: cargo-nextest
 
