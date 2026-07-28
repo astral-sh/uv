@@ -556,13 +556,16 @@ class PyodideFinder(Finder):
             pyodide_version = release["tag_name"]
             meta = metadata.get(pyodide_version, None)
             if meta is None:
+                base_version = f"{pyodide_version.rsplit('.', 1)[0]}.0"
+                meta = metadata.get(base_version, None)
+            if meta is None:
                 continue
 
             python_version = Version.from_str(meta["python_version"])
 
             # Find xbuildenv asset
             for asset in release["assets"]:
-                if asset["name"].startswith("xbuildenv"):
+                if asset["name"] == f"xbuildenv-{pyodide_version}.tar.gz":
                     break
             else:
                 # not found: should not happen but just in case
