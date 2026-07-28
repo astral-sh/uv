@@ -115,7 +115,7 @@ jobs:
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
-            --features test-python-patch,test-universal,native-auth,secret-service,uv-build/cache-prune-test \
+            --features test-python-patch,test-universal,native-auth,secret-service \
             --workspace \
             --profile ci-linux
 
