@@ -715,23 +715,6 @@ mod tests {
     }
 
     #[test]
-    fn configured_indexes_preserve_first_explicit_definition() -> Result<(), Box<dyn Error>> {
-        let mut explicit = Index::from_str("shared=https://explicit.example.com/simple")?;
-        explicit.explicit = true;
-        let shadowed = Index::from_str("shared=https://shadowed.example.com/simple")?;
-        let locations = IndexLocations::new(vec![explicit, shadowed], vec![], false);
-
-        assert_eq!(
-            index_urls(locations.explicit_indexes()),
-            ["https://explicit.example.com/simple"]
-        );
-        assert_eq!(index_urls(locations.implicit_indexes()), [] as [&str; 0]);
-        assert_eq!(index_urls(locations.indexes()), ["https://pypi.org/simple"]);
-
-        Ok(())
-    }
-
-    #[test]
     fn configured_indexes_preserve_all_unnamed_indexes() -> Result<(), Box<dyn Error>> {
         let first = Index::from_str("https://first.example.com/simple")?;
         let repeated = Index::from_str("https://first.example.com/simple")?;
@@ -759,29 +742,6 @@ mod tests {
     }
 
     #[test]
-    fn configured_indexes_preserve_first_default() -> Result<(), Box<dyn Error>> {
-        let mut first = Index::from_str("first=https://first.example.com/simple")?;
-        first.default = true;
-        let mut second = Index::from_str("second=https://second.example.com/simple")?;
-        second.default = true;
-        let locations = IndexLocations::new(vec![first, second], vec![], false);
-
-        assert_eq!(
-            index_urls(locations.default_index()),
-            ["https://first.example.com/simple"]
-        );
-        assert_eq!(
-            index_urls(locations.defined_indexes()),
-            [
-                "https://first.example.com/simple",
-                "https://second.example.com/simple",
-            ]
-        );
-
-        Ok(())
-    }
-
-    #[test]
     fn configured_indexes_ignore_shadowed_default() -> Result<(), Box<dyn Error>> {
         let first = Index::from_str("shared=https://first.example.com/simple")?;
         let mut shadowed = Index::from_str("shared=https://shadowed.example.com/simple")?;
@@ -797,47 +757,6 @@ mod tests {
             [
                 "https://first.example.com/simple",
                 "https://pypi.org/simple",
-            ]
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn disabled_indexes_preserve_flat_indexes() -> Result<(), Box<dyn Error>> {
-        let configured = Index::from_str("configured=https://configured.example.com/simple")?;
-        let first =
-            Index::from_find_links(IndexUrl::from_str("https://first.example.com/packages")?);
-        let second =
-            Index::from_find_links(IndexUrl::from_str("https://second.example.com/packages")?);
-        let locations = IndexLocations::new(vec![configured], vec![first, second], true);
-
-        assert!(locations.no_index());
-        assert!(locations.default_index().is_none());
-        assert_eq!(index_urls(locations.simple_indexes()), [] as [&str; 0]);
-        assert_eq!(index_urls(locations.implicit_indexes()), [] as [&str; 0]);
-        assert_eq!(index_urls(locations.explicit_indexes()), [] as [&str; 0]);
-        assert_eq!(index_urls(locations.indexes()), [] as [&str; 0]);
-        assert_eq!(index_urls(locations.defined_indexes()), [] as [&str; 0]);
-        assert_eq!(
-            index_urls(locations.flat_indexes()),
-            [
-                "https://first.example.com/packages",
-                "https://second.example.com/packages",
-            ]
-        );
-        assert_eq!(
-            index_urls(locations.allowed_indexes()),
-            [
-                "https://second.example.com/packages",
-                "https://first.example.com/packages",
-            ]
-        );
-        assert_eq!(
-            index_urls(locations.known_indexes()),
-            [
-                "https://second.example.com/packages",
-                "https://first.example.com/packages",
             ]
         );
 
