@@ -119,7 +119,7 @@ build-backend = "uv_build"
   versions than previous uv releases when both stable and pre-release candidates are available.
 
   You can opt out of automatic pre-release selection with `--prerelease disallow`. Alternatively,
-  `--prerelease allow` considers pre-releases without first preferring stable releases, while
+  `--prerelease allow` considers pre-releases without first preferring stable releases, and
   `--prerelease explicit` only allows them for direct requirements that mention a pre-release.
 
   The old `if-necessary-or-explicit` mode distinguished between explicitly requested pre-releases
