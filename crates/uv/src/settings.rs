@@ -534,11 +534,10 @@ impl InitSettings {
                 (InitProjectKind::ApplicationWithLibrary, Some(false)) => {
                     InitProjectKind::Application
                 }
-                // The user specifically asked for `--app`, so no library.
-                (InitProjectKind::Application, None | Some(false)) => InitProjectKind::Application,
-                (InitProjectKind::Application, Some(true)) => {
+                (InitProjectKind::Application, None | Some(true)) => {
                     InitProjectKind::ApplicationWithLibrary
                 }
+                (InitProjectKind::Application, Some(false)) => InitProjectKind::Application,
                 (InitProjectKind::Library, None | Some(true)) => InitProjectKind::Library,
                 (InitProjectKind::Library, Some(false)) => {
                     bail!("`lib` and `no_package` are mutually exclusive");
