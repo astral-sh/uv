@@ -71,9 +71,9 @@ requires = ["uv_build>=0.11.32,<0.13"]
   Removing support for uncommon compression methods reduces uv's compression dependencies and the
   attack surface exposed when processing untrusted packages.
 
-  You cannot opt out of this behavior. Rebuild source distributions as `.tar.gz` archives and
-  wheels with a supported ZIP compression method. If an existing `uv.lock` references an
-  unsupported source distribution, update the dependency and regenerate the lockfile.
+  You cannot opt out of this behavior. If you depend on a legacy source distribution that uses an
+  unsupported format, we recommend rebuilding it as a `.tar.gz` archive and regenerating any
+  lockfile containing references to the legacy archive.
 
 - **Reject wheel files that could replace the Python interpreter**
   ([#20748](https://github.com/astral-sh/uv/pull/20748),
