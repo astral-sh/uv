@@ -78,6 +78,7 @@ version_files = [
   "docs/guides/integration/github.md",
   "docs/guides/integration/gitlab.md",
   "docs/guides/integration/aws-lambda.md",
+  "docs/guides/projects.md",
   "docs/concepts/build-backend.md",
   "docs/concepts/projects/init.md",
   "docs/concepts/projects/workspaces.md",
