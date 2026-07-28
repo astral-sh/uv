@@ -6,9 +6,9 @@
 ## 0.12.0
 
 Since we released uv [0.11.0](https://github.com/astral-sh/uv/releases/tag/0.11.0) in March, we've
-accumulated changes that improve correctness, safety, and compatibility, but could break some
-workflows. This release contains those changes; many have been marked as breaking out of an
-abundance of caution. We expect most users to be able to upgrade without making changes.
+accumulated changes that improve correctness, safety, and compatibility with specifications, but
+could break some workflows. This release contains those changes; many have been marked as breaking
+out of an abundance of caution. We expect most users to be able to upgrade without making changes.
 
 Projects created with `uv init` are now packaged by default. When uv's project interface stabilized
 in 0.3, `uv init` created packaged projects using Hatchling. In 0.4, the default was changed to a
