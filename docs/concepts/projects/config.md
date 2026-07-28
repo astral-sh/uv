@@ -275,6 +275,9 @@ deepspeed = [{ requirement = "torch", match-runtime = true }]
 This will ensure that `deepspeed` is built with the same version of `torch` that is installed in the
 project environment.
 
+Pre-built `deepspeed` wheels are also available from the
+[Astral GPU indexes](../../guides/integration/pytorch.md#installing-gpu-enabled-pytorch-extensions).
+
 Similarly, to build `flash-attn` with `torch` as an additional build dependency, include the
 following in your `pyproject.toml`:
 
