@@ -3,6 +3,27 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.33
+
+Released on 2026-07-28.
+
+### Enhancements
+
+- Abort panics in release builds for smaller uv binaries ([#20271](https://github.com/astral-sh/uv/pull/20271))
+- Use `.tar.gz` archives for Pyodide installs ([#20667](https://github.com/astral-sh/uv/pull/20667))
+
+### Preview features
+
+- Avoid checking any scripts in `uv check` unless `--script` is passed ([#20676](https://github.com/astral-sh/uv/pull/20676))
+- Check locked tools for malware before cache reuse ([#20301](https://github.com/astral-sh/uv/pull/20301))
+- Write and read `package.metadata`-free lockfiles ([#20688](https://github.com/astral-sh/uv/pull/20688), [#20691](https://github.com/astral-sh/uv/pull/20691), [#20685](https://github.com/astral-sh/uv/pull/20685), [#20695](https://github.com/astral-sh/uv/pull/20695))
+
+### Bug fixes
+
+- Correctly split dependencies into production and optional markers ([#20671](https://github.com/astral-sh/uv/pull/20671))
+- Fix discrepancies in argument parsing of exclude-newer ([#20679](https://github.com/astral-sh/uv/pull/20679))
+- Cleanup managed Python temporary directory on error ([#20752](https://github.com/astral-sh/uv/pull/20752))
+
 ## 0.11.32
 
 Released on 2026-07-23.
@@ -1059,4 +1080,3 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
-
