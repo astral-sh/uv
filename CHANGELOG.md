@@ -36,16 +36,17 @@ build-backend = "uv_build"
 
 ### Breaking changes
 
-- **Create packaged projects by default with `uv init`**
+- **Define build systems by default with `uv init`**
   ([#19197](https://github.com/astral-sh/uv/pull/19197))
 
-  Previously, `uv init example` created an unpackaged application containing `main.py` and a
+  Previously, `uv init example` created an unpackaged layout containing `main.py` and a
   `pyproject.toml` without a build system. The project could declare dependencies but was not itself
   installed into its virtual environment.
 
-  Now, `uv init example` creates a packaged application with source code in `src/example`, a
-  `[build-system]` using `uv_build`, and a `[project.scripts]` entry named `example`. The project
-  can be imported from tests or other code, installed as a dependency, and run as a command:
+  Now, `uv init example` defines a `[build-system]` using `uv_build`, places application source
+  code in `src/example`, and includes a `[project.scripts]` entry named `example`. Defining a
+  build system allows the project to be imported from tests or other code, installed as a
+  dependency, and run as a command:
 
   ```console
   $ uv init example
@@ -55,8 +56,8 @@ build-backend = "uv_build"
   ```
 
   Existing projects are unaffected. You can opt out of the new layout with
-  `uv init --no-package example` or `uv init --app example`, which create the previous flat
-  application layout.
+  `uv init --no-package example` or `uv init --app example`, which create the previous flat layout
+  without a build system.
 
 - **Reject unsupported source distribution and wheel archive formats**
   ([#18927](https://github.com/astral-sh/uv/pull/18927))
@@ -334,12 +335,12 @@ build-backend = "uv_build"
 
 ### Stabilizations
 
-- **Packaged projects created by `uv init`**
+- **Build systems for projects created by `uv init`**
   ([#19197](https://github.com/astral-sh/uv/pull/19197))
 
-  `uv init` now creates an importable, distributable project with a `src` layout, the `uv_build`
-  backend, and a command-line entry point by default. Existing projects are unaffected, and
-  `uv init --no-package` or `uv init --app` retains the previous flat application layout.
+  `uv init` now defines a build system using `uv_build`, places application source code in a `src`
+  directory, and includes a command-line entry point by default. Existing projects are unaffected,
+  and `uv init --no-package` or `uv init --app` retains a flat layout without a build system.
 
   See the
   [project creation documentation](https://docs.astral.sh/uv/concepts/projects/init/#packaged-applications)
