@@ -240,11 +240,16 @@ impl TryFrom<RefreshArgs> for Refresh {
     }
 }
 
-impl TryFrom<ResolverArgs> for PipOptions {
-    type Error = anyhow::Error;
+/// Convert command-line arguments into [`PipOptions`].
+pub trait IntoPipOptions {
+    /// Convert command-line arguments into pip options.
+    fn into_pip_options(self) -> anyhow::Result<PipOptions>;
+}
 
-    fn try_from(args: ResolverArgs) -> anyhow::Result<Self> {
-        let ResolverArgs {
+impl IntoPipOptions for ResolverArgs {
+    /// Convert resolver arguments into pip options.
+    fn into_pip_options(self) -> anyhow::Result<PipOptions> {
+        let Self {
             index_args,
             upgrade,
             no_upgrade,
@@ -285,7 +290,7 @@ impl TryFrom<ResolverArgs> for PipOptions {
                     no_sources,
                     no_sources_package,
                 },
-        } = args;
+        } = self;
 
         if !upgrade_group.is_empty() {
             bail!(ArgumentError(format!(
@@ -294,7 +299,7 @@ impl TryFrom<ResolverArgs> for PipOptions {
             )));
         }
 
-        Ok(Self {
+        Ok(PipOptions {
             upgrade: flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package: Some(upgrade_package),
             index_strategy,
@@ -325,16 +330,15 @@ impl TryFrom<ResolverArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::try_from(index_args)?
+            ..index_args.into_pip_options()?
         })
     }
 }
 
-impl TryFrom<InstallerArgs> for PipOptions {
-    type Error = anyhow::Error;
-
-    fn try_from(args: InstallerArgs) -> anyhow::Result<Self> {
-        let InstallerArgs {
+impl IntoPipOptions for InstallerArgs {
+    /// Convert installer arguments into pip options.
+    fn into_pip_options(self) -> anyhow::Result<PipOptions> {
+        let Self {
             index_args,
             reinstall:
                 ReinstallArgs {
@@ -370,9 +374,9 @@ impl TryFrom<InstallerArgs> for PipOptions {
                     no_sources,
                     no_sources_package,
                 },
-        } = args;
+        } = self;
 
-        Ok(Self {
+        Ok(PipOptions {
             reinstall: flag(reinstall, no_reinstall, "reinstall")?,
             reinstall_package: Some(reinstall_package),
             index_strategy,
@@ -395,16 +399,15 @@ impl TryFrom<InstallerArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::try_from(index_args)?
+            ..index_args.into_pip_options()?
         })
     }
 }
 
-impl TryFrom<ResolverInstallerArgs> for PipOptions {
-    type Error = anyhow::Error;
-
-    fn try_from(args: ResolverInstallerArgs) -> anyhow::Result<Self> {
-        let ResolverInstallerArgs {
+impl IntoPipOptions for ResolverInstallerArgs {
+    /// Convert resolver and installer arguments into pip options.
+    fn into_pip_options(self) -> anyhow::Result<PipOptions> {
+        let Self {
             index_args,
             upgrade,
             no_upgrade,
@@ -456,7 +459,7 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
                     no_sources,
                     no_sources_package,
                 },
-        } = args;
+        } = self;
 
         if !upgrade_group.is_empty() {
             bail!(ArgumentError(format!(
@@ -465,7 +468,7 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
             )));
         }
 
-        Ok(Self {
+        Ok(PipOptions {
             upgrade: flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package: Some(upgrade_package),
             reinstall: flag(reinstall, no_reinstall, "reinstall")?,
@@ -499,16 +502,15 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::try_from(index_args)?
+            ..index_args.into_pip_options()?
         })
     }
 }
 
-impl TryFrom<FetchArgs> for PipOptions {
-    type Error = anyhow::Error;
-
-    fn try_from(args: FetchArgs) -> anyhow::Result<Self> {
-        let FetchArgs {
+impl IntoPipOptions for FetchArgs {
+    /// Convert package-fetch arguments into pip options.
+    fn into_pip_options(self) -> anyhow::Result<PipOptions> {
+        let Self {
             index_args,
             registry_client:
                 RegistryClientArgs {
@@ -520,14 +522,14 @@ impl TryFrom<FetchArgs> for PipOptions {
                     exclude_newer: ExcludeNewerArgs { exclude_newer },
                     exclude_newer_package,
                 },
-        } = args;
+        } = self;
 
-        Ok(Self {
+        Ok(PipOptions {
             index_strategy,
             keyring_provider,
             exclude_newer,
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
-            ..Self::try_from(index_args)?
+            ..index_args.into_pip_options()?
         })
     }
 }
@@ -567,12 +569,11 @@ impl IndexArgs {
     }
 }
 
-impl TryFrom<IndexArgs> for PipOptions {
-    type Error = anyhow::Error;
-
-    fn try_from(args: IndexArgs) -> anyhow::Result<Self> {
-        Ok(Self::from(
-            args.resolve().relative_to(&env::current_dir()?)?,
+impl IntoPipOptions for IndexArgs {
+    /// Convert index arguments into pip options.
+    fn into_pip_options(self) -> anyhow::Result<PipOptions> {
+        Ok(PipOptions::from(
+            self.resolve().relative_to(&env::current_dir()?)?,
         ))
     }
 }

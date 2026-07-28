@@ -28,7 +28,7 @@ use uv_cli::{
     HashCheckingArgs, PackageExcludeNewerArgs, PublishArgs, PythonDirArgs, RegistryClientArgs,
     ResolverArgs, ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
-        Flag, FlagSource, check_conflicts, flag, resolve_flag, resolve_flag_pair,
+        Flag, FlagSource, IntoPipOptions, check_conflicts, flag, resolve_flag, resolve_flag_pair,
         resolver_installer_options, resolver_options,
     },
 };
@@ -3524,7 +3524,7 @@ impl PipCompileSettings {
                     )?,
                     annotation_style,
                     torch_backend,
-                    ..PipOptions::try_from(resolver)?
+                    ..resolver.into_pip_options()?
                 },
                 filesystem,
                 environment,
@@ -3630,7 +3630,7 @@ impl PipSyncSettings {
                     all_extras: flag(all_extras, no_all_extras, "all-extras")?,
                     group: Some(group),
                     torch_backend,
-                    ..PipOptions::try_from(installer)?
+                    ..installer.into_pip_options()?
                 },
                 filesystem,
                 environment,
@@ -3816,7 +3816,7 @@ impl PipInstallSettings {
                     require_hashes: flag(require_hashes, no_require_hashes, "require-hashes")?,
                     verify_hashes: flag(verify_hashes, no_verify_hashes, "verify-hashes")?,
                     torch_backend,
-                    ..PipOptions::try_from(installer)?
+                    ..installer.into_pip_options()?
                 },
                 filesystem,
                 environment,
@@ -3978,7 +3978,7 @@ impl PipListSettings {
                     strict: flag(strict, no_strict, "strict")?,
                     target,
                     prefix,
-                    ..PipOptions::try_from(fetch)?
+                    ..fetch.into_pip_options()?
                 },
                 filesystem,
                 environment,
@@ -4079,7 +4079,7 @@ impl PipTreeSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system")?,
                     strict: flag(strict, no_strict, "strict")?,
-                    ..PipOptions::try_from(fetch)?
+                    ..fetch.into_pip_options()?
                 },
                 filesystem,
                 environment,
@@ -4330,7 +4330,7 @@ impl VenvSettings {
                     exclude_newer_package: exclude_newer_package
                         .map(ExcludeNewerPackage::from_iter),
                     link_mode,
-                    ..PipOptions::try_from(index_args)?
+                    ..index_args.into_pip_options()?
                 },
                 filesystem,
                 environment,
