@@ -21,5 +21,8 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
+[features]
+cache-prune-test = []
+
 [lints]
 workspace = true
