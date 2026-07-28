@@ -109,9 +109,9 @@ build-backend = "uv_build"
   pre-releases.
 
   This meant that a pre-release requirement discovered in a dependency's metadata, e.g.,
-  `example>=2.0.0b1`, could fail to resolve even when a compatible pre-release existed. Users had
-  to add that dependency as a direct requirement or allow pre-releases across their entire
-  dependency graph.
+  `example>=2.0.0b1`, would fail to resolve even when a compatible pre-release existed. To resolve
+  it, you had to add that dependency as a direct requirement or allow pre-releases across your
+  entire dependency graph.
 
   The default mode is now `if-necessary`. uv tries stable candidates first and falls back to
   pre-releases when no stable candidate satisfies the active constraints, including constraints
