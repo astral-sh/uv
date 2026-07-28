@@ -13,6 +13,7 @@ use flate2::write::GzEncoder;
 use fs_err::File;
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
+#[cfg(feature = "test-python-managed")]
 use http::StatusCode;
 #[cfg(feature = "test-universal")]
 use indoc::formatdoc;
@@ -16951,7 +16952,33 @@ fn pep_751_filename() -> Result<()> {
         .arg("test.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Expected the output filename to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`); `test.toml` won't be recognized as a `pylock.toml` file in subsequent commands
+    error: Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; found `test.toml`
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("--format")
+        .arg("pylock.toml")
+        .arg("-o")
+        .arg("pylock..toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; found `pylock..toml`
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("--format")
+        .arg("pylock.toml")
+        .arg("-o")
+        .arg("pylock.foo.bar.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; found `pylock.foo.bar.toml`
     ");
 
     Ok(())
