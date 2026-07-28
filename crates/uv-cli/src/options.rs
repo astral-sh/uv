@@ -16,6 +16,18 @@ use crate::{
     ResolverInstallerArgs, SourcesArgs, VersionSelectionArgs,
 };
 
+/// New CLI options for constraining Python resolution
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct PythonResolutionCli {
+    /// Resolve only for a single, exact Python version (e.g. 3.12.3)
+    #[arg(long = "resolve-python-only")]
+    pub resolve_python_only: Option<String>,
+
+    /// Resolve for a PEP 440-compatible version spec (e.g. ">=3.12,<3.13")
+    #[arg(long = "resolve-python-range")]
+    pub resolve_python_range: Option<String>,
+}
+
 /// An error caused by an invalid combination of command-line arguments.
 #[derive(Debug)]
 pub struct ArgumentError(String);
@@ -492,13 +504,25 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode")?,
+            no_build: flag(no_build, build, "build")?,
+            no_build_package: if no_build_package.is_empty() {
+                None
+            } else {
+                Some(no_build_package)
+            },
+            no_binary: flag(no_binary, binary, "binary")?,
+            no_binary_package: if no_binary_package.is_empty() {
+                None
+            } else {
+                Some(no_binary_package)
+            },
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: if no_sources_package.is_empty() {
                 None
             } else {
                 Some(no_sources_package)
             },
-            ..Self::from(index_args)
+            torch_backend: None,
         })
     }
 }
@@ -798,7 +822,6 @@ pub fn resolver_installer_options_with_indexes(
             prerelease
         },
         fork_strategy,
-        dependency_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
         config_settings_package: config_settings_package.map(|config_settings| {
