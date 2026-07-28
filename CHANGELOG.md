@@ -146,7 +146,8 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
   Previously, `uv pip install --require-hashes` and `uv pip sync --require-hashes` accepted
   requirements whose only available digest used MD5. MD5 is not collision-resistant, so relying on
-  it undermined explicitly integrity-enforced installations and differed from pip's behavior.
+  it undermined installations that explicitly require hash verification and differed from pip's
+  behavior.
 
   Hash-checking mode now requires at least one secure digest for every requirement. For example,
   the following requirement is rejected unless a secure hash, such as SHA-256, is also supplied:
