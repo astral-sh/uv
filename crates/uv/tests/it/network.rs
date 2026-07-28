@@ -236,6 +236,52 @@ fn read_timeout_server() -> (String, impl Drop) {
     (server, shutdown_tx)
 }
 
+/// Invalid explicit certificate files disable the default trust roots rather than being ignored.
+#[tokio::test]
+async fn invalid_ssl_cert_file_warns_default_roots_are_disabled() {
+    let context = uv_test::test_context!("3.12");
+    let (_server_drop_guard, mock_server_uri) = http_error_server().await;
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("tqdm")
+        .arg("--index-url")
+        .arg(&mock_server_uri)
+        .env(EnvVars::SSL_CERT_FILE, context.temp_dir.join("missing.pem"))
+        .env_remove(EnvVars::SSL_CERT_DIR)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Invalid `SSL_CERT_FILE`. Path does not exist: [TEMP_DIR]/missing.pem. No default certificates will be trusted.
+    error: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/tqdm/)
+    ");
+}
+
+/// Invalid explicit certificate directories disable the default trust roots rather than being ignored.
+#[tokio::test]
+async fn invalid_ssl_cert_dir_warns_default_roots_are_disabled() {
+    let context = uv_test::test_context!("3.12");
+    let (_server_drop_guard, mock_server_uri) = http_error_server().await;
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("tqdm")
+        .arg("--index-url")
+        .arg(&mock_server_uri)
+        .env_remove(EnvVars::SSL_CERT_FILE)
+        .env(EnvVars::SSL_CERT_DIR, context.temp_dir.join("missing-certs"))
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Invalid `SSL_CERT_DIR`. The directory does not exist: [TEMP_DIR]/missing-certs. No default certificates will be trusted.
+    error: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/tqdm/)
+    ");
+}
+
 /// Check the simple index error message when the server returns HTTP status 500, a retryable error.
 #[tokio::test]
 async fn simple_http_500() {

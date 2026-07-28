@@ -53,8 +53,9 @@ dangling symlinks.
 
 DER-encoded files are not supported.
 
-When set, these environment variables **override** the default certificate source entirely — only
-the provided certificates will be trusted.
+When set to non-empty values, these environment variables **override** the default certificate
+source entirely — only the provided certificates will be trusted. If a configured file or directory
+does not exist or contains no valid certificates, no default certificates will be trusted.
 
 `SSL_CERT_FILE` can point to a single certificate or a bundle containing multiple certificates.
 `SSL_CERT_DIR` can include multiple directory entries; uv will load all valid certificates from each
