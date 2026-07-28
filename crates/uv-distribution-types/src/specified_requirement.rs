@@ -161,10 +161,10 @@ impl UnresolvedRequirement {
                         if let Some(lfs) = lfs {
                             git.url = git.url.with_lfs(GitLfs::from(lfs));
                         }
-                        VerbatimParsedUrl {
-                            parsed_url: ParsedUrl::GitDirectory(git),
-                            verbatim: requirement.url.verbatim,
-                        }
+                        VerbatimParsedUrl::from_parts(
+                            ParsedUrl::GitDirectory(git),
+                            requirement.url.verbatim,
+                        )
                     }
                     ParsedUrl::GitPath(mut git) => {
                         if let Some(git_reference) = git_reference {
@@ -173,10 +173,10 @@ impl UnresolvedRequirement {
                         if let Some(lfs) = lfs {
                             git.url = git.url.with_lfs(GitLfs::from(lfs));
                         }
-                        VerbatimParsedUrl {
-                            parsed_url: ParsedUrl::GitPath(git),
-                            verbatim: requirement.url.verbatim,
-                        }
+                        VerbatimParsedUrl::from_parts(
+                            ParsedUrl::GitPath(git),
+                            requirement.url.verbatim,
+                        )
                     }
                     _ => requirement.url,
                 },
@@ -189,10 +189,9 @@ impl UnresolvedRequirement {
     pub fn source(&self) -> Cow<'_, RequirementSource> {
         match self {
             Self::Named(requirement) => Cow::Borrowed(&requirement.source),
-            Self::Unnamed(requirement) => Cow::Owned(RequirementSource::from_parsed_url(
-                requirement.url.parsed_url.clone(),
-                requirement.url.verbatim.clone(),
-            )),
+            Self::Unnamed(requirement) => {
+                Cow::Owned(RequirementSource::from_parsed_url(requirement.url.clone()))
+            }
         }
     }
 

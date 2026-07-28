@@ -2236,6 +2236,7 @@ mod test {
                                         ),
                                         expanded: false,
                                     },
+                                    prefer_relative: false,
                                 },
                                 extras: [],
                                 marker: true,
@@ -2586,6 +2587,7 @@ mod test {
                                         ),
                                         expanded: false,
                                     },
+                                    prefer_relative: true,
                                 },
                                 extras: [],
                                 marker: true,
@@ -2636,6 +2638,7 @@ mod test {
                                         ),
                                         expanded: false,
                                     },
+                                    prefer_relative: true,
                                 },
                                 extras: [],
                                 marker: sys_platform == 'win32',
@@ -2686,6 +2689,7 @@ mod test {
                                         ),
                                         expanded: false,
                                     },
+                                    prefer_relative: true,
                                 },
                                 extras: [
                                     ExtraName(
@@ -2740,6 +2744,7 @@ mod test {
                                         ),
                                         expanded: false,
                                     },
+                                    prefer_relative: true,
                                 },
                                 extras: [],
                                 marker: true,
@@ -2790,6 +2795,7 @@ mod test {
                                         ),
                                         expanded: false,
                                     },
+                                    prefer_relative: true,
                                 },
                                 extras: [],
                                 marker: sys_platform == 'win32',
@@ -2840,6 +2846,7 @@ mod test {
                                         ),
                                         expanded: false,
                                     },
+                                    prefer_relative: true,
                                 },
                                 extras: [
                                     ExtraName(

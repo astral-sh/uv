@@ -132,7 +132,7 @@ mod tests {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use uv_distribution_types::RequirementSource;
+    use uv_distribution_types::{LocalSourcePath, RequirementSource};
     use uv_normalize::{GroupName, PackageName};
     use uv_pep508::VerbatimUrl;
 
@@ -150,10 +150,12 @@ mod tests {
             groups: Box::default(),
             marker: MarkerTree::TRUE,
             source: RequirementSource::Directory {
-                install_path: PathBuf::from("/tmp/demo").into_boxed_path(),
+                source: LocalSourcePath::new_preserving_absolute(
+                    PathBuf::from("/tmp/demo").into_boxed_path(),
+                    VerbatimUrl::parse_url("file:///tmp/demo").unwrap(),
+                ),
                 editable: None,
                 r#virtual: None,
-                url: VerbatimUrl::parse_url("file:///tmp/demo").unwrap(),
             },
             origin: Some(RequirementOrigin::Group(
                 PathBuf::from("pyproject.toml"),

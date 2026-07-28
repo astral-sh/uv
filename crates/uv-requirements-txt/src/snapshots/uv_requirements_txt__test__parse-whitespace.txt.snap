@@ -101,6 +101,7 @@ RequirementsTxt {
                                     ),
                                     expanded: false,
                                 },
+                                prefer_relative: true,
                             },
                         ),
                     ),

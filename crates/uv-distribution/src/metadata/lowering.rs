@@ -10,8 +10,8 @@ use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
-    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
-    RequirementSource,
+    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, LocalSourcePath,
+    Origin, Requirement, RequirementSource,
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
@@ -944,8 +944,10 @@ fn path_source(
 
         if editable == Some(true) {
             Ok(RequirementSource::Directory {
-                install_path: install_path.into_boxed_path(),
-                url,
+                source: LocalSourcePath::new_preserving_absolute(
+                    install_path.into_boxed_path(),
+                    url,
+                ),
                 editable,
                 r#virtual: Some(false),
             })
@@ -966,8 +968,10 @@ fn path_source(
             let r#virtual = !is_package;
 
             Ok(RequirementSource::Directory {
-                install_path: install_path.into_boxed_path(),
-                url,
+                source: LocalSourcePath::new_preserving_absolute(
+                    install_path.into_boxed_path(),
+                    url,
+                ),
                 editable: Some(false),
                 r#virtual: Some(r#virtual),
             })
@@ -982,11 +986,11 @@ fn path_source(
         if package == Some(true) {
             return Err(LoweringError::PackagedFile(url.to_string()));
         }
+        let ext = DistExtension::from_path(&install_path)
+            .map_err(|err| ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err))?;
         Ok(RequirementSource::Path {
-            ext: DistExtension::from_path(&install_path)
-                .map_err(|err| ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err))?,
-            install_path: install_path.into_boxed_path(),
-            url,
+            source: LocalSourcePath::new_preserving_absolute(install_path.into_boxed_path(), url),
+            ext,
         })
     }
 }

@@ -154,11 +154,35 @@ impl Manifest {
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        self.requirements_no_overrides_with_lookaheads(env, mode, self.lookaheads.iter())
+    }
+
+    /// Return requirements whose local paths are authored by the current project or workspace.
+    pub(crate) fn authored_requirements_no_overrides<'a>(
+        &'a self,
+        env: &'a ResolverEnvironment,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        self.requirements_no_overrides_with_lookaheads(
+            env,
+            mode,
+            self.lookaheads.iter().filter(|lookahead| {
+                self.workspace_members.contains(lookahead.package())
+                    || self.project.as_ref() == Some(lookahead.package())
+            }),
+        )
+    }
+
+    fn requirements_no_overrides_with_lookaheads<'a>(
+        &'a self,
+        env: &'a ResolverEnvironment,
+        mode: DependencyMode,
+        lookaheads: impl Iterator<Item = &'a RequestedRequirements> + 'a,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         match mode {
             // Include all direct and transitive requirements, with constraints and overrides applied.
             DependencyMode::Transitive => Either::Left(
-                self.lookaheads
-                    .iter()
+                lookaheads
                     .flat_map(move |lookahead| {
                         self.overrides
                             .apply_for(

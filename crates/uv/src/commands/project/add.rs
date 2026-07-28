@@ -540,11 +540,11 @@ pub(crate) async fn add(
             if let AddTarget::Project(ref project, _) = target {
                 let workspace_root = project.workspace().install_path();
                 requirements.iter().any(|req| {
-                    if let RequirementSource::Directory { install_path, .. } = &req.source {
-                        let absolute_path = if install_path.is_absolute() {
-                            install_path.to_path_buf()
+                    if let RequirementSource::Directory { source, .. } = &req.source {
+                        let absolute_path = if source.install_path.is_absolute() {
+                            source.install_path.to_path_buf()
                         } else {
-                            project.root().join(install_path)
+                            project.root().join(&source.install_path)
                         };
                         absolute_path.starts_with(workspace_root)
                     } else {
@@ -571,11 +571,11 @@ pub(crate) async fn add(
 
         // Check each requirement to see if it's a path dependency
         for requirement in &requirements {
-            if let RequirementSource::Directory { install_path, .. } = &requirement.source {
-                let absolute_path = if install_path.is_absolute() {
-                    install_path.to_path_buf()
+            if let RequirementSource::Directory { source, .. } = &requirement.source {
+                let absolute_path = if source.install_path.is_absolute() {
+                    source.install_path.to_path_buf()
                 } else {
-                    project.root().join(install_path)
+                    project.root().join(&source.install_path)
                 };
 
                 // Either `--workspace` was provided explicitly, or it was omitted but the path is

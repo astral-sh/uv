@@ -5,7 +5,7 @@ use uv_normalize::PackageName;
 use uv_pep508::{
     Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter, UnnamedRequirement,
 };
-use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
+use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EditableError {
@@ -70,12 +70,12 @@ impl RequirementsTxtRequirement {
                     return Err(EditableError::MissingVersion(requirement.name));
                 };
 
-                let uv_pep508::VersionOrUrl::Url(url) = version_or_url else {
+                let uv_pep508::VersionOrUrl::Url(mut url) = version_or_url else {
                     return Err(EditableError::Versioned(requirement.name));
                 };
 
-                let parsed_url = match url.parsed_url {
-                    ParsedUrl::Directory(parsed_url) => parsed_url,
+                match &mut url.parsed_url {
+                    ParsedUrl::Directory(parsed_url) => parsed_url.editable = Some(true),
                     ParsedUrl::Path(_) => {
                         return Err(EditableError::File(requirement.name, url.to_string()));
                     }
@@ -88,22 +88,16 @@ impl RequirementsTxtRequirement {
                     ParsedUrl::GitPath(_) => {
                         return Err(EditableError::Git(requirement.name, url.to_string()));
                     }
-                };
+                }
 
                 Ok(Self::Named(uv_pep508::Requirement {
-                    version_or_url: Some(uv_pep508::VersionOrUrl::Url(VerbatimParsedUrl {
-                        verbatim: url.verbatim,
-                        parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
-                            editable: Some(true),
-                            ..parsed_url
-                        }),
-                    })),
+                    version_or_url: Some(uv_pep508::VersionOrUrl::Url(url)),
                     ..requirement
                 }))
             }
-            Self::Unnamed(requirement) => {
-                let parsed_url = match requirement.url.parsed_url {
-                    ParsedUrl::Directory(parsed_url) => parsed_url,
+            Self::Unnamed(mut requirement) => {
+                match &mut requirement.url.parsed_url {
+                    ParsedUrl::Directory(parsed_url) => parsed_url.editable = Some(true),
                     ParsedUrl::Path(_) => {
                         return Err(EditableError::UnnamedFile(requirement.to_string()));
                     }
@@ -116,18 +110,9 @@ impl RequirementsTxtRequirement {
                     ParsedUrl::GitPath(_) => {
                         return Err(EditableError::UnnamedGit(requirement.to_string()));
                     }
-                };
+                }
 
-                Ok(Self::Unnamed(UnnamedRequirement {
-                    url: VerbatimParsedUrl {
-                        verbatim: requirement.url.verbatim,
-                        parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
-                            editable: Some(true),
-                            ..parsed_url
-                        }),
-                    },
-                    ..requirement
-                }))
+                Ok(Self::Unnamed(requirement))
             }
         }
     }

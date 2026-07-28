@@ -18,10 +18,9 @@ pub(crate) fn apply_editable_mode(
         };
         let Dist::Source(SourceDist::Directory(DirectorySourceDist {
             name,
-            install_path,
+            source,
             editable: current_editable,
             r#virtual,
-            url,
         })) = dist.as_ref()
         else {
             return None;
@@ -35,10 +34,9 @@ pub(crate) fn apply_editable_mode(
         Some(ResolvedDist::Installable {
             dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
                 name: name.clone(),
-                install_path: install_path.clone(),
+                source: source.clone(),
                 editable: Some(editable),
                 r#virtual: *r#virtual,
-                url: url.clone(),
             }))),
             version: version.clone(),
         })
