@@ -365,9 +365,10 @@ build-backend = "uv_build"
 - **Automatic open-file limit adjustment on Unix**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
 
-  On Linux and macOS, uv now raises the soft open-file limit at startup toward the hard limit,
-  capped at 1,048,576 descriptors. The higher limit is inherited by subprocesses and helps prevent
-  open-file exhaustion during large dependency installations and builds.
+  On Linux and macOS, uv now attempts to raise the soft open-file limit at startup toward the hard
+  limit, capped at 1,048,576 descriptors. The higher limit is inherited by subprocesses and helps
+  prevent open-file exhaustion during large dependency installations and builds. If the limit
+  cannot be raised, uv continues running with the existing limit.
 
   This stabilizes the `adjust-ulimit` preview feature.
 
