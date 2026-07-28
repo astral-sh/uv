@@ -66,9 +66,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
   distributions remain supported for backwards compatibility.
 
   Wheels and other ZIP archives can no longer contain entries compressed with bzip2, LZMA, or XZ.
-  Entries must use the stored, DEFLATE, or zstd compression methods. zstd remains supported for
-  wheels and other archives; `.tar.zst` is not accepted specifically as a source distribution
-  because PEP 625 requires `.tar.gz`.
+  Entries must use the stored, DEFLATE, or zstd compression methods.
 
   Removing support for uncommon compression methods reduces uv's compression dependencies and the
   attack surface exposed when processing untrusted packages.
