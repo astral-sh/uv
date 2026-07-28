@@ -29,6 +29,7 @@ blake2 = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+liblzma = { workspace = true }
 md-5 = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
@@ -39,15 +40,17 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
-xz2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [features]
 default = []
 # Avoid a liblzma.so dependency
-static = ["xz2/static"]
+static = ["liblzma/static"]
 
 [package.metadata.cargo-shear]
 # NOTE: `async-compression` owns the actual Deflate codec, but we need to
 # explicitly declare `flate2` here so the workspace's `zlib-rs` backend stays
 # selected after removing the synchronous `zip` dependency.
-ignored = ["flate2", "xz2"]
+ignored = ["liblzma"]

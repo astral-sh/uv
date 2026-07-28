@@ -671,17 +671,8 @@ async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let mut decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
-
-    let archive = tokio_tar::ArchiveBuilder::new(
-        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
-    )
-    .set_preserve_mtime(false)
-    .set_preserve_permissions(false)
-    .set_allow_external_symlinks(false)
-    .build();
-    untar_in(archive, target.as_ref())
-        .await
-        .map_err(Error::io_or_compression)
+    decompressed_bytes.multiple_members(true);
+    untar_compressed(decompressed_bytes, target.as_ref()).await
 }
 
 /// Unpack a `.tar.bz2` archive into the target directory, without requiring `Seek`.
@@ -695,17 +686,8 @@ async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let mut decompressed_bytes = async_compression::tokio::bufread::BzDecoder::new(reader);
-
-    let archive = tokio_tar::ArchiveBuilder::new(
-        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
-    )
-    .set_preserve_mtime(false)
-    .set_preserve_permissions(false)
-    .set_allow_external_symlinks(false)
-    .build();
-    untar_in(archive, target.as_ref())
-        .await
-        .map_err(Error::io_or_compression)
+    decompressed_bytes.multiple_members(true);
+    untar_compressed(decompressed_bytes, target.as_ref()).await
 }
 
 /// Unpack a `.tar.zst` archive into the target directory, without requiring `Seek`.
@@ -719,17 +701,8 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let mut decompressed_bytes = async_compression::tokio::bufread::ZstdDecoder::new(reader);
-
-    let archive = tokio_tar::ArchiveBuilder::new(
-        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
-    )
-    .set_preserve_mtime(false)
-    .set_preserve_permissions(false)
-    .set_allow_external_symlinks(false)
-    .build();
-    untar_in(archive, target.as_ref())
-        .await
-        .map_err(Error::io_or_compression)
+    decompressed_bytes.multiple_members(true);
+    untar_compressed(decompressed_bytes, target.as_ref()).await
 }
 
 /// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
@@ -743,7 +716,15 @@ async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let mut decompressed_bytes = async_compression::tokio::bufread::XzDecoder::new(reader);
+    decompressed_bytes.multiple_members(true);
+    untar_compressed(decompressed_bytes, target.as_ref()).await
+}
 
+/// Unpack a compressed tar archive and drain the decoder to validate its trailer.
+async fn untar_compressed<R: tokio::io::AsyncRead + Unpin>(
+    mut decompressed_bytes: R,
+    target: &Path,
+) -> Result<Vec<(PathBuf, u64)>, Error> {
     let archive = tokio_tar::ArchiveBuilder::new(
         &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
     )
@@ -751,9 +732,16 @@ async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     .set_preserve_permissions(false)
     .set_allow_external_symlinks(false)
     .build();
-    untar_in(archive, target.as_ref())
+    let files = untar_in(archive, target)
         .await
-        .map_err(Error::io_or_compression)
+        .map_err(Error::io_or_compression)?;
+
+    // TAR readers stop at the zero blocks, before the compression trailer is necessarily read.
+    tokio::io::copy(&mut decompressed_bytes, &mut tokio::io::sink())
+        .await
+        .map_err(Error::io_or_compression)?;
+
+    Ok(files)
 }
 
 /// Unpack a `.tar` archive into the target directory, without requiring `Seek`.
@@ -802,5 +790,98 @@ pub async fn archive<D: Display, R: tokio::io::AsyncRead + Unpin>(
         | SourceDistExtension::TarLz
         | SourceDistExtension::TarLzma => untar_xz(reader, target).await,
         SourceDistExtension::TarZst => untar_zst(reader, target).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Read;
+
+    use async_compression::tokio::write::{BzEncoder, GzipEncoder, XzEncoder, ZstdEncoder};
+    use tokio::io::AsyncWriteExt;
+    use uv_distribution_filename::SourceDistExtension;
+
+    #[tokio::test]
+    async fn compressed_tar_is_finalized() {
+        let mut tar = Vec::new();
+        flate2::read::GzDecoder::new(
+            &include_bytes!("../../../test/links/basic_package-0.1.0.tar.gz")[..],
+        )
+        .read_to_end(&mut tar)
+        .expect("source distribution should decompress");
+
+        macro_rules! compress {
+            ($encoder:ident, $tar:expr) => {{
+                let mut encoder = $encoder::new(Vec::new());
+                encoder.write_all($tar).await.expect("tar should compress");
+                encoder.shutdown().await.expect("encoder should finish");
+                encoder.into_inner()
+            }};
+        }
+
+        let mut padded_tar = tar.clone();
+        padded_tar.resize(tar.len() + 2 * 1024 * 1024, 0);
+
+        for (name, extension, mut compressed, padded) in [
+            (
+                "gzip",
+                SourceDistExtension::TarGz,
+                compress!(GzipEncoder, &tar),
+                compress!(GzipEncoder, &padded_tar),
+            ),
+            (
+                "bzip2",
+                SourceDistExtension::TarBz2,
+                compress!(BzEncoder, &tar),
+                compress!(BzEncoder, &padded_tar),
+            ),
+            (
+                "xz",
+                SourceDistExtension::TarXz,
+                compress!(XzEncoder, &tar),
+                compress!(XzEncoder, &padded_tar),
+            ),
+            (
+                "zstd",
+                SourceDistExtension::TarZst,
+                compress!(ZstdEncoder, &tar),
+                compress!(ZstdEncoder, &padded_tar),
+            ),
+        ] {
+            let target = tempfile::tempdir().expect("temporary directory should be created");
+            super::archive(name, compressed.as_slice(), extension, target.path())
+                .await
+                .expect("complete archive should extract");
+
+            let target = tempfile::tempdir().expect("temporary directory should be created");
+            super::archive(name, padded.as_slice(), extension, target.path())
+                .await
+                .expect("archive with valid tar padding should extract");
+
+            let mut concatenated = compressed.clone();
+            concatenated.extend_from_slice(&compressed);
+            let target = tempfile::tempdir().expect("temporary directory should be created");
+            super::archive(name, concatenated.as_slice(), extension, target.path())
+                .await
+                .expect("concatenated archive should extract");
+
+            concatenated.pop();
+            let target = tempfile::tempdir().expect("temporary directory should be created");
+            assert!(
+                super::archive(name, concatenated.as_slice(), extension, target.path())
+                    .await
+                    .is_err(),
+                "archive with a truncated second {name} member should be rejected"
+            );
+
+            compressed.pop();
+            let target = tempfile::tempdir().expect("temporary directory should be created");
+            assert!(
+                super::archive(name, compressed.as_slice(), extension, target.path())
+                    .await
+                    .is_err(),
+                "truncated {name} archive should be rejected"
+            );
+        }
     }
 }
