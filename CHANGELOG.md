@@ -12,12 +12,6 @@ out of an abundance of caution.
 
 **We expect most users to be able to upgrade without making changes.**
 
-Projects created with `uv init` now declare a build system and are packaged by default. This was
-the default project layout all the way back in v0.3, but we found that the use of the `hatchling`
-build system was confusing to newcomers and consequently dropped use of a build system by default
-in v0.4. Since then, we've created our own build system (`uv_build`) with tight integration with
-uv and are excited to restore the default to a best-practice project layout.
-
 There are no breaking changes to the configuration of the
 [uv build backend](https://docs.astral.sh/uv/concepts/build-backend/). If your `[build-system]`
 table includes an upper bound on `uv_build`, update it from `<0.12` to `<0.13` to allow
@@ -27,6 +21,12 @@ table includes an upper bound on `uv_build`, update it from `<0.12` to `<0.13` t
 
 - **Define build systems by default with `uv init`**
   ([#19197](https://github.com/astral-sh/uv/pull/19197))
+
+  Projects created with `uv init` now declare a build system and are packaged by default. This was
+  the default project layout all the way back in v0.3, but we found that the use of the `hatchling`
+  build system was confusing to newcomers and consequently dropped use of a build system by default
+  in v0.4. Since then, we've created our own build system (`uv_build`) with tight integration with
+  uv and are excited to restore the default to a best-practice project layout.
 
   Previously, `uv init example` created an unpackaged layout containing `main.py` and a
   `pyproject.toml` without a build system. The project could declare dependencies but was not itself
