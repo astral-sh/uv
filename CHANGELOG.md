@@ -256,7 +256,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
   This stabilizes the `init-project-flag` preview feature.
 
-- **Require `--project` paths to exist and refer to directories**
+- **Reject missing or invalid `--project` paths**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
 
   uv previously warned when `--project` referred to a missing directory or a file other than
