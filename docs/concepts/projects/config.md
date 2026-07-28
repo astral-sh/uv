@@ -305,6 +305,9 @@ flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
     to `TRUE` can lead to an incompatible install if no compatible pre-built wheel is available
     for the target PyTorch version, GPU version, and platform.
 
+    Pre-built `flash-attn` wheels are also available from the
+    [Astral GPU indexes](../../guides/integration/pytorch.md#installing-gpu-enabled-pytorch-extensions).
+
 Similarly, [`deep_gemm`](https://github.com/deepseek-ai/DeepGEMM) follows the same pattern:
 
 ```toml title="pyproject.toml"
