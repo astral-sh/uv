@@ -116,7 +116,7 @@ build-backend = "uv_build"
   The default mode is now `if-necessary`. uv tries stable candidates first and falls back to
   pre-releases when no stable candidate satisfies the active constraints, including constraints
   discovered transitively. This matches modern pip's pre-release handling, but can select different
-  versions than previous uv releases when stable and pre-release candidates are both available.
+  versions than previous uv releases when both stable and pre-release candidates are available.
 
   You can opt out of automatic pre-release selection with `--prerelease disallow`. Alternatively,
   `--prerelease allow` considers pre-releases without first preferring stable releases, while
