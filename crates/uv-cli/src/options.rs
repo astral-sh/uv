@@ -6,9 +6,11 @@ use anyhow::bail;
 
 use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
-use uv_distribution_types::{ConfigSettings, Index, PackageConfigSettings, Requirement};
+use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewerPackage, PrereleaseMode};
-use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, ResolverOptions};
+use uv_settings::{
+    Combine, EnvFlag, IndexOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
+};
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
@@ -231,27 +233,6 @@ impl TryFrom<RefreshArgs> for Refresh {
             refresh_package,
         ))
     }
-}
-
-/// Extract the `--index` and `--default-index` values from [`IndexArgs`].
-fn indexes_from_args(
-    default_index: Option<&Maybe<Index>>,
-    index: Option<&[Vec<Maybe<Index>>]>,
-) -> Option<Vec<Index>> {
-    let default_index = default_index
-        .cloned()
-        .and_then(Maybe::into_option)
-        .map(|default_index| vec![default_index]);
-    let index = index.map(|index| {
-        index
-            .iter()
-            .flatten()
-            .cloned()
-            .filter_map(Maybe::into_option)
-            .collect()
-    });
-
-    default_index.combine(index)
 }
 
 impl TryFrom<ResolverArgs> for PipOptions {
@@ -542,39 +523,48 @@ impl TryFrom<FetchArgs> for PipOptions {
     }
 }
 
-impl TryFrom<IndexArgs> for PipOptions {
-    type Error = anyhow::Error;
-
-    fn try_from(args: IndexArgs) -> anyhow::Result<Self> {
-        let IndexArgs {
+impl IndexArgs {
+    /// Resolve the index arguments shared by pip, resolver, and installer settings.
+    fn resolve(self) -> IndexOptions {
+        let Self {
             default_index,
             index,
             index_url,
             extra_index_url,
             no_index,
             find_links,
-        } = args;
+        } = self;
 
-        Self {
-            index: indexes_from_args(default_index.as_ref(), index.as_deref()),
+        let default_index = default_index
+            .and_then(Maybe::into_option)
+            .map(|index| vec![index]);
+        let index = index.map(|indexes| {
+            indexes
+                .into_iter()
+                .flatten()
+                .filter_map(Maybe::into_option)
+                .collect()
+        });
+
+        IndexOptions {
+            index: default_index.combine(index),
             index_url: index_url.and_then(Maybe::into_option),
-            extra_index_url: extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
-            no_index: if no_index { Some(true) } else { None },
-            find_links: find_links.map(|find_links| {
-                find_links
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
-            ..Self::default()
+            extra_index_url: extra_index_url
+                .map(|indexes| indexes.into_iter().filter_map(Maybe::into_option).collect()),
+            no_index: no_index.then_some(true),
+            find_links: find_links
+                .map(|links| links.into_iter().filter_map(Maybe::into_option).collect()),
         }
-        .relative_to(&env::current_dir()?)
-        .map_err(Into::into)
+    }
+}
+
+impl TryFrom<IndexArgs> for PipOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(args: IndexArgs) -> anyhow::Result<Self> {
+        Ok(Self::from(
+            args.resolve().relative_to(&env::current_dir()?)?,
+        ))
     }
 }
 
@@ -634,28 +624,7 @@ pub fn resolver_options(
     } = build_args;
 
     ResolverOptions {
-        index: indexes_from_args(
-            index_args.default_index.as_ref(),
-            index_args.index.as_deref(),
-        ),
-        index_url: index_args.index_url.and_then(Maybe::into_option),
-        extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
-            extra_index_url
-                .into_iter()
-                .filter_map(Maybe::into_option)
-                .collect()
-        }),
-        no_index: if index_args.no_index {
-            Some(true)
-        } else {
-            None
-        },
-        find_links: index_args.find_links.map(|find_links| {
-            find_links
-                .into_iter()
-                .filter_map(Maybe::into_option)
-                .collect()
-        }),
+        indexes: index_args.resolve(),
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "no-upgrade")?,
             upgrade_package.into_iter().map(Requirement::from).collect(),
@@ -778,28 +747,7 @@ pub fn resolver_installer_options(
     } = build_args;
 
     ResolverInstallerOptions {
-        index: indexes_from_args(
-            index_args.default_index.as_ref(),
-            index_args.index.as_deref(),
-        ),
-        index_url: index_args.index_url.and_then(Maybe::into_option),
-        extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
-            extra_index_url
-                .into_iter()
-                .filter_map(Maybe::into_option)
-                .collect()
-        }),
-        no_index: if index_args.no_index {
-            Some(true)
-        } else {
-            None
-        },
-        find_links: index_args.find_links.map(|find_links| {
-            find_links
-                .into_iter()
-                .filter_map(Maybe::into_option)
-                .collect()
-        }),
+        indexes: index_args.resolve(),
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package.into_iter().map(Requirement::from).collect(),

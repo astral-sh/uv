@@ -10,7 +10,7 @@ use uv_configuration::{
     ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, Origin,
+    ConfigSettings, ExtraBuildVariables, Index, IndexLocations, IndexUrl, IndexUrlError, Origin,
     PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
@@ -577,14 +577,79 @@ pub struct InstallerOptions {
     no_sources_package: Option<Vec<PackageName>>,
 }
 
-/// Settings relevant to all resolver operations.
+/// Settings shared by all operations that use package indexes.
 #[derive(Debug, Clone, Default, CombineOptions)]
-pub struct ResolverOptions {
+pub struct IndexOptions {
     pub index: Option<Vec<Index>>,
     pub index_url: Option<PipIndex>,
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
     pub no_index: Option<bool>,
     pub find_links: Option<Vec<PipFindLinks>>,
+}
+
+impl IndexOptions {
+    /// Resolve the [`IndexOptions`] relative to the given root directory.
+    pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        rebase_indexes(
+            root_dir,
+            &mut self.index,
+            &mut self.index_url,
+            &mut self.extra_index_url,
+            &mut self.find_links,
+        )?;
+
+        Ok(self)
+    }
+}
+
+impl From<IndexOptions> for IndexLocations {
+    fn from(value: IndexOptions) -> Self {
+        let IndexOptions {
+            index,
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+        } = value;
+
+        Self::new(
+            index
+                .into_iter()
+                .flatten()
+                .chain(extra_index_url.into_iter().flatten().map(Index::from))
+                .chain(index_url.into_iter().map(Index::from))
+                .collect(),
+            find_links.into_iter().flatten().map(Index::from).collect(),
+            no_index.unwrap_or_default(),
+        )
+    }
+}
+
+impl From<IndexOptions> for PipOptions {
+    fn from(value: IndexOptions) -> Self {
+        let IndexOptions {
+            index,
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+        } = value;
+
+        Self {
+            index,
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            ..Self::default()
+        }
+    }
+}
+
+/// Settings relevant to all resolver operations.
+#[derive(Debug, Clone, Default, CombineOptions)]
+pub struct ResolverOptions {
+    pub indexes: IndexOptions,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub resolution: Option<ResolutionMode>,
@@ -612,14 +677,7 @@ pub struct ResolverOptions {
 impl ResolverOptions {
     /// Resolve the [`ResolverOptions`] relative to the given root directory.
     pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        rebase_indexes(
-            root_dir,
-            &mut self.index,
-            &mut self.index_url,
-            &mut self.extra_index_url,
-            &mut self.find_links,
-        )?;
-
+        self.indexes = self.indexes.relative_to(root_dir)?;
         Ok(self)
     }
 }
@@ -628,11 +686,7 @@ impl ResolverOptions {
 /// union of [`InstallerOptions`] and [`ResolverOptions`].
 #[derive(Debug, Clone, Default, CombineOptions)]
 pub struct ResolverInstallerOptions {
-    pub index: Option<Vec<Index>>,
-    pub index_url: Option<PipIndex>,
-    pub extra_index_url: Option<Vec<PipExtraIndex>>,
-    pub no_index: Option<bool>,
-    pub find_links: Option<Vec<PipFindLinks>>,
+    pub indexes: IndexOptions,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub resolution: Option<ResolutionMode>,
@@ -662,14 +716,7 @@ pub struct ResolverInstallerOptions {
 impl ResolverInstallerOptions {
     /// Resolve the [`ResolverInstallerOptions`] relative to the given root directory.
     pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        rebase_indexes(
-            root_dir,
-            &mut self.index,
-            &mut self.index_url,
-            &mut self.extra_index_url,
-            &mut self.find_links,
-        )?;
-
+        self.indexes = self.indexes.relative_to(root_dir)?;
         Ok(self)
     }
 }
@@ -711,11 +758,13 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             no_binary_package,
         } = value;
         Self {
-            index,
-            index_url,
-            extra_index_url,
-            no_index,
-            find_links,
+            indexes: IndexOptions {
+                index,
+                index_url,
+                extra_index_url,
+                no_index,
+                find_links,
+            },
             index_strategy,
             keyring_provider,
             resolution,
@@ -2127,7 +2176,7 @@ pub struct PipOptions {
 
 impl PipOptions {
     /// Resolve the [`PipOptions`] relative to the given root directory.
-    pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+    fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         rebase_indexes(
             root_dir,
             &mut self.index,
@@ -2143,11 +2192,13 @@ impl PipOptions {
 impl From<ResolverInstallerSchema> for ResolverOptions {
     fn from(value: ResolverInstallerSchema) -> Self {
         Self {
-            index: value.index,
-            index_url: value.index_url,
-            extra_index_url: value.extra_index_url,
-            no_index: value.no_index,
-            find_links: value.find_links,
+            indexes: IndexOptions {
+                index: value.index,
+                index_url: value.index_url,
+                extra_index_url: value.extra_index_url,
+                no_index: value.no_index,
+                find_links: value.find_links,
+            },
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
@@ -2295,16 +2346,16 @@ pub struct ToolOptionsWire {
 impl From<ResolverInstallerOptions> for ToolOptions {
     fn from(value: ResolverInstallerOptions) -> Self {
         Self {
-            index: value.index.map(|indexes| {
+            index: value.indexes.index.map(|indexes| {
                 indexes
                     .into_iter()
                     .map(Index::with_promoted_auth_policy)
                     .collect()
             }),
-            index_url: value.index_url,
-            extra_index_url: value.extra_index_url,
-            no_index: value.no_index,
-            find_links: value.find_links,
+            index_url: value.indexes.index_url,
+            extra_index_url: value.indexes.extra_index_url,
+            no_index: value.indexes.no_index,
+            find_links: value.indexes.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
@@ -2433,11 +2484,13 @@ impl From<ToolOptions> for ToolOptionsWire {
 impl From<ToolOptions> for ResolverInstallerOptions {
     fn from(value: ToolOptions) -> Self {
         Self {
-            index: value.index,
-            index_url: value.index_url,
-            extra_index_url: value.extra_index_url,
-            no_index: value.no_index,
-            find_links: value.find_links,
+            indexes: IndexOptions {
+                index: value.index,
+                index_url: value.index_url,
+                extra_index_url: value.extra_index_url,
+                no_index: value.no_index,
+                find_links: value.find_links,
+            },
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,

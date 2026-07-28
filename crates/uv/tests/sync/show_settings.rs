@@ -907,11 +907,13 @@ fn tool_install_baseline() {
             ),
         ),
         options: ResolverInstallerOptions {
-            index: None,
-            index_url: None,
-            extra_index_url: None,
-            no_index: None,
-            find_links: None,
+            indexes: IndexOptions {
+                index: None,
+                index_url: None,
+                extra_index_url: None,
+                no_index: None,
+                find_links: None,
+            },
             index_strategy: None,
             keyring_provider: None,
             resolution: None,
@@ -1961,7 +1963,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
     ...
-             find_links: None,
+             },
              index_strategy: None,
              keyring_provider: None,
     -        resolution: None,
