@@ -8,7 +8,9 @@
 Since we released uv [0.11.0](https://github.com/astral-sh/uv/releases/tag/0.11.0) in March, we've
 accumulated changes that improve correctness, safety, and compatibility with specifications, but
 could break some workflows. This release contains those changes; many have been marked as breaking
-out of an abundance of caution. We expect most users to be able to upgrade without making changes.
+out of an abundance of caution.
+
+**We expect most users to be able to upgrade without making changes.**
 
 Projects created with `uv init` now declare a build system and are packaged by default. This was
 the default project layout all the way back in v0.3, but we found that the use of the `hatchling`
