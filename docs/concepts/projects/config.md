@@ -308,8 +308,8 @@ flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
     to `TRUE` can lead to an incompatible install if no compatible pre-built wheel is available
     for the target PyTorch version, GPU version, and platform.
 
-    Pre-built `flash-attn` wheels are also available from the
-    [Astral GPU indexes](../../guides/integration/pytorch.md#installing-gpu-enabled-pytorch-extensions).
+Pre-built `flash-attn` wheels are also available from the
+[Astral GPU indexes](../../guides/integration/pytorch.md#installing-gpu-enabled-pytorch-extensions).
 
 Similarly, [`deep_gemm`](https://github.com/deepseek-ai/DeepGEMM) follows the same pattern:
 
@@ -328,6 +328,9 @@ deep_gemm = { git = "https://github.com/deepseek-ai/DeepGEMM" }
 [tool.uv.extra-build-dependencies]
 deep_gemm = [{ requirement = "torch", match-runtime = true }]
 ```
+
+Pre-built `deep_gemm` wheels are also available from the
+[Astral GPU indexes](../../guides/integration/pytorch.md#installing-gpu-enabled-pytorch-extensions).
 
 The use of `extra-build-dependencies` and `extra-build-variables` are tracked in the uv cache, such
 that changes to these settings will trigger a reinstall and rebuild of the affected packages. For

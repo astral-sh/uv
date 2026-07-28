@@ -444,8 +444,8 @@ specific combination of CUDA and PyTorch versions. Building these packages from 
 requires access to the CUDA development toolkit and additional build configuration.
 
 The [Astral GPU indexes](https://wheels.astral.sh/) provide pre-built wheels for packages like
-`flash-attn`, `deepspeed`, `torch-scatter`, and `vllm`, across a range of Python, CUDA, and PyTorch
-versions.
+`flash-attn`, `deepspeed`, `deep-gemm`, `torch-scatter`, and `vllm`, across a range of Python, CUDA,
+and PyTorch versions.
 
 To install `flash-attn` from the index for CUDA 12.8, run:
 
