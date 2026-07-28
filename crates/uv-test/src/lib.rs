@@ -114,6 +114,11 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Trim end-of-line whitespaces, to allow removing them on save.
     (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
+    // Certificate overrides and their contents depend on the host environment.
+    (
+        r"(?ms)^([ \t]*custom_certificates: )(?:None|Some\(\n.*?^[ \t]*\),\n[ \t]*\)),",
+        "${1}[CERTIFICATES],",
+    ),
     // Filter SSL certificate loading debug messages (environment-dependent)
     (r"DEBUG Loaded \d+ certificate\(s\) from [^\n]+\n", ""),
 ];
