@@ -1,3 +1,4 @@
+use std::env;
 use std::error::Error;
 use std::fmt;
 
@@ -233,7 +234,7 @@ impl TryFrom<RefreshArgs> for Refresh {
 }
 
 /// Extract the `--index` and `--default-index` values from [`IndexArgs`].
-pub fn indexes_from_args(
+fn indexes_from_args(
     default_index: Option<&Maybe<Index>>,
     index: Option<&[Vec<Maybe<Index>>]>,
 ) -> Option<Vec<Index>> {
@@ -336,7 +337,7 @@ impl TryFrom<ResolverArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::from(index_args)
+            ..Self::try_from(index_args)?
         })
     }
 }
@@ -406,7 +407,7 @@ impl TryFrom<InstallerArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::from(index_args)
+            ..Self::try_from(index_args)?
         })
     }
 }
@@ -508,13 +509,15 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::from(index_args)
+            ..Self::try_from(index_args)?
         })
     }
 }
 
-impl From<FetchArgs> for PipOptions {
-    fn from(args: FetchArgs) -> Self {
+impl TryFrom<FetchArgs> for PipOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(args: FetchArgs) -> anyhow::Result<Self> {
         let FetchArgs {
             index_args,
             registry_client:
@@ -529,18 +532,20 @@ impl From<FetchArgs> for PipOptions {
                 },
         } = args;
 
-        Self {
+        Ok(Self {
             index_strategy,
             keyring_provider,
             exclude_newer,
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
-            ..Self::from(index_args)
-        }
+            ..Self::try_from(index_args)?
+        })
     }
 }
 
-impl From<IndexArgs> for PipOptions {
-    fn from(args: IndexArgs) -> Self {
+impl TryFrom<IndexArgs> for PipOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(args: IndexArgs) -> anyhow::Result<Self> {
         let IndexArgs {
             default_index,
             index,
@@ -568,6 +573,8 @@ impl From<IndexArgs> for PipOptions {
             }),
             ..Self::default()
         }
+        .relative_to(&env::current_dir()?)
+        .map_err(Into::into)
     }
 }
 
@@ -626,7 +633,7 @@ pub fn resolver_options(
         no_binary_package,
     } = build_args;
 
-    Ok(ResolverOptions {
+    ResolverOptions {
         index: indexes_from_args(
             index_args.default_index.as_ref(),
             index_args.index.as_deref(),
@@ -699,26 +706,15 @@ pub fn resolver_options(
         } else {
             Some(no_sources_package)
         },
-    })
+    }
+    .relative_to(&env::current_dir()?)
+    .map_err(Into::into)
 }
 
 /// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildOptionsArgs`].
 pub fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
-) -> anyhow::Result<ResolverInstallerOptions> {
-    let index = indexes_from_args(
-        resolver_installer_args.index_args.default_index.as_ref(),
-        resolver_installer_args.index_args.index.as_deref(),
-    );
-    resolver_installer_options_with_indexes(resolver_installer_args, build_args, index)
-}
-
-/// Construct the [`ResolverInstallerOptions`] with a precomputed list of indexes.
-pub fn resolver_installer_options_with_indexes(
-    resolver_installer_args: ResolverInstallerArgs,
-    build_args: BuildOptionsArgs,
-    index: Option<Vec<Index>>,
 ) -> anyhow::Result<ResolverInstallerOptions> {
     let ResolverInstallerArgs {
         index_args,
@@ -781,8 +777,11 @@ pub fn resolver_installer_options_with_indexes(
         no_binary_package,
     } = build_args;
 
-    Ok(ResolverInstallerOptions {
-        index,
+    ResolverInstallerOptions {
+        index: indexes_from_args(
+            index_args.default_index.as_ref(),
+            index_args.index.as_deref(),
+        ),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -856,5 +855,7 @@ pub fn resolver_installer_options_with_indexes(
             Some(no_sources_package)
         },
         torch_backend: None,
-    })
+    }
+    .relative_to(&env::current_dir()?)
+    .map_err(Into::into)
 }
