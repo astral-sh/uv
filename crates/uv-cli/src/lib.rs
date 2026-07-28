@@ -3409,75 +3409,14 @@ pub struct RunArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include the development dependency group [env: UV_DEV=]
-    ///
-    /// Development dependencies are defined via `dependency-groups.dev` or
-    /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
-    ///
-    /// This option is an alias for `--group dev`.
-    ///
-    /// This option is only available when running in a project.
-    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
-    pub dev: bool,
-
-    /// Disable the development dependency group [env: UV_NO_DEV=]
-    ///
-    /// This option is an alias of `--no-group dev`.
-    /// See `--no-default-groups` to disable all default groups instead.
-    ///
-    /// This option is only available when running in a project.
-    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_dev: bool,
-
-    /// Include dependencies from the specified dependency group.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
-    pub group: Vec<GroupName>,
-
-    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
-    ///
-    /// This option always takes precedence over default groups,
-    /// `--all-groups`, and `--group`.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
-    pub no_group: Vec<GroupName>,
-
-    /// Ignore the default dependency groups.
-    ///
-    /// uv includes the groups defined in `tool.uv.default-groups` by default.
-    /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_default_groups: bool,
-
-    /// Only include dependencies from the specified dependency group.
-    ///
-    /// The project and its dependencies will be omitted.
-    ///
-    /// May be provided multiple times. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_hint = ValueHint::Other)]
-    pub only_group: Vec<GroupName>,
-
-    /// Include dependencies from all dependency groups.
-    ///
-    /// `--no-group` can be used to exclude specific groups.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
-    pub all_groups: bool,
+    #[command(flatten)]
+    pub dependency_groups: ProjectDependencyGroupsArgs,
 
     /// Run a Python module.
     ///
     /// Equivalent to `python -m <module>`.
     #[arg(short, long, conflicts_with_all = ["script", "gui_script"])]
     pub module: bool,
-
-    /// Only include the development dependency group.
-    ///
-    /// The project and its dependencies will be omitted.
-    ///
-    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
-    pub only_dev: bool,
 
     /// Install any non-editable dependencies, including the project and any workspace members, as
     /// editable.
@@ -3753,65 +3692,8 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include the development dependency group [env: UV_DEV=]
-    ///
-    /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
-    pub dev: bool,
-
-    /// Disable the development dependency group [env: UV_NO_DEV=]
-    ///
-    /// This option is an alias of `--no-group dev`.
-    /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_dev: bool,
-
-    /// Only include the development dependency group.
-    ///
-    /// The project and its dependencies will be omitted.
-    ///
-    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
-    pub only_dev: bool,
-
-    /// Include dependencies from the specified dependency group.
-    ///
-    /// When multiple extras or groups are specified that appear in
-    /// `tool.uv.conflicts`, uv will report an error.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
-    pub group: Vec<GroupName>,
-
-    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
-    ///
-    /// This option always takes precedence over default groups,
-    /// `--all-groups`, and `--group`.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
-    pub no_group: Vec<GroupName>,
-
-    /// Ignore the default dependency groups.
-    ///
-    /// uv includes the groups defined in `tool.uv.default-groups` by default.
-    /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_default_groups: bool,
-
-    /// Only include dependencies from the specified dependency group.
-    ///
-    /// The project and its dependencies will be omitted.
-    ///
-    /// May be provided multiple times. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_hint = ValueHint::Other)]
-    pub only_group: Vec<GroupName>,
-
-    /// Include dependencies from all dependency groups.
-    ///
-    /// `--no-group` can be used to exclude specific groups.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
-    pub all_groups: bool,
+    #[command(flatten)]
+    pub dependency_groups: ConflictCheckedDependencyGroupsArgs,
 
     /// Install any non-editable dependencies, including the project and any workspace members, as
     /// editable.
@@ -4597,65 +4479,8 @@ pub struct TreeArgs {
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
 
-    /// Include the development dependency group [env: UV_DEV=]
-    ///
-    /// Development dependencies are defined via `dependency-groups.dev` or
-    /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
-    ///
-    /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
-    pub dev: bool,
-
-    /// Only include the development dependency group.
-    ///
-    /// The project and its dependencies will be omitted.
-    ///
-    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
-    pub only_dev: bool,
-
-    /// Disable the development dependency group [env: UV_NO_DEV=]
-    ///
-    /// This option is an alias of `--no-group dev`.
-    /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_dev: bool,
-
-    /// Include dependencies from the specified dependency group.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
-    pub group: Vec<GroupName>,
-
-    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
-    ///
-    /// This option always takes precedence over default groups,
-    /// `--all-groups`, and `--group`.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, value_delimiter = ' ')]
-    pub no_group: Vec<GroupName>,
-
-    /// Ignore the default dependency groups.
-    ///
-    /// uv includes the groups defined in `tool.uv.default-groups` by default.
-    /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_default_groups: bool,
-
-    /// Only include dependencies from the specified dependency group.
-    ///
-    /// The project and its dependencies will be omitted.
-    ///
-    /// May be provided multiple times. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
-    pub only_group: Vec<GroupName>,
-
-    /// Include dependencies from all dependency groups.
-    ///
-    /// `--no-group` can be used to exclude specific groups.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
-    pub all_groups: bool,
+    #[command(flatten)]
+    pub dependency_groups: ProjectDependencyGroupsArgs,
 
     /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
     ///
@@ -4776,62 +4601,8 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include the development dependency group [env: UV_DEV=]
-    ///
-    /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
-    pub dev: bool,
-
-    /// Disable the development dependency group [env: UV_NO_DEV=]
-    ///
-    /// This option is an alias of `--no-group dev`.
-    /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_dev: bool,
-
-    /// Only include the development dependency group.
-    ///
-    /// The project and its dependencies will be omitted.
-    ///
-    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
-    pub only_dev: bool,
-
-    /// Include dependencies from the specified dependency group.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
-    pub group: Vec<GroupName>,
-
-    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
-    ///
-    /// This option always takes precedence over default groups,
-    /// `--all-groups`, and `--group`.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, value_delimiter = ' ')]
-    pub no_group: Vec<GroupName>,
-
-    /// Ignore the default dependency groups.
-    ///
-    /// uv includes the groups defined in `tool.uv.default-groups` by default.
-    /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_default_groups: bool,
-
-    /// Only include dependencies from the specified dependency group.
-    ///
-    /// The project and its dependencies will be omitted.
-    ///
-    /// May be provided multiple times. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
-    pub only_group: Vec<GroupName>,
-
-    /// Include dependencies from all dependency groups.
-    ///
-    /// `--no-group` can be used to exclude specific groups.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
-    pub all_groups: bool,
+    #[command(flatten)]
+    pub dependency_groups: ProjectDependencyGroupsArgs,
 
     /// Exclude comment annotations indicating the source of each package.
     #[arg(long, overrides_with("annotate"))]
@@ -5182,65 +4953,8 @@ pub struct CheckArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include the development dependency group [env: UV_DEV=]
-    ///
-    /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
-    pub dev: bool,
-
-    /// Disable the development dependency group [env: UV_NO_DEV=]
-    ///
-    /// This option is an alias of `--no-group dev`.
-    /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_dev: bool,
-
-    /// Only include the development dependency group.
-    ///
-    /// The project and its dependencies will be omitted.
-    ///
-    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
-    pub only_dev: bool,
-
-    /// Include dependencies from the specified dependency group.
-    ///
-    /// When multiple extras or groups are specified that appear in
-    /// `tool.uv.conflicts`, uv will report an error.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
-    pub group: Vec<GroupName>,
-
-    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
-    ///
-    /// This option always takes precedence over default groups,
-    /// `--all-groups`, and `--group`.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
-    pub no_group: Vec<GroupName>,
-
-    /// Ignore the default dependency groups.
-    ///
-    /// uv includes the groups defined in `tool.uv.default-groups` by default.
-    /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_default_groups: bool,
-
-    /// Only include dependencies from the specified dependency group.
-    ///
-    /// The project and its dependencies will be omitted.
-    ///
-    /// May be provided multiple times. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_hint = ValueHint::Other)]
-    pub only_group: Vec<GroupName>,
-
-    /// Include dependencies from all dependency groups.
-    ///
-    /// `--no-group` can be used to exclude specific groups.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
-    pub all_groups: bool,
+    #[command(flatten)]
+    pub dependency_groups: ConflictCheckedDependencyGroupsArgs,
 
     /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
     ///
@@ -7050,6 +6764,95 @@ pub struct VersionSelectionArgs {
     )]
     fork_strategy: Option<ForkStrategy>,
 }
+
+/// Arguments that select dependency groups in a project or workspace.
+#[derive(Args)]
+#[group(skip)]
+pub struct ProjectDependencyGroupsArgs<const CHECKS_CONFLICTS: bool = false> {
+    /// Include the development dependency group [env: UV_DEV=]
+    ///
+    /// Development dependencies are defined via `dependency-groups.dev` or
+    /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
+    ///
+    /// This option is an alias for `--group dev`.
+    ///
+    /// This option is only available when running in a project.
+    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
+    pub dev: bool,
+
+    /// Disable the development dependency group [env: UV_NO_DEV=]
+    ///
+    /// This option is an alias of `--no-group dev`.
+    /// See `--no-default-groups` to disable all default groups instead.
+    ///
+    /// This option is only available when running in a project.
+    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_dev: bool,
+
+    /// Only include the development dependency group.
+    ///
+    /// The project and its dependencies will be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
+    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
+    pub only_dev: bool,
+
+    /// Include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(
+        long,
+        conflicts_with_all = ["only_group", "only_dev"],
+        value_hint = ValueHint::Other,
+        long_help = if CHECKS_CONFLICTS {
+            concat!(
+                "Include dependencies from the specified dependency group.\n\n",
+                "When multiple extras or groups are specified that appear in ",
+                "`tool.uv.conflicts`, uv will report an error.\n\n",
+                "May be provided multiple times."
+            )
+        } else {
+            concat!(
+                "Include dependencies from the specified dependency group.\n\n",
+                "May be provided multiple times."
+            )
+        }
+    )]
+    pub group: Vec<GroupName>,
+
+    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
+    ///
+    /// This option always takes precedence over default groups,
+    /// `--all-groups`, and `--group`.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    pub no_group: Vec<GroupName>,
+
+    /// Ignore the default dependency groups.
+    ///
+    /// uv includes the groups defined in `tool.uv.default-groups` by default.
+    /// This disables that option, however, specific groups can still be included with `--group`.
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_default_groups: bool,
+
+    /// Only include dependencies from the specified dependency group.
+    ///
+    /// The project and its dependencies will be omitted.
+    ///
+    /// May be provided multiple times. Implies `--no-default-groups`.
+    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_hint = ValueHint::Other)]
+    pub only_group: Vec<GroupName>,
+
+    /// Include dependencies from all dependency groups.
+    ///
+    /// `--no-group` can be used to exclude specific groups.
+    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
+    pub all_groups: bool,
+}
+
+/// Dependency-group arguments for commands that reject conflicting extras or groups.
+pub type ConflictCheckedDependencyGroupsArgs = ProjectDependencyGroupsArgs<true>;
 
 /// Arguments that configure requirement hash checking.
 #[derive(Args)]
