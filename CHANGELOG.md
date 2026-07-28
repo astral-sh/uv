@@ -16,11 +16,23 @@ build system was confusing to newcomers and consequently dropped use of a build 
 in v0.4. Since then, we've created our own build system (`uv_build`) with tight integration with
 uv and are excited to restore the default to a best-practice project layout.
 
-The [`uv_build` build backend](https://docs.astral.sh/uv/concepts/build-backend/) follows uv's
-breaking-release versioning policy. If your `[build-system]` table includes an upper bound such as
-`uv_build>=0.11.32,<0.12`, it will continue selecting an older build backend after upgrading uv.
-Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend also changes how
-`pyproject.toml` is included in source distributions, as described below.
+There are no breaking changes to the configuration of the
+[uv build backend](https://docs.astral.sh/uv/concepts/build-backend/). If your `[build-system]`
+table includes an upper bound on `uv_build`, update it to allow `uv_build` 0.12:
+
+```toml
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12"]
+build-backend = "uv_build"
+```
+
+becomes:
+
+```toml
+[build-system]
+requires = ["uv_build>=0.11.32,<0.13"]
+build-backend = "uv_build"
+```
 
 ### Breaking changes
 
@@ -247,20 +259,6 @@ Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend als
 
   You cannot opt out of this behavior. Rebuild distributions with normalized filenames before
   publishing.
-
-- **Rewrite `pyproject.toml` files in source distributions for TOML 1.0 compatibility**
-  ([#20225](https://github.com/astral-sh/uv/pull/20225))
-
-  Python's `tomllib` only supports TOML 1.0 through Python 3.14, so source distributions using
-  TOML 1.1 syntax can fail when built by older frontends. `uv_build` now always rewrites the
-  distributed `pyproject.toml` as TOML 1.0 and includes the original as `pyproject.toml.orig`.
-
-  Previously, the rewrite occurred only when TOML 1.1 syntax was detected or the corresponding
-  preview feature was enabled. Now, even a TOML 1.0 input is normalized and the source distribution
-  gains an additional `pyproject.toml.orig` file.
-
-  You cannot opt out of this behavior. If a tool needs the original contents or formatting, read
-  `pyproject.toml.orig` from the source distribution instead.
 
 - **Classify Conda environments named `base` and `root` by their paths**
   ([#20225](https://github.com/astral-sh/uv/pull/20225))
