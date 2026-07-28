@@ -21,7 +21,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
 - **Define build systems by default with `uv init`** ([#19197](https://github.com/astral-sh/uv/pull/19197))
 
-  Projects created with `uv init` now declare a build system and are packaged by default. This was the default project layout all the way back in v0.3, but we found that the use of the `hatchling` build system was confusing to newcomers and consequently dropped use of a build system by default in v0.4. Since then, we've created our own build system (`uv_build`) with tight integration with uv and are excited to restore the default to a best-practice project layout.
+  Projects created with `uv init` now declare a build system and are packaged by default. This was the default project layout all the way back in [v0.3](https://github.com/astral-sh/uv/releases/tag/0.3.0), but we found that the use of the `hatchling` build system was confusing to newcomers and consequently dropped use of a build system by default in [v0.4](https://github.com/astral-sh/uv/releases/tag/0.4.0). Since then, we've created our own build system (`uv_build`) with tight integration with uv and are excited to restore the default to a best-practice project layout.
 
   Previously, `uv init example` created an unpackaged layout containing `main.py` and a `pyproject.toml` without a build system. The project could declare dependencies but was not itself installed into its virtual environment.
 
@@ -34,7 +34,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
   Hello from example!
   ```
 
-  Existing projects are unaffected. Use `uv init --no-package example` to create the previous unpackaged layout without a build system.
+  Existing projects are unaffected. Use [`uv init --no-package example`](https://docs.astral.sh/uv/concepts/projects/init/#creating-a-project-without-a-build-system) to create the previous unpackaged layout without a build system.
 
   See the [project creation documentation](https://docs.astral.sh/uv/concepts/projects/init/#applications) for more details.
 
@@ -42,7 +42,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
 - **Reject unsupported source distribution and wheel archive formats** ([#18927](https://github.com/astral-sh/uv/pull/18927))
 
-  [PEP 625](https://peps.python.org/pep-0625/) requires source distributions to use `.tar.gz` archives. Previously, uv also accepted legacy formats such as `.tar.bz2` and `.tar.xz`. Those formats are now rejected, including when referenced by an existing lockfile. Legacy `.zip` source distributions remain supported for backwards compatibility.
+  [PEP 625](https://peps.python.org/pep-0625/) requires [source distributions](https://docs.astral.sh/uv/concepts/resolution/#source-distribution) to use `.tar.gz` archives. Previously, uv also accepted legacy formats such as `.tar.bz2` and `.tar.xz`. Those formats are now rejected, including when referenced by an existing lockfile. Legacy `.zip` source distributions remain supported for backwards compatibility.
 
   Wheels and other ZIP archives can no longer contain entries compressed with bzip2, LZMA, or XZ. Entries must use the stored, DEFLATE, or zstd compression methods.
 
@@ -62,11 +62,11 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
 - **Prefer stable releases before falling back to pre-releases** ([#19993](https://github.com/astral-sh/uv/pull/19993))
 
-  A dependency can introduce a pre-release requirement after resolution starts. uv previously required each package's pre-release eligibility to be known before resolution began: the default `if-necessary-or-explicit` mode allowed them for direct requirements that explicitly requested a pre-release, or for packages that only published pre-releases.
+  A dependency can introduce a [pre-release requirement](https://docs.astral.sh/uv/concepts/resolution/#pre-release-handling) after resolution starts. uv previously required each package's pre-release eligibility to be known before resolution began: the default `if-necessary-or-explicit` mode allowed them for direct requirements that explicitly requested a pre-release, or for packages that only published pre-releases.
 
   This meant that a pre-release requirement discovered in a dependency's metadata, e.g., `example>=2.0.0b1`, would fail to resolve even when a compatible pre-release existed. To resolve it, you had to add that dependency as a direct requirement or allow pre-releases across your entire dependency graph.
 
-  The default mode is now `if-necessary`. uv tries stable candidates first and falls back to pre-releases when no stable candidate satisfies the active constraints. Like pip, uv now supports pre-release requirements discovered transitively, but can select different versions than previous uv releases when both stable and pre-release candidates are available.
+  The default mode is now `if-necessary`. uv tries stable candidates first and falls back to pre-releases when no stable candidate satisfies the active constraints. Like pip, uv now supports [pre-release requirements discovered transitively](https://docs.astral.sh/uv/pip/compatibility/#pre-release-compatibility), but can select different versions than previous uv releases when both stable and pre-release candidates are available.
 
   You can opt out of automatic pre-release selection with `--prerelease disallow`. Alternatively, `--prerelease allow` considers pre-releases without first preferring stable releases, and `--prerelease explicit` only allows them for direct requirements that mention a pre-release.
 
@@ -111,7 +111,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
 - **Honor explicit certificate overrides even when no certificates can be loaded** ([#20741](https://github.com/astral-sh/uv/pull/20741), [#20767](https://github.com/astral-sh/uv/pull/20767))
 
-  Previously, uv ignored `SSL_CERT_FILE` or `SSL_CERT_DIR` values that pointed to missing or inaccessible paths, empty files or directories, or sources without valid certificates. Instead, it fell back to its default trust roots, potentially allowing HTTPS connections that the configured override was intended to reject.
+  Previously, uv ignored [`SSL_CERT_FILE` or `SSL_CERT_DIR`](https://docs.astral.sh/uv/concepts/authentication/certificates/#custom-certificates) values that pointed to missing or inaccessible paths, empty files or directories, or sources without valid certificates. Instead, it fell back to its default trust roots, potentially allowing HTTPS connections that the configured override was intended to reject.
 
   Now, any non-empty `SSL_CERT_FILE` or `SSL_CERT_DIR` value replaces uv's default certificate roots, even when no valid certificates can be loaded. In that case, HTTPS requests fail because no certificates are trusted. This applies to package downloads and remote scripts, including GitHub Gists.
 
@@ -119,7 +119,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
 - **Support pip-compatible `--cert` handling in `uv pip`** ([#20418](https://github.com/astral-sh/uv/pull/20418))
 
-  The `uv pip` interface now accepts `--cert <path>`, e.g.:
+  The `uv pip` interface now accepts [`--cert <path>`](https://docs.astral.sh/uv/concepts/authentication/certificates/#custom-certificates), e.g.:
 
   ```console
   $ uv pip install --cert ./company-ca.pem example
@@ -165,7 +165,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
 - **Skip distributions with non-normalized filenames when publishing** ([#20225](https://github.com/astral-sh/uv/pull/20225))
 
-  Distribution filenames must use normalized package names and versions. For example, a wheel for version `1.01.0` should be named `example-1.1.0-py3-none-any.whl`, not `example-1.01.0-py3-none-any.whl`.
+  Distribution filenames must use [normalized package names](https://packaging.python.org/en/latest/specifications/name-normalization/) and versions. For example, a wheel for version `1.01.0` should be named `example-1.1.0-py3-none-any.whl`, not `example-1.01.0-py3-none-any.whl`.
 
   Previously, `uv publish` warned about non-normalized filenames but still attempted to upload them. It now skips the affected wheels and source distributions instead.
 
@@ -191,7 +191,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
 - **Reinstall matching installed Python patch versions instead of upgrading implicitly** ([#20659](https://github.com/astral-sh/uv/pull/20659))
 
-  Before Python upgrades were supported, `uv python install 3.12 --reinstall` doubled as a way to install the latest Python 3.12 patch release. Now that `--upgrade` is available, `--reinstall` reinstalls the matching patch releases that are already present.
+  Before [Python upgrades](https://docs.astral.sh/uv/guides/install-python/#upgrading-python-versions) were supported, `uv python install 3.12 --reinstall` doubled as a way to install the latest Python 3.12 patch release. Now that `--upgrade` is available, `--reinstall` reinstalls the matching patch releases that are already present.
 
   For example, if Python 3.12.6 and 3.12.7 are installed, `uv python install 3.12 --reinstall` reinstalls both versions instead of installing the latest available 3.12 release.
 
@@ -199,7 +199,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
 
 - **Require `--upgrade-group` to name an existing dependency group** ([#18957](https://github.com/astral-sh/uv/pull/18957))
 
-  Previously, `uv lock --upgrade-group docs` silently succeeded even if no `docs` dependency group existed. uv now validates the requested group against the project, its workspace members, and workspace-level dependency groups.
+  Previously, `uv lock --upgrade-group docs` silently succeeded even if no `docs` [dependency group](https://docs.astral.sh/uv/concepts/projects/dependencies/#dependency-groups) existed. uv now validates the requested group against the project, its workspace members, and workspace-level dependency groups.
 
   You cannot opt out of this behavior. Correct the group name or add it to `[dependency-groups]`. Legacy `tool.uv.dev-dependencies` still satisfies `--upgrade-group dev`.
 
