@@ -24,8 +24,7 @@ requires = ["uv_build>=0.11.32,<0.13"]
 ### Breaking changes
 
 - **Define build systems by default with `uv init`**
-  ([#19197](https://github.com/astral-sh/uv/pull/19197),
-  [#20773](https://github.com/astral-sh/uv/pull/20773))
+  ([#19197](https://github.com/astral-sh/uv/pull/19197))
 
   Projects created with `uv init` now declare a build system and are packaged by default. This was
   the default project layout all the way back in v0.3, but we found that the use of the `hatchling`
@@ -37,10 +36,10 @@ requires = ["uv_build>=0.11.32,<0.13"]
   `pyproject.toml` without a build system. The project could declare dependencies but was not itself
   installed into its virtual environment.
 
-  Now, both `uv init example` and `uv init --app example` define a `[build-system]` using
-  `uv_build`, place application source code in `src/example`, and include a `[project.scripts]`
-  entry named `example`. Defining a build system allows the project to be imported from tests or
-  other code, installed as a dependency, and run as a command:
+  Now, `uv init example` defines a `[build-system]` using `uv_build`, places application source
+  code in `src/example`, and includes a `[project.scripts]` entry named `example`. Defining a
+  build system allows the project to be imported from tests or other code, installed as a
+  dependency, and run as a command:
 
   ```console
   $ uv init example
