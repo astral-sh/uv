@@ -167,6 +167,89 @@ const RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR: &str = "python3.";
 const RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR: &[&str; 2] = &["python3.", "pythonw3."];
 const RESERVED_SCRIPT_NAMES_WARN: &[&str; 2] = &["activate", "activate_this.py"];
 
+fn reserved_script_name(name: &str) -> Option<&str> {
+    let normalized_name = name.strip_suffix(".py").unwrap_or(name);
+    (RESERVED_SCRIPT_NAMES_ERROR.contains(&normalized_name)
+        || normalized_name
+            .strip_prefix(RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR)
+            .is_some_and(|minor| minor.parse::<u8>().is_ok())
+        || RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR
+            .iter()
+            .any(|prefix| {
+                normalized_name
+                    .strip_prefix(prefix)
+                    .and_then(|minor| minor.strip_suffix('t'))
+                    .is_some_and(|minor| minor.parse::<u8>().is_ok())
+            }))
+    .then_some(normalized_name)
+}
+
+/// An unpacked wheel whose data directories cannot overwrite a reserved script.
+pub(crate) struct ValidatedWheel<'wheel> {
+    path: &'wheel Path,
+}
+
+impl<'wheel> ValidatedWheel<'wheel> {
+    pub(crate) fn new(
+        layout: &Layout,
+        wheel: &'wheel Path,
+        dist_info_prefix: &str,
+    ) -> Result<Self, Error> {
+        let data_dir = wheel.join(format!("{dist_info_prefix}.data"));
+        for (source, destination) in [
+            (data_dir.join("scripts"), &layout.scheme.scripts),
+            (data_dir.join("data"), &layout.scheme.data),
+        ] {
+            if !source.is_dir() {
+                continue;
+            }
+
+            for entry in WalkDir::new(&source).min_depth(1) {
+                let entry = entry?;
+                if entry.file_type().is_dir() {
+                    continue;
+                }
+
+                let relative = relative_to(entry.path(), &source)?;
+                validate_data_script_destination(
+                    &destination.join(relative),
+                    &layout.scheme.scripts,
+                )?;
+            }
+        }
+
+        Ok(Self { path: wheel })
+    }
+
+    pub(crate) fn as_path(&self) -> &Path {
+        self.path
+    }
+}
+
+fn validate_data_script_destination(target: &Path, scripts: &Path) -> Result<(), Error> {
+    let Some(name) = target
+        .strip_prefix(scripts)
+        .ok()
+        .filter(|relative| relative.components().count() == 1)
+        .and_then(Path::to_str)
+    else {
+        return Ok(());
+    };
+
+    let normalized_name = name.to_ascii_lowercase();
+    let normalized_name = normalized_name
+        .strip_suffix(".exe")
+        .unwrap_or(&normalized_name);
+    if let Some(reserved) = reserved_script_name(normalized_name) {
+        return Err(Error::ReservedScriptName {
+            reserved: reserved.to_string(),
+            declared: name.to_string(),
+        });
+    }
+
+    Ok(())
+}
+
 /// A form of [`Script`] guaranteed by [`ValidatedScript::try_from_script`] to be constrained to
 /// the scripts directory.
 struct ValidatedScript<'script> {
@@ -198,34 +281,19 @@ impl<'script> ValidatedScript<'script> {
         }
 
         // Reserve launcher basenames emitted by `uv venv` across supported platforms.
-        // Apply the Windows launcher normalization before checking so wheel validity is portable.
-        // FIXME: What are the in-reality rules here for name normalization?
-        let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
+        // Normalize casing before checking so wheel validity is portable.
         let lowercase_name = name.to_ascii_lowercase();
-        let reserved_name = lowercase_name
-            .strip_suffix(".py")
-            .unwrap_or(&lowercase_name);
-        if RESERVED_SCRIPT_NAMES_ERROR.contains(&reserved_name)
-            || reserved_name
-                .strip_prefix(RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR)
-                .is_some_and(|minor| minor.parse::<u8>().is_ok())
-            || RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR
-                .iter()
-                .any(|prefix| {
-                    reserved_name
-                        .strip_prefix(prefix)
-                        .and_then(|minor| minor.strip_suffix('t'))
-                        .is_some_and(|minor| minor.parse::<u8>().is_ok())
-                })
-        {
+        if let Some(reserved) = reserved_script_name(&lowercase_name) {
             return Err(Error::ReservedScriptName {
-                reserved: reserved_name.to_string(),
+                reserved: reserved.to_string(),
                 declared: script.name.clone(),
             });
         }
 
         let path = if cfg!(windows) {
             // On Windows we actually build an `.exe` wrapper.
+            // FIXME: What are the in-reality rules here for name normalization?
+            let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
             let name = normalized_name.to_string() + std::env::consts::EXE_SUFFIX;
 
             layout.scheme.scripts.join(name)
@@ -396,6 +464,7 @@ pub(crate) enum LibKind {
 fn move_folder_recorded(
     src_dir: &Path,
     dest_dir: &Path,
+    scripts: &Path,
     site_packages: &Path,
     record: &mut [RecordEntry],
 ) -> Result<(), Error> {
@@ -418,6 +487,7 @@ fn move_folder_recorded(
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
         } else {
+            validate_data_script_destination(&target, scripts)?;
             rename_or_copy.rename_or_copy(src, &target)?;
             let entry = record
                 .iter_mut()
@@ -471,6 +541,7 @@ fn install_script(
     }
 
     let script_absolute = layout.scheme.scripts.join(file.file_name());
+    validate_data_script_destination(&script_absolute, &layout.scheme.scripts)?;
     let script_relative =
         pathdiff::diff_paths(&script_absolute, site_packages).ok_or_else(|| {
             Error::Io(io::Error::other(format!(
@@ -662,7 +733,13 @@ pub(crate) fn install_data(
                     layout.scheme.data.user_display()
                 );
                 // Move the content of the folder to the root of the venv
-                move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &layout.scheme.data,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             Some("scripts") => {
                 trace!(
@@ -714,7 +791,13 @@ pub(crate) fn install_data(
                     "Installing data/headers to {}",
                     target_path.user_display()
                 );
-                move_folder_recorded(&path, &target_path, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &target_path,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             Some("purelib") => {
                 trace!(
@@ -722,7 +805,13 @@ pub(crate) fn install_data(
                     "Installing data/purelib to {}",
                     layout.scheme.purelib.user_display()
                 );
-                move_folder_recorded(&path, &layout.scheme.purelib, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &layout.scheme.purelib,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             Some("platlib") => {
                 trace!(
@@ -730,7 +819,13 @@ pub(crate) fn install_data(
                     "Installing data/platlib to {}",
                     layout.scheme.platlib.user_display()
                 );
-                move_folder_recorded(&path, &layout.scheme.platlib, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &layout.scheme.platlib,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(
