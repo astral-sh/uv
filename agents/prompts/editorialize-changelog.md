@@ -16,6 +16,8 @@ Apply these rules:
 
 - Preserve the release version and date.
 - For every retained entry, preserve its pull request number and exact URL. Never modify a URL.
+- Keep each Markdown paragraph and list item on a single line, including its pull request links. Do
+  not hard-wrap changelog prose; wrapping can break rendering on GitHub.
 - Drop entries that are clearly internal-only and have no user-facing effect, including CI or test
   runner changes, repository reorganization, and agent or developer infrastructure. If the effect is
   uncertain, keep the entry.
