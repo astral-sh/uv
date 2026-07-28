@@ -321,6 +321,26 @@ requires = ["uv_build>=0.11.32,<0.13"]
   You cannot opt out of this behavior. Correct the group name or add it to `[dependency-groups]`.
   Legacy `tool.uv.dev-dependencies` still satisfies `--upgrade-group dev`.
 
+- **Resolve relative indexes and find-links against `--directory`**
+  ([#20740](https://github.com/astral-sh/uv/pull/20740))
+
+  The `--directory` option changes the directory in which uv operates. Previously, relative index
+  and find-links paths supplied on the command line were still resolved against the original
+  working directory.
+
+  uv now resolves `--index`, `--default-index`, `--index-url`, `--extra-index-url`, and
+  `--find-links` relative to the directory selected by `--directory`. For example:
+
+  ```console
+  $ uv add --directory project --index ./packages example
+  ```
+
+  This now uses `project/packages` instead of `./packages` in the original working directory.
+  Absolute paths and indexes loaded from configuration files are unaffected.
+
+  To preserve the previous target, pass an absolute path or adjust the relative path, e.g.,
+  `--index ../packages`.
+
 - **Preserve absolute paths provided to `uv add`**
   ([#18402](https://github.com/astral-sh/uv/pull/18402))
 
