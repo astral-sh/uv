@@ -4982,6 +4982,12 @@ fn pep_751_infer_output_format() -> Result<()> {
 #[test]
 fn pep_751_filename() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4990,7 +4996,10 @@ fn pep_751_filename() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = ["ok"]
+
+        [tool.uv.sources]
+        ok = { path = "ok-1.0.0-py3-none-any.whl" }
 
         [build-system]
         requires = ["uv_build>=0.7,<10000"]
@@ -5003,8 +5012,22 @@ fn pep_751_filename() -> Result<()> {
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("-o").arg("test.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    error: Expected the output filename to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`); `test.toml` won't be recognized as a `pylock.toml` file in subsequent commands
+    Resolved 2 packages in [TIME]
+    error: Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; found `test.toml`
+    ");
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("-o").arg("pylock..toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; found `pylock..toml`
+    ");
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("-o").arg("pylock.foo.bar.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; found `pylock.foo.bar.toml`
     ");
 
     Ok(())
