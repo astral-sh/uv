@@ -20,21 +20,8 @@ uv and are excited to restore the default to a best-practice project layout.
 
 There are no breaking changes to the configuration of the
 [uv build backend](https://docs.astral.sh/uv/concepts/build-backend/). If your `[build-system]`
-table includes an upper bound on `uv_build`, update it to allow `uv_build` 0.12:
-
-```toml
-[build-system]
-requires = ["uv_build>=0.11.32,<0.12"]
-build-backend = "uv_build"
-```
-
-becomes:
-
-```toml
-[build-system]
-requires = ["uv_build>=0.11.32,<0.13"]
-build-backend = "uv_build"
-```
+table includes an upper bound on `uv_build`, update it from `<0.12` to `<0.13` to allow
+`uv_build` 0.12.
 
 ### Breaking changes
 
