@@ -364,3 +364,42 @@ fn workspace_list_scripts() -> Result<()> {
 
     Ok(())
 }
+
+/// Explicit script discovery should identify both the invalid script and the workspace root.
+#[test]
+fn workspace_list_scripts_invalid_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc::indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+    context
+        .temp_dir
+        .child("fixtures/invalid-script.py")
+        .write_str(indoc::indoc! {r"
+            # /// script
+            # dependencies = []
+            # ///
+
+            # /// script
+            # dependencies = []
+            # ///
+        "})?;
+
+    uv_snapshot!(context.filters(), context.workspace_list().arg("--scripts"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
+    error: Failed to discover PEP 723 scripts under workspace root `[TEMP_DIR]/`
+      Caused by: Failed to parse PEP 723 script: [TEMP_DIR]/fixtures/invalid-script.py
+      Caused by: The script contains multiple PEP 723 metadata blocks
+    ");
+
+    Ok(())
+}

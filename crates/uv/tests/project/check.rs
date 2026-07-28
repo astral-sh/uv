@@ -146,6 +146,53 @@ fn check_workspace_excludes_pep723_scripts() -> Result<()> {
     Ok(())
 }
 
+/// Invalid inline metadata should not prevent checking the surrounding project.
+#[test]
+fn check_project_ignores_invalid_pep723_scripts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+    context.temp_dir.child("main.py").write_str("value = 1\n")?;
+    context
+        .temp_dir
+        .child("fixtures/invalid-script.py")
+        .write_str(indoc! {r"
+            # /// script
+            # dependencies = []
+            # ///
+
+            # /// script
+            # dependencies = []
+            # ///
+            value = 1
+        "})?;
+
+    uv_snapshot!(context.filters(), context.check(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    uv_snapshot!(context.filters(), context.check().arg("--script").arg("fixtures/invalid-script.py"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The script contains multiple PEP 723 metadata blocks
+    ");
+
+    Ok(())
+}
+
 /// Check only the selected workspace member, whether selected implicitly or explicitly.
 #[test]
 fn check_workspace_member_selection() -> Result<()> {

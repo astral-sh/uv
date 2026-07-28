@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -10,7 +10,7 @@ use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
     InstallOptions,
 };
-use uv_fs::normalize_path;
+use uv_fs::{Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
@@ -34,7 +34,7 @@ use crate::commands::project::{
     validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::workspace::list::find_scripts;
+use crate::commands::workspace::list::{ScriptDiscoveryError, find_scripts};
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
@@ -275,13 +275,29 @@ pub(crate) async fn check(
     // selected workspace members are not checked against the project environment.
     if let Some(project) = project.as_ref() {
         excluded_targets.extend(
-            find_scripts(project.workspace().install_path(), cache)?
-                .into_iter()
-                .filter(|script| {
-                    check_targets
+            find_scripts(project.workspace().install_path(), cache)
+                .filter_map(|script| match script {
+                    Ok(script) => check_targets
                         .iter()
                         .any(|target| script.starts_with(target))
-                }),
+                        .then_some(Ok(script)),
+                    Err(ScriptDiscoveryError::Parse { path, source }) => {
+                        debug!(
+                            "Ignoring invalid PEP 723 script `{}` while checking project root `{}`: {source}",
+                            path.simplified_display(),
+                            project.root().simplified_display(),
+                        );
+                        None
+                    }
+                    Err(err) => Some(Err(err)),
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|| {
+                    format!(
+                        "Failed to discover PEP 723 scripts while checking project root `{}`",
+                        project.root().simplified_display()
+                    )
+                })?,
         );
     }
 
