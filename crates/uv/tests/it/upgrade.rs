@@ -1356,8 +1356,17 @@ fn upgrade_preserves_hard_constraint_no_solution_failure() -> Result<()> {
         .write_str(&pyproject_toml)?;
     fs_err::remove_dir_all(&context.venv)?;
 
+    let filters: Vec<_> = packse_filters(&context)
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
     uv_snapshot!(
-        packse_filters(&context),
+        filters,
         context
             .upgrade()
             .arg("bar")
