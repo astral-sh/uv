@@ -7,23 +7,22 @@
 
 Released on 2026-07-28.
 
+### Security
+
+- Prevent wheel data files from overwriting virtual-environment interpreters ([#20749](https://github.com/astral-sh/uv/pull/20749))
+- Prevent case-variant reserved wheel entry points from overwriting interpreters on case-insensitive filesystems ([#20748](https://github.com/astral-sh/uv/pull/20748))
+
 ### Breaking changes
 
-- Reject MD5-only requirements in hash-checking mode ([#20758](https://github.com/astral-sh/uv/pull/20758))
+- Reject requirements that provide only MD5 hashes in hash-checking mode ([#20758](https://github.com/astral-sh/uv/pull/20758))
 
 ### Preview features
 
-- Allow multiple packages in `uv upgrade` ([#20338](https://github.com/astral-sh/uv/pull/20338))
+- Allow `uv upgrade` to target multiple packages, upgrade all production dependencies, and exclude selected dependencies ([#20338](https://github.com/astral-sh/uv/pull/20338))
 
 ### Bug fixes
 
-- Fix inclusion of extra specified in dependency group when listed in a conflict ([#20237](https://github.com/astral-sh/uv/pull/20237))
-
-### Other changes
-
-- Reject case-variant reserved wheel entry points ([#20748](https://github.com/astral-sh/uv/pull/20748))
-- Reject interpreter files in wheel data directories ([#20749](https://github.com/astral-sh/uv/pull/20749))
-- Release 0.12.0 ([#20355](https://github.com/astral-sh/uv/pull/20355))
+- Include extras activated by dependency groups when evaluating conflicts ([#20237](https://github.com/astral-sh/uv/pull/20237))
 
 ## 0.11.33
 
