@@ -3472,7 +3472,7 @@ fn compile_exclude_newer() -> Result<()> {
         .arg("2022-04-04T26:00:00+00"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time: failed to parse two digit integer as hour: parameter 'hour' is not in the required range of 0..=23
+    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse two digit integer as hour: parameter 'hour' is not in the required range of 0..=23
 
     For more information, try '--help'.
     "
