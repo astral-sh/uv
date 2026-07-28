@@ -66,6 +66,25 @@ Update that upper bound to `<0.13` to use `uv_build` 0.12. The build backend als
   wheels with a supported ZIP compression method. If an existing `uv.lock` references an
   unsupported source distribution, update the dependency and regenerate the lockfile.
 
+- **Reject wheel files that could replace the Python interpreter**
+  ([#20748](https://github.com/astral-sh/uv/pull/20748),
+  [#20749](https://github.com/astral-sh/uv/pull/20749))
+
+  uv already rejected wheel entry points named `python`, but case variants such as `Python` were
+  still accepted. On case-insensitive filesystems, including common macOS and Windows setups,
+  these entry points could overwrite the virtual environment's interpreter.
+
+  Wheels could also place interpreter files in their `.data/scripts` directory or in paths such as
+  `.data/data/bin/python`, bypassing the entry-point check and replacing the interpreter during
+  installation.
+
+  uv now rejects case-insensitive variants of reserved interpreter names and wheel data files that
+  would be installed over an interpreter. This includes names such as `Python`, `python.py`, and
+  `Python.exe`, along with other reserved interpreter names and their versioned variants.
+
+  You cannot opt out of these checks. Rename conflicting entry points or wheel data files and
+  rebuild the affected wheel.
+
 - **Prefer stable releases before falling back to pre-releases**
   ([#19993](https://github.com/astral-sh/uv/pull/19993))
 
