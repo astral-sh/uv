@@ -258,7 +258,7 @@ serde_json = { version = "1.0.128" }
 sha2 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
 spdx = { version = "0.13.0" }
-syn = { version = "2.0.77" }
+syn = { version = "3.0.0" }
 target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.14.0" }
 terminal_size = { version = "0.4.2" }
