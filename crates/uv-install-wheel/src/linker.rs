@@ -16,6 +16,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 
 use crate::Error;
+use crate::wheel::ValidatedWheel;
 
 pub use uv_fs::link::LinkMode;
 
@@ -252,11 +253,11 @@ impl InstallState {
 pub(crate) fn link_wheel_files(
     link_mode: LinkMode,
     site_packages: impl AsRef<Path>,
-    wheel: impl AsRef<Path>,
+    wheel: &ValidatedWheel<'_>,
     state: &InstallState,
     filename: &WheelFilename,
 ) -> Result<(), Error> {
-    let wheel = wheel.as_ref();
+    let wheel = wheel.as_path();
     let site_packages = site_packages.as_ref();
     register_installed_paths(wheel, state, filename)?;
 

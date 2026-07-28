@@ -12817,7 +12817,7 @@ fn reject_reserved_wheel_data_script_name() -> Result<()> {
     let scripts = if cfg!(windows) { "Scripts" } else { "bin" };
 
     allow_duplicates! {
-        for data_path in ["python", "Python.exe", "python.EXE"]
+        for data_path in ["python", "python.py", "Python.exe", "python.EXE", "Python.PY"]
             .into_iter()
             .flat_map(|executable| {
                 [
@@ -12826,8 +12826,10 @@ fn reject_reserved_wheel_data_script_name() -> Result<()> {
                 ]
             })
         {
-            let context = uv_test::test_context!("3.12")
-                .with_filter((r"got: `(?:Python\.exe|python(?:\.EXE)?)`", "got: `python`"));
+            let context = uv_test::test_context!("3.12").with_filter((
+                r"got: `(?:Python\.(?:exe|PY)|python(?:\.EXE|\.py)?)`",
+                "got: `python`",
+            ));
             let wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
             let record = formatdoc! {"
                 foo/__init__.py,,

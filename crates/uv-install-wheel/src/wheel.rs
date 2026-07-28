@@ -184,6 +184,48 @@ fn reserved_script_name(name: &str) -> Option<&str> {
     .then_some(normalized_name)
 }
 
+/// An unpacked wheel whose data directories cannot overwrite a reserved script.
+pub(crate) struct ValidatedWheel<'wheel> {
+    path: &'wheel Path,
+}
+
+impl<'wheel> ValidatedWheel<'wheel> {
+    pub(crate) fn new(
+        layout: &Layout,
+        wheel: &'wheel Path,
+        dist_info_prefix: &str,
+    ) -> Result<Self, Error> {
+        let data_dir = wheel.join(format!("{dist_info_prefix}.data"));
+        for (source, destination) in [
+            (data_dir.join("scripts"), &layout.scheme.scripts),
+            (data_dir.join("data"), &layout.scheme.data),
+        ] {
+            if !source.is_dir() {
+                continue;
+            }
+
+            for entry in WalkDir::new(&source).min_depth(1) {
+                let entry = entry?;
+                if entry.file_type().is_dir() {
+                    continue;
+                }
+
+                let relative = relative_to(entry.path(), &source)?;
+                validate_data_script_destination(
+                    &destination.join(relative),
+                    &layout.scheme.scripts,
+                )?;
+            }
+        }
+
+        Ok(Self { path: wheel })
+    }
+
+    pub(crate) fn as_path(&self) -> &Path {
+        self.path
+    }
+}
+
 fn validate_data_script_destination(target: &Path, scripts: &Path) -> Result<(), Error> {
     let Some(name) = target
         .strip_prefix(scripts)
@@ -203,35 +245,6 @@ fn validate_data_script_destination(target: &Path, scripts: &Path) -> Result<(),
             reserved: reserved.to_string(),
             declared: name.to_string(),
         });
-    }
-
-    Ok(())
-}
-
-/// Validate every `.data` script destination before linking the wheel into site-packages.
-pub(crate) fn validate_data_script_destinations(
-    layout: &Layout,
-    wheel: &Path,
-    dist_info_prefix: &str,
-) -> Result<(), Error> {
-    let data_dir = wheel.join(format!("{dist_info_prefix}.data"));
-    for (source, destination) in [
-        (data_dir.join("scripts"), &layout.scheme.scripts),
-        (data_dir.join("data"), &layout.scheme.data),
-    ] {
-        if !source.is_dir() {
-            continue;
-        }
-
-        for entry in WalkDir::new(&source).min_depth(1) {
-            let entry = entry?;
-            if entry.file_type().is_dir() {
-                continue;
-            }
-
-            let relative = relative_to(entry.path(), &source)?;
-            validate_data_script_destination(&destination.join(relative), &layout.scheme.scripts)?;
-        }
     }
 
     Ok(())
@@ -268,9 +281,7 @@ impl<'script> ValidatedScript<'script> {
         }
 
         // Reserve launcher basenames emitted by `uv venv` across supported platforms.
-        // Apply the Windows launcher normalization before checking so wheel validity is portable.
-        // FIXME: What are the in-reality rules here for name normalization?
-        let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
+        // Normalize casing before checking so wheel validity is portable.
         let lowercase_name = name.to_ascii_lowercase();
         if let Some(reserved) = reserved_script_name(&lowercase_name) {
             return Err(Error::ReservedScriptName {
@@ -281,6 +292,8 @@ impl<'script> ValidatedScript<'script> {
 
         let path = if cfg!(windows) {
             // On Windows we actually build an `.exe` wrapper.
+            // FIXME: What are the in-reality rules here for name normalization?
+            let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
             let name = normalized_name.to_string() + std::env::consts::EXE_SUFFIX;
 
             layout.scheme.scripts.join(name)
