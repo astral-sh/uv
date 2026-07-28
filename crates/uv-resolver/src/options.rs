@@ -1,4 +1,4 @@
-use uv_configuration::{BuildOptions, IndexStrategy};
+use uv_configuration::{BuildOptions, IndexStrategy, ResolutionPolicy};
 use uv_pypi_types::SupportedEnvironments;
 use uv_torch::TorchStrategy;
 
@@ -18,6 +18,8 @@ pub struct Options {
     pub flexibility: Flexibility,
     pub build_options: BuildOptions,
     pub torch_backend: Option<TorchStrategy>,
+    /// Optional policy to constrain Python interpreter versions during resolution
+    pub python_resolution: Option<ResolutionPolicy>,
 }
 
 /// Builder for [`Options`].
@@ -33,6 +35,7 @@ pub struct OptionsBuilder {
     flexibility: Flexibility,
     build_options: BuildOptions,
     torch_backend: Option<TorchStrategy>,
+    python_resolution: Option<ResolutionPolicy>,
 }
 
 impl OptionsBuilder {
@@ -111,6 +114,13 @@ impl OptionsBuilder {
         self
     }
 
+    /// Sets the Python resolution policy.
+    #[must_use]
+    pub fn python_resolution(mut self, python_resolution: Option<ResolutionPolicy>) -> Self {
+        self.python_resolution = python_resolution;
+        self
+    }
+
     /// Builds the options.
     pub fn build(self) -> Options {
         Options {
@@ -124,6 +134,7 @@ impl OptionsBuilder {
             flexibility: self.flexibility,
             build_options: self.build_options,
             torch_backend: self.torch_backend,
+            python_resolution: self.python_resolution,
         }
     }
 }
