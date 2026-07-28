@@ -201,21 +201,25 @@ impl<'script> ValidatedScript<'script> {
         // Apply the Windows launcher normalization before checking so wheel validity is portable.
         // FIXME: What are the in-reality rules here for name normalization?
         let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
-        if RESERVED_SCRIPT_NAMES_ERROR.contains(&normalized_name)
-            || normalized_name
+        let lowercase_name = name.to_ascii_lowercase();
+        let reserved_name = lowercase_name
+            .strip_suffix(".py")
+            .unwrap_or(&lowercase_name);
+        if RESERVED_SCRIPT_NAMES_ERROR.contains(&reserved_name)
+            || reserved_name
                 .strip_prefix(RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR)
                 .is_some_and(|minor| minor.parse::<u8>().is_ok())
             || RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR
                 .iter()
                 .any(|prefix| {
-                    normalized_name
+                    reserved_name
                         .strip_prefix(prefix)
                         .and_then(|minor| minor.strip_suffix('t'))
                         .is_some_and(|minor| minor.parse::<u8>().is_ok())
                 })
         {
             return Err(Error::ReservedScriptName {
-                reserved: normalized_name.to_string(),
+                reserved: reserved_name.to_string(),
                 declared: script.name.clone(),
             });
         }
