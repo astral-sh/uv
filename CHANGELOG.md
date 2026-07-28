@@ -57,8 +57,8 @@ build-backend = "uv_build"
   Hello from example!
   ```
 
-  Existing projects are unaffected. Use `uv init --no-package example` to create the previous flat
-  layout without a build system.
+  Existing projects are unaffected. Use `uv init --no-package example` to create the previous
+  unpackaged layout without a build system.
 
   See the
   [project creation documentation](https://docs.astral.sh/uv/concepts/projects/init/#applications)
