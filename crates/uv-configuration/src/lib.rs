@@ -51,3 +51,7 @@ mod threading;
 mod trusted_host;
 mod trusted_publishing;
 mod vcs;
+
+// New configuration for Python resolution policy
+mod python_resolution;
+pub use python_resolution::{PythonResolutionConfig, ResolutionPolicy};
