@@ -1,0 +1,28 @@
+name = "upgrade-outcomes"
+description = '''
+This test checks upgrade outcomes for blocked fork rewrites alongside safe upgrades.
+'''
+
+[testgen]
+disable = true
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["foo"]
+
+[packages.foo.versions."1.0.0"]
+requires = [
+  "bar==1; sys_platform == 'linux'",
+  "bar==2; sys_platform != 'linux'",
+]
+
+[packages.bar.versions."1.0.0"]
+[packages.bar.versions."2.0.0"]
+
+[packages.baz.versions."1.0.0"]
+[packages.baz.versions."2.0.0"]

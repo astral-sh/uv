@@ -209,8 +209,13 @@ impl Upgrade {
 
     /// Create an [`Upgrade`] to upgrade a single package.
     pub fn package(package_name: PackageName) -> Self {
+        Self::from_packages([package_name])
+    }
+
+    /// Create an [`Upgrade`] to upgrade a set of packages.
+    pub fn from_packages(package_names: impl IntoIterator<Item = PackageName>) -> Self {
         let mut packages = FxHashSet::default();
-        packages.insert(package_name);
+        packages.extend(package_names);
         Self {
             strategy: UpgradeStrategy::Some(packages, FxHashSet::default()),
             constraints: FxHashMap::default(),
