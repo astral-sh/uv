@@ -15198,6 +15198,317 @@ fn lock_transitive_extra_path_dependency() -> Result<()> {
     Ok(())
 }
 
+/// Registry-form extras must be replayed against the marker-compatible direct source.
+#[test]
+fn lock_transitive_extra_path_dependency_marker_scoped_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = [
+            { path = "packages/target-linux", marker = "sys_platform == 'linux'" },
+            { path = "packages/target-other", marker = "sys_platform != 'linux'" },
+        ]
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [project.optional-dependencies]
+        feature = ["target[feature] ; sys_platform != 'linux'"]
+    "#})?;
+
+    let target_linux = context.temp_dir.child("packages").child("target-linux");
+    target_linux.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf-linux"]
+
+        [tool.uv.sources]
+        leaf-linux = { path = "../leaf-linux" }
+    "#})?;
+
+    let target_other = context.temp_dir.child("packages").child("target-other");
+    target_other.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf-other"]
+
+        [tool.uv.sources]
+        leaf-other = { path = "../leaf-other" }
+    "#})?;
+
+    for name in ["leaf-linux", "leaf-other"] {
+        let leaf = context.temp_dir.child("packages").child(name);
+        leaf.child("pyproject.toml")
+            .write_str(&indoc::formatdoc! {r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Ignore source and dependency markers outside the project's supported Python versions.
+#[test]
+fn lock_transitive_extra_path_dependency_outside_requires_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = [
+            { path = "packages/target-old", marker = "python_version < '3.12'" },
+            { path = "packages/target-new", marker = "python_version >= '3.12'" },
+        ]
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [project.optional-dependencies]
+        feature = ["target[feature] ; python_version < '3.12'"]
+    "#})?;
+
+    let target_old = context.temp_dir.child("packages").child("target-old");
+    target_old.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../missing-leaf" }
+    "#})?;
+
+    let target_new = context.temp_dir.child("packages").child("target-new");
+    target_new.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Replay registry extras only against direct sources selected by the same project extra.
+#[test]
+fn lock_transitive_extra_path_dependency_conflicting_extra_scoped_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["bridge[feature]", "target"]
+        bar = ["target"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ extra = "foo" }, { extra = "bar" }]]
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge", extra = "foo" }
+        target = [
+            { path = "packages/target-foo", extra = "foo" },
+            { path = "packages/target-bar", extra = "bar" },
+        ]
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    let target_foo = context.temp_dir.child("packages").child("target-foo");
+    target_foo.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+    "#})?;
+
+    let target_bar = context.temp_dir.child("packages").child("target-bar");
+    target_bar.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["missing-leaf"]
+
+        [tool.uv.sources]
+        missing-leaf = { path = "../missing-leaf" }
+    "#})?;
+
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Do not replay extras whose markers cannot overlap the supported environments.
+#[test]
+fn lock_transitive_extra_path_dependency_outside_supported_environments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+        environments = ["sys_platform == 'linux'"]
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [project.optional-dependencies]
+        feature = ["target[feature] ; sys_platform == 'win32'"]
+    "#})?;
+
+    let target = context.temp_dir.child("packages").child("target");
+    target.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../missing-leaf" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// A registry-form extra should be replayed if the matching path source is discovered later.
 #[test]
 fn lock_transitive_extra_path_dependency_source_discovered_later() -> Result<()> {

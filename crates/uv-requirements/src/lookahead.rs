@@ -8,10 +8,30 @@ use tracing::trace;
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
-use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
+use uv_normalize::PackageName;
+use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra};
+use uv_pypi_types::Conflicts;
+use uv_resolver::{InMemoryIndex, MetadataResponse, PythonRequirement, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
 use crate::{Error, required_dist};
+
+/// A requirement and the project-extra scope in which it was discovered.
+///
+/// Dependency extras are local to their declaring package, so project-extra scopes must be tracked
+/// separately instead of intersecting their markers with transitive dependency markers.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ScopedRequirement {
+    requirement: Requirement,
+    scope: Option<ExtraScope>,
+}
+
+/// The package whose extras select the source and the conditions under which it applies.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ExtraScope {
+    package: PackageName,
+    marker: MarkerTree,
+}
 
 /// A resolver for resolving lookahead requirements from direct URLs.
 ///
@@ -86,6 +106,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     pub async fn resolve(
         self,
         env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+        conflicts: &Conflicts,
     ) -> Result<(Vec<RequestedRequirements>, HashStrategy), Error> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
@@ -98,66 +120,83 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| !self.excludes.contains(&requirement.name))
             .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
-            .map(|requirement| (*requirement).clone())
+            .map(|requirement| ScopedRequirement {
+                requirement: (*requirement).clone(),
+                scope: None,
+            })
             .collect();
 
-        // Track the non-registry requirement seen for each package, so that registry-form
-        // requirements (e.g., `target[feature]` in `Requires-Dist`) can be mapped back to a
-        // direct URL source when the resolver will use that source for the package anyway
-        // (e.g., via `tool.uv.sources`).
-        let mut direct = FxHashMap::default();
-        for requirement in &queue {
+        // Track every direct source for each package, including sources that apply in disjoint
+        // marker environments. Registry-form requirements can then activate extras on each
+        // compatible source without depending on their discovery order.
+        let mut direct: FxHashMap<_, Vec<_>> = FxHashMap::default();
+        for scoped_requirement in &queue {
+            let requirement = &scoped_requirement.requirement;
             if !matches!(requirement.source, RequirementSource::Registry { .. }) {
-                direct
-                    .entry(requirement.name.clone())
-                    .or_insert_with(|| requirement.clone());
+                let direct_requirements = direct.entry(requirement.name.clone()).or_default();
+                if !direct_requirements.contains(scoped_requirement) {
+                    direct_requirements.push(scoped_requirement.clone());
+                }
             }
         }
         let mut pending: FxHashMap<_, FxHashSet<_>> = FxHashMap::default();
 
         while !queue.is_empty() || !futures.is_empty() {
-            while let Some(requirement) = queue.pop_front() {
+            while let Some(scoped_requirement) = queue.pop_front() {
+                let requirement = &scoped_requirement.requirement;
                 if !matches!(requirement.source, RequirementSource::Registry { .. }) {
-                    let source = direct
-                        .entry(requirement.name.clone())
-                        .or_insert_with(|| requirement.clone())
-                        .source
-                        .clone();
-                    if seen.insert(requirement.clone()) {
-                        futures.push(self.lookahead(requirement.clone(), hasher.clone()));
+                    let direct_requirements = direct.entry(requirement.name.clone()).or_default();
+                    if !direct_requirements.contains(&scoped_requirement) {
+                        direct_requirements.push(scoped_requirement.clone());
                     }
-                    if let Some(pending_requirements) = pending.remove(&requirement.name) {
+
+                    if seen.insert(scoped_requirement.clone()) {
+                        futures.push(self.lookahead(scoped_requirement.clone(), hasher.clone()));
+                    }
+
+                    if let Some(pending_requirements) = pending.get(&requirement.name) {
                         for pending_requirement in pending_requirements {
-                            let candidate = Requirement {
-                                source: source.clone(),
-                                ..pending_requirement
+                            let Some(candidate) = Self::replay_requirement(
+                                pending_requirement,
+                                &scoped_requirement,
+                                env,
+                                python_requirement,
+                                conflicts,
+                            ) else {
+                                continue;
                             };
                             if seen.insert(candidate.clone()) {
                                 futures.push(self.lookahead(candidate, hasher.clone()));
                             }
                         }
                     }
-                } else if let Some(direct_requirement) = direct.get(&requirement.name) {
-                    // The package will resolve to a known direct URL source, so re-run the
-                    // lookahead for that source with the extras (or groups) from this request
-                    // activated, to discover any dependencies gated behind them.
-                    let candidate = Requirement {
-                        source: direct_requirement.source.clone(),
-                        ..requirement
-                    };
-                    if seen.insert(candidate.clone()) {
-                        futures.push(self.lookahead(candidate, hasher.clone()));
-                    }
                 } else {
-                    pending
-                        .entry(requirement.name.clone())
-                        .or_default()
-                        .insert(requirement);
+                    let pending_requirements = pending.entry(requirement.name.clone()).or_default();
+                    if !pending_requirements.insert(scoped_requirement.clone()) {
+                        continue;
+                    }
+
+                    if let Some(direct_requirements) = direct.get(&requirement.name) {
+                        for direct_requirement in direct_requirements {
+                            let Some(candidate) = Self::replay_requirement(
+                                &scoped_requirement,
+                                direct_requirement,
+                                env,
+                                python_requirement,
+                                conflicts,
+                            ) else {
+                                continue;
+                            };
+                            if seen.insert(candidate.clone()) {
+                                futures.push(self.lookahead(candidate, hasher.clone()));
+                            }
+                        }
+                    }
                 }
             }
 
             while let Some(result) = futures.next().await {
-                if let Some(lookahead) = result? {
+                if let Some((lookahead, scope)) = result? {
                     hasher = hasher.augment_with_requirements(
                         lookahead.requirements().iter().filter(|requirement| {
                             !self.excludes.contains_for(
@@ -179,7 +218,13 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         ) && requirement
                             .evaluate_markers(env.marker_environment(), lookahead.extras())
                         {
-                            queue.push_back((*requirement).clone());
+                            queue.push_back(ScopedRequirement {
+                                requirement: (*requirement).clone(),
+                                scope: Some(scope.clone().unwrap_or_else(|| ExtraScope {
+                                    package: lookahead.package().clone(),
+                                    marker: requirement.marker.only_extras(),
+                                })),
+                            });
                         }
                     }
                     results.push(lookahead);
@@ -190,12 +235,92 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         Ok((results, hasher))
     }
 
+    /// Replays a registry requirement against a compatible direct source.
+    ///
+    /// Source markers and dependency markers originate from different packages, so compare their
+    /// project-extra scopes separately before intersecting their environment markers.
+    fn replay_requirement(
+        scoped_requirement: &ScopedRequirement,
+        scoped_direct_requirement: &ScopedRequirement,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+        conflicts: &Conflicts,
+    ) -> Option<ScopedRequirement> {
+        let requirement = &scoped_requirement.requirement;
+        let direct_requirement = &scoped_direct_requirement.requirement;
+
+        let scope = match (&scoped_requirement.scope, &scoped_direct_requirement.scope) {
+            (Some(scope), Some(direct_scope)) if scope.package == direct_scope.package => {
+                let mut marker = scope.marker.and(direct_scope.marker);
+
+                for conflict_set in conflicts.iter() {
+                    for (index, left) in conflict_set.iter().enumerate() {
+                        if left.package() != &scope.package {
+                            continue;
+                        }
+                        let Some(left_extra) = left.extra() else {
+                            continue;
+                        };
+
+                        for right in conflict_set.iter().skip(index + 1) {
+                            if right.package() != &scope.package {
+                                continue;
+                            }
+                            let Some(right_extra) = right.extra() else {
+                                continue;
+                            };
+
+                            let left_marker = MarkerTree::expression(MarkerExpression::Extra {
+                                operator: ExtraOperator::Equal,
+                                name: MarkerValueExtra::Extra(left_extra.clone()),
+                            });
+                            let right_marker = MarkerTree::expression(MarkerExpression::Extra {
+                                operator: ExtraOperator::Equal,
+                                name: MarkerValueExtra::Extra(right_extra.clone()),
+                            });
+                            let compatible = left_marker.negate().or(right_marker.negate());
+                            marker = marker.and(compatible);
+                        }
+                    }
+                }
+
+                if marker.is_false() {
+                    return None;
+                }
+                Some(ExtraScope {
+                    package: scope.package.clone(),
+                    marker,
+                })
+            }
+            (Some(scope), _) | (None, Some(scope)) => Some(scope.clone()),
+            (None, None) => None,
+        };
+
+        let marker = requirement
+            .marker
+            .and(direct_requirement.marker.without_extras());
+
+        if !env.supports_marker(marker, python_requirement) {
+            return None;
+        }
+
+        Some(ScopedRequirement {
+            requirement: Requirement {
+                source: direct_requirement.source.clone(),
+                marker,
+                ..requirement.clone()
+            },
+            scope,
+        })
+    }
+
     /// Infer the package name for a given "unnamed" requirement.
     async fn lookahead(
         &self,
-        requirement: Requirement,
+        scoped_requirement: ScopedRequirement,
         hasher: HashStrategy,
-    ) -> Result<Option<RequestedRequirements>, Error> {
+    ) -> Result<Option<(RequestedRequirements, Option<ExtraScope>)>, Error> {
+        let ScopedRequirement { requirement, scope } = scoped_requirement;
         trace!("Performing lookahead for {requirement}");
 
         // Determine whether the requirement represents a local distribution and convert to a
@@ -268,12 +393,9 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .collect();
 
         // Return the requirements from the metadata.
-        Ok(Some(RequestedRequirements::new(
-            package,
-            version,
-            requirement.extras,
-            requires_dist,
-            direct,
+        Ok(Some((
+            RequestedRequirements::new(package, version, requirement.extras, requires_dist, direct),
+            scope,
         )))
     }
 }
