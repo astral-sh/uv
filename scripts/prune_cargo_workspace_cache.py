@@ -40,8 +40,9 @@ def prune_workspace_fingerprints(
     profile: Path, marker_timestamp: int, packages: set[str]
 ) -> tuple[int, int, int]:
     fingerprint_root = profile / ".fingerprint"
-    stale_fingerprints: set[str] = set()
+    stale_fingerprints_by_package: dict[str, set[str]] = {}
     active_fingerprints: set[str] = set()
+    active_packages: set[str] = set()
 
     for directory in fingerprint_root.iterdir():
         if not directory.is_dir():
@@ -55,15 +56,23 @@ def prune_workspace_fingerprints(
         if last_used is None:
             continue
 
+        package = match.group("package")
         fingerprint = match.group("fingerprint")
         if last_used >= marker_timestamp:
             active_fingerprints.add(fingerprint)
-        elif match.group("package") in packages:
-            stale_fingerprints.add(fingerprint)
+            if package in packages:
+                active_packages.add(package)
+        elif package in packages:
+            stale_fingerprints_by_package.setdefault(package, set()).add(fingerprint)
 
     if not active_fingerprints:
         raise RuntimeError("No active Cargo fingerprints found; refusing to prune")
 
+    stale_fingerprints = {
+        fingerprint
+        for package in active_packages
+        for fingerprint in stale_fingerprints_by_package.get(package, set())
+    }
     stale_fingerprints.difference_update(active_fingerprints)
     removed_paths = 0
 
