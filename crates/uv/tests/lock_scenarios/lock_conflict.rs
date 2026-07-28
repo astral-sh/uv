@@ -2699,11 +2699,8 @@ fn group_activates_self_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
@@ -2809,22 +2806,16 @@ fn group_activates_self_extra() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
 
     // Activating the `dev` group (the default) should install `idna==3.5` via `anyio`'s
     // conflict-gated edge, because the group itself enables the `dev` self-extra.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -2834,11 +2825,8 @@ fn group_activates_self_extra() -> Result<()> {
     ");
 
     // Enabling the extra explicitly should produce the same environment.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=dev"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=dev"), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 3 packages in [TIME]
     ");
@@ -2889,22 +2877,16 @@ fn group_activates_self_extra_non_project_workspace() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
 
     // Activating the `dev` group (the default) installs `idna==3.5` via `anyio`'s
     // conflict-gated edge, because the group references `pkg1[dev]`.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -2915,11 +2897,8 @@ fn group_activates_self_extra_non_project_workspace() -> Result<()> {
     ");
 
     // Enabling the extra explicitly produces the same environment.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=dev"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=dev"), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 4 packages in [TIME]
     ");
