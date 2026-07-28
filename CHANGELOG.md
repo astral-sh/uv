@@ -102,10 +102,11 @@ build-backend = "uv_build"
 - **Prefer stable releases before falling back to pre-releases**
   ([#19993](https://github.com/astral-sh/uv/pull/19993))
 
-  Pre-releases are difficult to resolve because requirements are discovered incrementally. uv
-  previously required each package's pre-release eligibility to be known before resolution began:
-  the default `if-necessary-or-explicit` mode allowed them for direct requirements that explicitly
-  requested a pre-release, or for packages that only published pre-releases.
+  Pre-releases are difficult to model during resolution because requirements are discovered
+  incrementally. uv previously required each package's pre-release eligibility to be known before
+  resolution began: the default `if-necessary-or-explicit` mode allowed them for direct
+  requirements that explicitly requested a pre-release, or for packages that only published
+  pre-releases.
 
   This meant that a pre-release requirement discovered in a dependency's metadata, e.g.,
   `example>=2.0.0b1`, could fail to resolve even when a compatible pre-release existed. Users had
