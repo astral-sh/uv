@@ -29,7 +29,7 @@ with an error.
 
 Application projects are suitable for web servers, scripts, and command-line interfaces.
 
-Applications are the default target for `uv init`:
+Applications are the default target for `uv init`, but can also be specified with the `--app` flag:
 
 ```console
 $ uv init example-app
