@@ -4186,15 +4186,15 @@ fn require_hashes_at_least_one() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     // An MD5 digest alone must not satisfy integrity-enforced installs.
-    let requirements_txt = context.temp_dir.child("requirements-md5.txt");
-    requirements_txt.write_str("anyio==4.0.0 --hash=md5:420d85e19168705cdf0223621b18831a")?;
+    let md5_requirements_txt = context.temp_dir.child("requirements-md5.txt");
+    md5_requirements_txt.write_str("anyio==4.0.0 --hash=md5:420d85e19168705cdf0223621b18831a")?;
 
     uv_snapshot!(context.pip_sync()
-        .arg(requirements_txt.path())
+        .arg(md5_requirements_txt.path())
         .arg("--require-hashes"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, `md5` hashes are insecure and cannot be used for: anyio==4.0.0
+    error: `md5` hashes are insecure and cannot be used with `--require-hashes` but no other hashes are available for: anyio==4.0.0
     ");
 
     // Request `anyio` with a `sha256` hash.
@@ -4211,6 +4211,27 @@ fn require_hashes_at_least_one() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.0.0
+    "
+    );
+
+    // An MD5 requirement can still use a secure hash supplied by its constraint.
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt
+        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg(md5_requirements_txt.path())
+        .arg("--constraint")
+        .arg(constraints_txt.path())
+        .arg("--reinstall")
+        .arg("--require-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ anyio==4.0.0
     "
     );
 
@@ -4254,10 +4275,8 @@ fn require_hashes_at_least_one() -> Result<()> {
     );
 
     // MD5 remains supported when hash checking is not required.
-    let requirements_txt = context.temp_dir.child("requirements-md5.txt");
-
     uv_snapshot!(context.pip_sync()
-        .arg(requirements_txt.path())
+        .arg(md5_requirements_txt.path())
         .arg("--reinstall"), @"
     exit_code: 0 (success)
     ----- stderr -----

@@ -235,19 +235,12 @@ impl HashStrategy {
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
-            if mode.is_require() {
-                let has_md5 = digests
+            let has_md5 = mode.is_require()
+                && digests
                     .iter()
                     .any(|digest| digest.algorithm() == HashAlgorithm::Md5);
+            if mode.is_require() {
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
-
-                if digests.is_empty() && has_md5 {
-                    return Err(HashStrategyError::InsecureHashAlgorithm(
-                        requirement.to_string(),
-                        HashAlgorithm::Md5,
-                        mode,
-                    ));
-                }
             }
 
             let digests = if let Some(constraint) = constraint_hashes.remove(&id) {
@@ -279,6 +272,13 @@ impl HashStrategy {
             // Under `--require-hashes`, every requirement must include a hash.
             if digests.is_empty() {
                 if mode.is_require() {
+                    if has_md5 {
+                        return Err(HashStrategyError::InsecureHashAlgorithm(
+                            requirement.to_string(),
+                            HashAlgorithm::Md5,
+                            mode,
+                        ));
+                    }
                     return Err(HashStrategyError::MissingHashes(
                         requirement.to_string(),
                         mode,
@@ -496,7 +496,9 @@ pub enum HashStrategyError {
         "In `{1}` mode, all requirements must have their versions pinned with `==`, but found: {0}"
     )]
     UnpinnedRequirement(String, HashCheckingMode),
-    #[error("In `{2}` mode, `{1}` hashes are insecure and cannot be used for: {0}")]
+    #[error(
+        "`{1}` hashes are insecure and cannot be used with `{2}` but no other hashes are available for: {0}"
+    )]
     InsecureHashAlgorithm(String, HashAlgorithm, HashCheckingMode),
     #[error("In `{1}` mode, all requirements must have a hash, but none were provided for: {0}")]
     MissingHashes(String, HashCheckingMode),
