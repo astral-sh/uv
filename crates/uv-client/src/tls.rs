@@ -295,7 +295,7 @@ impl Certificates {
                     .filter_invalid(&CertificateSource::SslCertFile(file.clone()));
                 if certs.0.is_empty() {
                     warn_user_once!(
-                        "Ignoring `SSL_CERT_FILE`. No valid certificates found in: {}.",
+                        "No valid certificates found in `SSL_CERT_FILE`: {}. No default certificates will be trusted.",
                         file.simplified_display().cyan()
                     );
                     return None;
@@ -304,21 +304,21 @@ impl Certificates {
             }
             Ok(_) => {
                 warn_user_once!(
-                    "Ignoring invalid `SSL_CERT_FILE`. Path is not a file: {}.",
+                    "Invalid `SSL_CERT_FILE`. Path is not a file: {}. No default certificates will be trusted.",
                     file.simplified_display().cyan()
                 );
                 None
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 warn_user_once!(
-                    "Ignoring invalid `SSL_CERT_FILE`. Path does not exist: {}.",
+                    "Invalid `SSL_CERT_FILE`. Path does not exist: {}. No default certificates will be trusted.",
                     file.simplified_display().cyan()
                 );
                 None
             }
             Err(err) => {
                 warn_user_once!(
-                    "Ignoring invalid `SSL_CERT_FILE`. Path is not accessible: {} ({err}).",
+                    "Invalid `SSL_CERT_FILE`. Path is not accessible: {} ({err}). No default certificates will be trusted.",
                     file.simplified_display().cyan()
                 );
                 None
@@ -343,12 +343,12 @@ impl Certificates {
 
         if existing.is_empty() {
             let end_note = if missing.len() == 1 {
-                "The directory does not exist."
+                "The directory does not exist"
             } else {
-                "The entries do not exist."
+                "The entries do not exist"
             };
             warn_user_once!(
-                "Ignoring invalid `SSL_CERT_DIR`. {end_note}: {}.",
+                "Invalid `SSL_CERT_DIR`. {end_note}: {}. No default certificates will be trusted.",
                 missing
                     .iter()
                     .map(Simplified::simplified_display)
@@ -394,7 +394,7 @@ impl Certificates {
             // Unlike `SSL_CERT_FILE`, it's plausible for this to be intentionally set to an
             // empty directory that a user _could_ put certificates in.
             warn!(
-                "Ignoring `SSL_CERT_DIR`. No valid certificates found in: {}.",
+                "No valid certificates found in `SSL_CERT_DIR`: {}. No default certificates will be trusted.",
                 existing
                     .iter()
                     .map(Simplified::simplified_display)
