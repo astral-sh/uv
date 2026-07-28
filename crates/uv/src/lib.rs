@@ -32,7 +32,7 @@ use uv_cli::{
     PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
     WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
-use uv_client::{BaseClientBuilder, Certificates};
+use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
@@ -67,6 +67,29 @@ mod install_source;
 mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
+
+/// Construct the shared HTTP client builder from the resolved global settings.
+pub(crate) fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
+    let client_builder = BaseClientBuilder::new(
+        globals.network_settings.connectivity,
+        globals.network_settings.system_certs,
+        globals.network_settings.allow_insecure_host.clone(),
+        globals.preview,
+        globals.network_settings.read_timeout,
+        globals.network_settings.connect_timeout,
+        globals.network_settings.retries,
+    )
+    .cache_read_concurrency(globals.concurrency.cache_reads)
+    .http_proxy(globals.network_settings.http_proxy.clone())
+    .https_proxy(globals.network_settings.https_proxy.clone())
+    .no_proxy(globals.network_settings.no_proxy.clone());
+
+    if let Some(certificates) = &globals.network_settings.custom_certificates {
+        client_builder.custom_certificates(certificates.clone())
+    } else {
+        client_builder
+    }
+}
 
 /// Whether to initialize process-global state.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -461,11 +484,17 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         .map(FilesystemOptions::from)
         .combine(filesystem);
 
+    let custom_certificate_file = match &*cli.command {
+        Commands::Pip(PipNamespace { cert, .. }) => cert.as_deref(),
+        _ => None,
+    };
+
     // Resolve the global settings.
     let globals = GlobalSettings::resolve(
         &cli.top_level.global_args,
         filesystem.as_ref(),
         &environment,
+        custom_certificate_file,
     )?;
 
     if global_initialization.needs_initialization() {
@@ -607,37 +636,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         WorkspaceCache::default()
     };
 
-    // Configure custom CA certificates from `--cert` or from the environment (`SSL_CERT_FILE` and
-    // `SSL_CERT_DIR`).
-    // Like pip, an explicit certificate bundle overrides the environment certificate sources.
-    let custom_certificates = if let Commands::Pip(PipNamespace {
-        cert: Some(cert), ..
-    }) = &*cli.command
-    {
-        Some(Certificates::from_file(cert)?)
-    } else {
-        Certificates::from_env()
-    };
-
     // Configure the global network settings.
-    let client_builder = BaseClientBuilder::new(
-        globals.network_settings.connectivity,
-        globals.network_settings.system_certs,
-        globals.network_settings.allow_insecure_host.clone(),
-        globals.preview,
-        globals.network_settings.read_timeout,
-        globals.network_settings.connect_timeout,
-        globals.network_settings.retries,
-    )
-    .cache_read_concurrency(globals.concurrency.cache_reads)
-    .http_proxy(globals.network_settings.http_proxy.clone())
-    .https_proxy(globals.network_settings.https_proxy.clone())
-    .no_proxy(globals.network_settings.no_proxy.clone());
-    let client_builder = if let Some(certificates) = custom_certificates {
-        client_builder.custom_certificates(certificates)
-    } else {
-        client_builder
-    };
+    let client_builder = base_client_builder(&globals);
 
     match *cli.command {
         Commands::Auth(AuthNamespace {

@@ -1,7 +1,7 @@
 use std::env::VarError;
 use std::fmt;
 use std::num::NonZeroUsize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 use std::str::FromStr;
 use std::time::Duration;
@@ -32,7 +32,7 @@ use uv_cli::{
         resolver_installer_options, resolver_options,
     },
 };
-use uv_client::Connectivity;
+use uv_client::{Certificates, Connectivity};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode, DryRun, EditableMode,
     EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode,
@@ -98,8 +98,10 @@ impl GlobalSettings {
         args: &GlobalArgs,
         workspace: Option<&FilesystemOptions>,
         environment: &EnvironmentOptions,
+        custom_certificate_file: Option<&Path>,
     ) -> anyhow::Result<Self> {
-        let network_settings = NetworkSettings::resolve(args, workspace, environment)?;
+        let network_settings =
+            NetworkSettings::resolve(args, workspace, environment, custom_certificate_file)?;
         let python_preference = resolve_python_preference(args, workspace, environment)?;
         let color = resolve_color(args);
         Ok(Self {
@@ -273,6 +275,7 @@ pub(crate) struct NetworkSettings {
     pub(super) connectivity: Connectivity,
     pub(super) offline: Flag,
     pub(super) system_certs: bool,
+    pub(super) custom_certificates: Option<Certificates>,
     pub(super) http_proxy: Option<ProxyUrl>,
     pub(super) https_proxy: Option<ProxyUrl>,
     pub(super) no_proxy: Option<Vec<String>>,
@@ -288,6 +291,7 @@ impl NetworkSettings {
         args: &GlobalArgs,
         workspace: Option<&FilesystemOptions>,
         environment: &EnvironmentOptions,
+        custom_certificate_file: Option<&Path>,
     ) -> anyhow::Result<Self> {
         // Resolve offline flag from CLI, environment variable, and workspace config.
         // Precedence: CLI > Env var > Workspace config > default (false).
@@ -388,10 +392,16 @@ impl NetworkSettings {
         let https_proxy = workspace.and_then(|workspace| workspace.globals.https_proxy.clone());
         let no_proxy = workspace.and_then(|workspace| workspace.globals.no_proxy.clone());
 
+        let custom_certificates = custom_certificate_file
+            .map(Certificates::from_file)
+            .transpose()?
+            .or_else(Certificates::from_env);
+
         Ok(Self {
             connectivity,
             offline,
             system_certs,
+            custom_certificates,
             http_proxy,
             https_proxy,
             no_proxy,

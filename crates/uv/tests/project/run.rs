@@ -4642,6 +4642,27 @@ fn run_remote_pep723_script() {
 }
 
 #[test]
+fn run_remote_pep723_script_with_nonexistent_ssl_cert_file() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py")
+        .arg(EnvVars::CI)
+        .env(EnvVars::SSL_CERT_FILE, context.temp_dir.join("missing.pem"))
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env_remove(EnvVars::SSL_CERT_DIR)
+        .env_remove(EnvVars::UV_NATIVE_TLS)
+        .env_remove(EnvVars::UV_SYSTEM_CERTS), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Invalid `SSL_CERT_FILE`. Path does not exist: [TEMP_DIR]/missing.pem. No default certificates will be trusted.
+    error: error sending request for url (https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py)
+      Caused by: client error (Connect)
+      Caused by: invalid peer certificate: UnknownIssuer
+    ");
+}
+
+#[test]
 fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

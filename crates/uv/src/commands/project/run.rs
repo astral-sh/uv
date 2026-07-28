@@ -49,6 +49,7 @@ use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
+use crate::base_client_builder;
 use crate::child::run_to_completion;
 
 /// GitHub Gist API response structure
@@ -1472,19 +1473,8 @@ impl ParsedRunCommand {
                 Ok((script, run_command))
             }
             Self::PendingRemote(remote_command) => {
-                let settings = GlobalSettings::resolve(global_args, filesystem, environment)?;
-                let client_builder = BaseClientBuilder::new(
-                    settings.network_settings.connectivity,
-                    settings.network_settings.system_certs,
-                    settings.network_settings.allow_insecure_host,
-                    settings.preview,
-                    settings.network_settings.read_timeout,
-                    settings.network_settings.connect_timeout,
-                    settings.network_settings.retries,
-                )
-                .http_proxy(settings.network_settings.http_proxy)
-                .https_proxy(settings.network_settings.https_proxy)
-                .no_proxy(settings.network_settings.no_proxy);
+                let settings = GlobalSettings::resolve(global_args, filesystem, environment, None)?;
+                let client_builder = base_client_builder(&settings);
 
                 let (url, downloaded_script, args) =
                     remote_command.download(&client_builder).await?;
