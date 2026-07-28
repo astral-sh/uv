@@ -55,9 +55,8 @@ build-backend = "uv_build"
   Hello from example!
   ```
 
-  Existing projects are unaffected. You can opt out of the new layout with
-  `uv init --no-package example` or `uv init --app example`, which create the previous flat layout
-  without a build system.
+  Existing projects are unaffected. Use `uv init --no-package example` to create the previous flat
+  layout without a build system.
 
 - **Reject unsupported source distribution and wheel archive formats**
   ([#18927](https://github.com/astral-sh/uv/pull/18927))
@@ -339,11 +338,11 @@ build-backend = "uv_build"
   ([#19197](https://github.com/astral-sh/uv/pull/19197))
 
   `uv init` now defines a build system using `uv_build`, places application source code in a `src`
-  directory, and includes a command-line entry point by default. Existing projects are unaffected,
-  and `uv init --no-package` or `uv init --app` retains a flat layout without a build system.
+  directory, and includes a command-line entry point by default. Existing projects are unaffected.
+  Use `uv init --no-package` to create a flat layout without a build system.
 
   See the
-  [project creation documentation](https://docs.astral.sh/uv/concepts/projects/init/#packaged-applications)
+  [project creation documentation](https://docs.astral.sh/uv/concepts/projects/init/#applications)
   for more details.
 
 - **Script-relative project and workspace discovery**
