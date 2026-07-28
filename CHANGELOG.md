@@ -11,11 +11,7 @@ Since we released uv [0.11.0](https://github.com/astral-sh/uv/releases/tag/0.11.
 
 **We expect most users to be able to upgrade without making changes.**
 
-There are no breaking changes to the configuration of the [uv build backend](https://docs.astral.sh/uv/concepts/build-backend/). If your `[build-system]` table includes an upper bound on `uv_build`, update it from `<0.12` to `<0.13` to allow `uv_build` 0.12:
-
-```toml
-requires = ["uv_build>=0.11.32,<0.13"]
-```
+There are no breaking changes to the configuration of the [uv build backend](https://docs.astral.sh/uv/concepts/build-backend/). If your `[build-system]` table includes an upper bound on `uv_build`, update it to allow `uv_build` 0.12, e.g., `uv_build>=0.11.32,<0.13`.
 
 ### Breaking changes
 
