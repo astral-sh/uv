@@ -125,7 +125,7 @@ build-backend = "uv_build"
   The old `if-necessary-or-explicit` mode distinguished between explicitly requested pre-releases
   and packages with no stable releases. That distinction is unnecessary now that `if-necessary`
   handles both cases, including transitive requirements. The old name remains available as an alias
-  but emits a deprecation warning and will be removed in a future release. Replace
+  but is deprecated and will be removed in a future release. Replace
   `--prerelease if-necessary-or-explicit` with `--prerelease if-necessary`, and update any
   corresponding `prerelease` configuration values.
 
