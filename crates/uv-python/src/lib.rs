@@ -206,6 +206,9 @@ mod tests {
     use std::{
         env,
         ffi::{OsStr, OsString},
+        fs::Permissions,
+        io,
+        os::unix::fs::PermissionsExt,
         path::{Path, PathBuf},
         str::FromStr,
     };
@@ -2252,6 +2255,65 @@ mod tests {
             matches!(result, Err(PythonNotFound { .. })),
             "We should not find an python; got {result:?}"
         );
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn find_python_does_not_traverse_broken_child_virtualenv() -> Result<()> {
+        let context = TestContext::new()?;
+
+        let parent_venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(&parent_venv, "3.12.0")?;
+        let child_venv = context.workdir.child(".venv");
+        fs_err::os::unix::fs::symlink(context.workdir.child("missing"), &child_venv)?;
+
+        let result = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::OnlyVirtual,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        });
+        assert!(
+            matches!(
+                &result,
+                Err(discovery::Error::VirtualEnv(
+                    crate::virtualenv::Error::MissingPyVenvCfg(path)
+                )) if path == child_venv.path()
+            ),
+            "A broken symlink at `.venv` should be eagerly rejected; got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_propagates_virtualenv_metadata_errors() -> Result<()> {
+        let context = TestContext::new()?;
+
+        let permissions = fs_err::metadata(&context.workdir)?.permissions();
+        fs_err::set_permissions(&context.workdir, Permissions::from_mode(0o000))?;
+        let result = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::OnlyVirtual,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        });
+        fs_err::set_permissions(&context.workdir, permissions)?;
+
+        assert!(
+            matches!(
+                &result,
+                Err(discovery::Error::VirtualEnv(crate::virtualenv::Error::Io(error)))
+                    if error.kind() == io::ErrorKind::PermissionDenied
+            ),
+            "A virtual environment metadata error should not be ignored; got {result:?}"
+        );
+
         Ok(())
     }
 
