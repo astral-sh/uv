@@ -3275,6 +3275,8 @@ pub struct InitArgs {
     /// Create a project for an application.
     ///
     /// This project kind is for web servers, scripts, and command-line interfaces.
+    ///
+    /// Applications are packaged by default. Use `--no-package` to create an unpackaged application.
     #[arg(long, alias = "application", conflicts_with_all = ["lib", "script"])]
     pub r#app: bool,
 
