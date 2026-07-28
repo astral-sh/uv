@@ -1,6 +1,7 @@
 use std::process::Command;
 
 use assert_fs::prelude::*;
+use url::Url;
 use uv_static::EnvVars;
 
 use uv_test::{capture_uv_snapshot, diff_uv_snapshot, uv_snapshot};
@@ -2826,6 +2827,160 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     ...
     "#
     );
+
+    Ok(())
+}
+
+/// Resolve relative CLI indexes and find-links against the directory selected by `--directory`.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_relative_indexes_with_directory() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("project").create_dir_all()?;
+
+    // Add a configured index to ensure `--directory` does not rebase it.
+    let config_directory = context.temp_dir.child("configuration");
+    config_directory.create_dir_all()?;
+    let config_file = config_directory.child("uv.toml");
+    config_file.write_str(indoc::indoc! {r#"
+        [[index]]
+        name = "configured"
+        url = "./configured-index"
+    "#})?;
+
+    let absolute_index = context.temp_dir.child("absolute-index");
+    let absolute_find_links = context.temp_dir.child("absolute-find-links");
+    let file_url = Url::from_directory_path(context.temp_dir.child("file-index").path()).unwrap();
+
+    let show_settings = || {
+        let mut command = add_shared_args(context.pip_install());
+        command
+            .arg("tqdm")
+            .arg("--offline")
+            .arg("--config-file")
+            .arg(config_file.path())
+            .arg("--show-settings")
+            .arg("--index=index")
+            .arg("--index=local=./named-index")
+            .arg("--default-index=./default-index")
+            .arg("--index-url=./legacy-index")
+            .arg("--extra-index-url=./extra-index")
+            .arg("--find-links=./find-links")
+            .arg("--find-links")
+            .arg(absolute_find_links.path())
+            .arg("--index=https://test.pypi.org/simple")
+            .arg("--index")
+            .arg(absolute_index.path())
+            .arg("--index")
+            .arg(file_url.as_str());
+        command
+    };
+
+    // Capture CLI index paths before changing directories.
+    let original_directory = capture_uv_snapshot!(context.filters(), show_settings());
+
+    // Only relative CLI indexes and find-links should move into `project`.
+    diff_uv_snapshot!(context.filters(), &original_directory, show_settings()
+        .arg("--directory")
+        .arg("project"), @r#"
+    ...
+                                     password: None,
+                                     host: None,
+                                     port: None,
+    -                                path: "[TEMP_DIR]/default-index",
+    +                                path: "[TEMP_DIR]/project/default-index",
+                                     query: None,
+                                     fragment: None,
+                                 },
+    ...
+                                     password: None,
+                                     host: None,
+                                     port: None,
+    -                                path: "[TEMP_DIR]/index",
+    +                                path: "[TEMP_DIR]/project/index",
+                                     query: None,
+                                     fragment: None,
+                                 },
+    ...
+                                     password: None,
+                                     host: None,
+                                     port: None,
+    -                                path: "[TEMP_DIR]/named-index",
+    +                                path: "[TEMP_DIR]/project/named-index",
+                                     query: None,
+                                     fragment: None,
+                                 },
+    ...
+                                     password: None,
+                                     host: None,
+                                     port: None,
+    -                                path: "[TEMP_DIR]/extra-index",
+    +                                path: "[TEMP_DIR]/project/extra-index",
+                                     query: None,
+                                     fragment: None,
+                                 },
+    ...
+                                     password: None,
+                                     host: None,
+                                     port: None,
+    -                                path: "[TEMP_DIR]/legacy-index",
+    +                                path: "[TEMP_DIR]/project/legacy-index",
+                                     query: None,
+                                     fragment: None,
+                                 },
+    ...
+                                     password: None,
+                                     host: None,
+                                     port: None,
+    -                                path: "[TEMP_DIR]/find-links",
+    +                                path: "[TEMP_DIR]/project/find-links",
+                                     query: None,
+                                     fragment: None,
+                                 },
+    ...
+    "#);
+
+    let show_project_settings = || {
+        let mut command = add_shared_args(context.add());
+        command
+            .arg("tqdm")
+            .arg("--offline")
+            .arg("--config-file")
+            .arg(config_file.path())
+            .arg("--show-settings")
+            .arg("--index=local=./project-index");
+        command
+    };
+
+    let original_directory = capture_uv_snapshot!(context.filters(), show_project_settings());
+
+    // Project commands rebase indexes through a separate settings path.
+    diff_uv_snapshot!(context.filters(), &original_directory, show_project_settings()
+        .arg("--directory")
+        .arg("project"), @r#"
+    ...
+                             password: None,
+                             host: None,
+                             port: None,
+    -                        path: "[TEMP_DIR]/project-index",
+    +                        path: "[TEMP_DIR]/project/project-index",
+                             query: None,
+                             fragment: None,
+                         },
+    ...
+                                         password: None,
+                                         host: None,
+                                         port: None,
+    -                                    path: "[TEMP_DIR]/project-index",
+    +                                    path: "[TEMP_DIR]/project/project-index",
+                                         query: None,
+                                         fragment: None,
+                                     },
+    ...
+    "#);
 
     Ok(())
 }
