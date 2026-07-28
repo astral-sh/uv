@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Remove superseded workspace artifacts without discarding reusable dependencies."""
 
 from __future__ import annotations
