@@ -6,10 +6,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use owo_colors::OwoColorize;
+use thiserror::Error;
 use uv_cache::Cache;
 use uv_fs::{CWD, Simplified, ValidatedReader, is_virtualenv_base, normalize_path};
 use uv_preview::{Preview, PreviewFeature};
-use uv_scripts::Pep723Metadata;
+use uv_scripts::{Pep723Error, Pep723Metadata};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -42,7 +43,16 @@ pub(crate) async fn list(
     .await?;
 
     if scripts {
-        for script in find_scripts(workspace.install_path(), cache)? {
+        let mut scripts = find_scripts(workspace.install_path(), cache)
+            .collect::<Result<Vec<_>, _>>()
+            .with_context(|| {
+                format!(
+                    "Failed to discover PEP 723 scripts under workspace root `{}`",
+                    workspace.install_path().simplified_display()
+                )
+            })?;
+        scripts.sort_unstable();
+        for script in scripts {
             let script = script
                 .strip_prefix(workspace.install_path())
                 .context("PEP 723 script was discovered outside the workspace root")?;
@@ -66,11 +76,37 @@ pub(crate) async fn list(
     Ok(ExitStatus::Success)
 }
 
+/// A failure encountered while discovering PEP 723 scripts.
+#[derive(Debug, Error)]
+pub(crate) enum ScriptDiscoveryError {
+    /// The workspace could not be traversed.
+    #[error("Failed to walk workspace while discovering PEP 723 scripts")]
+    Walk(#[source] ignore::Error),
+    /// A candidate script could not be read.
+    #[error("Failed to read candidate PEP 723 script: {}", path.simplified_display())]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    /// A candidate script contains invalid PEP 723 metadata.
+    #[error("Failed to parse PEP 723 script: {}", path.simplified_display())]
+    Parse {
+        path: PathBuf,
+        #[source]
+        source: Pep723Error,
+    },
+}
+
 /// Find PEP 723 scripts under a workspace root.
 ///
 /// Respects ignore files and excludes repository internals, virtual environments, and the uv cache
-/// from traversal.
-pub(crate) fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
+/// from traversal. Script-specific errors are returned individually so callers can decide whether
+/// invalid candidates should fail discovery.
+pub(crate) fn find_scripts(
+    workspace_root: &Path,
+    cache: &Cache,
+) -> impl Iterator<Item = Result<PathBuf, ScriptDiscoveryError>> {
     // Avoid descending into the cache when it is inside the workspace. If the workspace itself is
     // inside the cache, it is still the requested search root and must not be excluded.
     let cache_root = if cache.root().is_absolute() {
@@ -122,43 +158,38 @@ pub(crate) fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<P
             // handled too.
             !is_virtualenv_base(path)
         });
-    let walker = builder.build();
-
-    let mut scripts = Vec::new();
-    for entry in walker {
-        let entry = entry.context("Failed to walk workspace while discovering PEP 723 scripts")?;
+    builder.build().filter_map(|entry| {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(source) => return Some(Err(ScriptDiscoveryError::Walk(source))),
+        };
         if !entry
             .file_type()
             .is_some_and(|file_type| file_type.is_file())
             || !is_python_script_path(entry.path())
         {
-            continue;
+            return None;
         }
 
-        let Some(contents) = read_script_candidate(entry.path()).with_context(|| {
-            format!(
-                "Failed to read candidate PEP 723 script: {}",
-                entry.path().simplified_display()
-            )
-        })?
-        else {
-            continue;
+        let contents = match read_script_candidate(entry.path()) {
+            Ok(Some(contents)) => contents,
+            Ok(None) => return None,
+            Err(source) => {
+                return Some(Err(ScriptDiscoveryError::Read {
+                    path: entry.into_path(),
+                    source,
+                }));
+            }
         };
-        if Pep723Metadata::parse(&contents)
-            .with_context(|| {
-                format!(
-                    "Failed to parse PEP 723 script: {}",
-                    entry.path().simplified_display()
-                )
-            })?
-            .is_some()
-        {
-            scripts.push(entry.into_path());
+        match Pep723Metadata::parse(&contents) {
+            Ok(Some(_)) => Some(Ok(entry.into_path())),
+            Ok(None) => None,
+            Err(source) => Some(Err(ScriptDiscoveryError::Parse {
+                path: entry.into_path(),
+                source,
+            })),
         }
-    }
-
-    scripts.sort_unstable();
-    Ok(scripts)
+    })
 }
 
 /// Read a candidate script.
