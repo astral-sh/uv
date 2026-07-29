@@ -24,7 +24,9 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallTarget, Override, Overrides, PackageOverride,
     ScopedOverrideSourceError,
 };
-use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
+use uv_distribution::{
+    DistributionDatabase, FlatRequiresDist, Metadata as DistributionMetadata, RequiresDist,
+};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
@@ -44,23 +46,20 @@ use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, VersionOrUrl,
-    split_scheme,
+    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
 };
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
-    ConflictItem, ConflictKindRef, Conflicts, DependencyGroupSpecifier, HashAlgorithm, HashDigest,
-    HashDigests, Hashes, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
-    VerbatimParsedUrl,
+    ConflictItem, ConflictKindRef, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::{Source as WorkspaceSource, Sources as WorkspaceSources};
 use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
@@ -2544,157 +2543,10 @@ impl Lock {
                 let Some(source_tree) = package.id.source.as_source_tree() else {
                     continue;
                 };
-                if Self::source_tree_requires_dist(source_tree, root, package, database)
-                    .await?
-                    .is_some()
+                if let Some(SourceTreeRequiresDist { metadata, .. }) =
+                    Self::source_tree_requires_dist(source_tree, root, package, database).await?
                 {
-                    continue;
-                }
-                let package_root = root.join(source_tree);
-
-                let HashedDist { dist, .. } =
-                    package.to_dist(root, TagPolicy::Preferred(tags), build_options, markers)?;
-                let id = dist.distribution_id();
-                let metadata = if let Some(archive) = index
-                    .distributions()
-                    .get(&id)
-                    .as_deref()
-                    .and_then(|response| {
-                        if let MetadataResponse::Found(archive, ..) = response {
-                            Some(archive)
-                        } else {
-                            None
-                        }
-                    }) {
-                    archive.metadata.clone()
-                } else {
-                    let archive = database
-                        .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
-                        .await
-                        .map_err(|err| LockErrorKind::Resolution {
-                            id: package.id.clone(),
-                            err,
-                        })?;
-                    let metadata = archive.metadata.clone();
-                    index
-                        .distributions()
-                        .done(id, Arc::new(MetadataResponse::Found(archive)));
-                    metadata
-                };
-
-                let mut direct_requirements = metadata.requires_dist.into_vec();
-                if !package.resolved_dependency_groups().is_empty() {
-                    let dependency_groups = database
-                        .dependency_groups(&package_root)
-                        .await
-                        .map_err(|err| LockErrorKind::Resolution {
-                            id: package.id.clone(),
-                            err,
-                        })?;
-                    direct_requirements.extend(
-                        dependency_groups
-                            .dependency_groups
-                            .into_values()
-                            .flat_map(<[Requirement]>::into_vec),
-                    );
-                }
-
-                add_source_requirements(package, direct_requirements)?;
-            }
-
-            for member in packages.values() {
-                let has_direct_production_requirements = member
-                    .project()
-                    .dependencies
-                    .iter()
-                    .flatten()
-                    .any(|requirement| requirement.contains('@'));
-                let has_direct_optional_requirements = member
-                    .project()
-                    .optional_dependencies
-                    .iter()
-                    .flat_map(|extras| extras.values())
-                    .flatten()
-                    .any(|requirement| requirement.contains('@'));
-                let has_direct_group_requirements = member
-                    .pyproject_toml()
-                    .dependency_groups
-                    .iter()
-                    .flatten()
-                    .flat_map(|(_, requirements)| requirements)
-                    .any(|requirement| {
-                        matches!(
-                            requirement,
-                            DependencyGroupSpecifier::Requirement(requirement)
-                                if requirement.contains('@')
-                        )
-                    });
-                let has_direct_dev_requirements = member
-                    .pyproject_toml()
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.dev_dependencies.as_ref())
-                    .is_some_and(|requirements| {
-                        requirements.iter().any(|requirement| {
-                            matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_)))
-                        })
-                    });
-                let has_direct_sources = member
-                    .pyproject_toml()
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.sources.as_ref())
-                    .is_some_and(|sources| {
-                        sources
-                            .inner()
-                            .values()
-                            .flat_map(WorkspaceSources::iter)
-                            .any(|source| {
-                                matches!(
-                                    source,
-                                    WorkspaceSource::Git { .. }
-                                        | WorkspaceSource::Url { .. }
-                                        | WorkspaceSource::Path { .. }
-                                )
-                            })
-                    });
-                if !has_direct_production_requirements
-                    && !has_direct_optional_requirements
-                    && !has_direct_group_requirements
-                    && !has_direct_dev_requirements
-                    && !has_direct_sources
-                {
-                    continue;
-                }
-
-                let Some(package) = self.find_by_name(&member.project().name).ok().flatten() else {
-                    continue;
-                };
-                let direct_requirements = if has_direct_sources
-                    || has_direct_optional_requirements
-                    || has_direct_group_requirements
-                    || has_direct_dev_requirements
-                {
-                    let path = member.root().join("pyproject.toml");
-                    let pyproject_toml =
-                        PyProjectToml::from_toml(&member.pyproject_toml().raw, path.user_display())
-                            .map_err(|err| LockErrorKind::InvalidPyprojectToml {
-                                path: path.clone(),
-                                err,
-                            })?;
-                    let Some(metadata) = database
-                        .requires_dist(member.root(), &pyproject_toml)
-                        .await
-                        .map_err(|err| LockErrorKind::Resolution {
-                            id: package.id.clone(),
-                            err,
-                        })?
-                    else {
-                        continue;
-                    };
-                    metadata
+                    let direct_requirements = metadata
                         .requires_dist
                         .into_vec()
                         .into_iter()
@@ -2704,59 +2556,22 @@ impl Lock {
                                 .into_values()
                                 .flat_map(<[Requirement]>::into_vec),
                         )
-                        .collect()
-                } else {
-                    member
-                        .project()
-                        .dependencies
-                        .iter()
-                        .flatten()
-                        .filter(|requirement| requirement.contains('@'))
-                        .filter_map(|requirement| {
-                            uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(requirement).ok()
-                        })
-                        .map(Requirement::from)
-                        .collect()
-                };
-                add_source_requirements(package, direct_requirements)?;
-            }
-
-            for package in &self.packages {
-                if packages.contains_key(&package.id.name) {
+                        .collect();
+                    add_source_requirements(package, direct_requirements)?;
                     continue;
                 }
 
-                let Some(source_tree) = package.id.source.as_source_tree() else {
-                    continue;
-                };
-                let package_root = root.join(source_tree);
-                let path = package_root.join("pyproject.toml");
-                let contents = match fs_err::tokio::read_to_string(&path).await {
-                    Ok(contents) => contents,
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
-                    Err(err) => {
-                        return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
-                    }
-                };
-                if !contents.contains('@') && !contents.contains("sources") {
-                    continue;
-                }
-
-                let pyproject_toml = PyProjectToml::from_toml(&contents, path.user_display())
-                    .map_err(|err| LockErrorKind::InvalidPyprojectToml {
-                        path: path.clone(),
-                        err,
-                    })?;
-                let Some(metadata) = database
-                    .requires_dist(&package_root, &pyproject_toml)
-                    .await
-                    .map_err(|err| LockErrorKind::Resolution {
-                        id: package.id.clone(),
-                        err,
-                    })?
-                else {
-                    continue;
-                };
+                let metadata = Self::package_metadata(
+                    package,
+                    root,
+                    tags,
+                    markers,
+                    build_options,
+                    hasher,
+                    index,
+                    database,
+                )
+                .await?;
                 let direct_requirements = metadata
                     .requires_dist
                     .into_vec()
@@ -3081,50 +2896,17 @@ impl Lock {
                 if !statically_satisfied {
                     // For a non-dynamic package without usable static metadata, fetch the metadata
                     // from the distribution database.
-                    let HashedDist { dist, .. } = package.to_dist(
+                    let metadata = Self::package_metadata(
+                        package,
                         root,
-                        TagPolicy::Preferred(tags),
-                        build_options,
+                        tags,
                         markers,
-                    )?;
-
-                    let metadata = {
-                        let id = dist.distribution_id();
-                        if let Some(archive) =
-                            index
-                                .distributions()
-                                .get(&id)
-                                .as_deref()
-                                .and_then(|response| {
-                                    if let MetadataResponse::Found(archive, ..) = response {
-                                        Some(archive)
-                                    } else {
-                                        None
-                                    }
-                                })
-                        {
-                            // If the metadata is already in the index, return it.
-                            archive.metadata.clone()
-                        } else {
-                            // Run the PEP 517 build process to extract metadata from the source distribution.
-                            let archive = database
-                                .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
-                                .await
-                                .map_err(|err| LockErrorKind::Resolution {
-                                    id: package.id.clone(),
-                                    err,
-                                })?;
-
-                            let metadata = archive.metadata.clone();
-
-                            // Insert the metadata into the index.
-                            index
-                                .distributions()
-                                .done(id, Arc::new(MetadataResponse::Found(archive)));
-
-                            metadata
-                        }
-                    };
+                        build_options,
+                        hasher,
+                        index,
+                        database,
+                    )
+                    .await?;
 
                     // If this is a local package, validate that it hasn't become dynamic (in which
                     // case, we'd expect the version to be omitted).
@@ -3245,50 +3027,17 @@ impl Lock {
                 // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
                 // extras, while `setuptools` will not.
                 if !satisfied {
-                    let HashedDist { dist, .. } = package.to_dist(
+                    let metadata = Self::package_metadata(
+                        package,
                         root,
-                        TagPolicy::Preferred(tags),
-                        build_options,
+                        tags,
                         markers,
-                    )?;
-
-                    let metadata = {
-                        let id = dist.distribution_id();
-                        if let Some(archive) =
-                            index
-                                .distributions()
-                                .get(&id)
-                                .as_deref()
-                                .and_then(|response| {
-                                    if let MetadataResponse::Found(archive, ..) = response {
-                                        Some(archive)
-                                    } else {
-                                        None
-                                    }
-                                })
-                        {
-                            // If the metadata is already in the index, return it.
-                            archive.metadata.clone()
-                        } else {
-                            // Run the PEP 517 build process to extract metadata from the source distribution.
-                            let archive = database
-                                .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
-                                .await
-                                .map_err(|err| LockErrorKind::Resolution {
-                                    id: package.id.clone(),
-                                    err,
-                                })?;
-
-                            let metadata = archive.metadata.clone();
-
-                            // Insert the metadata into the index.
-                            index
-                                .distributions()
-                                .done(id, Arc::new(MetadataResponse::Found(archive)));
-
-                            metadata
-                        }
-                    };
+                        build_options,
+                        hasher,
+                        index,
+                        database,
+                    )
+                    .await?;
 
                     // Validate that the package is still dynamic.
                     if !metadata.dynamic {
@@ -3351,6 +3100,49 @@ impl Lock {
         }
 
         Ok(SatisfiesResult::Satisfied)
+    }
+
+    /// Read the current metadata for a locked package, reusing the resolver's in-memory cache.
+    async fn package_metadata<Context: BuildContext>(
+        package: &Package,
+        root: &Path,
+        tags: &Tags,
+        markers: &MarkerEnvironment,
+        build_options: &BuildOptions,
+        hasher: &HashStrategy,
+        index: &InMemoryIndex,
+        database: &DistributionDatabase<'_, Context>,
+    ) -> Result<DistributionMetadata, LockError> {
+        let HashedDist { dist, .. } =
+            package.to_dist(root, TagPolicy::Preferred(tags), build_options, markers)?;
+        let id = dist.distribution_id();
+        if let Some(archive) = index
+            .distributions()
+            .get(&id)
+            .as_deref()
+            .and_then(|response| {
+                if let MetadataResponse::Found(archive, ..) = response {
+                    Some(archive)
+                } else {
+                    None
+                }
+            })
+        {
+            return Ok(archive.metadata.clone());
+        }
+
+        let archive = database
+            .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+            .await
+            .map_err(|err| LockErrorKind::Resolution {
+                id: package.id.clone(),
+                err,
+            })?;
+        let metadata = archive.metadata.clone();
+        index
+            .distributions()
+            .done(id, Arc::new(MetadataResponse::Found(archive)));
+        Ok(metadata)
     }
 
     async fn source_tree_requires_dist<Context: BuildContext>(
