@@ -7451,6 +7451,66 @@ fn find_links() {
     );
 }
 
+/// Install from a local `--find-links` HTML file containing a relative wheel URL.
+#[test]
+fn find_links_local_html() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel_filename = "tqdm-1000.0.0-py3-none-any.whl";
+
+    let links = context.temp_dir.child("links");
+    let wheels = links.child("wheels");
+    wheels.create_dir_all()?;
+    fs::copy(
+        context
+            .workspace_root
+            .join("test/links")
+            .join(wheel_filename),
+        wheels.child(wheel_filename).path(),
+    )?;
+
+    let index = links.child("index.html");
+    index.write_str(&format!(
+        r#"<a href="wheels/{wheel_filename}">{wheel_filename}</a>"#
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(index.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [[tool.uv.index]]
+        name = "local"
+        url = "./links/index.html"
+        format = "flat"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm==1000.0.0")
+        .arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ tqdm==1000.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Install the latest version across multiple `--find-links` directories.
 #[test]
 fn find_links_multiple() -> Result<()> {
