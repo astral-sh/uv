@@ -94,14 +94,15 @@ impl Urls {
     /// Return an iterator over the allowed URLs for the given package.
     ///
     /// If we have a URL override, apply it unconditionally for registry and URL requirements.
-    /// Otherwise, URL requirements must either already be allowed or originate from another
-    /// direct URL dependency. Registry requirements without an override return an empty iterator.
+    /// Otherwise, there are two case: for a URL requirement (`url` isn't `None`), check that the
+    /// URL is allowed and return its canonical form.
+    ///
+    /// For registry requirements, we return an empty iterator.
     pub(crate) fn get_url<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         name: &'a PackageName,
         url: Option<&'a VerbatimParsedUrl>,
-        parent_is_url: bool,
         git: &'a GitResolver,
     ) -> Result<impl Iterator<Item = &'a VerbatimParsedUrl>, ResolveError> {
         if self.overrides.contains_key(name) {
@@ -109,11 +110,8 @@ impl Urls {
                 self.overrides.get(name, env).into_iter(),
             )))
         } else if let Some(url) = url {
-            let url = if parent_is_url && self.get_regular(name).is_none() {
-                url
-            } else {
-                self.canonicalize_allowed_url(env, name, git, &url.verbatim, &url.parsed_url)?
-            };
+            let url =
+                self.canonicalize_allowed_url(env, name, git, &url.verbatim, &url.parsed_url)?;
             Ok(Either::Left(Either::Right(std::iter::once(url))))
         } else {
             Ok(Either::Right(std::iter::empty()))

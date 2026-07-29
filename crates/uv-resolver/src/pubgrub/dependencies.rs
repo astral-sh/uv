@@ -6,6 +6,7 @@ use either::Either;
 use uv_distribution_types::{IndexMetadata, Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{
     ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
     ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
@@ -33,14 +34,22 @@ pub(crate) enum DependencySource {
 impl DependencySource {
     /// Derive the edge-local source constraint from a requirement.
     ///
-    /// Registry requirements preserve explicit indexes, while direct URL-like requirements
-    /// preserve their verbatim URL.
+    /// Registry requirements only carry a source here when they are tied to a group-scoped
+    /// explicit index. Direct URL-like requirements always preserve their verbatim URL.
     fn from_requirement(requirement: &Requirement) -> Self {
         match &requirement.source {
-            RequirementSource::Registry { index, .. } => index
-                .clone()
-                .map(Self::ExplicitIndex)
-                .unwrap_or(Self::Unspecified),
+            RequirementSource::Registry { index, .. }
+                if matches!(
+                    requirement.origin.as_ref(),
+                    Some(RequirementOrigin::Group(_, Some(_), _))
+                ) =>
+            {
+                index
+                    .clone()
+                    .map(Self::ExplicitIndex)
+                    .unwrap_or(Self::Unspecified)
+            }
+            RequirementSource::Registry { .. } => Self::Unspecified,
             RequirementSource::Url { .. }
             | RequirementSource::GitDirectory { .. }
             | RequirementSource::GitPath { .. }

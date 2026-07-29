@@ -175,6 +175,36 @@ impl ResolverEnvironment {
         }
     }
 
+    /// Returns whether a marker overlaps the environments and Python versions supported by this
+    /// resolution.
+    ///
+    /// Extras are evaluated by the dependency that requested the marker, so only its platform and
+    /// Python-version conditions are relevant when checking the supported environments.
+    pub fn supports_marker(
+        &self,
+        marker: MarkerTree,
+        python_requirement: &PythonRequirement,
+    ) -> bool {
+        let marker = marker
+            .without_extras()
+            .and(python_requirement.to_marker_tree());
+
+        match &self.kind {
+            Kind::Specific { marker_env } => marker.evaluate(marker_env, &[]),
+            Kind::Universal {
+                initial_forks,
+                markers,
+                ..
+            } => {
+                !marker.is_disjoint(markers.without_extras())
+                    && (initial_forks.is_empty()
+                        || initial_forks
+                            .iter()
+                            .any(|fork| !marker.is_disjoint(fork.without_extras())))
+            }
+        }
+    }
+
     /// Returns `false` only when this environment is a fork and it is disjoint
     /// with the given marker.
     pub(crate) fn included_by_marker(&self, marker: MarkerTree) -> bool {
@@ -182,6 +212,41 @@ impl ResolverEnvironment {
             Kind::Specific { .. } => true,
             Kind::Universal { ref markers, .. } => !markers.is_disjoint(marker),
         }
+    }
+
+    /// Return whether a marker can apply after enforcing this fork's conflict assignments.
+    ///
+    /// Source-tree lookahead publishes inherited conflict predicates directly in its marker. A
+    /// plain marker-intersection check cannot eliminate excluded predicates because conflict
+    /// assignments are stored separately from the platform marker.
+    pub(crate) fn included_by_scoped_marker(&self, marker: MarkerTree) -> bool {
+        let Kind::Universal {
+            markers, include, ..
+        } = &self.kind
+        else {
+            return true;
+        };
+
+        let universal_marker = UniversalMarker::from_combined(marker);
+        if !universal_marker.has_conflict_marker() {
+            return !markers.is_disjoint(marker);
+        }
+
+        let Ok((positive, negative)) = universal_marker.conflict().filter_rules() else {
+            return !markers.is_disjoint(marker);
+        };
+
+        let mut compatible = marker;
+        for item in positive.iter().chain(&negative) {
+            let activation = UniversalMarker::from_conflict_item(item).combined();
+            if !self.included_by_group(item.as_ref()) {
+                compatible = compatible.and(activation.negate());
+            } else if include.contains(item) {
+                compatible = compatible.and(activation);
+            }
+        }
+
+        !markers.is_disjoint(compatible)
     }
 
     /// Returns true if the dependency represented by this forker may be
@@ -755,6 +820,47 @@ mod tests {
     fn python_requirement(python_version_greater_than_equal: &str) -> PythonRequirement {
         let requires_python = requires_python_lower(python_version_greater_than_equal);
         PythonRequirement::from_marker_environment(&MARKER_ENV, requires_python)
+    }
+
+    #[test]
+    fn supports_marker_specific() {
+        let resolver_env =
+            ResolverEnvironment::specific(ResolverMarkerEnvironment::from(MARKER_ENV.clone()));
+        let python_requirement = python_requirement("3.11");
+
+        assert!(
+            resolver_env.supports_marker(marker("sys_platform == 'darwin'"), &python_requirement)
+        );
+        assert!(
+            !resolver_env.supports_marker(marker("sys_platform == 'linux'"), &python_requirement)
+        );
+        assert!(resolver_env.supports_marker(
+            marker("sys_platform == 'darwin' and extra == 'feature'"),
+            &python_requirement,
+        ));
+    }
+
+    #[test]
+    fn supports_marker_universal() {
+        let resolver_env = ResolverEnvironment::universal(vec![marker("sys_platform == 'linux'")]);
+        let python_requirement = python_requirement("3.12");
+
+        assert!(
+            resolver_env.supports_marker(marker("sys_platform == 'linux'"), &python_requirement)
+        );
+        assert!(
+            !resolver_env.supports_marker(marker("sys_platform == 'win32'"), &python_requirement)
+        );
+        assert!(resolver_env.supports_marker(
+            marker("sys_platform == 'linux' and extra == 'feature'"),
+            &python_requirement,
+        ));
+        assert!(
+            !resolver_env.supports_marker(marker("python_version < '3.12'"), &python_requirement)
+        );
+        assert!(
+            resolver_env.supports_marker(marker("python_version >= '3.12'"), &python_requirement)
+        );
     }
 
     /// Tests that narrowing a Python requirement when resolving for a

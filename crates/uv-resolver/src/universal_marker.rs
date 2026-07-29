@@ -6,7 +6,10 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
+use uv_pep508::{
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree,
+    MarkerValueExtra,
+};
 use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
 use crate::ResolveError;
@@ -107,6 +110,55 @@ impl UniversalMarker {
             marker,
             pep508: marker.without_extras(),
         }
+    }
+
+    /// Creates a marker for the activation of a project, extra, or dependency group.
+    pub fn from_conflict_item(item: &ConflictItem) -> Self {
+        Self::new(MarkerTree::TRUE, ConflictMarker::from_conflict_item(item))
+    }
+
+    /// Creates a marker describing all declared project, extra, and dependency-group conflicts.
+    pub fn from_conflicts(conflicts: &Conflicts) -> Self {
+        Self::new(MarkerTree::TRUE, ConflictMarker::from_conflicts(conflicts))
+    }
+
+    /// Scopes conflict-relevant extras in a marker to their declaring package.
+    ///
+    /// Extras belonging to different packages otherwise share the same PEP 508 marker namespace.
+    pub fn from_package_extras(
+        package: &PackageName,
+        marker: MarkerTree,
+        conflicts: &Conflicts,
+    ) -> Self {
+        if marker.is_true() || marker.is_false() {
+            return Self::from_combined(marker);
+        }
+        if conflicts.is_empty() {
+            return Self::from_combined(MarkerTree::TRUE);
+        }
+
+        let mut scoped = MarkerTree::FALSE;
+
+        for conjunction in marker.to_dnf() {
+            let mut branch = MarkerTree::TRUE;
+            for expression in conjunction {
+                let expression = match expression {
+                    MarkerExpression::Extra {
+                        operator,
+                        name: MarkerValueExtra::Extra(extra),
+                    } if conflicts.contains(package, &extra) => MarkerExpression::Extra {
+                        operator,
+                        name: MarkerValueExtra::Extra(encode_package_extra(package, &extra)),
+                    },
+                    MarkerExpression::Extra { .. } => continue,
+                    expression => expression,
+                };
+                branch = branch.and(MarkerTree::expression(expression));
+            }
+            scoped = scoped.or(branch);
+        }
+
+        Self::from_combined(scoped)
     }
 
     /// Combine this universal marker with the one given in a way that unions
@@ -946,6 +998,39 @@ mod tests {
         cm.marker
             .try_to_string()
             .unwrap_or_else(|| "true".to_string())
+    }
+
+    #[test]
+    fn package_extra_markers_are_scoped_to_declaring_package() {
+        let package = create_package("pkg");
+        let marker = MarkerTree::from_str("extra == 'foo'").expect("valid extra marker");
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
+
+        assert_eq!(
+            UniversalMarker::from_package_extras(&package, marker, &conflicts).combined(),
+            MarkerTree::from_str("extra == 'extra-3-pkg-foo'").expect("valid encoded extra marker")
+        );
+        assert!(
+            UniversalMarker::from_package_extras(&package, marker, &Conflicts::empty())
+                .combined()
+                .is_true()
+        );
+        let unrelated = MarkerTree::from_str("extra == 'baz'").expect("valid extra marker");
+        assert!(
+            UniversalMarker::from_package_extras(&package, unrelated, &conflicts)
+                .combined()
+                .is_true()
+        );
+        assert!(
+            UniversalMarker::from_package_extras(&package, MarkerTree::TRUE, &conflicts)
+                .combined()
+                .is_true()
+        );
+        assert!(
+            UniversalMarker::from_package_extras(&package, MarkerTree::FALSE, &conflicts)
+                .combined()
+                .is_false()
+        );
     }
 
     /// This tests the conversion from declared conflicts into a conflict

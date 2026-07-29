@@ -177,6 +177,9 @@ impl Manifest {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
                             })
+                            .map(move |requirement| {
+                                Self::scope_lookahead_requirement(lookahead, requirement)
+                            })
                     })
                     .chain(
                         self.overrides
@@ -279,6 +282,9 @@ impl Manifest {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
                             })
+                            .map(move |requirement| {
+                                Self::scope_lookahead_requirement(lookahead, requirement)
+                            })
                     })
                     .chain(
                         self.overrides
@@ -301,5 +307,22 @@ impl Manifest {
     /// Returns the number of input requirements.
     pub fn num_requirements(&self) -> usize {
         self.requirements.len()
+    }
+
+    /// Carry a source tree's activation environment and conflict scope into its dependencies.
+    fn scope_lookahead_requirement<'a>(
+        lookahead: &RequestedRequirements,
+        requirement: Cow<'a, Requirement>,
+    ) -> Cow<'a, Requirement> {
+        let extras = lookahead.extras();
+        let marker = requirement
+            .marker
+            .simplify_extras(extras)
+            .simplify_not_extras_with(|extra| !extras.contains(extra))
+            .and(lookahead.activation().marker);
+
+        let mut requirement = requirement.into_owned();
+        requirement.marker = marker;
+        Cow::Owned(requirement)
     }
 }

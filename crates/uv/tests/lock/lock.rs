@@ -23,7 +23,7 @@ use uv_test::uv_snapshot;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 #[cfg(feature = "test-universal")]
-use uv_test::{download_to_disk, venv_bin_path};
+use uv_test::{TestContext, download_to_disk, venv_bin_path};
 
 /// Generate the preview lock without package metadata.
 #[cfg(feature = "test-universal")]
@@ -15198,6 +15198,118 @@ fn lock_transitive_extra_path_dependency() -> Result<()> {
     Ok(())
 }
 
+/// Prepare a local source whose nested URL sits behind contradictory ancestor markers.
+#[cfg(feature = "test-universal")]
+fn write_disjoint_ancestor_source_project(
+    context: &TestContext,
+    alpha_marker: &str,
+    charlie_marker: &str,
+) -> Result<()> {
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["alpha ; {alpha_marker}"]
+
+            [tool.uv]
+            package = false
+
+            [tool.uv.sources]
+            alpha = {{ path = "packages/alpha" }}
+        "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("alpha")
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "alpha"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["charlie ; {charlie_marker}"]
+
+            [tool.uv.sources]
+            charlie = {{ path = "../charlie" }}
+        "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("charlie")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "charlie"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["delta"]
+
+            [tool.uv.sources]
+            delta = { path = "../delta" }
+        "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("delta")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "delta"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+
+    Ok(())
+}
+
+/// Register nested URLs even when contradictory platform markers make their parent unreachable.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_disjoint_platform_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_disjoint_ancestor_source_project(
+        &context,
+        "sys_platform != 'linux'",
+        "sys_platform == 'linux'",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Register nested URLs even when contradictory Python markers make their parent unreachable.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_disjoint_python_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_disjoint_ancestor_source_project(
+        &context,
+        "python_version < '3.13'",
+        "python_version >= '3.13'",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Shared local dependencies should be traversed once, including across distinct ancestor markers.
 #[test]
 fn lock_transitive_extra_path_dependency_shared_source_graph() -> Result<()> {
@@ -15322,8 +15434,8 @@ fn lock_transitive_extra_path_dependency_scoped_indexes() -> Result<()> {
         format = "flat"
         explicit = true
     "#,
-            linux_index = context.temp_dir.join("indexes/linux").display(),
-            other_index = context.temp_dir.join("indexes/other").display(),
+            linux_index = context.temp_dir.join("indexes/linux").portable_display(),
+            other_index = context.temp_dir.join("indexes/other").portable_display(),
         })?;
 
     let bridge = context.temp_dir.child("packages").child("bridge");
@@ -15364,7 +15476,7 @@ fn lock_transitive_extra_path_dependency_scoped_indexes() -> Result<()> {
                 format = "flat"
                 explicit = true
             "#,
-                directory = directory.display(),
+                directory = directory.portable_display(),
             })?;
     }
 
@@ -15372,6 +15484,313 @@ fn lock_transitive_extra_path_dependency_scoped_indexes() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Preserve conflicting project-extra scopes on source-specific index requirements.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_conflicting_extra_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .workspace_root
+        .join("test/links/tqdm-1000.0.0-py3-none-any.whl");
+
+    for extra in ["foo", "bar"] {
+        let directory = context.temp_dir.join("indexes").join(extra);
+        fs_err::create_dir_all(&directory)?;
+        fs_err::copy(&wheel, directory.join("tqdm-1000.0.0-py3-none-any.whl"))?;
+    }
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["bridge[feature]", "target"]
+        bar = ["target"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{{ extra = "foo" }}, {{ extra = "bar" }}]]
+
+        [tool.uv.sources]
+        bridge = {{ path = "packages/bridge", extra = "foo" }}
+        target = [
+            {{ path = "packages/target-foo", extra = "foo" }},
+            {{ path = "packages/target-bar", extra = "bar" }},
+        ]
+
+        [[tool.uv.index]]
+        name = "foo"
+        url = "{foo_index}"
+        format = "flat"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "bar"
+        url = "{bar_index}"
+        format = "flat"
+        explicit = true
+    "#,
+            foo_index = context.temp_dir.join("indexes/foo").portable_display(),
+            bar_index = context.temp_dir.join("indexes/bar").portable_display(),
+        })?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("bridge")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "bridge"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = ["target[feature]"]
+        "#})?;
+
+    for extra in ["foo", "bar"] {
+        let directory = context.temp_dir.join("indexes").join(extra);
+        context
+            .temp_dir
+            .child("packages")
+            .child(format!("target-{extra}"))
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+                [project]
+                name = "target"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = ["tqdm"]
+
+                [project.optional-dependencies]
+                feature = []
+
+                [tool.uv.sources]
+                tqdm = {{ index = "{extra}" }}
+
+                [[tool.uv.index]]
+                name = "{extra}"
+                url = "{directory}"
+                format = "flat"
+                explicit = true
+            "#,
+                directory = directory.portable_display(),
+            })?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Canonicalize symlinked direct sources discovered through a transitively activated extra.
+#[cfg(unix)]
+#[test]
+fn lock_transitive_extra_path_dependency_symlinked_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("bridge")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "bridge"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = ["target[feature]"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("target")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "target"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = ["left", "right"]
+
+            [tool.uv.sources]
+            left = { path = "../left" }
+            right = { path = "../right" }
+        "#})?;
+
+    for (name, source) in [("left", "../shared"), ("right", "../shared-alias")] {
+        context
+            .temp_dir
+            .child("packages")
+            .child(name)
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+                [project]
+                name = "{name}"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = ["shared"]
+
+                [tool.uv.sources]
+                shared = {{ path = "{source}" }}
+            "#})?;
+    }
+
+    let shared = context.temp_dir.child("packages").child("shared");
+    shared.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "shared"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    fs_err::os::unix::fs::symlink(
+        shared.path(),
+        context.temp_dir.child("packages").child("shared-alias"),
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Create a source tree whose extra is activated only by replaying a registry-form requirement.
+#[cfg(feature = "test-universal")]
+fn write_transitively_activated_source(context: &TestContext, dependency: &str) -> Result<()> {
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("bridge")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "bridge"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = ["target[feature]"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("target")
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "target"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = ["{dependency}"]
+        "#})?;
+
+    Ok(())
+}
+
+/// Include pins discovered by activated source extras before initializing yanked candidates.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_yanked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("yanked/package-only-yanked.toml");
+    write_transitively_activated_source(&context, "a==1.0.0")?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    warning: `a==1.0.0` is yanked
+    ");
+
+    Ok(())
+}
+
+/// Include explicit pre-release pins from activated source extras in candidate selection.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_prerelease() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new(
+        "prereleases/package-prerelease-specified-only-prerelease-available.toml",
+    );
+    write_transitively_activated_source(&context, "a==0.3.0a1")?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=explicit"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
