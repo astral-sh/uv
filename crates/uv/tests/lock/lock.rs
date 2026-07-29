@@ -19573,7 +19573,7 @@ fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
     Ok(())
 }
 
-/// Immutable Git packages can select external URLs and local wheels for first-party dependencies.
+/// Immutable Git packages can select external URLs, local wheels, and local source trees.
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
 fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
@@ -19592,6 +19592,17 @@ fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
     let archive_url = Url::from_file_path(archive.path())
         .map_err(|()| anyhow!("failed to convert archive path to file URL"))?;
 
+    let directory = context.temp_dir.child("directory-package");
+    directory.create_dir_all()?;
+    directory.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "directory-package"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        "#})?;
+    let directory_url = Url::from_directory_path(directory.path())
+        .map_err(|()| anyhow!("failed to convert source-tree path to file URL"))?;
+
     let repository = context.temp_dir.child("repository");
     repository.create_dir_all()?;
     repository
@@ -19604,6 +19615,7 @@ fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
         dependencies = [
             "httpx @ {httpx_url} ; sys_platform == 'darwin'",
             "basic-package @ {archive_url} ; sys_platform == 'darwin'",
+            "directory-package @ {directory_url} ; sys_platform == 'darwin'",
         ]
         "#,
             httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
@@ -19649,6 +19661,7 @@ fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
         dependencies = [
             "httpx ; sys_platform == 'win32'",
             "basic-package ; sys_platform == 'win32'",
+            "directory-package ; sys_platform == 'win32'",
             "provider",
         ]
 
@@ -19663,7 +19676,7 @@ fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     fs_err::remove_dir_all(repository.path())?;
@@ -19678,7 +19691,7 @@ fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     Ok(())

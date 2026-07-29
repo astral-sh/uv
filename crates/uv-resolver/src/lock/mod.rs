@@ -778,18 +778,14 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             }
         }
 
-        // Git packages can depend on an external direct URL or another directory or archive in
-        // the same repository. Since their metadata is immutable and isn't refreshed, the locked
-        // edge is the only available declaration of that source when another package requests it
-        // without qualification.
+        // Git packages can select any non-registry source, including external URLs, local files,
+        // source trees, and other directories or archives in the same repository. Since their
+        // metadata is immutable and isn't refreshed, the locked edge is the only available
+        // declaration of that source when another package requests it without qualification.
         if !source_matches
             && matches!(
                 requirement.source,
                 RequirementSource::Registry { index: None, .. }
-            )
-            && matches!(
-                &package.id.source,
-                Source::Direct(..) | Source::Path(..) | Source::Git(..)
             )
         {
             for provider in &self.lock.packages {
