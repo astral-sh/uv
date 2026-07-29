@@ -6402,7 +6402,7 @@ fn run_target_workspace_discovery_workspace_root_group() -> Result<()> {
         members = ["subproj-a", "subproj-b"]
 
         [dependency-groups]
-        group-for-this-ci = ["iniconfig"]
+        test = ["iniconfig"]
         "#
         })?;
 
@@ -6442,12 +6442,12 @@ fn run_target_workspace_discovery_workspace_root_group() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.run()
         .arg("--only-group")
-        .arg("group-for-this-ci")
+        .arg("test")
         .arg("subproj-a/scripts/thing.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Group `group-for-this-ci` is not defined in the project's `dependency-groups` table
+    error: Group `test` is not defined in the project's `dependency-groups` table
     ");
 
     Ok(())
