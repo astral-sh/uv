@@ -31,8 +31,9 @@ pub(super) fn from_str(input: &str) -> Result<Lock, Error> {
     Ok(lock)
 }
 
+/// An error returned when parsing a lockfile without the general TOML fallback.
 #[derive(Debug, thiserror::Error)]
-pub(super) enum Error {
+pub enum Error {
     #[error("unsupported canonical lock syntax at byte {offset}: {message}")]
     Unsupported {
         offset: usize,
@@ -868,11 +869,8 @@ impl<'de> VariantAccess<'de> for InlineVariantAccess<'_, 'de> {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
     use std::fmt::Write as _;
-    use std::path::PathBuf;
 
-    use fs_err as fs;
     use serde::Deserialize;
 
     use super::{Cursor, Error, Lock, ValueDeserializer, from_str};
@@ -910,157 +908,6 @@ dependencies = [
         let actual = from_str(input).expect("valid canonical repository lock");
 
         assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn ecosystem_locks_match_toml() {
-        macro_rules! ecosystem_lock {
-            ($project:literal) => {
-                (
-                    $project,
-                    include_str!(concat!(
-                        env!("CARGO_MANIFEST_DIR"),
-                        "/../uv/tests/it/snapshots/it__ecosystem__",
-                        $project,
-                        "-lock-file.snap"
-                    )),
-                )
-            };
-        }
-
-        for (project, snapshot) in [
-            ecosystem_lock!("black"),
-            ecosystem_lock!("github-wikidata-bot"),
-            ecosystem_lock!("home-assistant-core"),
-            ecosystem_lock!("jupyterlab"),
-            ecosystem_lock!("packse"),
-            ecosystem_lock!("pandas"),
-            ecosystem_lock!("poetry"),
-            ecosystem_lock!("pyx-external"),
-            ecosystem_lock!("saleor"),
-            ecosystem_lock!("semantic-kernel"),
-            ecosystem_lock!("transformers"),
-            ecosystem_lock!("warehouse"),
-        ] {
-            let (_, input) = snapshot
-                .split_once("\n---\n")
-                .expect("ecosystem lock snapshot has an insta header");
-            let input = input.replace("[X]", "0");
-            let expected = toml::from_str::<Lock>(&input);
-            assert!(
-                expected.is_ok(),
-                "the normalized {project} ecosystem lock is valid TOML"
-            );
-            let expected = expected.expect("validated ecosystem lock");
-
-            let actual = from_str(&input);
-            assert!(
-                actual.is_ok(),
-                "the canonical {project} ecosystem lock uses the fast path"
-            );
-            let actual = actual.expect("validated canonical ecosystem lock");
-
-            assert_eq!(
-                actual, expected,
-                "the direct lock parser changed the {project} ecosystem lock"
-            );
-        }
-
-        let Some(corpus) = env::var_os("UV_LOCK_ECOSYSTEM_CORPUS") else {
-            return;
-        };
-        let corpus = PathBuf::from(corpus);
-        let lockfiles: Vec<_> = if corpus.is_file() {
-            fs::read_to_string(&corpus)
-                .expect("ecosystem lock manifest is readable")
-                .lines()
-                .filter(|path| !path.is_empty())
-                .map(PathBuf::from)
-                .collect()
-        } else {
-            fs::read_dir(&corpus)
-                .expect("ecosystem lock corpus exists")
-                .map(|entry| {
-                    entry
-                        .expect("ecosystem corpus entry is readable")
-                        .path()
-                        .join("uv.lock")
-                })
-                .filter(|path| path.is_file())
-                .collect()
-        };
-
-        let mut direct = 0;
-        let mut fallback = 0;
-        let mut invalid = 0;
-        let mut fallback_paths = Vec::new();
-        let mut invalid_paths = Vec::new();
-
-        for path in lockfiles {
-            let project = path.display();
-            let input = fs::read_to_string(&path).expect("ecosystem lock is readable");
-            let expected = toml::from_str::<Lock>(&input);
-
-            if let Ok(expected) = expected {
-                if let Ok(actual) = from_str(&input) {
-                    assert_eq!(
-                        actual, expected,
-                        "the direct lock parser changed the {project} ecosystem lock"
-                    );
-                    direct += 1;
-                } else {
-                    let actual =
-                        Lock::from_toml(&input).expect("ecosystem lock uses the TOML fallback");
-                    assert_eq!(
-                        actual, expected,
-                        "the TOML fallback changed the {project} ecosystem lock"
-                    );
-                    fallback += 1;
-                    fallback_paths.push(path);
-                }
-            } else {
-                assert!(
-                    from_str(&input).is_err(),
-                    "the direct lock parser accepted the invalid {project} ecosystem lock"
-                );
-                let expected =
-                    toml::from_str::<Lock>(&input).expect_err("the ecosystem lock is invalid TOML");
-                let actual =
-                    Lock::from_toml(&input).expect_err("the invalid ecosystem lock stays invalid");
-                assert_eq!(
-                    actual.to_string(),
-                    expected.to_string(),
-                    "the direct lock parser changed the {project} TOML error"
-                );
-                invalid += 1;
-                invalid_paths.push(path);
-            }
-        }
-
-        assert_ne!(
-            direct + fallback + invalid,
-            0,
-            "the ecosystem corpus contains no lockfiles"
-        );
-
-        if let Some(summary) = env::var_os("UV_LOCK_ECOSYSTEM_SUMMARY") {
-            let mut report =
-                format!("direct={direct}\nfallback={fallback}\ninvalid={invalid}\nmismatches=0\n");
-
-            for path in fallback_paths {
-                report.push_str("fallback_file=");
-                report.push_str(&path.to_string_lossy());
-                report.push('\n');
-            }
-
-            for path in invalid_paths {
-                report.push_str("invalid_file=");
-                report.push_str(&path.to_string_lossy());
-                report.push('\n');
-            }
-
-            fs::write(summary, report).expect("ecosystem summary is writable");
-        }
     }
 
     #[test]
@@ -1156,7 +1003,10 @@ dev = [{ name = "dependency", specifier = ">=1" }]
             .replace("[[package]]", "# A hand-edited package.\n[[package]]");
         let expected: Lock = toml::from_str(&input).expect("valid noncanonical lock");
 
-        assert!(from_str(&input).is_err());
+        assert!(
+            Lock::from_canonical_toml(&input).is_err(),
+            "the canonical lock parser must not fall back"
+        );
         assert_eq!(
             Lock::from_toml(&input).expect("noncanonical lock falls back"),
             expected
@@ -1663,7 +1513,7 @@ dev = [{ name = "dependency", specifier = ">=1" }]
         let canonical = lock.to_toml().expect("lock serializes canonically");
 
         assert_eq!(
-            from_str(&canonical).expect("writer output uses fast path"),
+            Lock::from_canonical_toml(&canonical).expect("writer output uses fast path"),
             lock
         );
     }

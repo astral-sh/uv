@@ -58,6 +58,7 @@ use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
+pub use crate::lock::deserialize::Error as CanonicalLockError;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
@@ -1420,12 +1421,20 @@ impl Lock {
         }
     }
 
+    /// Parses a canonical lockfile without falling back to the general TOML parser.
+    ///
+    /// Use [`Self::from_toml`] when reading lockfiles that might not use uv's
+    /// canonical format.
+    pub fn from_canonical_toml(input: &str) -> Result<Self, CanonicalLockError> {
+        deserialize::from_str(input)
+    }
+
     /// Parses a lockfile, using the canonical fast path when possible.
     ///
     /// Lockfiles not written in uv's canonical layout fall back to the general
     /// TOML parser, preserving its compatibility and error reporting.
     pub fn from_toml(input: &str) -> Result<Self, toml::de::Error> {
-        match deserialize::from_str(input) {
+        match Self::from_canonical_toml(input) {
             Ok(lock) => Ok(lock),
             Err(_) => toml::from_str(input),
         }
