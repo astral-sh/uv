@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -594,7 +594,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             continue 'FORK;
                         }
                         ResolverVersion::Unavailable(version, reason) => {
-                            state.add_unavailable_version(version, reason);
+                            state.add_unavailable_version(
+                                version,
+                                reason,
+                                &self.index,
+                                &self.installed_packages,
+                            );
                             continue;
                         }
                     };
@@ -653,11 +658,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     ForkedDependencies::Unavailable(reason) => {
                         // Then here, if we get a reason that we consider unrecoverable, we should
                         // show the derivation chain.
+                        let versions = state.widen_version_to_gap(
+                            &version,
+                            &self.index,
+                            &self.installed_packages,
+                        );
                         state
                             .pubgrub
-                            .add_incompatibility(Incompatibility::custom_version(
+                            .add_incompatibility(Incompatibility::custom_term(
                                 next_id,
-                                version.clone(),
+                                Term::Positive(versions),
                                 UnavailableReason::Version(reason),
                             ));
                     }
@@ -787,11 +797,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                         }
 
+                        let versions = state.widen_version_to_gap(
+                            &version,
+                            &self.index,
+                            &self.installed_packages,
+                        );
                         state
                             .pubgrub
-                            .add_incompatibility(Incompatibility::custom_version(
+                            .add_incompatibility(Incompatibility::custom_term(
                                 next_id,
-                                version.clone(),
+                                Term::Positive(versions),
                                 UnavailableReason::Version(UnavailableVersion::RequiresPython(
                                     requires_python,
                                 )),
@@ -1074,14 +1089,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(())
     }
 
-    /// Returns the sorted, deduplicated candidate universe used to widen dependency ranges.
+    /// Returns the sorted, deduplicated candidate universe used to widen version sets.
     ///
-    /// Every selectable version must be present: omitting one could extend a dependency
-    /// incompatibility across it, while including an unselectable version only prevents a
-    /// possible simplification. The result is therefore conservative, including yanked and
-    /// otherwise unavailable versions from every index plus installed versions missing from the
-    /// indexes. Versions past the exclude-newer cutoff are omitted because resolution treats them
-    /// as nonexistent.
+    /// Every selectable version must be present: omitting one could extend an incompatibility
+    /// across it, while including an unselectable version only prevents a possible simplification.
+    /// The result is therefore conservative, including yanked and otherwise unavailable versions
+    /// from every index plus installed versions missing from the indexes. Versions past the
+    /// exclude-newer cutoff are omitted because resolution treats them as nonexistent.
     ///
     /// Non-blocking: Returns `None` if the version map hasn't been fetched yet, or if the
     /// package is not a registry package.
@@ -3225,24 +3239,7 @@ impl ForkState {
 
         // Widen across gaps so rejected adjacent versions merge into contiguous ranges rather
         // than leaving one hole per version.
-        let versions = Range::singleton(for_version.clone());
-        let versions = if let Some(known_versions) =
-            ResolverState::<InstalledPackages>::known_versions(
-                index,
-                installed_packages,
-                &self.fork_urls,
-                &self.fork_indexes,
-                &mut self.known_versions,
-                &self.pubgrub.package_store[self.next],
-            )
-            .filter(|versions| !versions.is_empty())
-        {
-            versions.widen_versions(known_versions)
-        } else {
-            // A decided version is always selectable and thus in the list, but an empty list
-            // would unsoundly widen to the full range.
-            versions
-        };
+        let versions = self.widen_version_to_gap(for_version, index, installed_packages);
         let conflict = self.pubgrub.add_package_version_dependencies(
             self.next,
             for_version.clone(),
@@ -3263,6 +3260,26 @@ impl ForkState {
         if let Some(incompatibility) = conflict {
             self.record_conflict(for_package, Some(for_version), incompatibility);
         }
+    }
+
+    /// Widens a version of the current package to the gap around it in the known versions.
+    fn widen_version_to_gap<InstalledPackages: InstalledPackagesProvider>(
+        &mut self,
+        version: &Version,
+        index: &InMemoryIndex,
+        installed_packages: &InstalledPackages,
+    ) -> Range<Version> {
+        widen_to_gap(
+            version,
+            ResolverState::<InstalledPackages>::known_versions(
+                index,
+                installed_packages,
+                &self.fork_urls,
+                &self.fork_indexes,
+                &mut self.known_versions,
+                &self.pubgrub.package_store[self.next],
+            ),
+        )
     }
 
     fn record_conflict(
@@ -3373,7 +3390,22 @@ impl ForkState {
         }
     }
 
-    fn add_unavailable_version(&mut self, version: Version, reason: UnavailableVersion) {
+    /// Records that a version cannot be used.
+    ///
+    /// The rejected version is widened to the gap around it, so that a run of rejected versions
+    /// excludes one contiguous range. The gap holds no known version but the rejected one, and
+    /// none at all when that version is itself unknown: `--exclude-newer` drops a version whose
+    /// files carry no upload time from [`ResolverState::known_versions`], but every one of its
+    /// distributions is incompatible, so it cannot be selected either.
+    fn add_unavailable_version<InstalledPackages: InstalledPackagesProvider>(
+        &mut self,
+        version: Version,
+        reason: UnavailableVersion,
+        index: &InMemoryIndex,
+        installed_packages: &InstalledPackages,
+    ) {
+        let versions = self.widen_version_to_gap(&version, index, installed_packages);
+
         // Incompatible requires-python versions are special in that we track
         // them as incompatible dependencies instead of marking the package version
         // as unavailable directly.
@@ -3392,7 +3424,7 @@ impl ForkState {
             self.pubgrub
                 .add_incompatibility(Incompatibility::from_dependency(
                     *package,
-                    Range::singleton(version.clone()),
+                    versions,
                     (
                         python,
                         Range::from_versions(release_specifiers_to_ranges(requires_python)),
@@ -3404,9 +3436,9 @@ impl ForkState {
             return;
         }
         self.pubgrub
-            .add_incompatibility(Incompatibility::custom_version(
+            .add_incompatibility(Incompatibility::custom_term(
                 self.next,
-                version.clone(),
+                Term::Positive(versions),
                 UnavailableReason::Version(reason),
             ));
     }
@@ -3700,6 +3732,24 @@ impl ForkState {
             pins: self.pins,
             env: self.env,
         }
+    }
+}
+
+/// Widens a single version to the largest interval that contains no other known version
+/// ([`Ranges::widen_versions`]).
+///
+/// The interval adds only versions the registry does not list, which can never be selected, so an
+/// incompatibility recorded for it holds for the same selectable versions.
+///
+/// Returns the singleton range when the known versions are unavailable, as for a URL or workspace
+/// package, and for an empty list, which would otherwise widen to the full range.
+fn widen_to_gap(version: &Version, known_versions: Option<&[Version]>) -> Range<Version> {
+    let versions = Range::singleton(version.clone());
+    match known_versions {
+        Some(known_versions) if !known_versions.is_empty() => {
+            versions.widen_versions(known_versions)
+        }
+        _ => versions,
     }
 }
 
@@ -4417,4 +4467,54 @@ struct ConflictTracker {
     ///
     /// Distilled from `culprit` for fast checking in the hot loop.
     deprioritize: Vec<Id<PubGrubPackage>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn versions(versions: &[&str]) -> Vec<Version> {
+        versions
+            .iter()
+            .map(|version| version.parse().expect("valid version"))
+            .collect()
+    }
+
+    #[test]
+    fn widens_a_version_to_its_gap() {
+        let known_versions = versions(&["1.0", "2.0", "3.0"]);
+        let version: Version = "2.0".parse().expect("valid version");
+
+        // A version between two others widens to the open interval between them.
+        assert_eq!(
+            widen_to_gap(&version, Some(&known_versions)).to_string(),
+            ">1.0, <3.0"
+        );
+
+        // At the ends of the listing the interval is unbounded.
+        let version: Version = "1.0".parse().expect("valid version");
+        assert_eq!(
+            widen_to_gap(&version, Some(&known_versions)).to_string(),
+            "<2.0"
+        );
+        let version: Version = "3.0".parse().expect("valid version");
+        assert_eq!(
+            widen_to_gap(&version, Some(&known_versions)).to_string(),
+            ">2.0"
+        );
+    }
+
+    #[test]
+    fn widens_a_version_without_known_versions_to_itself() {
+        let version: Version = "2.0".parse().expect("valid version");
+
+        // A URL or workspace package has no registry version map to widen against.
+        assert_eq!(
+            widen_to_gap(&version, None),
+            Range::singleton(version.clone())
+        );
+
+        // An empty list would otherwise widen to the full range.
+        assert_eq!(widen_to_gap(&version, Some(&[])), Range::singleton(version));
+    }
 }

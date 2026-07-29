@@ -399,6 +399,15 @@ fn derived_tree(metadata: DerivedMetadata, cause1: ErrorTree, cause2: ErrorTree)
     })
 }
 
+/// Narrow a version set onto a non-empty list of known versions.
+fn narrow_to_known(set: &Range<Version>, versions: &[Version]) -> Range<Version> {
+    if versions.iter().all(|version| set.contains(version)) {
+        Range::full()
+    } else {
+        set.narrow_versions(versions)
+    }
+}
+
 /// A wrapper around [`pubgrub::error::NoSolutionError`] that displays a resolution failure report.
 pub struct NoSolutionError {
     error: StackSafeErrorTree,
@@ -572,33 +581,57 @@ impl NoSolutionError {
 
     /// Shrinks widened version sets in the derivation tree back onto the known versions.
     ///
-    /// The resolver widens the version set on the depending side of a dependency
-    /// incompatibility to the largest interval containing the same known versions
-    /// ([`Ranges::widen_versions`]), keeping version sets small during resolution. The widened
-    /// bounds are misleading in error messages, e.g., `a>1.5.2,<2.0.0` when `a 1.5.3` is the only
-    /// version in that interval. Shrink the depending side and positive terms back: a set
-    /// containing all known versions of a package becomes the full range ("all versions of a");
-    /// otherwise, bounded ends are narrowed to inclusive bounds on the known versions they
-    /// contain while unbounded ends are preserved. Dependency requests (the depended-on side and
-    /// negative terms) are shown as requested.
+    /// The resolver widens version sets to the largest interval containing the same known
+    /// versions ([`Ranges::widen_versions`]), both on the depending side of a dependency
+    /// incompatibility and for a version that cannot be used, keeping version sets small during
+    /// resolution. The widened bounds are misleading in error messages, e.g., `a>1.5.2,<2.0.0`
+    /// when `a 1.5.3` is the only version in that interval. Shrink the depending side, the
+    /// unavailable set, and positive terms back: a set containing all known versions of a package
+    /// becomes the full range ("all versions of a"); otherwise, bounded ends are narrowed to
+    /// inclusive bounds on the known versions they contain while unbounded ends are preserved,
+    /// except on an unavailable set, which never claims a version outside the listing. Dependency
+    /// requests (the depended-on side and negative terms) are shown as requested.
     pub(crate) fn narrow_widened_sets(
         derivation_tree: ErrorTree,
         known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
     ) -> ErrorTree {
-        let narrow = |package: &PubGrubPackage, set: Range<Version>| -> Range<Version> {
-            let Some(versions) = package
+        // The known versions of a package, with the lowest and the highest. An empty list carries
+        // no information, so it is treated as absent.
+        let listed = |package: &PubGrubPackage| -> Option<(&[Version], &Version, &Version)> {
+            let versions = package
                 .name_no_root()
-                .and_then(|name| known_versions.get(name))
-                .filter(|versions| !versions.is_empty())
-            else {
+                .and_then(|name| known_versions.get(name))?;
+            Some((versions, versions.first()?, versions.last()?))
+        };
+
+        let narrow = |package: &PubGrubPackage, set: Range<Version>| -> Range<Version> {
+            let Some((versions, _, _)) = listed(package) else {
                 return set;
             };
-            if versions.iter().all(|version| set.contains(version)) {
-                Range::full()
-            } else {
-                set.narrow_versions(versions)
-            }
+            narrow_to_known(&set, versions)
         };
+
+        // A single version's unavailability says nothing about versions outside the listing, so
+        // an unbounded end of its widened set must not be reported as a claim about them.
+        let narrow_unavailable =
+            |package: &PubGrubPackage, set: Range<Version>| -> Range<Version> {
+                let Some((versions, lowest, highest)) = listed(package) else {
+                    return set;
+                };
+                let narrowed = narrow_to_known(&set, versions);
+                // A claim about every known version is reported as such, not as its bounds.
+                if narrowed == Range::full() {
+                    return narrowed;
+                }
+                let envelope = Range::from_range_bounds(lowest.clone()..=highest.clone());
+                let clamped = narrowed.intersection(&envelope);
+                // A rejected version outside the listing has no envelope to report it in.
+                if clamped == Range::empty() {
+                    narrowed
+                } else {
+                    clamped
+                }
+            };
 
         map_derivation_tree(
             derivation_tree,
@@ -608,6 +641,13 @@ impl NoSolutionError {
                     DerivationTree::External(External::FromDependencyOf(
                         package1, versions1, package2, versions2,
                     ))
+                }
+                External::Custom(package, versions, reason) => {
+                    let versions = match &reason {
+                        UnavailableReason::Version(_) => narrow_unavailable(&package, versions),
+                        UnavailableReason::Package(_) => narrow(&package, versions),
+                    };
+                    DerivationTree::External(External::Custom(package, versions, reason))
                 }
                 external => DerivationTree::External(external),
             },
@@ -1695,12 +1735,78 @@ mod tests {
         version.parse().expect("valid version")
     }
 
+    fn known_versions(name: &str, versions: &[&str]) -> FxHashMap<PackageName, Arc<[Version]>> {
+        let versions: Arc<[Version]> = versions.iter().copied().map(version).collect();
+        FxHashMap::from_iter([(package_name(name), versions)])
+    }
+
     fn unavailable(package: &PubGrubPackage, versions: Range<Version>) -> ErrorTree {
         ErrorTree::External(External::Custom(
             package.clone(),
             versions,
             UnavailableReason::Version(UnavailableVersion::InvalidMetadata),
         ))
+    }
+
+    fn narrow_unavailable(
+        package: &PubGrubPackage,
+        versions: Range<Version>,
+        known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
+    ) -> Range<Version> {
+        let narrowed =
+            NoSolutionError::narrow_widened_sets(unavailable(package, versions), known_versions);
+        let ErrorTree::External(External::Custom(_, versions, _)) = narrowed else {
+            panic!("expected a custom incompatibility");
+        };
+        versions
+    }
+
+    /// A widened unavailable set is narrowed back onto the known versions.
+    #[test]
+    fn narrows_widened_unavailable_versions() {
+        let package = pubgrub_package("numpy");
+        let known_versions = known_versions("numpy", &["1.0", "2.0", "3.0"]);
+
+        // A gap-widened rejection reports the single version it excludes.
+        let widened = Range::singleton(version("2.0")).widen_versions(&[
+            version("1.0"),
+            version("2.0"),
+            version("3.0"),
+        ]);
+        assert_eq!(widened.to_string(), ">1.0, <3.0");
+        assert_eq!(
+            narrow_unavailable(&package, widened, &known_versions),
+            Range::singleton(version("2.0"))
+        );
+
+        // At the top of a listing the widened set is unbounded, but the rejection says nothing
+        // about versions that are not published yet.
+        let widened = Range::from_range_bounds(version("2.0")..);
+        assert_eq!(
+            narrow_unavailable(&package, widened, &known_versions),
+            Range::from_range_bounds(version("2.0")..=version("3.0"))
+        );
+
+        // Merged rejections covering every known version report as the full range.
+        let merged = Range::from_range_bounds(version("0")..);
+        assert_eq!(
+            narrow_unavailable(&package, merged, &known_versions),
+            Range::full()
+        );
+
+        // A rejected version outside the known versions has no envelope to report it in.
+        let widened = Range::from_range_bounds(version("4.0")..version("5.0"));
+        assert_eq!(
+            narrow_unavailable(&package, widened.clone(), &known_versions),
+            widened
+        );
+
+        // A package without a known version list is reported as recorded.
+        let widened = Range::from_range_bounds(version("1.0")..version("3.0"));
+        assert_eq!(
+            narrow_unavailable(&pubgrub_package("scipy"), widened.clone(), &known_versions),
+            widened
+        );
     }
 
     /// Two rejections of the same package for the same reason read as one statement.
