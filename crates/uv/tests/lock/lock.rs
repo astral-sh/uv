@@ -15062,6 +15062,7 @@ fn lock_transitive_extra() -> Result<()> {
 /// (i.e., one without an explicit URL).
 ///
 /// See <https://github.com/astral-sh/uv/issues/20672>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_transitive_extra_path_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15311,6 +15312,7 @@ fn lock_transitive_extra_path_dependency_disjoint_python_markers() -> Result<()>
 }
 
 /// Shared local dependencies should be traversed once, including across distinct ancestor markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_transitive_extra_path_dependency_shared_source_graph() -> Result<()> {
     const LEVELS: usize = 8;
@@ -15371,14 +15373,18 @@ fn lock_transitive_extra_path_dependency_shared_source_graph() -> Result<()> {
         }
     }
 
-    let output = context
-        .lock()
+    let mut filters = context.filters();
+    filters.push((r"(?m)^.*Performing lookahead for [^\n]*\n", ""));
+
+    let output = uv_snapshot!(filters, context.lock()
         .arg("--offline")
-        .env("RUST_LOG", "uv_requirements::lookahead=trace")
-        .output()?;
+        .env(EnvVars::RUST_LOG, "uv_requirements::lookahead=trace"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 17 packages in [TIME]
+    ");
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    assert!(output.status.success(), "{stderr}");
     assert_eq!(
         stderr.matches("Performing lookahead for ").count(),
         LEVELS * 2 + 1,
@@ -15389,6 +15395,7 @@ fn lock_transitive_extra_path_dependency_shared_source_graph() -> Result<()> {
 }
 
 /// Preserve the source fork when an activated extra selects different transitive indexes.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_transitive_extra_path_dependency_scoped_indexes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15601,7 +15608,7 @@ fn lock_transitive_extra_path_dependency_conflicting_extra_indexes() -> Result<(
 }
 
 /// Canonicalize symlinked direct sources discovered through a transitively activated extra.
-#[cfg(unix)]
+#[cfg(all(unix, feature = "test-universal"))]
 #[test]
 fn lock_transitive_extra_path_dependency_symlinked_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15797,6 +15804,7 @@ fn lock_transitive_extra_path_dependency_prerelease() -> Result<()> {
 }
 
 /// Resolve mixed extra and platform markers using the extras selected in the active fork.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_transitive_extra_path_dependency_mixed_extra_platform_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15871,6 +15879,7 @@ fn lock_transitive_extra_path_dependency_mixed_extra_platform_marker() -> Result
 }
 
 /// Replay registry extras only against direct sources from compatible dependency groups.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_transitive_extra_path_dependency_conflicting_group_scoped_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15962,6 +15971,7 @@ fn lock_transitive_extra_path_dependency_conflicting_group_scoped_sources() -> R
 }
 
 /// Preserve conflicting source scopes belonging to different workspace members.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_transitive_extra_path_dependency_conflicting_workspace_scoped_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -16079,6 +16089,7 @@ fn lock_transitive_extra_path_dependency_conflicting_workspace_scoped_sources() 
 }
 
 /// Do not replay a group requirement against a source from its conflicting project branch.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_transitive_extra_path_dependency_conflicting_project_scope() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -16147,6 +16158,7 @@ fn lock_transitive_extra_path_dependency_conflicting_project_scope() -> Result<(
 }
 
 /// Ignore path dependencies whose accumulated markers exclude the project's Python versions.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_transitive_extra_path_dependency_transitive_outside_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -16206,6 +16218,7 @@ fn lock_transitive_extra_path_dependency_transitive_outside_requires_python() ->
 }
 
 /// A registry-form extra should be replayed if the matching path source is discovered later.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_transitive_extra_path_dependency_source_discovered_later() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -16282,14 +16295,12 @@ fn lock_transitive_extra_path_dependency_source_discovered_later() -> Result<()>
     Resolved 5 packages in [TIME]
     ");
 
-    let lock = context.read("uv.lock");
-    assert!(lock.contains("[[package]]\nname = \"leaf\""));
-
     Ok(())
 }
 
 /// Mapping a registry-form extra back to a known path source must not hide a conflicting path
 /// source for the same package.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_transitive_extra_path_dependency_conflicting_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");

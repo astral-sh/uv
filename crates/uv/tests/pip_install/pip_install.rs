@@ -10400,10 +10400,9 @@ fn require_hashes_transitively_activated_extra() -> Result<()> {
     );
     let leaf_server = PackseServer::from_scenario(&leaf_scenario);
     let leaf_url = leaf_server.file_url("leaf-0.1.0-py3-none-any.whl");
-    let leaf_bytes = reqwest::blocking::get(&leaf_url)?
-        .error_for_status()?
-        .bytes()?;
-    let leaf_hash = format!("{:x}", Sha256::digest(&leaf_bytes));
+    let leaf_archive = context.temp_dir.child("leaf-0.1.0-py3-none-any.whl");
+    download_to_disk(&leaf_url, leaf_archive.path());
+    let leaf_hash = format!("{:x}", Sha256::digest(fs_err::read(leaf_archive.path())?));
 
     let mut scenario = Scenario::empty();
     scenario.packages.insert(
@@ -10441,15 +10440,13 @@ fn require_hashes_transitively_activated_extra() -> Result<()> {
     let server = PackseServer::from_scenario(&scenario);
 
     let bridge_url = server.file_url("bridge-0.1.0-py3-none-any.whl");
-    let bridge_bytes = reqwest::blocking::get(&bridge_url)?
-        .error_for_status()?
-        .bytes()?;
-    let bridge_hash = format!("{:x}", Sha256::digest(&bridge_bytes));
+    let bridge_archive = context.temp_dir.child("bridge-0.1.0-py3-none-any.whl");
+    download_to_disk(&bridge_url, bridge_archive.path());
+    let bridge_hash = format!("{:x}", Sha256::digest(fs_err::read(bridge_archive.path())?));
     let target_url = server.file_url("target-0.1.0-py3-none-any.whl");
-    let target_bytes = reqwest::blocking::get(&target_url)?
-        .error_for_status()?
-        .bytes()?;
-    let target_hash = format!("{:x}", Sha256::digest(&target_bytes));
+    let target_archive = context.temp_dir.child("target-0.1.0-py3-none-any.whl");
+    download_to_disk(&target_url, target_archive.path());
+    let target_hash = format!("{:x}", Sha256::digest(fs_err::read(target_archive.path())?));
 
     let mut filters = context.filters();
     filters.push((r"sha256=[0-9a-f]{64}", "sha256=[HASH]"));
