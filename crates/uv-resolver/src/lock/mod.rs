@@ -656,6 +656,7 @@ struct ExpectedPackageDependencies<'lock> {
     declarations: BTreeSet<Requirement>,
     provides_extra: &'lock [ExtraName],
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
+    source_requirements: &'lock Constraints,
     activated_extras: BTreeSet<ExtraName>,
     /// The environment under which this package can be selected.
     package_marker: UniversalMarker,
@@ -670,6 +671,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         declarations: &BTreeSet<Requirement>,
         provides_extra: &'lock [ExtraName],
         dependency_groups: &BTreeMap<GroupName, BTreeSet<Requirement>>,
+        source_requirements: &'lock Constraints,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -729,6 +731,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             declarations,
             provides_extra,
             dependency_groups,
+            source_requirements,
             activated_extras,
             package_marker,
             lock_marker,
@@ -768,26 +771,22 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             MarkerTree::FALSE
         };
 
-        // Constraints can redirect an unqualified registry requirement to a direct URL, path,
-        // directory, or Git source. Preserve their markers when matching the locked package.
+        // A direct source can be selected by both constraints and explicit requirements. Preserve
+        // the union of their markers so another requirement can widen a conditional constraint.
         if source_marker.is_false()
             && matches!(
                 requirement.source,
                 RequirementSource::Registry { index: None, .. }
             )
+            && let Some(source_requirements) = self.source_requirements.get(&requirement.name)
         {
-            for constraint in &self.lock.manifest.constraints {
-                if constraint.name != requirement.name {
-                    continue;
-                }
-
-                let constraint = constraint.clone().to_absolute(self.workspace_root);
+            for source_requirement in source_requirements {
                 if package
                     .id
                     .source
-                    .satisfies_requirement_source(&constraint.source, self.workspace_root)?
+                    .satisfies_requirement_source(&source_requirement.source, self.workspace_root)?
                 {
-                    source_marker = source_marker.or(constraint.marker);
+                    source_marker = source_marker.or(source_requirement.marker);
                 }
             }
         }
@@ -2048,6 +2047,7 @@ impl Lock {
         requires_dist: Box<[Requirement]>,
         provides_extra: &[ExtraName],
         dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
+        source_requirements: &Constraints,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -2164,6 +2164,7 @@ impl Lock {
                 declarations,
                 provides_extra,
                 &expected_groups,
+                source_requirements,
                 overrides,
                 excludes,
                 package_requires_python,
@@ -2372,7 +2373,7 @@ impl Lock {
         }
 
         // Validate that the lockfile was generated with the same constraints.
-        {
+        let normalized_constraints = {
             let expected: BTreeSet<_> = constraints
                 .iter()
                 .cloned()
@@ -2388,7 +2389,8 @@ impl Lock {
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
             }
-        }
+            expected
+        };
 
         // Validate that the lockfile was generated with the same overrides.
         let normalized_overrides = {
@@ -2525,6 +2527,82 @@ impl Lock {
                 return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
             }
         }
+
+        let source_requirements = if allow_missing_package_metadata {
+            let mut source_requirements = normalized_constraints.into_iter().collect::<Vec<_>>();
+            let conditional_source_names = source_requirements
+                .iter()
+                .filter(|requirement| {
+                    !matches!(requirement.source, RequirementSource::Registry { .. })
+                        && !requirement.marker.is_true()
+                })
+                .map(|requirement| requirement.name.clone())
+                .collect::<FxHashSet<_>>();
+
+            if !conditional_source_names.is_empty() {
+                for requirement in requirements
+                    .iter()
+                    .chain(dependency_groups.values().flatten())
+                {
+                    if conditional_source_names.contains(&requirement.name)
+                        && !matches!(requirement.source, RequirementSource::Registry { .. })
+                    {
+                        source_requirements.push(normalize_requirement(
+                            requirement.clone(),
+                            root,
+                            &self.requires_python,
+                        )?);
+                    }
+                }
+
+                for name in packages.keys() {
+                    let Some(package) = self.find_by_name(name).ok().flatten() else {
+                        continue;
+                    };
+                    let Some(source_tree) = package.id.source.as_source_tree() else {
+                        continue;
+                    };
+                    let Some(SourceTreeRequiresDist { metadata, .. }) =
+                        Self::source_tree_requires_dist(source_tree, root, package, database)
+                            .await?
+                    else {
+                        continue;
+                    };
+
+                    let package_context = package
+                        .id
+                        .version
+                        .as_ref()
+                        .map(|version| (&package.id.name, version));
+                    for requirement in dependency_overrides.apply_for_package(
+                        package_context,
+                        metadata
+                            .requires_dist
+                            .iter()
+                            .chain(metadata.dependency_groups.values().flatten()),
+                    ) {
+                        if !conditional_source_names.contains(&requirement.name)
+                            || matches!(requirement.source, RequirementSource::Registry { .. })
+                            || requirement.marker.top_level_extra().is_some()
+                            || dependency_excludes
+                                .contains_for_package(package_context, &requirement.name)
+                        {
+                            continue;
+                        }
+
+                        source_requirements.push(normalize_requirement(
+                            requirement.into_owned(),
+                            root,
+                            &self.requires_python,
+                        )?);
+                    }
+                }
+            }
+
+            Constraints::from_requirements(source_requirements.into_iter())
+        } else {
+            Constraints::default()
+        };
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let mut remotes = indexes.map(|locations| {
@@ -2731,6 +2809,7 @@ impl Lock {
                             metadata.requires_dist,
                             &metadata.provides_extra,
                             metadata.dependency_groups,
+                            &source_requirements,
                             &dependency_overrides,
                             &dependency_excludes,
                             requires_python.as_ref(),
@@ -2829,6 +2908,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &source_requirements,
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
@@ -2884,6 +2964,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &source_requirements,
                         &dependency_overrides,
                         &dependency_excludes,
                         requires_python.as_ref(),
@@ -2981,6 +3062,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &source_requirements,
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
