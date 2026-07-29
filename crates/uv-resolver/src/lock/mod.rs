@@ -788,38 +788,14 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                 RequirementSource::Registry { index: None, .. }
             )
         {
-            for provider in &self.lock.packages {
-                let Source::Git(_, provider_source) = &provider.id.source else {
-                    continue;
-                };
-
-                // Source selections apply globally, even when this edge and the unqualified
-                // requirement have disjoint markers.
-                if !provider
-                    .all_dependencies()
-                    .any(|dependency| dependency.package_id == package.id)
-                {
-                    continue;
-                }
-
-                if let Source::Git(_, source) = &package.id.source {
-                    let Some(repository) = package.as_git_ref()? else {
-                        continue;
-                    };
-                    let Some(provider_repository) = provider.as_git_ref()? else {
-                        continue;
-                    };
-                    if provider_repository.sha != repository.sha
-                        || provider_repository.reference.url != repository.reference.url
-                        || provider_source.lfs != source.lfs
-                    {
-                        continue;
-                    }
-                }
-
-                source_matches = true;
-                break;
-            }
+            // The locked package identity includes the complete source, including a Git
+            // repository, precise commit, and LFS configuration.
+            source_matches = self.lock.packages.iter().any(|provider| {
+                matches!(provider.id.source, Source::Git(..))
+                    && provider
+                        .all_dependencies()
+                        .any(|dependency| dependency.package_id == package.id)
+            });
         }
 
         source_matches |= package.id == self.package.id
