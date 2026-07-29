@@ -2544,36 +2544,13 @@ impl Lock {
                 let Some(source_tree) = package.id.source.as_source_tree() else {
                     continue;
                 };
-                let package_root = root.join(source_tree);
-                let path = package_root.join("pyproject.toml");
-                let contents = match fs_err::tokio::read_to_string(&path).await {
-                    Ok(contents) => Some(contents),
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-                    Err(err) => {
-                        return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
-                    }
-                };
-                if let Some(contents) = contents.as_ref() {
-                    let pyproject_toml = PyProjectToml::from_toml(contents, path.user_display())
-                        .map_err(|err| LockErrorKind::InvalidPyprojectToml {
-                            path: path.clone(),
-                            err,
-                        })?;
-                    let has_dynamic_requirements =
-                        pyproject_toml.project.as_ref().is_none_or(|project| {
-                            project.dynamic.as_ref().is_some_and(|fields| {
-                                fields.iter().any(|field| {
-                                    matches!(
-                                        field.as_str(),
-                                        "dependencies" | "optional-dependencies"
-                                    )
-                                })
-                            })
-                        });
-                    if !has_dynamic_requirements {
-                        continue;
-                    }
+                if Self::source_tree_requires_dist(source_tree, root, package, database)
+                    .await?
+                    .is_some()
+                {
+                    continue;
                 }
+                let package_root = root.join(source_tree);
 
                 let HashedDist { dist, .. } =
                     package.to_dist(root, TagPolicy::Preferred(tags), build_options, markers)?;
@@ -2606,9 +2583,7 @@ impl Lock {
                 };
 
                 let mut direct_requirements = metadata.requires_dist.into_vec();
-                if contents.as_ref().is_some_and(|contents| {
-                    contents.contains("dependency-groups") || contents.contains("dev-dependencies")
-                }) {
+                if !package.resolved_dependency_groups().is_empty() {
                     let dependency_groups = database
                         .dependency_groups(&package_root)
                         .await
