@@ -394,6 +394,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 &mut state.pre_visited,
                                 &self.urls,
                                 &self.indexes,
+                                &state.fork_urls,
+                                &state.fork_indexes,
                                 &state.python_requirement,
                                 request_sink,
                             )?;
@@ -1129,6 +1131,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pre_visited: &mut FxHashMap<Id<PubGrubPackage>, Range<Version>>,
         urls: &Urls,
         indexes: &Indexes,
+        fork_urls: &ForkUrls,
+        fork_indexes: &ForkIndexes,
         python_requirement: &PythonRequirement,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
@@ -1144,13 +1148,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             else {
                 continue;
             };
-            // Avoid pre-visiting packages that have any URLs in any fork. At this point we can't
-            // tell whether they are registry distributions or which url they use.
-            if urls.any_url(name) {
+            // Avoid pre-visiting packages with a known URL, whether discovered in the manifest or
+            // introduced by another direct URL dependency in this fork.
+            if urls.any_url(name) || fork_urls.contains_key(name) {
                 continue;
             }
             // Avoid visiting packages that may use an explicit index.
-            if indexes.contains_key(name) {
+            if indexes.contains_key(name) || fork_indexes.get(name).is_some() {
                 continue;
             }
             // Unit propagation often leaves a package's range unchanged. Although prefetching the
@@ -3207,6 +3211,10 @@ impl ForkState {
         workspace_members: &BTreeSet<PackageName>,
         resolution_strategy: &ResolutionStrategy,
     ) -> Result<(), ResolveError> {
+        let parent_is_url = self.pubgrub.package_store[for_package]
+            .name_no_root()
+            .is_some_and(|name| self.fork_urls.contains_key(name));
+
         for dependency in dependencies {
             let PubGrubDependency {
                 package,
@@ -3221,7 +3229,9 @@ impl ForkState {
                 // requirement was a URL requirement. `Urls` applies canonicalization to this and
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
-                for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
+                for url in
+                    urls.get_url(&self.env, name, source.verbatim_url(), parent_is_url, git)?
+                {
                     self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
                 }

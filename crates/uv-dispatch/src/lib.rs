@@ -281,7 +281,6 @@ impl BuildContext for BuildDispatch<'_> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.to_resolver_marker_environment();
         let resolver_env = ResolverEnvironment::specific(marker_env);
-        let conflicts = Conflicts::empty();
         let tags = self.interpreter.tags()?;
 
         // Walk any URL requirements transitively so their sub-URLs (for example, a workspace
@@ -310,7 +309,7 @@ impl BuildContext for BuildDispatch<'_> {
             )
             .with_build_stack(build_stack),
         )
-        .resolve(&resolver_env, &python_requirement, &conflicts)
+        .resolve(&resolver_env)
         .await?;
 
         let manifest = Manifest::simple(requirements.to_vec())
@@ -329,7 +328,7 @@ impl BuildContext for BuildDispatch<'_> {
             resolver_env,
             self.interpreter.markers(),
             // Conflicting groups only make sense when doing universal resolution.
-            conflicts,
+            Conflicts::empty(),
             Some(tags),
             self.flat_index,
             &self.shared_state.index,
