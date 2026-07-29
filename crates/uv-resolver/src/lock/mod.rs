@@ -52,12 +52,13 @@ use uv_platform_tags::{
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     ConflictItem, ConflictKindRef, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
-    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml, VerbatimParsedUrl,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_warnings::warn_user_once;
+use uv_workspace::pyproject::{Source as WorkspaceSource, Sources as WorkspaceSources};
 use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::fork_strategy::ForkStrategy;
@@ -649,7 +650,7 @@ struct ExpectedPackageDependencies<'lock> {
     declarations: BTreeSet<Requirement>,
     provides_extra: &'lock [ExtraName],
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
-    constraints: &'lock Constraints,
+    source_requirements: &'lock Constraints,
     activated_extras: BTreeSet<ExtraName>,
     /// The environment under which this package can be selected.
     package_marker: UniversalMarker,
@@ -664,7 +665,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         declarations: &BTreeSet<Requirement>,
         provides_extra: &'lock [ExtraName],
         dependency_groups: &BTreeMap<GroupName, BTreeSet<Requirement>>,
-        constraints: &'lock Constraints,
+        source_requirements: &'lock Constraints,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -724,7 +725,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             declarations,
             provides_extra,
             dependency_groups,
-            constraints,
+            source_requirements,
             activated_extras,
             package_marker,
             lock_marker,
@@ -754,21 +755,21 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             .source
             .satisfies_requirement_source(&requirement.source, self.workspace_root)?;
 
-        // A constraint can select a direct source for an otherwise unqualified registry
-        // requirement. Sources apply globally, even across disjoint marker environments,
-        // but the locked source must still match that constraint exactly.
+        // A constraint or another first-party requirement can select a direct source for an
+        // otherwise unqualified registry requirement. Source selections apply globally, even
+        // across disjoint marker environments, but the locked source must match exactly.
         if !source_matches
             && matches!(
                 requirement.source,
                 RequirementSource::Registry { index: None, .. }
             )
-            && let Some(constraints) = self.constraints.get(&requirement.name)
+            && let Some(source_requirements) = self.source_requirements.get(&requirement.name)
         {
-            for constraint in constraints {
+            for source_requirement in source_requirements {
                 if package
                     .id
                     .source
-                    .satisfies_requirement_source(&constraint.source, self.workspace_root)?
+                    .satisfies_requirement_source(&source_requirement.source, self.workspace_root)?
                 {
                     source_matches = true;
                     break;
@@ -2061,7 +2062,7 @@ impl Lock {
         requires_dist: Box<[Requirement]>,
         provides_extra: &[ExtraName],
         dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
-        constraints: &Constraints,
+        source_requirements: &Constraints,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -2178,7 +2179,7 @@ impl Lock {
                 declarations,
                 provides_extra,
                 &expected_groups,
-                constraints,
+                source_requirements,
                 overrides,
                 excludes,
                 package_requires_python,
@@ -2454,11 +2455,6 @@ impl Lock {
             }
         }
 
-        let dependency_constraints = if allow_missing_package_metadata {
-            Constraints::from_requirements(normalized_constraints.into_iter())
-        } else {
-            Constraints::default()
-        };
         let dependency_overrides = if allow_missing_package_metadata {
             Overrides::from_entries(normalized_overrides.into_iter().collect())
                 .map_err(LockErrorKind::InvalidScopedOverride)?
@@ -2469,6 +2465,103 @@ impl Lock {
             Excludes::from_entries(excludes.iter().cloned())
         } else {
             Excludes::default()
+        };
+        let dependency_sources = if allow_missing_package_metadata {
+            let mut source_requirements = normalized_constraints;
+            for member in packages.values() {
+                let has_direct_requirements = member
+                    .project()
+                    .dependencies
+                    .iter()
+                    .flatten()
+                    .any(|requirement| requirement.contains('@'));
+                let has_direct_sources = member
+                    .pyproject_toml()
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.sources.as_ref())
+                    .is_some_and(|sources| {
+                        sources
+                            .inner()
+                            .values()
+                            .flat_map(WorkspaceSources::iter)
+                            .any(|source| {
+                                matches!(
+                                    source,
+                                    WorkspaceSource::Git { .. }
+                                        | WorkspaceSource::Url { .. }
+                                        | WorkspaceSource::Path { .. }
+                                )
+                            })
+                    });
+                if !has_direct_requirements && !has_direct_sources {
+                    continue;
+                }
+
+                let Some(package) = self.find_by_name(&member.project().name).ok().flatten() else {
+                    continue;
+                };
+                let direct_requirements = if has_direct_sources {
+                    let path = member.root().join("pyproject.toml");
+                    let pyproject_toml =
+                        PyProjectToml::from_toml(&member.pyproject_toml().raw, path.user_display())
+                            .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                                path: path.clone(),
+                                err,
+                            })?;
+                    let Some(metadata) = database
+                        .requires_dist(member.root(), &pyproject_toml)
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package.id.clone(),
+                            err,
+                        })?
+                    else {
+                        continue;
+                    };
+                    metadata.requires_dist.into_vec()
+                } else {
+                    member
+                        .project()
+                        .dependencies
+                        .iter()
+                        .flatten()
+                        .filter(|requirement| requirement.contains('@'))
+                        .filter_map(|requirement| {
+                            uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(requirement).ok()
+                        })
+                        .map(Requirement::from)
+                        .collect()
+                };
+                let package_context = package
+                    .id
+                    .version
+                    .as_ref()
+                    .map(|version| (&package.id.name, version));
+
+                for requirement in dependency_overrides
+                    .apply_for_package(package_context, &direct_requirements)
+                    .filter(|requirement| {
+                        !dependency_excludes
+                            .contains_for_package(package_context, &requirement.name)
+                    })
+                {
+                    if matches!(requirement.source, RequirementSource::Registry { .. }) {
+                        continue;
+                    }
+
+                    source_requirements.insert(normalize_requirement(
+                        requirement.into_owned(),
+                        root,
+                        &self.requires_python,
+                    )?);
+                }
+            }
+
+            Constraints::from_requirements(source_requirements.into_iter())
+        } else {
+            Constraints::default()
         };
 
         // Validate that the lockfile was generated with the same build constraints.
@@ -2752,7 +2845,7 @@ impl Lock {
                             metadata.requires_dist,
                             &metadata.provides_extra,
                             metadata.dependency_groups,
-                            &dependency_constraints,
+                            &dependency_sources,
                             &dependency_overrides,
                             &dependency_excludes,
                             requires_python.as_ref(),
@@ -2851,7 +2944,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
-                        &dependency_constraints,
+                        &dependency_sources,
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
@@ -2907,7 +3000,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
-                        &dependency_constraints,
+                        &dependency_sources,
                         &dependency_overrides,
                         &dependency_excludes,
                         requires_python.as_ref(),
@@ -3005,7 +3098,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
-                        &dependency_constraints,
+                        &dependency_sources,
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
