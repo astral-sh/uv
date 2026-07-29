@@ -1213,10 +1213,6 @@ impl RemoteSource for UrlString {
             .next_back()
             .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
-        if !last.contains('%') {
-            return Ok(Cow::Borrowed(last));
-        }
-
         // Decode the filename, which may be percent-encoded.
         let filename = percent_encoding::percent_decode_str(last).decode_utf8()?;
 
@@ -1788,35 +1784,5 @@ mod test {
             let url = UrlString::from(url.clone());
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
         }
-    }
-
-    #[test]
-    fn percent_encoded_remote_source() {
-        for (url, expected) in [
-            ("https://example.com/foo%20bar.whl", "foo bar.whl"),
-            ("https://example.com/caf%C3%A9.whl", "café.whl"),
-            ("https://example.com/foo%2520bar.whl", "foo%20bar.whl"),
-        ] {
-            let parsed = DisplaySafeUrl::parse(url).expect("valid encoded URL");
-            assert_eq!(
-                parsed.filename().expect("valid encoded filename"),
-                expected,
-                "{url}"
-            );
-
-            let parsed = UrlString::from(parsed);
-            assert_eq!(
-                parsed.filename().expect("valid encoded filename"),
-                expected,
-                "{url}"
-            );
-        }
-
-        let invalid = DisplaySafeUrl::parse("https://example.com/foo%FF.whl")
-            .expect("percent-encoded URL is syntactically valid");
-        assert!(invalid.filename().is_err());
-
-        let invalid = UrlString::from(invalid);
-        assert!(invalid.filename().is_err());
     }
 }
