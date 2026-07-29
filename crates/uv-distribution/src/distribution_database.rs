@@ -37,7 +37,7 @@ use crate::error::PythonVersion;
 use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
-use crate::{Error, LocalWheel, Reporter, RequiresDist};
+use crate::{Error, LocalWheel, Reporter, RequiresDist, SourcedDependencyGroups};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -661,6 +661,21 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 self.client.unmanaged.credentials_cache(),
             )
             .await
+    }
+
+    /// Return the lowered dependency groups from a source tree's `pyproject.toml`.
+    pub async fn dependency_groups(&self, path: &Path) -> Result<SourcedDependencyGroups, Error> {
+        SourcedDependencyGroups::from_virtual_project(
+            &path.join("pyproject.toml"),
+            None,
+            self.build_context.locations(),
+            self.build_context.sources().clone(),
+            self.build_context.cache(),
+            self.build_context.workspace_cache(),
+            self.client.unmanaged.credentials_cache(),
+        )
+        .await
+        .map_err(Error::from)
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.

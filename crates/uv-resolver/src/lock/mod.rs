@@ -2605,7 +2605,24 @@ impl Lock {
                     metadata
                 };
 
-                add_source_requirements(package, Box::into_iter(metadata.requires_dist).collect())?;
+                let mut direct_requirements = metadata.requires_dist.into_vec();
+                if contents.contains("dependency-groups") || contents.contains("dev-dependencies") {
+                    let dependency_groups = database
+                        .dependency_groups(&package_root)
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package.id.clone(),
+                            err,
+                        })?;
+                    direct_requirements.extend(
+                        dependency_groups
+                            .dependency_groups
+                            .into_values()
+                            .flat_map(<[Requirement]>::into_vec),
+                    );
+                }
+
+                add_source_requirements(package, direct_requirements)?;
             }
 
             for member in packages.values() {
