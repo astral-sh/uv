@@ -781,6 +781,65 @@ if __name__ == "__main__":
         Ok(())
     }
 
+    /// A script launcher must run the interpreter it was given, even when that interpreter is a
+    /// symlink to another one, as in a virtual environment created with `python -m venv
+    /// --symlinks`. Resolving the symlink would run the child process outside the environment.
+    #[test]
+    #[cfg(windows)]
+    fn script_launcher_preserves_symlinked_interpreter() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let venv = temp_dir.child("venv");
+
+        let python = which("python")?;
+        Command::new(&python)
+            .arg("-m")
+            .arg("venv")
+            .arg("--symlinks")
+            .arg(venv.path())
+            .assert()
+            .success();
+
+        // `venv --symlinks` silently falls back to copies when the user may not create symlinks,
+        // which requires either Developer Mode or elevation. Skip in that case, but never in CI,
+        // where the test must not pass without exercising the launcher.
+        let venv_python = venv.path().join("Scripts").join("python.exe");
+        if !fs_err::symlink_metadata(&venv_python)?.is_symlink() {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "the interpreter was copied rather than symlinked"
+            );
+            println!("Skipping: `venv --symlinks` did not create a symlink");
+            return Ok(());
+        }
+
+        let script = format!(
+            r"{}
+import sys
+print(sys.prefix)
+",
+            format_shebang(&venv_python)
+        );
+        let launcher_path = venv.path().join("Scripts").join("launcher.exe");
+        let launcher = windows_script_launcher(&script, false, &venv_python)?;
+        File::create(&launcher_path)?.write_all(launcher.as_ref())?;
+
+        let output = Command::new(&launcher_path).output()?;
+        assert!(
+            output.status.success(),
+            "the launcher failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let prefix = PathBuf::from(String::from_utf8(output.stdout)?.trim());
+        assert_eq!(
+            fs_err::canonicalize(&prefix)?,
+            fs_err::canonicalize(venv.path())?,
+            "the launcher must run inside the virtual environment"
+        );
+
+        Ok(())
+    }
+
     #[test]
     #[ignore = "This test will spawn a GUI and wait until you close the window."]
     fn gui_launcher() -> Result<()> {

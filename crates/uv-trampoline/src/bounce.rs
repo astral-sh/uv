@@ -1,5 +1,5 @@
 use std::ffi::CString;
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, absolute};
 use std::vec::Vec;
 
 use windows::Win32::Foundation::{LPARAM, WPARAM};
@@ -118,19 +118,13 @@ fn make_child_cmdline() -> CString {
         parent_dir.join(python_path)
     };
 
-    let python_exe =
-        if !python_exe.is_absolute() || matches!(trampoline_kind, TrampolineKind::Script) {
-            // NOTICE: dunce adds 5kb~
-            // TODO(john): In order to avoid resolving junctions and symlinks for relative paths and
-            // scripts, we can consider reverting https://github.com/astral-sh/uv/pull/5750/files#diff-969979506be03e89476feade2edebb4689a9c261f325988d3c7efc5e51de26d1L273-L277.
-            dunce::canonicalize(python_exe.as_path()).unwrap_or_else(|_| {
-                error_and_exit("uv trampoline failed to canonicalize script path");
-            })
-        } else {
-            // For Python trampolines with absolute paths, we skip `dunce::canonicalize` to
-            // avoid resolving junctions.
-            python_exe
-        };
+    // Normalize the path lexically, without touching the filesystem. Resolving junctions and
+    // symlinks would break virtual environments created with `python -m venv --symlinks`, where
+    // `Scripts\python.exe` is a symlink to the base interpreter: the child process would then run
+    // outside of the environment.
+    let python_exe = absolute(python_exe.as_path()).unwrap_or_else(|_| {
+        error_and_exit("uv trampoline failed to resolve the Python path");
+    });
 
     let mut child_cmdline = Vec::<u8>::new();
     push_quoted_path(python_exe.as_ref(), &mut child_cmdline);
