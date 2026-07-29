@@ -2553,22 +2553,17 @@ impl Lock {
                         return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
                     }
                 };
-                if !contents.contains("dynamic") {
-                    continue;
-                }
-
                 let pyproject_toml = PyProjectToml::from_toml(&contents, path.user_display())
                     .map_err(|err| LockErrorKind::InvalidPyprojectToml {
                         path: path.clone(),
                         err,
                     })?;
-                let has_dynamic_requirements = pyproject_toml
-                    .project
-                    .as_ref()
-                    .and_then(|project| project.dynamic.as_ref())
-                    .is_some_and(|fields| {
-                        fields.iter().any(|field| {
-                            matches!(field.as_str(), "dependencies" | "optional-dependencies")
+                let has_dynamic_requirements =
+                    pyproject_toml.project.as_ref().is_none_or(|project| {
+                        project.dynamic.as_ref().is_some_and(|fields| {
+                            fields.iter().any(|field| {
+                                matches!(field.as_str(), "dependencies" | "optional-dependencies")
+                            })
                         })
                     });
                 if !has_dynamic_requirements {
