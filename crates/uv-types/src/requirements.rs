@@ -91,7 +91,7 @@ impl RequestedRequirements {
         &self.requirements
     }
 
-    /// Return the requirement that activated these dependencies.
+    /// Return the activating source, including its inherited environment and conflict markers.
     pub fn activation(&self) -> &Requirement {
         &self.activation
     }

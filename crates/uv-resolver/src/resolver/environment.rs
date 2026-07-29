@@ -175,11 +175,11 @@ impl ResolverEnvironment {
         }
     }
 
-    /// Returns whether a marker overlaps the environments and Python versions supported by this
-    /// resolution.
+    /// Returns whether a marker overlaps this resolution's initial forks and Python requirements.
     ///
     /// Extras are evaluated by the dependency that requested the marker, so only its platform and
-    /// Python-version conditions are relevant when checking the supported environments.
+    /// Python-version conditions are relevant. Universal resolution must also account for the
+    /// project's Python bounds, which are not represented by its initial environment forks.
     pub fn supports_marker(
         &self,
         marker: MarkerTree,

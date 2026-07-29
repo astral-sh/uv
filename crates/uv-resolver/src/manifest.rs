@@ -159,28 +159,7 @@ impl Manifest {
             DependencyMode::Transitive => Either::Left(
                 self.lookaheads
                     .iter()
-                    .flat_map(move |lookahead| {
-                        self.overrides
-                            .apply_for(
-                                lookahead.package(),
-                                lookahead.version(),
-                                lookahead.requirements(),
-                            )
-                            .filter(|requirement| {
-                                !self.excludes.contains_for(
-                                    lookahead.package(),
-                                    lookahead.version(),
-                                    &requirement.name,
-                                )
-                            })
-                            .filter(move |requirement| {
-                                requirement
-                                    .evaluate_markers(env.marker_environment(), lookahead.extras())
-                            })
-                            .map(move |requirement| {
-                                Self::scope_lookahead_requirement(lookahead, requirement)
-                            })
-                    })
+                    .flat_map(move |lookahead| self.lookahead_requirements(env, lookahead))
                     .chain(
                         self.overrides
                             .apply(&self.requirements)
@@ -260,40 +239,19 @@ impl Manifest {
         match mode {
             // Include direct requirements, dependencies of editables, and transitive dependencies
             // of local packages.
-            DependencyMode::Transitive => Either::Left(
-                self.lookaheads
-                    .iter()
-                    .filter(|lookahead| lookahead.direct())
-                    .flat_map(move |lookahead| {
-                        self.overrides
-                            .apply_for(
-                                lookahead.package(),
-                                lookahead.version(),
-                                lookahead.requirements(),
-                            )
-                            .filter(|requirement| {
-                                !self.excludes.contains_for(
-                                    lookahead.package(),
-                                    lookahead.version(),
-                                    &requirement.name,
-                                )
-                            })
-                            .filter(move |requirement| {
-                                requirement
-                                    .evaluate_markers(env.marker_environment(), lookahead.extras())
-                            })
-                            .map(move |requirement| {
-                                Self::scope_lookahead_requirement(lookahead, requirement)
-                            })
-                    })
-                    .chain(
-                        self.overrides
-                            .apply(&self.requirements)
-                            .filter(move |requirement| {
+            DependencyMode::Transitive => {
+                Either::Left(
+                    self.lookaheads
+                        .iter()
+                        .filter(|lookahead| lookahead.direct())
+                        .flat_map(move |lookahead| self.lookahead_requirements(env, lookahead))
+                        .chain(self.overrides.apply(&self.requirements).filter(
+                            move |requirement| {
                                 requirement.evaluate_markers(env.marker_environment(), &[])
-                            }),
-                    ),
-            ),
+                            },
+                        )),
+                )
+            }
 
             // Restrict to the direct requirements.
             DependencyMode::Direct => {
@@ -309,20 +267,42 @@ impl Manifest {
         self.requirements.len()
     }
 
-    /// Carry a source tree's activation environment and conflict scope into its dependencies.
-    fn scope_lookahead_requirement<'a>(
-        lookahead: &RequestedRequirements,
-        requirement: Cow<'a, Requirement>,
-    ) -> Cow<'a, Requirement> {
-        let extras = lookahead.extras();
-        let marker = requirement
-            .marker
-            .simplify_extras(extras)
-            .simplify_not_extras_with(|extra| !extras.contains(extra))
-            .and(lookahead.activation().marker);
+    /// Return a source tree's active dependencies with its inherited environment and conflict scope.
+    ///
+    /// Keep requirements borrowed when applying the activation marker does not change them.
+    fn lookahead_requirements<'a>(
+        &'a self,
+        env: &'a ResolverEnvironment,
+        lookahead: &'a RequestedRequirements,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        self.overrides
+            .apply_for(
+                lookahead.package(),
+                lookahead.version(),
+                lookahead.requirements(),
+            )
+            .filter(move |requirement| {
+                !self.excludes.contains_for(
+                    lookahead.package(),
+                    lookahead.version(),
+                    &requirement.name,
+                ) && requirement.evaluate_markers(env.marker_environment(), lookahead.extras())
+            })
+            .map(move |requirement| {
+                let extras = lookahead.extras();
+                let marker = requirement
+                    .marker
+                    .simplify_extras(extras)
+                    .simplify_not_extras_with(|extra| !extras.contains(extra))
+                    .and(lookahead.activation().marker);
 
-        let mut requirement = requirement.into_owned();
-        requirement.marker = marker;
-        Cow::Owned(requirement)
+                if marker == requirement.marker {
+                    requirement
+                } else {
+                    let mut requirement = requirement.into_owned();
+                    requirement.marker = marker;
+                    Cow::Owned(requirement)
+                }
+            })
     }
 }

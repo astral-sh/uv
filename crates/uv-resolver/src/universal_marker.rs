@@ -125,6 +125,7 @@ impl UniversalMarker {
     /// Scopes conflict-relevant extras in a marker to their declaring package.
     ///
     /// Extras belonging to different packages otherwise share the same PEP 508 marker namespace.
+    /// Extras absent from the declared conflicts do not affect fork compatibility and are dropped.
     pub fn from_package_extras(
         package: &PackageName,
         marker: MarkerTree,

@@ -26,20 +26,25 @@ use crate::{Error, required_dist};
 /// tracked separately from the environment markers inherited through transitive dependencies.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ScopedRequirement {
+    /// The dependency being activated, including its package-local extra marker.
     requirement: Requirement,
+    /// The package-qualified project, extra, and group predicates inherited from its ancestors.
     scope: MarkerTree,
+    /// The platform and Python-version conditions inherited from its ancestors.
     environment: MarkerTree,
 }
 
 /// A source activation independent of the environments that can reach it.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ScopedRequirementKey {
+    /// The source and dependency with its marker normalized away.
     requirement: Requirement,
+    /// Conflict scopes must remain distinct even when the source is otherwise identical.
     scope: MarkerTree,
 }
 
 impl ScopedRequirement {
-    /// Return the source and conflict scope without its accumulated environment.
+    /// Return a marker-independent source key while preserving its conflict scope.
     fn key(&self) -> ScopedRequirementKey {
         ScopedRequirementKey {
             requirement: Requirement {
@@ -49,12 +54,27 @@ impl ScopedRequirement {
             scope: self.scope,
         }
     }
+
+    /// Merge another activation of the same source and report whether its marker coverage grew.
+    fn merge(&mut self, other: &Self) -> bool {
+        let environment = self.environment.or(other.environment);
+        let marker = self.requirement.marker.or(other.requirement.marker);
+        if environment == self.environment && marker == self.requirement.marker {
+            return false;
+        }
+
+        self.environment = environment;
+        self.requirement.marker = marker;
+        true
+    }
 }
 
 /// A FIFO work queue with indexed coalescing for equivalent source activations.
 #[derive(Default)]
 struct ScopedRequirementQueue {
+    /// Preserve discovery order without scanning queued requirements on every insertion.
     order: VecDeque<ScopedRequirementKey>,
+    /// Keep the activation associated with each queued source key.
     requirements: FxHashMap<ScopedRequirementKey, ScopedRequirement>,
 }
 
@@ -63,12 +83,7 @@ impl ScopedRequirementQueue {
     fn push(&mut self, requirement: ScopedRequirement) {
         match self.requirements.entry(requirement.key()) {
             Entry::Occupied(mut entry) => {
-                let previous = entry.get_mut();
-                previous.environment = previous.environment.or(requirement.environment);
-                previous.requirement.marker = previous
-                    .requirement
-                    .marker
-                    .or(requirement.requirement.marker);
+                entry.get_mut().merge(&requirement);
             }
             Entry::Vacant(entry) => {
                 self.order.push_back(entry.key().clone());
@@ -86,13 +101,6 @@ impl ScopedRequirementQueue {
     /// Return whether the activation queue has been drained.
     fn is_empty(&self) -> bool {
         self.order.is_empty()
-    }
-
-    /// Return the scheduled sources without changing their processing order.
-    fn iter(&self) -> impl Iterator<Item = &ScopedRequirement> {
-        self.order
-            .iter()
-            .filter_map(|key| self.requirements.get(key))
     }
 }
 
@@ -160,12 +168,11 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         }
     }
 
-    /// Resolve the requirements from the provided source trees.
+    /// Resolve direct sources and every transitively activated source before dependency resolution.
     ///
-    /// When the environment is not given, this treats all marker expressions
-    /// that reference the environment as true. In other words, it does
-    /// environment independent expression evaluation. (Which in turn devolves
-    /// to "only evaluate marker expressions that reference an extra name.")
+    /// Registry-form requirements can request extras on an already-known direct source. Replay
+    /// those requirements only in compatible Python, platform, and conflict scopes so their URLs,
+    /// hashes, and candidate-selection requirements are available before the main resolver starts.
     pub async fn resolve(
         self,
         env: &ResolverEnvironment,
@@ -179,59 +186,42 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let conflict_markers = UniversalMarker::from_conflicts(conflicts).combined();
 
         // Queue up the initial requirements.
-        let initial_requirements = self
+        let mut queue = ScopedRequirementQueue::default();
+        for requirement in self
             .constraints
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| !self.excludes.contains(&requirement.name))
             .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
             .filter(|requirement| env.supports_marker(requirement.marker, python_requirement))
-            .flat_map(|requirement| {
-                let requirement = (*requirement).clone();
-                let environment = requirement.marker.without_extras();
+        {
+            let requirement = (*requirement).clone();
+            let environment = requirement.marker.without_extras();
 
-                if requirement.groups.len() <= 1 {
-                    let scope = Self::activation_scope(&requirement, conflicts);
-                    return vec![ScopedRequirement {
-                        requirement,
-                        scope,
-                        environment,
-                    }];
-                }
+            if requirement.groups.len() <= 1 {
+                queue.push(ScopedRequirement {
+                    scope: Self::activation_scope(&requirement, conflicts),
+                    requirement,
+                    environment,
+                });
+                continue;
+            }
 
-                requirement
-                    .groups
-                    .iter()
-                    .cloned()
-                    .map(|group| {
-                        let requirement = Requirement {
-                            groups: Box::new([group]),
-                            ..requirement.clone()
-                        };
-                        ScopedRequirement {
-                            scope: Self::activation_scope(&requirement, conflicts),
-                            requirement,
-                            environment,
-                        }
-                    })
-                    .collect()
-            })
-            .collect::<Vec<_>>();
-        let mut queue = ScopedRequirementQueue::default();
-        for requirement in initial_requirements {
-            queue.push(requirement);
-        }
-
-        // Track every direct source for each package, including sources that apply in disjoint
-        // marker environments. Registry-form requirements can then activate extras on each
-        // compatible source without depending on their discovery order.
-        let mut direct: FxHashMap<_, Vec<_>> = FxHashMap::default();
-        for scoped_requirement in queue.iter() {
-            let requirement = &scoped_requirement.requirement;
-            if !matches!(requirement.source, RequirementSource::Registry { .. }) {
-                let direct_requirements = direct.entry(requirement.name.clone()).or_default();
-                Self::remember(direct_requirements, scoped_requirement.clone());
+            for group in &requirement.groups {
+                let requirement = Requirement {
+                    groups: Box::new([group.clone()]),
+                    ..requirement.clone()
+                };
+                queue.push(ScopedRequirement {
+                    scope: Self::activation_scope(&requirement, conflicts),
+                    requirement,
+                    environment,
+                });
             }
         }
+
+        // Track direct sources and registry requirements separately so either can be discovered
+        // first and still replay against all compatible activations of the other.
+        let mut direct: FxHashMap<_, Vec<_>> = FxHashMap::default();
         let mut pending: FxHashMap<_, Vec<_>> = FxHashMap::default();
 
         while !queue.is_empty() || !futures.is_empty() {
@@ -366,7 +356,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         Ok((results, hasher))
     }
 
-    /// Merge equivalent source records and return their newly expanded activation context.
+    /// Merge equivalent source records, returning only newly expanded activation contexts.
     fn remember(
         requirements: &mut Vec<ScopedRequirement>,
         requirement: ScopedRequirement,
@@ -376,18 +366,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .iter_mut()
             .find(|previous| previous.key() == key)
         {
-            let environment = previous.environment.or(requirement.environment);
-            let marker = previous
-                .requirement
-                .marker
-                .or(requirement.requirement.marker);
-            if environment == previous.environment && marker == previous.requirement.marker {
-                return None;
-            }
-
-            previous.environment = environment;
-            previous.requirement.marker = marker;
-            Some(previous.clone())
+            previous.merge(&requirement).then(|| previous.clone())
         } else {
             requirements.push(requirement.clone());
             Some(requirement)
@@ -395,6 +374,9 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     }
 
     /// Return whether a source is reachable in any environment not traversed previously.
+    ///
+    /// An impossible environment is still visited once to register its immediate nested URLs;
+    /// later visits must add a genuinely reachable environment.
     fn visit(
         seen: &mut FxHashMap<ScopedRequirementKey, MarkerTree>,
         requirement: &ScopedRequirement,
@@ -415,7 +397,9 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         }
     }
 
-    /// Evaluate package-local extras before removing them from an environment marker.
+    /// Evaluate package-local extras before projecting a marker onto its supported environments.
+    ///
+    /// This keeps the selected branch of markers that combine extras with platform conditions.
     fn selected_marker(marker: MarkerTree, extras: &[ExtraName]) -> MarkerTree {
         marker
             .simplify_extras(extras)
@@ -464,7 +448,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         })
     }
 
-    /// Returns the conflict activation implied by a direct requirement.
+    /// Return the package-qualified project or dependency-group conflicts activated by a source.
     fn activation_scope(requirement: &Requirement, conflicts: &Conflicts) -> MarkerTree {
         if requirement.groups.is_empty() {
             if !conflicts.contains(&requirement.name, ConflictKindRef::Project) {
@@ -492,7 +476,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             })
     }
 
-    /// Infer the package name for a given "unnamed" requirement.
+    /// Fetch a direct source's metadata while retaining the scope in which it was activated.
     async fn lookahead(
         &self,
         scoped_requirement: ScopedRequirement,
