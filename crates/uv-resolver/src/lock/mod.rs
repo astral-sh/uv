@@ -2041,8 +2041,21 @@ impl Lock {
 
         // Special-case: if the version is dynamic, compare the flattened requirements.
         let flattened = if package.is_dynamic() || missing_metadata {
+            let requirements = if missing_metadata {
+                let package_context = package_version.map(|version| (&package.id.name, version));
+                // The resolver excludes recursive self-requirements before flattening extras.
+                requires_dist
+                    .iter()
+                    .filter(|requirement| {
+                        !excludes.contains_for_package(package_context, &requirement.name)
+                    })
+                    .cloned()
+                    .collect()
+            } else {
+                requires_dist.clone()
+            };
             Some(
-                FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
+                FlatRequiresDist::from_requirements(requirements, &package.id.name)
                     .into_iter()
                     .map(|requirement| {
                         normalize_requirement(requirement, root, &self.requires_python)
