@@ -18882,6 +18882,133 @@ fn lock_metadata_free_shared_direct_sources() -> Result<()> {
     Ok(())
 }
 
+/// Extras and dependency groups can select direct sources for otherwise unqualified dependencies.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_shared_optional_and_group_direct_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx", "six", "member[feature]"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["httpx @ {httpx_url}"]
+
+        [dependency-groups]
+        dev = ["six @ {six_url}"]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+            six_url = server.file_url("six-1.0.0-py3-none-any.whl"),
+        })?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Direct sources selected by a non-workspace local dependency are shared across the resolution.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_shared_transitive_direct_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx[http2]", "local"]
+
+        [tool.uv.sources]
+        local = { path = "local" }
+        "#})?;
+    context
+        .temp_dir
+        .child("local/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "local"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx @ {httpx_url}"]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Requested target extras must cover the same marker environments as their declarations.
 #[cfg(feature = "test-universal")]
 #[test]

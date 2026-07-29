@@ -44,15 +44,17 @@ use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, VersionOrUrl,
+    split_scheme,
 };
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
-    ConflictItem, ConflictKindRef, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
-    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml, VerbatimParsedUrl,
+    ConflictItem, ConflictKindRef, Conflicts, DependencyGroupSpecifier, HashAlgorithm, HashDigest,
+    HashDigests, Hashes, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    VerbatimParsedUrl,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -2468,13 +2470,73 @@ impl Lock {
         };
         let dependency_sources = if allow_missing_package_metadata {
             let mut source_requirements = normalized_constraints;
+            let mut add_source_requirements =
+                |package: &Package, requirements: Vec<Requirement>| -> Result<(), LockError> {
+                    let package_context = package
+                        .id
+                        .version
+                        .as_ref()
+                        .map(|version| (&package.id.name, version));
+
+                    for requirement in dependency_overrides
+                        .apply_for_package(package_context, &requirements)
+                        .filter(|requirement| {
+                            !dependency_excludes
+                                .contains_for_package(package_context, &requirement.name)
+                        })
+                    {
+                        if matches!(requirement.source, RequirementSource::Registry { .. }) {
+                            continue;
+                        }
+
+                        source_requirements.insert(normalize_requirement(
+                            requirement.into_owned(),
+                            root,
+                            &self.requires_python,
+                        )?);
+                    }
+
+                    Ok(())
+                };
+
             for member in packages.values() {
-                let has_direct_requirements = member
+                let has_direct_production_requirements = member
                     .project()
                     .dependencies
                     .iter()
                     .flatten()
                     .any(|requirement| requirement.contains('@'));
+                let has_direct_optional_requirements = member
+                    .project()
+                    .optional_dependencies
+                    .iter()
+                    .flat_map(|extras| extras.values())
+                    .flatten()
+                    .any(|requirement| requirement.contains('@'));
+                let has_direct_group_requirements = member
+                    .pyproject_toml()
+                    .dependency_groups
+                    .iter()
+                    .flatten()
+                    .flat_map(|(_, requirements)| requirements)
+                    .any(|requirement| {
+                        matches!(
+                            requirement,
+                            DependencyGroupSpecifier::Requirement(requirement)
+                                if requirement.contains('@')
+                        )
+                    });
+                let has_direct_dev_requirements = member
+                    .pyproject_toml()
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.dev_dependencies.as_ref())
+                    .is_some_and(|requirements| {
+                        requirements.iter().any(|requirement| {
+                            matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_)))
+                        })
+                    });
                 let has_direct_sources = member
                     .pyproject_toml()
                     .tool
@@ -2495,14 +2557,23 @@ impl Lock {
                                 )
                             })
                     });
-                if !has_direct_requirements && !has_direct_sources {
+                if !has_direct_production_requirements
+                    && !has_direct_optional_requirements
+                    && !has_direct_group_requirements
+                    && !has_direct_dev_requirements
+                    && !has_direct_sources
+                {
                     continue;
                 }
 
                 let Some(package) = self.find_by_name(&member.project().name).ok().flatten() else {
                     continue;
                 };
-                let direct_requirements = if has_direct_sources {
+                let direct_requirements = if has_direct_sources
+                    || has_direct_optional_requirements
+                    || has_direct_group_requirements
+                    || has_direct_dev_requirements
+                {
                     let path = member.root().join("pyproject.toml");
                     let pyproject_toml =
                         PyProjectToml::from_toml(&member.pyproject_toml().raw, path.user_display())
@@ -2520,7 +2591,17 @@ impl Lock {
                     else {
                         continue;
                     };
-                    metadata.requires_dist.into_vec()
+                    metadata
+                        .requires_dist
+                        .into_vec()
+                        .into_iter()
+                        .chain(
+                            metadata
+                                .dependency_groups
+                                .into_values()
+                                .flat_map(<[Requirement]>::into_vec),
+                        )
+                        .collect()
                 } else {
                     member
                         .project()
@@ -2534,29 +2615,57 @@ impl Lock {
                         .map(Requirement::from)
                         .collect()
                 };
-                let package_context = package
-                    .id
-                    .version
-                    .as_ref()
-                    .map(|version| (&package.id.name, version));
+                add_source_requirements(package, direct_requirements)?;
+            }
 
-                for requirement in dependency_overrides
-                    .apply_for_package(package_context, &direct_requirements)
-                    .filter(|requirement| {
-                        !dependency_excludes
-                            .contains_for_package(package_context, &requirement.name)
-                    })
-                {
-                    if matches!(requirement.source, RequirementSource::Registry { .. }) {
-                        continue;
-                    }
-
-                    source_requirements.insert(normalize_requirement(
-                        requirement.into_owned(),
-                        root,
-                        &self.requires_python,
-                    )?);
+            for package in &self.packages {
+                if packages.contains_key(&package.id.name) {
+                    continue;
                 }
+
+                let Some(source_tree) = package.id.source.as_source_tree() else {
+                    continue;
+                };
+                let package_root = root.join(source_tree);
+                let path = package_root.join("pyproject.toml");
+                let contents = match fs_err::tokio::read_to_string(&path).await {
+                    Ok(contents) => contents,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                    Err(err) => {
+                        return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
+                    }
+                };
+                if !contents.contains('@') && !contents.contains("sources") {
+                    continue;
+                }
+
+                let pyproject_toml = PyProjectToml::from_toml(&contents, path.user_display())
+                    .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                        path: path.clone(),
+                        err,
+                    })?;
+                let Some(metadata) = database
+                    .requires_dist(&package_root, &pyproject_toml)
+                    .await
+                    .map_err(|err| LockErrorKind::Resolution {
+                        id: package.id.clone(),
+                        err,
+                    })?
+                else {
+                    continue;
+                };
+                let direct_requirements = metadata
+                    .requires_dist
+                    .into_vec()
+                    .into_iter()
+                    .chain(
+                        metadata
+                            .dependency_groups
+                            .into_values()
+                            .flat_map(<[Requirement]>::into_vec),
+                    )
+                    .collect();
+                add_source_requirements(package, direct_requirements)?;
             }
 
             Constraints::from_requirements(source_requirements.into_iter())
