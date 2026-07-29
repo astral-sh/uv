@@ -2965,6 +2965,7 @@ pub(crate) struct CheckSettings {
     pub(crate) ty_path: Option<PathBuf>,
     #[expect(dead_code)]
     script: Option<PathBuf>,
+    pub(crate) fix: bool,
     pub(crate) all_packages: bool,
     pub(crate) package: Vec<PackageName>,
     pub(crate) extras: ExtrasSpecification,
@@ -2991,6 +2992,7 @@ impl CheckSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let CheckArgs {
+            fix,
             all_packages,
             package,
             script,
@@ -3047,6 +3049,7 @@ impl CheckSettings {
         Ok(Self {
             ty_path: environment.ty_path,
             script,
+            fix,
             all_packages,
             package,
             extras: ExtrasSpecification::from_args(

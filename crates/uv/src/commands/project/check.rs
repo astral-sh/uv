@@ -45,6 +45,7 @@ mod ty;
 pub(crate) async fn check(
     project_dir: &Path,
     ty_path: Option<PathBuf>,
+    fix: bool,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     no_sync: bool,
@@ -726,6 +727,7 @@ pub(crate) async fn check(
     ty::run(
         ty_version,
         ty_path.or(locked_ty_path),
+        fix,
         &target_dir,
         project
             .as_ref()

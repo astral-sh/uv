@@ -2869,6 +2869,7 @@ async fn run_project(
             Box::pin(commands::check(
                 project_dir,
                 args.ty_path,
+                args.fix,
                 args.lock_check,
                 args.frozen,
                 args.no_sync,
