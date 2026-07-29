@@ -667,17 +667,22 @@ mod tests {
     }
 
     #[test]
-    fn configured_indexes_keep_first_named_definition() -> Result<(), Box<dyn Error>> {
+    fn named_indexes_use_first_definition() -> Result<(), Box<dyn Error>> {
         let first = Index::from_str("shared=https://first.example.com/simple")?;
         let mut shadowed = Index::from_str("shared=https://shadowed.example.com/simple")?;
         shadowed.explicit = true;
         let mut explicit = Index::from_str("explicit=https://explicit.example.com/simple")?;
         explicit.explicit = true;
+        let shadowed_implicit =
+            Index::from_str("explicit=https://shadowed-implicit.example.com/simple")?;
         let mut default = Index::from_str("default=https://default.example.com/simple")?;
         default.default = true;
 
-        let locations =
-            IndexLocations::new(vec![first, shadowed, explicit, default], vec![], false);
+        let locations = IndexLocations::new(
+            vec![first, shadowed, explicit, shadowed_implicit, default],
+            vec![],
+            false,
+        );
 
         assert_eq!(
             index_urls(locations.simple_indexes()),
@@ -715,7 +720,7 @@ mod tests {
     }
 
     #[test]
-    fn configured_indexes_preserve_all_unnamed_indexes() -> Result<(), Box<dyn Error>> {
+    fn unnamed_indexes_are_not_deduplicated() -> Result<(), Box<dyn Error>> {
         let first = Index::from_str("https://first.example.com/simple")?;
         let repeated = Index::from_str("https://first.example.com/simple")?;
         let last = Index::from_str("https://last.example.com/simple")?;
@@ -742,7 +747,7 @@ mod tests {
     }
 
     #[test]
-    fn configured_indexes_ignore_shadowed_default() -> Result<(), Box<dyn Error>> {
+    fn shadowed_default_falls_back_to_pypi() -> Result<(), Box<dyn Error>> {
         let first = Index::from_str("shared=https://first.example.com/simple")?;
         let mut shadowed = Index::from_str("shared=https://shadowed.example.com/simple")?;
         shadowed.default = true;
