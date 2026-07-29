@@ -19243,6 +19243,78 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
     Ok(())
 }
 
+/// Legacy `setup.py` source trees can select direct sources without a `pyproject.toml`.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_shared_legacy_direct_source() -> Result<()> {
+    let context = uv_test::test_context!("3.10");
+    let server = PackseServer::empty();
+
+    context
+        .python_command()
+        .arg("-m")
+        .arg("ensurepip")
+        .assert()
+        .success();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["setuptools", "provider"]
+
+        [tool.uv]
+        no-build-isolation-package = ["provider"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/setup.py")
+        .write_str(&formatdoc! {r#"
+        from setuptools import setup
+
+        setup(
+            name="provider",
+            version="1.0.0",
+            python_requires=">=3.10",
+            install_requires=["setuptools @ {setuptools_url}"],
+        )
+        "#,
+            setuptools_url = server.file_url("setuptools-69.0.2-py3-none-any.whl"),
+        })?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Dependency groups on dynamic workspace members can select shared direct sources.
 #[cfg(feature = "test-universal")]
 #[test]

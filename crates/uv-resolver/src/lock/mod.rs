@@ -2547,27 +2547,32 @@ impl Lock {
                 let package_root = root.join(source_tree);
                 let path = package_root.join("pyproject.toml");
                 let contents = match fs_err::tokio::read_to_string(&path).await {
-                    Ok(contents) => contents,
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                    Ok(contents) => Some(contents),
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => None,
                     Err(err) => {
                         return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
                     }
                 };
-                let pyproject_toml = PyProjectToml::from_toml(&contents, path.user_display())
-                    .map_err(|err| LockErrorKind::InvalidPyprojectToml {
-                        path: path.clone(),
-                        err,
-                    })?;
-                let has_dynamic_requirements =
-                    pyproject_toml.project.as_ref().is_none_or(|project| {
-                        project.dynamic.as_ref().is_some_and(|fields| {
-                            fields.iter().any(|field| {
-                                matches!(field.as_str(), "dependencies" | "optional-dependencies")
+                if let Some(contents) = contents.as_ref() {
+                    let pyproject_toml = PyProjectToml::from_toml(contents, path.user_display())
+                        .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                            path: path.clone(),
+                            err,
+                        })?;
+                    let has_dynamic_requirements =
+                        pyproject_toml.project.as_ref().is_none_or(|project| {
+                            project.dynamic.as_ref().is_some_and(|fields| {
+                                fields.iter().any(|field| {
+                                    matches!(
+                                        field.as_str(),
+                                        "dependencies" | "optional-dependencies"
+                                    )
+                                })
                             })
-                        })
-                    });
-                if !has_dynamic_requirements {
-                    continue;
+                        });
+                    if !has_dynamic_requirements {
+                        continue;
+                    }
                 }
 
                 let HashedDist { dist, .. } =
@@ -2601,7 +2606,9 @@ impl Lock {
                 };
 
                 let mut direct_requirements = metadata.requires_dist.into_vec();
-                if contents.contains("dependency-groups") || contents.contains("dev-dependencies") {
+                if contents.as_ref().is_some_and(|contents| {
+                    contents.contains("dependency-groups") || contents.contains("dev-dependencies")
+                }) {
                     let dependency_groups = database
                         .dependency_groups(&package_root)
                         .await
