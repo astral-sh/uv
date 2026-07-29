@@ -18882,6 +18882,79 @@ fn lock_metadata_free_shared_direct_sources() -> Result<()> {
     Ok(())
 }
 
+/// First-party direct sources apply globally, even across disjoint platform markers.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "httpx[http2] ; sys_platform == 'win32'",
+            "six ; sys_platform == 'win32'",
+            "member",
+        ]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "httpx @ {httpx_url} ; sys_platform == 'darwin'",
+            "six ; sys_platform == 'darwin'",
+        ]
+
+        [tool.uv.sources]
+        six = {{ url = "{six_url}" }}
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+            six_url = server.file_url("six-1.0.0-py3-none-any.whl"),
+        })?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Extras and dependency groups can select direct sources for otherwise unqualified dependencies.
 #[cfg(feature = "test-universal")]
 #[test]
