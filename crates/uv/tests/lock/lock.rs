@@ -18642,7 +18642,7 @@ fn lock_regenerates_dynamic_version_scoped_override() -> Result<()> {
     ");
 
     // The dynamically selected version can change which scoped override applies.
-    backend.write_str(&backend_contents.replace("1.0.0", "2.0.0"))?;
+    backend.write_str(&backend_contents.replace("1.0.0", "2.0.0.post1"))?;
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
@@ -18746,7 +18746,7 @@ fn lock_regenerates_dynamic_version_scoped_exclusion() -> Result<()> {
     ");
 
     // A scoped exclusion stops applying when the dynamic version no longer matches.
-    backend.write_str(&backend_contents.replace("1.0.0", "2.0.0"))?;
+    backend.write_str(&backend_contents.replace("1.0.0", "2.0.0.post1"))?;
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
@@ -18800,6 +18800,69 @@ fn lock_regenerates_scoped_excluded_recursive_extra() -> Result<()> {
         [project.optional-dependencies]
         base = ["anyio"]
         feature = ["provider[base]"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Scoped overrides must apply before recursive extras are expanded for metadata-free locks.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_regenerates_scoped_overridden_recursive_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    let provider = context.temp_dir.child("provider");
+    provider.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        base = ["anyio"]
+        feature = ["provider[base]"]
+        "#})?;
+    let provider_url = Url::from_directory_path(provider.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert provider directory to a file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==4.4.0", "provider[feature] @ {provider_url}"]
+
+        [tool.uv]
+        override-dependencies = [
+            {{ package = {{ name = "provider", version = "1.0.0" }}, dependencies = ["provider==1.0.0"] }},
+        ]
         "#})?;
 
     uv_snapshot!(context.filters(), context.lock()

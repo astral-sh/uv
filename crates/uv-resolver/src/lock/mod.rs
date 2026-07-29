@@ -2043,13 +2043,14 @@ impl Lock {
         let flattened = if package.is_dynamic() || missing_metadata {
             let requirements = if missing_metadata {
                 let package_context = package_version.map(|version| (&package.id.name, version));
-                // The resolver excludes recursive self-requirements before flattening extras.
-                requires_dist
-                    .iter()
+                // The resolver applies overrides and exclusions before flattening recursive
+                // self-requirements.
+                overrides
+                    .apply_for_package(package_context, requires_dist.iter())
                     .filter(|requirement| {
                         !excludes.contains_for_package(package_context, &requirement.name)
                     })
-                    .cloned()
+                    .map(Cow::into_owned)
                     .collect()
             } else {
                 requires_dist.clone()
