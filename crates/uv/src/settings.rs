@@ -1277,14 +1277,14 @@ impl ToolListSettings {
             no_python_downloads: _,
         } = args;
 
-        let filesystem = filesystem
+        let top_level = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.top_level)
             .unwrap_or_default();
         let filesystem = ResolverInstallerOptions {
-            index: filesystem.index,
-            exclude_newer: filesystem.exclude_newer,
-            exclude_newer_package: filesystem.exclude_newer_package,
+            index: top_level.index,
+            exclude_newer: top_level.exclude_newer,
+            exclude_newer_package: top_level.exclude_newer_package,
             ..ResolverInstallerOptions::default()
         };
 
