@@ -828,8 +828,9 @@ impl<'de> VariantAccess<'de> for InlineVariantAccess<'_, 'de> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<(), Error> {
-        self.cursor.skip_whitespace();
-        self.cursor.consume(b'}')
+        Err(self
+            .cursor
+            .unsupported("inline tables cannot contain unit variants"))
     }
 
     fn newtype_variant_seed<T: DeserializeSeed<'de>>(self, seed: T) -> Result<T::Value, Error> {
@@ -1180,6 +1181,29 @@ dev = [{ name = "dependency", specifier = ">=1" }]
         let actual = Lock::from_toml(&input).expect_err("duplicate source remains invalid");
 
         assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn inline_unit_variants_without_values_preserve_toml_error() {
+        for variant in ["highest", "lowest", "lowest-direct"] {
+            let input = CANONICAL_LOCK.replacen(
+                "\n\n[[package]]",
+                &format!("\n\n[options]\nresolution-mode = {{ {variant} = }}\n\n[[package]]"),
+                1,
+            );
+            let expected = toml::from_str::<Lock>(&input)
+                .expect_err("TOML rejects an inline unit variant without a value");
+
+            assert!(
+                from_str(&input).is_err(),
+                "the direct parser must reject an inline `{variant}` without a value"
+            );
+
+            let actual = Lock::from_toml(&input)
+                .expect_err("the lock reader rejects an inline unit variant without a value");
+
+            assert_eq!(actual.to_string(), expected.to_string());
+        }
     }
 
     #[test]
