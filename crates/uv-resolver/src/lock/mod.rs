@@ -2470,6 +2470,28 @@ impl Lock {
         };
         let dependency_sources = if allow_missing_package_metadata {
             let mut source_requirements = normalized_constraints;
+            for requirement in dependency_overrides
+                .apply_for_package(
+                    None,
+                    requirements
+                        .iter()
+                        .chain(dependency_groups.values().flatten()),
+                )
+                .filter(|requirement| {
+                    !dependency_excludes.contains_for_package(None, &requirement.name)
+                })
+            {
+                if matches!(requirement.source, RequirementSource::Registry { .. }) {
+                    continue;
+                }
+
+                source_requirements.insert(normalize_requirement(
+                    requirement.into_owned(),
+                    root,
+                    &self.requires_python,
+                )?);
+            }
+
             let mut add_source_requirements =
                 |package: &Package, requirements: Vec<Requirement>| -> Result<(), LockError> {
                     let package_context = package
