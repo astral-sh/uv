@@ -283,11 +283,14 @@ pub(crate) async fn check(
                         .then_some(Ok(script)),
                     Err(ScriptDiscoveryError::Parse { path, source }) => {
                         debug!(
-                            "Ignoring invalid PEP 723 script `{}` while checking project root `{}`: {source}",
+                            "Excluding invalid PEP 723 script `{}` while checking project root `{}`: {source}",
                             path.simplified_display(),
                             project.root().simplified_display(),
                         );
-                        None
+                        check_targets
+                            .iter()
+                            .any(|target| path.starts_with(target))
+                            .then_some(Ok(path))
                     }
                     Err(err) => Some(Err(err)),
                 })

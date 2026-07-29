@@ -172,7 +172,7 @@ fn check_project_ignores_invalid_pep723_scripts() -> Result<()> {
             # /// script
             # dependencies = []
             # ///
-            value = 1
+            value: str = 1
         "})?;
 
     uv_snapshot!(context.filters(), context.check(), @"
