@@ -4110,18 +4110,13 @@ fn python_greater_than_current_excluded() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==2.0.0 depends on Python>=3.10, we can conclude that a==2.0.0 cannot be used.
-          And because only the following versions of a are available:
-              a<=2.0.0
-              a==3.0.0
-              a==4.0.0
-          we can conclude that a>=2.0.0,<3.0.0 cannot be used. (1)
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==2.0.0 depends on Python>=3.10, we can conclude that a==2.0.0 cannot be used. (1)
 
           Because the current Python version (3.9.[X]) does not satisfy Python>=3.11 and a==3.0.0 depends on Python>=3.11, we can conclude that a==3.0.0 cannot be used.
-          And because we know from (1) that a>=2.0.0,<3.0.0 cannot be used, we can conclude that a>=2.0.0,<4.0.0 cannot be used. (2)
+          And because we know from (1) that a==2.0.0 cannot be used, we can conclude that a>=2.0.0,<=3.0.0 cannot be used. (2)
 
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 cannot be used.
-          And because we know from (2) that a>=2.0.0,<4.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and a>=4.0.0 depends on Python>=3.12, we can conclude that a>=4.0.0 cannot be used.
+          And because we know from (2) that a>=2.0.0,<=3.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
           And because you require a>=2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -4205,7 +4200,7 @@ fn python_greater_than_current_patch() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.13) does not satisfy Python>=3.13.2 and a==1.0.0 depends on Python>=3.13.2, we can conclude that a==1.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.13) does not satisfy Python>=3.13.2 and all versions of a depend on Python>=3.13.2, we can conclude that all versions of a cannot be used.
           And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -4236,7 +4231,7 @@ fn python_greater_than_current() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and all versions of a depend on Python>=3.10, we can conclude that all versions of a cannot be used.
           And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -4299,7 +4294,7 @@ fn python_version_does_not_exist() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.30 and a==1.0.0 depends on Python>=3.30, we can conclude that a==1.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.30 and all versions of a depend on Python>=3.30, we can conclude that all versions of a cannot be used.
           And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -4555,8 +4550,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp312`), we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a have no wheels with a matching Python ABI tag (e.g., `cp312`) and you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: You require CPython 3.12 (`cp312`), but we only found wheels for `a` (v1.0.0) with the following Python ABI tag: `graalpy240_310_native`
     ");
@@ -4588,8 +4582,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`), we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a have no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: Wheels are available for `a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
     ");
@@ -4621,8 +4614,7 @@ fn no_sdist_no_wheels_with_matching_python() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp312`), we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a have no wheels with a matching Python implementation tag (e.g., `cp312`) and you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: You require CPython 3.12 (`cp312`), but we only found wheels for `a` (v1.0.0) with the following Python implementation tag: `graalpy310`
     ");
@@ -4655,8 +4647,7 @@ fn no_wheels_no_build() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no usable wheels, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a have no usable wheels and you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: Wheels are required for `a` because building from source is disabled for `a` (i.e., with `--no-build-package a`)
     ");
@@ -4747,8 +4738,7 @@ fn only_wheels_no_binary() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no source distribution, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a have no source distribution and you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: A source distribution is required for `a` because using pre-built wheels is disabled for `a` (i.e., with `--no-binary-package a`)
     ");
@@ -4838,11 +4828,7 @@ fn package_only_yanked_in_range() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of a are available:
-              a<=0.1.0
-              a==1.0.0
-          and a==1.0.0 was yanked, we can conclude that a>0.1.0 cannot be used.
-          And because you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because a==1.0.0 was yanked and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Since there are other versions of `a` available, yanked versions should not be selected without explicit opt-in.
@@ -4872,8 +4858,7 @@ fn package_only_yanked() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 was yanked, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a were yanked and you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only one available.
@@ -5020,11 +5005,8 @@ fn transitive_package_only_yanked_in_range() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of b are available:
-              b<=0.1
-              b==1.0.0
-          and b==1.0.0 was yanked, we can conclude that b>0.1 cannot be used.
-          And because all versions of a depend on b>0.1 and you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because b==1.0.0 was yanked and all versions of a depend on b>0.1, we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only valid version in a range.
@@ -5058,8 +5040,8 @@ fn transitive_package_only_yanked() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only b==1.0.0 is available and b==1.0.0 was yanked, we can conclude that all versions of b cannot be used.
-          And because all versions of a depend on b and you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of b were yanked and all versions of a depend on b, we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only one available.

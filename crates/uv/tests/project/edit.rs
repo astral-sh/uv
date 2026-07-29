@@ -13499,8 +13499,7 @@ async fn add_auth_policy_never_with_url_credentials_ignored() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only anyio==4.3.0 is available and anyio==4.3.0 could not be fetched from the network (`401 Unauthorized`), we can conclude that all versions of anyio cannot be used.
-          And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because all versions of anyio could not be fetched from the network (`401 Unauthorized`) and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: Metadata for `anyio` (v4.3.0) could not be fetched; the server returned: `401 Unauthorized`
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing

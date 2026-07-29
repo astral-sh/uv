@@ -366,10 +366,10 @@ fn compatible_python_incompatible_override() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.9 is not available; 3.11.[X] will be used to build dependencies instead.
       × No solution found when resolving dependencies:
-      ╰─▶ Because the requested Python version (>=3.9) does not satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
+      ╰─▶ Because the requested Python version (>=3.9) does not satisfy Python>=3.10 and all versions of a depend on Python>=3.10, we can conclude that all versions of a cannot be used.
           And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
-    hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., a==1.0.0 only supports >=3.10). Consider using a higher `--python-version` value.
+    hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., all versions of a only support >=3.10). Consider using a higher `--python-version` value.
     "
     );
 
@@ -644,10 +644,10 @@ fn python_patch_override_no_patch() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the requested Python version (>=3.9) does not satisfy Python>=3.9.4 and a==1.0.0 depends on Python>=3.9.4, we can conclude that a==1.0.0 cannot be used.
+      ╰─▶ Because the requested Python version (>=3.9) does not satisfy Python>=3.9.4 and all versions of a depend on Python>=3.9.4, we can conclude that all versions of a cannot be used.
           And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
-    hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., a==1.0.0 only supports >=3.9.4). Consider using a higher `--python-version` value.
+    hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., all versions of a only support >=3.9.4). Consider using a higher `--python-version` value.
     "
     );
 
