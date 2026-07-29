@@ -16,6 +16,9 @@ use uv_test::{diff_snapshot, uv_snapshot};
 fn workspace_check(context: &uv_test::TestContext) -> Command {
     let mut command = context.check();
     command.env("TY_OUTPUT_FORMAT", "concise");
+    // Select ty 0.0.64 independently of the suite-wide cutoff so these checks can
+    // exercise `--exclude-scripts` and track newer ty versions without disrupting other tests.
+    command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-07-28T00:00:00Z");
     command
 }
 
@@ -114,7 +117,7 @@ fn check_workspace_excludes_pep723_scripts() -> Result<()> {
 
     uv_snapshot!(
         context.filters(),
-        workspace_check(&context).arg("--ty-version").arg("0.0.64"),
+        workspace_check(&context).arg("--ty-version").arg("0.0.40"),
         @r#"
         exit_code: 1 (failure)
         ----- stdout -----
@@ -203,6 +206,342 @@ fn check_project_ignores_invalid_pep723_scripts() -> Result<()> {
     ----- stderr -----
     error: The script contains multiple PEP 723 metadata blocks
     ");
+
+    Ok(())
+}
+
+/// Apply a safe fix and verify that the corrected source is written to disk.
+#[test]
+fn check_fix() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("value = 1  # ty: ignore[unresolved-reference]\n")?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Found 1 diagnostic (1 fixed, 0 remaining).
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("main.py"), @"
+    value = 1
+    ");
+
+    Ok(())
+}
+
+/// Apply available fixes while preserving unfixable diagnostics and their failure exit status.
+#[test]
+fn check_fix_unfixable() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r#"
+        unused = 1  # ty: ignore[unresolved-reference]
+        value: int = "wrong"
+    "#})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:2:14: error[invalid-assignment] Object of type `Literal["wrong"]` is not assignable to `int`
+    Found 2 diagnostics (1 fixed, 1 remaining).
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    assert_snapshot!(context.read("main.py"), @r#"
+    unused = 1
+    value: int = "wrong"
+    "#);
+
+    Ok(())
+}
+
+/// Leave a clean project unchanged and report success when there are no fixes to apply.
+#[test]
+fn check_fix_clean_project() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("value: int = 1\n")?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("main.py"), @"
+    value: int = 1
+    ");
+
+    Ok(())
+}
+
+/// Fix only the selected workspace member and leave other members and scripts untouched.
+#[test]
+fn check_fix_workspace_member_selection() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(
+        &context,
+        "selected",
+        "value = 1  # ty: ignore[unresolved-reference]\n",
+    )?;
+    write_workspace_member(
+        &context,
+        "unselected",
+        "value = 2  # ty: ignore[unresolved-reference]\n",
+    )?;
+    context
+        .temp_dir
+        .child("packages/selected/script.py")
+        .write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.12"
+            # dependencies = []
+            # ///
+
+            value = 3  # ty: ignore[unresolved-reference]
+        "#})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix").arg("--package").arg("selected"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Found 1 diagnostic (1 fixed, 0 remaining).
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("packages/selected/main.py"), @"
+    value = 1
+    ");
+    assert_snapshot!(context.read("packages/unselected/main.py"), @"
+    value = 2  # ty: ignore[unresolved-reference]
+    ");
+    assert_snapshot!(context.read("packages/selected/script.py"), @r#"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    value = 3  # ty: ignore[unresolved-reference]
+    "#);
+
+    Ok(())
+}
+
+/// Fix all explicitly selected workspace members without modifying standalone scripts.
+#[test]
+fn check_fix_all_packages() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(
+        &context,
+        "selected-a",
+        "value = 1  # ty: ignore[unresolved-reference]\n",
+    )?;
+    write_workspace_member(
+        &context,
+        "selected-b",
+        "value = 2  # ty: ignore[unresolved-reference]\n",
+    )?;
+    context
+        .temp_dir
+        .child("packages/selected-a/script.py")
+        .write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.12"
+            # dependencies = []
+            # ///
+
+            value = 3  # ty: ignore[unresolved-reference]
+        "#})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix").arg("--all-packages"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Found 2 diagnostics (2 fixed, 0 remaining).
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("packages/selected-a/main.py"), @"
+    value = 1
+    ");
+    assert_snapshot!(context.read("packages/selected-b/main.py"), @"
+    value = 2
+    ");
+    assert_snapshot!(context.read("packages/selected-a/script.py"), @r#"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    value = 3  # ty: ignore[unresolved-reference]
+    "#);
+
+    Ok(())
+}
+
+/// Fix a selected PEP 723 script without checking or changing another Python file.
+#[test]
+fn check_fix_script() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    let selected = context.temp_dir.child("selected.py");
+    selected.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        value = 1  # ty: ignore[unresolved-reference]
+    "#})?;
+    context
+        .temp_dir
+        .child("unselected.py")
+        .write_str("value: int = 'unselected'\n")?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix").arg("--script").arg(selected.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Found 1 diagnostic (1 fixed, 0 remaining).
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("selected.py"), @r#"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    value = 1
+    "#);
+    assert_snapshot!(context.read("unselected.py"), @"
+    value: int = 'unselected'
+    ");
+
+    Ok(())
+}
+
+/// Leave a fixable script unchanged when a different, clean script is selected.
+#[test]
+fn check_fix_script_does_not_fix_unselected_script() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    let selected = context.temp_dir.child("selected.py");
+    selected.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        value: int = 1
+    "#})?;
+
+    let unselected = context.temp_dir.child("unselected.py");
+    unselected.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        value = 2  # ty: ignore[unresolved-reference]
+    "#})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix").arg("--script").arg(selected.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("selected.py"), @r#"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    value: int = 1
+    "#);
+    assert_snapshot!(context.read("unselected.py"), @r#"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    value = 2  # ty: ignore[unresolved-reference]
+    "#);
 
     Ok(())
 }

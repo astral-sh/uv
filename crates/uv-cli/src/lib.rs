@@ -1222,6 +1222,8 @@ pub enum ProjectCommand {
     ///
     /// Currently, this type checks Python code using ty. By default, all Python files in the
     /// project are checked.
+    ///
+    /// To apply safe fixes to type-checking errors, use `--fix`.
     #[command(
         after_help = "Use `uv help check` for more details.",
         after_long_help = ""
@@ -5095,6 +5097,10 @@ pub struct FormatArgs {
 
 #[derive(Args)]
 pub struct CheckArgs {
+    /// Apply safe fixes to resolve type-checking errors.
+    #[arg(long)]
+    pub fix: bool,
+
     /// Check all packages in the workspace.
     ///
     /// The workspace's environment is synchronized to include all workspace members, and files in

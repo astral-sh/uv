@@ -22,6 +22,7 @@ use crate::printer::Printer;
 pub(super) async fn run(
     version: Option<String>,
     ty_path: Option<PathBuf>,
+    fix: bool,
     target_dir: &Path,
     workspace_root: Option<&Path>,
     check_targets: &[PathBuf],
@@ -140,6 +141,9 @@ pub(super) async fn run(
     let mut command = Command::new(&ty_path);
     command.current_dir(target_dir);
     command.arg("check");
+    if fix {
+        command.arg("--fix");
+    }
     // PEP 723 scripts have independent environments and must be checked explicitly with
     // `uv check --script`. This still allows explicitly selected script paths to be checked.
     // Older versions of ty do not support `--exclude-scripts`, so discover and exclude their
