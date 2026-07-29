@@ -965,7 +965,7 @@ fn parse_requirement_and_hashes(
     let start = s.cursor();
     // Termination: s.eat() eventually becomes None
     let (end, has_hashes) = loop {
-        let end = s.cursor();
+        let mut end = s.cursor();
 
         //  We look for the end of the line ...
         if s.eat_if('\n') {
@@ -992,6 +992,7 @@ fn parse_requirement_and_hashes(
         if s.eat().is_none() {
             break (end, false);
         }
+        end = s.cursor();
     };
 
     let requirement = &content[start..end];
@@ -1016,7 +1017,18 @@ fn parse_requirement_and_hashes(
         }
     }
 
-    let requirement = RequirementsTxtRequirement::parse(requirement, working_dir, editable)
+    let requirement = if requirement.contains('\\') {
+        Cow::Owned(
+            requirement
+                .replace("\\\r\n", "")
+                .replace("\\\n", "")
+                .replace("\\\r", ""),
+        )
+    } else {
+        Cow::Borrowed(requirement)
+    };
+
+    let requirement = RequirementsTxtRequirement::parse(&requirement, working_dir, editable)
         .map(|requirement| {
             if let Some(source) = source {
                 requirement.with_origin(RequirementOrigin::File(source.to_path_buf()))
@@ -1630,6 +1642,21 @@ mod test {
         }, {
             insta::assert_debug_snapshot!(snapshot, actual);
         });
+    }
+
+    #[tokio::test]
+    async fn escaped_line_continuation_before_version_specifier() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let requirements_txt = temp_dir.path().join("requirements.txt");
+        fs::write(&requirements_txt, "anyio \\\n     >1.0.0\n")?;
+
+        let requirements = RequirementsTxt::parse(&requirements_txt, temp_dir.path()).await?;
+
+        assert_eq!(
+            requirements.requirements[0].requirement.to_string(),
+            "anyio>1.0.0"
+        );
+        Ok(())
     }
 
     #[test_case(Path::new("basic.txt"))]
