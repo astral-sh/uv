@@ -31,30 +31,22 @@ pub(super) fn from_str(input: &str) -> Result<Lock, Error> {
     Ok(lock)
 }
 
-#[derive(Debug)]
-pub(super) struct Error {
-    offset: usize,
-    message: String,
+#[derive(Debug, thiserror::Error)]
+pub(super) enum Error {
+    #[error("unsupported canonical lock syntax at byte {offset}: {message}")]
+    Unsupported {
+        offset: usize,
+        message: &'static str,
+    },
+    #[error("invalid canonical lock syntax at byte {offset}: {message}")]
+    Invalid { offset: usize, message: String },
+    #[error("failed to deserialize canonical lock: {0}")]
+    Deserialize(String),
 }
-
-impl fmt::Display for Error {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "unsupported canonical lock syntax at byte {}: {}",
-            self.offset, self.message
-        )
-    }
-}
-
-impl std::error::Error for Error {}
 
 impl de::Error for Error {
     fn custom<T: fmt::Display>(message: T) -> Self {
-        Self {
-            offset: 0,
-            message: message.to_string(),
-        }
+        Self::Deserialize(message.to_string())
     }
 }
 
@@ -78,14 +70,14 @@ impl<'de> Cursor<'de> {
     }
 
     fn unsupported(&self, message: &'static str) -> Error {
-        Error {
+        Error::Unsupported {
             offset: self.offset,
-            message: message.to_string(),
+            message,
         }
     }
 
     fn invalid(&self, error: &toml_parser::ParseError) -> Error {
-        Error {
+        Error::Invalid {
             offset: error
                 .unexpected()
                 .or_else(|| error.context())
@@ -883,7 +875,7 @@ mod tests {
     use fs_err as fs;
     use serde::Deserialize;
 
-    use super::{Cursor, Lock, ValueDeserializer, from_str};
+    use super::{Cursor, Error, Lock, ValueDeserializer, from_str};
 
     const CANONICAL_LOCK: &str = r#"version = 1
 revision = 3
@@ -1181,6 +1173,26 @@ dev = [{ name = "dependency", specifier = ">=1" }]
         let actual = Lock::from_toml(&input).expect_err("duplicate source remains invalid");
 
         assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn syntax_errors_preserve_real_byte_offsets() {
+        let input =
+            CANONICAL_LOCK.replace("requires-python = \">=3.12\"", "requires-python = '>=3.12'");
+        let unsupported = from_str(&input).expect_err("literal strings require the TOML fallback");
+
+        assert!(
+            matches!(&unsupported, Error::Unsupported { offset, .. } if *offset > 0),
+            "unsupported syntax must retain its real byte offset: {unsupported}"
+        );
+
+        let input = CANONICAL_LOCK.replace("revision = 3", "revision = 03");
+        let invalid = from_str(&input).expect_err("TOML rejects a leading zero");
+
+        assert!(
+            matches!(&invalid, Error::Invalid { offset, .. } if *offset > 0),
+            "invalid TOML scalars must retain their real byte offset: {invalid}"
+        );
     }
 
     #[test]
