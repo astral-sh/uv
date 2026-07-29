@@ -2521,6 +2521,93 @@ impl Lock {
                     Ok(())
                 };
 
+            for package in &self.packages {
+                if let Some(metadata) =
+                    dependency_metadata.get(&package.id.name, package.id.version.as_ref())
+                {
+                    add_source_requirements(
+                        package,
+                        Box::into_iter(metadata.requires_dist)
+                            .map(Requirement::from)
+                            .collect(),
+                    )?;
+                    continue;
+                }
+
+                if !package
+                    .all_dependencies()
+                    .any(|dependency| !matches!(dependency.package_id.source, Source::Registry(..)))
+                {
+                    continue;
+                }
+
+                let Some(source_tree) = package.id.source.as_source_tree() else {
+                    continue;
+                };
+                let package_root = root.join(source_tree);
+                let path = package_root.join("pyproject.toml");
+                let contents = match fs_err::tokio::read_to_string(&path).await {
+                    Ok(contents) => contents,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                    Err(err) => {
+                        return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
+                    }
+                };
+                if !contents.contains("dynamic") {
+                    continue;
+                }
+
+                let pyproject_toml = PyProjectToml::from_toml(&contents, path.user_display())
+                    .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                        path: path.clone(),
+                        err,
+                    })?;
+                let has_dynamic_requirements = pyproject_toml
+                    .project
+                    .as_ref()
+                    .and_then(|project| project.dynamic.as_ref())
+                    .is_some_and(|fields| {
+                        fields.iter().any(|field| {
+                            matches!(field.as_str(), "dependencies" | "optional-dependencies")
+                        })
+                    });
+                if !has_dynamic_requirements {
+                    continue;
+                }
+
+                let HashedDist { dist, .. } =
+                    package.to_dist(root, TagPolicy::Preferred(tags), build_options, markers)?;
+                let id = dist.distribution_id();
+                let metadata = if let Some(archive) = index
+                    .distributions()
+                    .get(&id)
+                    .as_deref()
+                    .and_then(|response| {
+                        if let MetadataResponse::Found(archive, ..) = response {
+                            Some(archive)
+                        } else {
+                            None
+                        }
+                    }) {
+                    archive.metadata.clone()
+                } else {
+                    let archive = database
+                        .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package.id.clone(),
+                            err,
+                        })?;
+                    let metadata = archive.metadata.clone();
+                    index
+                        .distributions()
+                        .done(id, Arc::new(MetadataResponse::Found(archive)));
+                    metadata
+                };
+
+                add_source_requirements(package, Box::into_iter(metadata.requires_dist).collect())?;
+            }
+
             for member in packages.values() {
                 let has_direct_production_requirements = member
                     .project()
