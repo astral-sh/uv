@@ -778,6 +778,43 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             }
         }
 
+        // Git packages can depend on another directory or archive in the same repository. Since
+        // their metadata is immutable and isn't refreshed, the locked edge is the only available
+        // declaration of that source when another package requests it without qualification.
+        if !source_matches
+            && matches!(
+                requirement.source,
+                RequirementSource::Registry { index: None, .. }
+            )
+            && let Source::Git(_, source) = &package.id.source
+            && let Some(repository) = package.as_git_ref()?
+        {
+            for provider in &self.lock.packages {
+                let Source::Git(_, provider_source) = &provider.id.source else {
+                    continue;
+                };
+                let Some(provider_repository) = provider.as_git_ref()? else {
+                    continue;
+                };
+                if provider_repository.sha != repository.sha
+                    || provider_repository.reference.url != repository.reference.url
+                    || provider_source.lfs != source.lfs
+                {
+                    continue;
+                }
+
+                // Source selections apply globally, even when this edge and the unqualified
+                // requirement have disjoint markers.
+                if provider
+                    .all_dependencies()
+                    .any(|dependency| dependency.package_id == package.id)
+                {
+                    source_matches = true;
+                    break;
+                }
+            }
+        }
+
         source_matches |= package.id == self.package.id
             && matches!(
                 requirement.source,

@@ -1,4 +1,9 @@
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+use std::process::Command;
+
 use anyhow::Result;
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+use anyhow::anyhow;
 #[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -19470,6 +19475,99 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Immutable Git packages can select repository-internal archives for first-party dependencies.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    let repository = context.temp_dir.child("repository");
+    repository.child("archives").create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        repository
+            .child("archives/basic_package-0.1.0-py3-none-any.whl")
+            .path(),
+    )?;
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package ; sys_platform == 'darwin'"]
+
+        [tool.uv.sources]
+        basic-package = { path = "archives/basic_package-0.1.0-py3-none-any.whl" }
+        "#})?;
+
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("add")
+        .arg(".")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("-c")
+        .arg("user.name=Example")
+        .arg("-c")
+        .arg("user.email=example@example.com")
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package ; sys_platform == 'win32'", "provider"]
+
+        [tool.uv.sources]
+        provider = {{ git = "{repository_url}" }}
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())
