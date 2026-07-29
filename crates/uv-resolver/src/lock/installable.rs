@@ -73,6 +73,26 @@ pub trait Installable<'lock> {
     /// Return the [`PackageName`] of the root packages in the target.
     fn roots(&self) -> impl Iterator<Item = &PackageName>;
 
+    /// Return packages whose dependency groups, but not production dependencies, are included.
+    fn group_roots(
+        &self,
+        _groups: &DependencyGroupsWithDefaults,
+    ) -> impl Iterator<Item = &PackageName> {
+        std::iter::empty()
+    }
+
+    /// Return whether a dependency group should be included for its owning package.
+    ///
+    /// A `None` package represents groups defined directly on a non-project workspace root.
+    fn includes_group(
+        &self,
+        _package: Option<&PackageName>,
+        group: &GroupName,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> bool {
+        groups.contains(group)
+    }
+
     /// Return the [`PackageName`] of the target, if available.
     fn project_name(&self) -> Option<&PackageName>;
 
@@ -101,10 +121,26 @@ pub trait Installable<'lock> {
                     })
             })
             .collect::<Result<Vec<_>, LockError>>()?;
+        let group_roots = self
+            .group_roots(groups)
+            .map(|root_name| {
+                self.lock()
+                    .find_by_name(root_name)
+                    .map_err(|_| LockErrorKind::MultipleRootPackages {
+                        name: root_name.clone(),
+                    })?
+                    .ok_or_else(|| {
+                        LockError::from(LockErrorKind::MissingRootPackage {
+                            name: root_name.clone(),
+                        })
+                    })
+            })
+            .collect::<Result<Vec<_>, LockError>>()?;
 
         InstallableExt::to_resolution_from_packages(
             self,
             &roots,
+            &group_roots,
             true,
             DependencySelectionContext::None,
             marker_env,
@@ -195,6 +231,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
     fn to_resolution_from_packages(
         &self,
         roots: &[&Package],
+        group_roots: &[&Package],
         include_manifest: bool,
         selection_context: DependencySelectionContext<'lock>,
         marker_env: &ResolverMarkerEnvironment,
@@ -266,7 +303,17 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 for group in dist
                     .dependency_groups
                     .keys()
-                    .filter(|group| groups.contains(group))
+                    .filter(|group| self.includes_group(Some(&dist.id.name), group, groups))
+                {
+                    activated_groups.push((&dist.id.name, group));
+                }
+            }
+
+            for dist in group_roots.iter().copied() {
+                for group in dist
+                    .dependency_groups
+                    .keys()
+                    .filter(|group| self.includes_group(Some(&dist.id.name), group, groups))
                 {
                     activated_groups.push((&dist.id.name, group));
                 }
@@ -288,12 +335,19 @@ trait InstallableExt<'lock>: Installable<'lock> {
             petgraph.add_edge(root, index, Edge::Prod);
 
             // Push the package onto the queue.
-            initialized_roots.push((dist, index));
+            initialized_roots.push((dist, index, true));
+        }
+
+        for dist in group_roots.iter().copied() {
+            let index = petgraph.add_node(self.non_installable_node(dist, tags, marker_env)?);
+            inverse.insert(&dist.id, index);
+            petgraph.add_edge(root, index, Edge::Prod);
+            initialized_roots.push((dist, index, false));
         }
 
         // Add the workspace dependencies to the queue.
-        for (dist, index) in initialized_roots {
-            if groups.prod() {
+        for (dist, index, include_production) in initialized_roots {
+            if include_production && groups.prod() {
                 // Push its dependencies onto the queue.
                 queue.push_back((dist, None));
                 add_reachability(
@@ -316,7 +370,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 .dependency_groups
                 .iter()
                 .filter_map(|(group, deps)| {
-                    if groups.contains(group) {
+                    if self.includes_group(Some(&dist.id.name), group, groups) {
                         Some(deps.iter().map(move |dep| (group, dep)))
                     } else {
                         None
@@ -472,7 +526,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 .dependency_groups()
                 .iter()
                 .filter_map(|(group, deps)| {
-                    if groups.contains(group) {
+                    if self.includes_group(None, group, groups) {
                         Some(deps.iter().map(move |dep| (group, dep)))
                     } else {
                         None
@@ -879,6 +933,7 @@ impl Lock {
         }
         .to_resolution_from_packages(
             &[package],
+            &[],
             false,
             dependency.context(),
             marker_env,
@@ -943,6 +998,7 @@ impl Lock {
         }
         .to_resolution_from_packages(
             &concrete_roots,
+            &[],
             false,
             DependencySelectionContext::None,
             marker_env,
