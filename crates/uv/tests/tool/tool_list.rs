@@ -5,6 +5,10 @@ use fs_err as fs;
 use insta::assert_snapshot;
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
+};
 
 #[test]
 fn tool_list() {
@@ -145,6 +149,64 @@ fn tool_list_outdated() {
     - black
     - blackd
     ");
+}
+
+#[tokio::test]
+async fn tool_list_outdated_respects_configured_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/black/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"{
+                "meta": { "api-version": "1.1" },
+                "name": "black",
+                "files": [{
+                    "filename": "black-99.0.0-py3-none-any.whl",
+                    "url": "black-99.0.0-py3-none-any.whl",
+                    "hashes": {},
+                    "upload-time": "2024-03-24T00:00:00Z"
+                }]
+            }"#,
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    fs::write(
+        context.temp_dir.child("uv.toml"),
+        format!(
+            "[[index]]\nname = \"ordinary\"\nurl = \"{}/simple\"\ndefault = true\n",
+            server.uri()
+        ),
+    )?;
+
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--outdated")
+    .arg("--config-file")
+    .arg(context.temp_dir.child("uv.toml").as_os_str())
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    black v24.2.0 [latest: 99.0.0]
+    - black
+    - blackd
+    ");
+
+    Ok(())
 }
 
 #[test]
