@@ -112,6 +112,20 @@ fn check_workspace_excludes_pep723_scripts() -> Result<()> {
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     "#);
 
+    uv_snapshot!(
+        context.filters(),
+        workspace_check(&context).arg("--ty-version").arg("0.0.64"),
+        @r#"
+        exit_code: 1 (failure)
+        ----- stdout -----
+        main.py:1:14: error[invalid-assignment] Object of type `Literal["project"]` is not assignable to `int`
+        Found 1 diagnostic
+
+        ----- stderr -----
+        warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+        "#
+    );
+
     uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("member"), @r#"
     exit_code: 1 (failure)
     ----- stdout -----

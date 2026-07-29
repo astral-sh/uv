@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -10,7 +10,7 @@ use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
     InstallOptions,
 };
-use uv_fs::{Simplified, normalize_path};
+use uv_fs::normalize_path;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
@@ -34,7 +34,6 @@ use crate::commands::project::{
     validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::workspace::list::{ScriptDiscoveryError, find_scripts};
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
@@ -246,7 +245,7 @@ pub(crate) async fn check(
     // The most common case this is handling is a non-virtual workspace, where the root
     // package will almost always have the other packages nested under it, and we need a
     // way to select just the workspace root.
-    let mut excluded_targets = if let Some(project) = project.as_ref()
+    let excluded_targets = if let Some(project) = project.as_ref()
         && !defacto_all_packages
     {
         project
@@ -269,40 +268,6 @@ pub(crate) async fn check(
     } else {
         Vec::new()
     };
-
-    // PEP 723 scripts have independent environments and must be checked explicitly with
-    // `uv check --script`. Reuse `uv workspace list --scripts` discovery so scripts nested in
-    // selected workspace members are not checked against the project environment.
-    if let Some(project) = project.as_ref() {
-        excluded_targets.extend(
-            find_scripts(project.workspace().install_path(), cache)
-                .filter_map(|script| match script {
-                    Ok(script) => check_targets
-                        .iter()
-                        .any(|target| script.starts_with(target))
-                        .then_some(Ok(script)),
-                    Err(ScriptDiscoveryError::Parse { path, source }) => {
-                        debug!(
-                            "Excluding invalid PEP 723 script `{}` while checking project root `{}`: {source}",
-                            path.simplified_display(),
-                            project.root().simplified_display(),
-                        );
-                        check_targets
-                            .iter()
-                            .any(|target| path.starts_with(target))
-                            .then_some(Ok(path))
-                    }
-                    Err(err) => Some(Err(err)),
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .with_context(|| {
-                    format!(
-                        "Failed to discover PEP 723 scripts while checking project root `{}`",
-                        project.root().simplified_display()
-                    )
-                })?,
-        );
-    }
 
     let groups = if let Some(project) = &project {
         groups.with_defaults(default_dependency_groups(project.pyproject_toml())?)
@@ -762,6 +727,9 @@ pub(crate) async fn check(
         ty_version,
         ty_path.or(locked_ty_path),
         &target_dir,
+        project
+            .as_ref()
+            .map(|project| project.workspace().install_path().as_path()),
         &check_targets,
         &excluded_targets,
         venv_path.as_deref(),
