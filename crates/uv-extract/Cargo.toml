@@ -39,6 +39,9 @@ tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 
+[target.'cfg(all(target_arch = "aarch64", not(target_os = "windows")))'.dependencies]
+sha2 = { workspace = true, features = ["asm"] }
+
 [features]
 default = []
 
