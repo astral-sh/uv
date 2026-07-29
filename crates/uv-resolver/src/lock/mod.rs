@@ -522,12 +522,7 @@ impl<'a> LockedDependencyBuilder<'a> {
             {
                 // Self-requirements do not create graph edges, but their source and version
                 // constraints must still be satisfied by the locked parent package.
-                if !ExpectedPackageDependencies::package_satisfies_requirement(
-                    expected.package,
-                    expected.package,
-                    requirement,
-                    expected.workspace_root,
-                )? {
+                if !expected.package_satisfies_requirement(expected.package, requirement)? {
                     complete = false;
                 }
                 continue;
@@ -537,12 +532,7 @@ impl<'a> LockedDependencyBuilder<'a> {
 
             let mut covered_marker = MarkerTree::FALSE;
             for dependency in expected.packages_for_name(&requirement.name) {
-                if !ExpectedPackageDependencies::package_satisfies_requirement(
-                    expected.package,
-                    dependency,
-                    requirement,
-                    expected.workspace_root,
-                )? {
+                if !expected.package_satisfies_requirement(dependency, requirement)? {
                     continue;
                 }
 
@@ -656,6 +646,7 @@ struct ExpectedPackageDependencies<'lock> {
     declarations: BTreeSet<Requirement>,
     provides_extra: &'lock [ExtraName],
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
+    constraints: &'lock Constraints,
     activated_extras: BTreeSet<ExtraName>,
     /// The environment under which this package can be selected.
     package_marker: UniversalMarker,
@@ -670,6 +661,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         declarations: &BTreeSet<Requirement>,
         provides_extra: &'lock [ExtraName],
         dependency_groups: &BTreeMap<GroupName, BTreeSet<Requirement>>,
+        constraints: &'lock Constraints,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -729,6 +721,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             declarations,
             provides_extra,
             dependency_groups,
+            constraints,
             activated_extras,
             package_marker,
             lock_marker,
@@ -749,20 +742,42 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
 
     /// Check the resolved source and version once for both generation and existing-edge lookup.
     fn package_satisfies_requirement(
-        parent_package: &Package,
+        &self,
         package: &Package,
         requirement: &Requirement,
-        workspace_root: &Path,
     ) -> Result<bool, LockError> {
-        let source_matches = package
+        let mut source_matches = package
             .id
             .source
-            .satisfies_requirement_source(&requirement.source, workspace_root)?
-            || package.id == parent_package.id
-                && matches!(
-                    requirement.source,
-                    RequirementSource::Registry { index: None, .. }
-                );
+            .satisfies_requirement_source(&requirement.source, self.workspace_root)?;
+
+        // A constraint can select a direct source for an otherwise unqualified registry
+        // requirement. The locked source must still match that constraint exactly.
+        if !source_matches
+            && matches!(
+                requirement.source,
+                RequirementSource::Registry { index: None, .. }
+            )
+            && let Some(constraints) = self.constraints.get(&requirement.name)
+        {
+            for constraint in constraints {
+                if !constraint.marker.is_disjoint(requirement.marker)
+                    && package
+                        .id
+                        .source
+                        .satisfies_requirement_source(&constraint.source, self.workspace_root)?
+                {
+                    source_matches = true;
+                    break;
+                }
+            }
+        }
+
+        source_matches |= package.id == self.package.id
+            && matches!(
+                requirement.source,
+                RequirementSource::Registry { index: None, .. }
+            );
         let version_matches = requirement
             .source
             .version_specifiers()
@@ -2019,6 +2034,7 @@ impl Lock {
         requires_dist: Box<[Requirement]>,
         provides_extra: &[ExtraName],
         dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
+        constraints: &Constraints,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -2135,6 +2151,7 @@ impl Lock {
                 declarations,
                 provides_extra,
                 &expected_groups,
+                constraints,
                 overrides,
                 excludes,
                 package_requires_python,
@@ -2170,7 +2187,7 @@ impl Lock {
         package: &'lock Package,
         activated_extras: &mut FxHashMap<PackageId, BTreeSet<ExtraName>>,
         missing_metadata: bool,
-        expected: &ExpectedPackageDependencies,
+        expected: &ExpectedPackageDependencies<'_>,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
         // Use the same dependency builder as lockfile construction, including extra
         // activation for packages whose metadata does not need to be regenerated.
@@ -2343,7 +2360,7 @@ impl Lock {
         }
 
         // Validate that the lockfile was generated with the same constraints.
-        {
+        let normalized_constraints = {
             let expected: BTreeSet<_> = constraints
                 .iter()
                 .cloned()
@@ -2359,7 +2376,8 @@ impl Lock {
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
             }
-        }
+            expected
+        };
 
         // Validate that the lockfile was generated with the same overrides.
         let normalized_overrides = {
@@ -2409,6 +2427,11 @@ impl Lock {
             }
         }
 
+        let dependency_constraints = if allow_missing_package_metadata {
+            Constraints::from_requirements(normalized_constraints.into_iter())
+        } else {
+            Constraints::default()
+        };
         let dependency_overrides = if allow_missing_package_metadata {
             Overrides::from_entries(normalized_overrides.into_iter().collect())
                 .map_err(LockErrorKind::InvalidScopedOverride)?
@@ -2702,6 +2725,7 @@ impl Lock {
                             metadata.requires_dist,
                             &metadata.provides_extra,
                             metadata.dependency_groups,
+                            &dependency_constraints,
                             &dependency_overrides,
                             &dependency_excludes,
                             requires_python.as_ref(),
@@ -2800,6 +2824,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &dependency_constraints,
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
@@ -2855,6 +2880,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &dependency_constraints,
                         &dependency_overrides,
                         &dependency_excludes,
                         requires_python.as_ref(),
@@ -2952,6 +2978,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &dependency_constraints,
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
