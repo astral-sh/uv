@@ -1227,6 +1227,60 @@ fn merge_unavailable_versions(
     }))
 }
 
+/// Combine two unavailabilities of one package that are the causes of the same derivation.
+///
+/// A derivation whose two causes both say that a package cannot be used concludes their union. If
+/// they say it for the same reason, they are one statement about a larger set and the derivation
+/// collapses into it, as [`merge_unavailable_versions`] does for a cause nested one level deeper.
+/// Otherwise the two statements stay separate and only the conclusion is widened to cover them
+/// both.
+///
+/// Two unavailabilities are siblings rather than nested when their version sets are contiguous.
+fn merge_unavailable_siblings(derived: &ErrorDerived) -> Option<ErrorTree> {
+    let DerivationTree::External(External::Custom(package, versions, reason)) = &*derived.cause1
+    else {
+        return None;
+    };
+    let DerivationTree::External(External::Custom(other_package, other_versions, other_reason)) =
+        &*derived.cause2
+    else {
+        return None;
+    };
+    if package != other_package {
+        return None;
+    }
+
+    // Only rewrite a derivation that concludes about this package alone.
+    let mut terms = derived.terms.iter();
+    let Some((term_package, Term::Positive(term_versions))) = terms.next() else {
+        return None;
+    };
+    if terms.next().is_some() || term_package != package {
+        return None;
+    }
+
+    let versions = versions.union(other_versions);
+    if reason == other_reason {
+        return Some(DerivationTree::External(External::Custom(
+            package.clone(),
+            versions,
+            reason.clone(),
+        )));
+    }
+    if versions.subset_of(term_versions) {
+        return None;
+    }
+    Some(DerivationTree::Derived(Derived {
+        terms: Map::from_iter([(
+            package.clone(),
+            Term::Positive(term_versions.union(&versions)),
+        )]),
+        shared_id: derived.shared_id,
+        cause1: derived.cause1.clone(),
+        cause2: derived.cause2.clone(),
+    }))
+}
+
 /// Given a [`DerivationTree`], collapse incompatibilities for versions of a package that are
 /// unavailable for the same reason to avoid repeating the same message for every unavailable
 /// version.
@@ -1235,17 +1289,27 @@ fn collapse_unavailable_versions(tree: ErrorTree) -> ErrorTree {
         tree,
         DerivationTree::External,
         |metadata, cause1, cause2| {
-            if let DerivationTree::External(External::Custom(package, versions, reason)) = &cause1
+            let tree = if let DerivationTree::External(External::Custom(package, versions, reason)) =
+                &cause1
                 && let Some(tree) = merge_unavailable_versions(package, versions, reason, &cause2)
             {
-                return tree;
-            }
-            if let DerivationTree::External(External::Custom(package, versions, reason)) = &cause2
+                tree
+            } else if let DerivationTree::External(External::Custom(package, versions, reason)) =
+                &cause2
                 && let Some(tree) = merge_unavailable_versions(package, versions, reason, &cause1)
             {
-                return tree;
+                tree
+            } else {
+                derived_tree(metadata, cause1, cause2)
+            };
+
+            // Merging a cause can also leave two unavailabilities of one package side by side.
+            if let DerivationTree::Derived(derived) = &tree
+                && let Some(merged) = merge_unavailable_siblings(derived)
+            {
+                return merged;
             }
-            derived_tree(metadata, cause1, cause2)
+            tree
         },
     )
 }
@@ -1595,6 +1659,7 @@ fn simplify_range(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resolver::UnavailableVersion;
 
     fn deep_derivation_tree() -> ErrorTree {
         let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
@@ -1611,6 +1676,81 @@ mod tests {
         }
 
         tree
+    }
+
+    fn pubgrub_package(name: &str) -> PubGrubPackage {
+        PubGrubPackage::from(PubGrubPackageInner::Package {
+            name: package_name(name),
+            extra: None,
+            group: None,
+            marker: uv_pep508::MarkerTree::TRUE,
+        })
+    }
+
+    fn package_name(name: &str) -> PackageName {
+        name.parse().expect("valid package name")
+    }
+
+    fn version(version: &str) -> Version {
+        version.parse().expect("valid version")
+    }
+
+    fn unavailable(package: &PubGrubPackage, versions: Range<Version>) -> ErrorTree {
+        ErrorTree::External(External::Custom(
+            package.clone(),
+            versions,
+            UnavailableReason::Version(UnavailableVersion::InvalidMetadata),
+        ))
+    }
+
+    /// Two rejections of the same package for the same reason read as one statement.
+    #[test]
+    fn collapses_sibling_unavailable_versions() {
+        let package = pubgrub_package("numpy");
+        let cause1 = unavailable(&package, Range::singleton(version("1.0")));
+        let cause2 = unavailable(
+            &package,
+            Range::from_range_bounds(version("2.0")..=version("3.0")),
+        );
+        let terms = pubgrub::Map::from_iter([(
+            package.clone(),
+            Term::Positive(Range::from_range_bounds(version("2.0")..=version("3.0"))),
+        )]);
+        let tree = ErrorTree::Derived(Derived {
+            terms,
+            shared_id: None,
+            cause1: Arc::new(cause1),
+            cause2: Arc::new(cause2),
+        });
+
+        let collapsed = collapse_unavailable_versions(tree);
+        let ErrorTree::External(External::Custom(_, versions, _)) = collapsed else {
+            panic!("expected a custom incompatibility");
+        };
+        assert_eq!(versions.to_string(), "==1.0 | >=2.0, <=3.0");
+    }
+
+    /// A derivation that concludes about more than the unavailable package is left alone.
+    #[test]
+    fn keeps_sibling_unavailable_versions_concluding_about_another_package() {
+        let package = pubgrub_package("numpy");
+        let cause1 = unavailable(&package, Range::singleton(version("1.0")));
+        let cause2 = unavailable(&package, Range::singleton(version("3.0")));
+        let terms = pubgrub::Map::from_iter([
+            (package.clone(), Term::Positive(Range::full())),
+            (pubgrub_package("scipy"), Term::Positive(Range::full())),
+        ]);
+        let tree = ErrorTree::Derived(Derived {
+            terms,
+            shared_id: None,
+            cause1: Arc::new(cause1),
+            cause2: Arc::new(cause2),
+        });
+
+        assert!(matches!(
+            collapse_unavailable_versions(tree),
+            ErrorTree::Derived(_)
+        ));
     }
 
     #[test]
