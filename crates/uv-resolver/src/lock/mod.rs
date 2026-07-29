@@ -778,20 +778,17 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             }
         }
 
-        // Git packages can select any non-registry source, including external URLs, local files,
-        // source trees, and other directories or archives in the same repository. Since their
-        // metadata is immutable and isn't refreshed, the locked edge is the only available
-        // declaration of that source when another package requests it without qualification.
+        // Immutable packages retain their original metadata, so their exact locked edges can
+        // provide missing source declarations when another package requests a dependency without
+        // qualification.
         if !source_matches
             && matches!(
                 requirement.source,
                 RequirementSource::Registry { index: None, .. }
             )
         {
-            // The locked package identity includes the complete source, including a Git
-            // repository, precise commit, and LFS configuration.
             source_matches = self.lock.packages.iter().any(|provider| {
-                matches!(provider.id.source, Source::Git(..))
+                provider.id.source.is_immutable()
                     && provider
                         .all_dependencies()
                         .any(|dependency| dependency.package_id == package.id)
@@ -2511,6 +2508,47 @@ impl Lock {
                 )?);
             }
 
+            // Direct-URL metadata cannot be refreshed while offline. Reuse its exact locked
+            // dependency edges as source declarations, just as later validation preserves the
+            // package's locked metadata instead of downloading its archive.
+            if database.client().unmanaged.connectivity().is_offline() {
+                for provider in &self.packages {
+                    if !matches!(provider.id.source, Source::Direct(..)) {
+                        continue;
+                    }
+
+                    for dependency in provider.all_dependencies() {
+                        if matches!(dependency.package_id.source, Source::Registry(..)) {
+                            continue;
+                        }
+
+                        let package = self.find_by_id(&dependency.package_id);
+                        let HashedDist { dist, .. } = package.to_dist(
+                            root,
+                            TagPolicy::Preferred(tags),
+                            build_options,
+                            markers,
+                        )?;
+                        let dist = ResolvedDist::Installable {
+                            dist: Arc::new(dist),
+                            version: package.id.version.clone(),
+                        };
+                        source_requirements.insert(normalize_requirement(
+                            Requirement {
+                                name: package.id.name.clone(),
+                                extras: Box::new([]),
+                                groups: Box::new([]),
+                                source: RequirementSource::from(&dist),
+                                marker: MarkerTree::TRUE,
+                                origin: None,
+                            },
+                            root,
+                            &self.requires_python,
+                        )?);
+                    }
+                }
+            }
+
             let mut add_source_requirements =
                 |package: &Package, requirements: Vec<Requirement>| -> Result<(), LockError> {
                     let package_context = package
@@ -2560,11 +2598,10 @@ impl Lock {
                     continue;
                 }
 
-                let Some(source_tree) = package.id.source.as_source_tree() else {
-                    continue;
-                };
-                if let Some(SourceTreeRequiresDist { metadata, .. }) =
-                    Self::source_tree_requires_dist(source_tree, root, package, database).await?
+                if let Some(source_tree) = package.id.source.as_source_tree()
+                    && let Some(SourceTreeRequiresDist { metadata, .. }) =
+                        Self::source_tree_requires_dist(source_tree, root, package, database)
+                            .await?
                 {
                     let direct_requirements = metadata
                         .requires_dist
@@ -2578,6 +2615,13 @@ impl Lock {
                         )
                         .collect();
                     add_source_requirements(package, direct_requirements)?;
+                    continue;
+                }
+
+                if package.id.source.is_immutable()
+                    || matches!(package.id.source, Source::Direct(..))
+                        && database.client().unmanaged.connectivity().is_offline()
+                {
                     continue;
                 }
 
