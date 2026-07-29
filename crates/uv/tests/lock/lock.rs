@@ -19795,6 +19795,20 @@ async fn lock_metadata_free_shared_archive_direct_sources() -> Result<()> {
                 .arg("--preview-features")
                 .arg("lock-without-metadata")
                 .arg("--locked")
+                .arg("--no-cache")
+                .arg("--index-url")
+                .arg(index.index_url())
+                .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            DEBUG Existing `uv.lock` satisfies workspace requirements
+            Resolved 4 packages in [TIME]
+            ");
+
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--preview-features")
+                .arg("lock-without-metadata")
+                .arg("--locked")
                 .arg("--offline")
                 .arg("--no-cache")
                 .arg("--index-url")
