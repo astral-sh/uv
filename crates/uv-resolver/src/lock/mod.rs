@@ -787,7 +787,10 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                 requirement.source,
                 RequirementSource::Registry { index: None, .. }
             )
-            && matches!(&package.id.source, Source::Direct(..) | Source::Git(..))
+            && matches!(
+                &package.id.source,
+                Source::Direct(..) | Source::Path(..) | Source::Git(..)
+            )
         {
             for provider in &self.lock.packages {
                 let Source::Git(_, provider_source) = &provider.id.source else {

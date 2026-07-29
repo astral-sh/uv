@@ -19573,12 +19573,24 @@ fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
     Ok(())
 }
 
-/// Immutable Git packages can select external direct URLs for first-party dependencies.
+/// Immutable Git packages can select external URLs and local wheels for first-party dependencies.
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
 fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.13");
     let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    let archive = context
+        .temp_dir
+        .child("basic_package-0.1.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        archive.path(),
+    )?;
+    let archive_url = Url::from_file_path(archive.path())
+        .map_err(|()| anyhow!("failed to convert archive path to file URL"))?;
 
     let repository = context.temp_dir.child("repository");
     repository.create_dir_all()?;
@@ -19588,8 +19600,11 @@ fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
         [project]
         name = "provider"
         version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["httpx @ {httpx_url} ; sys_platform == 'darwin'"]
+        requires-python = ">=3.13"
+        dependencies = [
+            "httpx @ {httpx_url} ; sys_platform == 'darwin'",
+            "basic-package @ {archive_url} ; sys_platform == 'darwin'",
+        ]
         "#,
             httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
         })?;
@@ -19630,8 +19645,12 @@ fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["httpx ; sys_platform == 'win32'", "provider"]
+        requires-python = ">=3.13"
+        dependencies = [
+            "httpx ; sys_platform == 'win32'",
+            "basic-package ; sys_platform == 'win32'",
+            "provider",
+        ]
 
         [tool.uv.sources]
         provider = {{ git = "{repository_url}" }}
@@ -19644,8 +19663,10 @@ fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
+
+    fs_err::remove_dir_all(repository.path())?;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
@@ -19657,7 +19678,7 @@ fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
