@@ -673,15 +673,12 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
+        package_version: Option<&Version>,
         package: &'lock Package,
         activated_extras: BTreeSet<ExtraName>,
         workspace_root: &'lock Path,
     ) -> Self {
-        let package_context = package
-            .id
-            .version
-            .as_ref()
-            .map(|version| (&package.id.name, version));
+        let package_context = package_version.map(|version| (&package.id.name, version));
         let declarations = overrides
             .apply_for_package(package_context, declarations)
             .filter(|requirement| {
@@ -2022,6 +2019,7 @@ impl Lock {
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
+        package_version: Option<&Version>,
         package: &'lock Package,
         activated_extras: &mut FxHashMap<PackageId, BTreeSet<ExtraName>>,
         remotes: &mut Option<BTreeSet<UrlString>>,
@@ -2138,6 +2136,7 @@ impl Lock {
                 overrides,
                 excludes,
                 package_requires_python,
+                package_version,
                 package,
                 package_activated_extras,
                 root,
@@ -2705,6 +2704,7 @@ impl Lock {
                             &dependency_overrides,
                             &dependency_excludes,
                             requires_python.as_ref(),
+                            Some(version),
                             package,
                             &mut activated_extras,
                             &mut remotes,
@@ -2803,6 +2803,7 @@ impl Lock {
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
+                        Some(&metadata.version),
                         package,
                         &mut activated_extras,
                         &mut remotes,
@@ -2824,8 +2825,15 @@ impl Lock {
                 // even if the version is dynamic, we can still extract the requirements without
                 // performing a build, unlike in the database where we typically construct a "complete"
                 // metadata object.
-                let metadata =
-                    Self::source_tree_requires_dist(source_tree, root, package, database).await?;
+                let metadata = if dependency_overrides.has_scoped_package(&package.id.name)
+                    || dependency_excludes.has_scoped_package(&package.id.name)
+                {
+                    // Package-scoped rules depend on the actual dynamic version, which is only
+                    // available from the built distribution metadata.
+                    None
+                } else {
+                    Self::source_tree_requires_dist(source_tree, root, package, database).await?
+                };
 
                 let satisfied = metadata.is_some_and(|SourceTreeRequiresDist {
                     requires_python,
@@ -2858,6 +2866,7 @@ impl Lock {
                         &dependency_overrides,
                         &dependency_excludes,
                         requires_python.as_ref(),
+                        None,
                         package,
                         &mut activated_extras,
                         &mut remotes,
@@ -2955,6 +2964,7 @@ impl Lock {
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
+                        Some(&metadata.version),
                         package,
                         &mut activated_extras,
                         &mut remotes,
