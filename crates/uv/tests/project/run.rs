@@ -6384,6 +6384,75 @@ fn run_target_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for <https://github.com/astral-sh/uv/issues/8851#issuecomment-5123317996>.
+#[test]
+fn run_target_workspace_discovery_workspace_root_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+        [project]
+        name = "myproj"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["subproj-a", "subproj-b"]
+
+        [dependency-groups]
+        test = ["iniconfig"]
+        "#
+        })?;
+
+    let subproject_a = context.temp_dir.child("subproj-a");
+    subproject_a.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "subproj-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        integration = ["typing-extensions"]
+        "#
+    })?;
+
+    context
+        .temp_dir
+        .child("subproj-b")
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "subproj-b"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            "#
+        })?;
+
+    subproject_a
+        .child("scripts")
+        .child("thing.py")
+        .write_str(indoc! { r"
+            import iniconfig
+
+            print('success')
+            "
+        })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--only-group")
+        .arg("test")
+        .arg("subproj-a/scripts/thing.py"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    error: Group `test` is not defined in the project's `dependency-groups` table
+    ");
+
+    Ok(())
+}
+
 /// Test target workspace discovery with a bare script filename (no directory component), which
 /// would otherwise cause `Path::parent()` to return an empty path.
 #[test]
