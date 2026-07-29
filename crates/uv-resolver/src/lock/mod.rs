@@ -522,12 +522,14 @@ impl<'a> LockedDependencyBuilder<'a> {
             {
                 // Self-requirements do not create graph edges, but their source and version
                 // constraints must still be satisfied by the locked parent package.
-                if !ExpectedPackageDependencies::package_satisfies_requirement(
-                    expected.package,
-                    expected.package,
-                    requirement,
-                    expected.workspace_root,
-                )? {
+                let source_marker =
+                    expected.package_satisfies_requirement(expected.package, requirement)?;
+                if source_marker.is_none_or(|source_marker| {
+                    !required_marker
+                        .combined()
+                        .and(source_marker.negate())
+                        .is_false()
+                }) {
                     complete = false;
                 }
                 continue;
@@ -537,16 +539,14 @@ impl<'a> LockedDependencyBuilder<'a> {
 
             let mut covered_marker = MarkerTree::FALSE;
             for dependency in expected.packages_for_name(&requirement.name) {
-                if !ExpectedPackageDependencies::package_satisfies_requirement(
-                    expected.package,
-                    dependency,
-                    requirement,
-                    expected.workspace_root,
-                )? {
+                let Some(source_marker) =
+                    expected.package_satisfies_requirement(dependency, requirement)?
+                else {
                     continue;
-                }
+                };
 
                 let mut marker = UniversalMarker::from_combined(required_marker);
+                marker.and(UniversalMarker::from_combined(source_marker));
                 if !dependency.fork_markers.is_empty() {
                     let dependency_marker = dependency
                         .fork_markers
@@ -749,20 +749,49 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
 
     /// Check the resolved source and version once for both generation and existing-edge lookup.
     fn package_satisfies_requirement(
-        parent_package: &Package,
+        &self,
         package: &Package,
         requirement: &Requirement,
-        workspace_root: &Path,
-    ) -> Result<bool, LockError> {
+    ) -> Result<Option<MarkerTree>, LockError> {
         let source_matches = package
             .id
             .source
-            .satisfies_requirement_source(&requirement.source, workspace_root)?
-            || package.id == parent_package.id
+            .satisfies_requirement_source(&requirement.source, self.workspace_root)?
+            || package.id == self.package.id
                 && matches!(
                     requirement.source,
                     RequirementSource::Registry { index: None, .. }
                 );
+        let mut source_marker = if source_matches {
+            MarkerTree::TRUE
+        } else {
+            MarkerTree::FALSE
+        };
+
+        // Constraints can redirect an unqualified registry requirement to a direct URL, path,
+        // directory, or Git source. Preserve their markers when matching the locked package.
+        if source_marker.is_false()
+            && matches!(
+                requirement.source,
+                RequirementSource::Registry { index: None, .. }
+            )
+        {
+            for constraint in &self.lock.manifest.constraints {
+                if constraint.name != requirement.name {
+                    continue;
+                }
+
+                let constraint = constraint.clone().to_absolute(self.workspace_root);
+                if package
+                    .id
+                    .source
+                    .satisfies_requirement_source(&constraint.source, self.workspace_root)?
+                {
+                    source_marker = source_marker.or(constraint.marker);
+                }
+            }
+        }
+
         let version_matches = requirement
             .source
             .version_specifiers()
@@ -770,7 +799,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             // Dynamic local packages intentionally omit their version from the lockfile.
             .is_none_or(|(specifiers, version)| specifiers.contains(version));
 
-        Ok(source_matches && version_matches)
+        Ok((!source_marker.is_false() && version_matches).then_some(source_marker))
     }
 
     /// Include locked-only contexts too, so stale extra and group sections cannot be retained.
