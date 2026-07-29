@@ -796,7 +796,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             .chain(groups.into_iter().map(DependencyContext::Group))
     }
 
-    /// Preserve source, requested-extra, and workspace-project conflicts on resolved edges.
+    /// Preserve selected, source, requested-extra, and workspace-project conflicts on resolved edges.
     fn requirement_conflict_marker(
         &self,
         context: DependencyContext<'_>,
@@ -820,14 +820,18 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             .conflicts
             .contains(&requirement.name, ConflictKindRef::Project)
             .then(|| ConflictItem::from(requirement.name.clone()));
+        let selected = context.selected_conflict(&self.package.id.name, &self.lock.conflicts);
         let mut conflicts = source_conflict
             .cloned()
             .into_iter()
             .chain(requested_conflicts)
             .chain(requested_project)
             .peekable();
-        conflicts.peek()?;
-        let selected = context.selected_conflict(&self.package.id.name, &self.lock.conflicts);
+        // A selected parent conflict is retained on requested-extra edges, but ordinary
+        // dependencies omit the redundant parent marker.
+        if conflicts.peek().is_none() && (selected.is_none() || requirement.extras.is_empty()) {
+            return None;
+        }
         let mut marker = UniversalMarker::TRUE;
         for conflict in conflicts.chain(selected) {
             marker.and(UniversalMarker::new(

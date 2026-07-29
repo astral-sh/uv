@@ -17811,6 +17811,142 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
     Ok(())
 }
 
+/// Preserve the selected extra's conflict marker when it requests another package's extra.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_conflicting_transitive_extras() -> Result<()> {
+    lock_metadata_free_conflicting_transitive_dependencies("project.optional-dependencies", "extra")
+}
+
+/// Preserve the selected group's conflict marker when it requests another package's extra.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_conflicting_transitive_groups() -> Result<()> {
+    lock_metadata_free_conflicting_transitive_dependencies("dependency-groups", "group")
+}
+
+/// Exercise parent-selected conflict markers in both extra and dependency-group contexts.
+#[cfg(feature = "test-universal")]
+fn lock_metadata_free_conflicting_transitive_dependencies(
+    dependency_section: &str,
+    conflict_kind: &str,
+) -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [{dependency_section}]
+        a = ["provider[one]"]
+        b = ["provider[two]"]
+
+        [tool.uv]
+        conflicts = [[{{ {conflict_kind} = "a" }}, {{ {conflict_kind} = "b" }}]]
+
+        [tool.uv.sources]
+        provider = {{ path = "provider" }}
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = ["anyio==4.3.0"]
+        two = ["anyio==4.4.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Ordinary conflicting dependencies do not retain their parent selection marker on the edge.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_conflicting_direct_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["anyio==4.3.0"]
+
+        [dependency-groups]
+        dev = ["anyio==4.4.0"]
+
+        [tool.uv]
+        conflicts = [[{ extra = "feature" }, { group = "dev" }]]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// An empty extra remains selectable when its lockfile omits package metadata.
 #[cfg(feature = "test-universal")]
 #[test]
