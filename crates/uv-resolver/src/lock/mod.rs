@@ -527,7 +527,14 @@ impl<'a> LockedDependencyBuilder<'a> {
             {
                 // Self-requirements do not create graph edges, but their source and version
                 // constraints must still be satisfied by the locked parent package.
-                if !expected.package_satisfies_requirement(expected.package, requirement)? {
+                let source_marker =
+                    expected.package_satisfies_requirement(expected.package, requirement)?;
+                if source_marker.is_none_or(|source_marker| {
+                    !required_marker
+                        .combined()
+                        .and(source_marker.negate())
+                        .is_false()
+                }) {
                     complete = false;
                 }
                 continue;
@@ -537,11 +544,14 @@ impl<'a> LockedDependencyBuilder<'a> {
 
             let mut covered_marker = MarkerTree::FALSE;
             for dependency in expected.packages_for_name(&requirement.name) {
-                if !expected.package_satisfies_requirement(dependency, requirement)? {
+                let Some(source_marker) =
+                    expected.package_satisfies_requirement(dependency, requirement)?
+                else {
                     continue;
-                }
+                };
 
                 let mut marker = UniversalMarker::from_combined(required_marker);
+                marker.and(UniversalMarker::from_combined(source_marker));
                 if !dependency.fork_markers.is_empty() {
                     let dependency_marker = dependency
                         .fork_markers
@@ -750,16 +760,25 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         &self,
         package: &Package,
         requirement: &Requirement,
-    ) -> Result<bool, LockError> {
-        let mut source_matches = package
+    ) -> Result<Option<MarkerTree>, LockError> {
+        let source_matches = package
             .id
             .source
-            .satisfies_requirement_source(&requirement.source, self.workspace_root)?;
+            .satisfies_requirement_source(&requirement.source, self.workspace_root)?
+            || package.id == self.package.id
+                && matches!(
+                    requirement.source,
+                    RequirementSource::Registry { index: None, .. }
+                );
+        let mut source_marker = if source_matches {
+            MarkerTree::TRUE
+        } else {
+            MarkerTree::FALSE
+        };
 
-        // A constraint or another first-party requirement can select a direct source for an
-        // otherwise unqualified registry requirement. Source selections apply globally, even
-        // across disjoint marker environments, but the locked source must match exactly.
-        if !source_matches
+        // A direct source can be selected by both constraints and explicit requirements. Preserve
+        // the union of their markers so another requirement can widen a conditional constraint.
+        if source_marker.is_false()
             && matches!(
                 requirement.source,
                 RequirementSource::Registry { index: None, .. }
@@ -772,8 +791,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                     .source
                     .satisfies_requirement_source(&source_requirement.source, self.workspace_root)?
                 {
-                    source_matches = true;
-                    break;
+                    source_marker = source_marker.or(source_requirement.marker.without_extras());
                 }
             }
         }
@@ -781,25 +799,21 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         // Immutable packages retain their original metadata, so their exact locked edges can
         // provide missing source declarations when another package requests a dependency without
         // qualification.
-        if !source_matches
+        if source_marker.is_false()
             && matches!(
                 requirement.source,
                 RequirementSource::Registry { index: None, .. }
             )
         {
-            source_matches = self.lock.packages.iter().any(|provider| {
+            if self.lock.packages.iter().any(|provider| {
                 provider.id.source.is_immutable()
                     && provider
                         .all_dependencies()
                         .any(|dependency| dependency.package_id == package.id)
-            });
+            }) {
+                source_marker = MarkerTree::TRUE;
+            }
         }
-
-        source_matches |= package.id == self.package.id
-            && matches!(
-                requirement.source,
-                RequirementSource::Registry { index: None, .. }
-            );
         let version_matches = requirement
             .source
             .version_specifiers()
@@ -807,7 +821,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             // Dynamic local packages intentionally omit their version from the lockfile.
             .is_none_or(|(specifiers, version)| specifiers.contains(version));
 
-        Ok(source_matches && version_matches)
+        Ok((!source_marker.is_false() && version_matches).then_some(source_marker))
     }
 
     /// Include locked-only contexts too, so stale extra and group sections cannot be retained.
@@ -2233,7 +2247,7 @@ impl Lock {
         package: &'lock Package,
         activated_extras: &mut FxHashMap<PackageId, BTreeSet<ExtraName>>,
         missing_metadata: bool,
-        expected: &ExpectedPackageDependencies<'_>,
+        expected: &ExpectedPackageDependencies,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
         // Use the same dependency builder as lockfile construction, including extra
         // activation for packages whose metadata does not need to be regenerated.
@@ -2486,6 +2500,8 @@ impl Lock {
         };
         let dependency_sources = if allow_missing_package_metadata {
             let mut source_requirements = normalized_constraints;
+            let mut registry_markers = FxHashMap::<PackageName, MarkerTree>::default();
+            let mut unconditional_registries = FxHashSet::<PackageName>::default();
             for requirement in dependency_overrides
                 .apply_for_package(
                     None,
@@ -2497,6 +2513,21 @@ impl Lock {
                     !dependency_excludes.contains_for_package(None, &requirement.name)
                 })
             {
+                if matches!(
+                    requirement.source,
+                    RequirementSource::Registry { index: None, .. }
+                ) && requirement.marker.top_level_extra().is_none()
+                {
+                    if requirement.marker.is_true() {
+                        unconditional_registries.insert(requirement.name.clone());
+                    } else {
+                        registry_markers
+                            .entry(requirement.name.clone())
+                            .and_modify(|marker| *marker = marker.or(requirement.marker))
+                            .or_insert(requirement.marker);
+                    }
+                }
+
                 if matches!(requirement.source, RequirementSource::Registry { .. }) {
                     continue;
                 }
@@ -2564,6 +2595,21 @@ impl Lock {
                                 .contains_for_package(package_context, &requirement.name)
                         })
                     {
+                        if matches!(
+                            requirement.source,
+                            RequirementSource::Registry { index: None, .. }
+                        ) && requirement.marker.top_level_extra().is_none()
+                        {
+                            if requirement.marker.is_true() {
+                                unconditional_registries.insert(requirement.name.clone());
+                            } else {
+                                registry_markers
+                                    .entry(requirement.name.clone())
+                                    .and_modify(|marker| *marker = marker.or(requirement.marker))
+                                    .or_insert(requirement.marker);
+                            }
+                        }
+
                         if matches!(requirement.source, RequirementSource::Registry { .. }) {
                             continue;
                         }
@@ -2649,6 +2695,26 @@ impl Lock {
                     .collect();
                 add_source_requirements(package, direct_requirements)?;
             }
+
+            // Conditional direct sources can be selected globally across disjoint,
+            // marker-scoped requirements. An unconditional registry declaration, however,
+            // must retain its uncovered environments and cannot inherit that source.
+            let widened_sources = source_requirements
+                .iter()
+                .filter_map(|requirement| {
+                    if requirement.marker.is_true()
+                        || unconditional_registries.contains(&requirement.name)
+                        || matches!(requirement.source, RequirementSource::Registry { .. })
+                    {
+                        return None;
+                    }
+
+                    let mut widened = requirement.clone();
+                    widened.marker = *registry_markers.get(&requirement.name)?;
+                    Some(widened)
+                })
+                .collect::<Vec<_>>();
+            source_requirements.extend(widened_sources);
 
             Constraints::from_requirements(source_requirements.into_iter())
         } else {
