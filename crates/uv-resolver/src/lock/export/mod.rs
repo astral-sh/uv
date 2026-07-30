@@ -26,7 +26,7 @@ pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::universal_marker::resolve_activated_extras;
-use crate::{Installable, LockError, Package};
+use crate::{Installable, InstallableRootKind, LockError, Package};
 
 pub mod cyclonedx_json;
 mod metadata;
@@ -69,10 +69,14 @@ impl<'lock> ExportableRequirements<'lock> {
         let root = graph.add_node(Node::Root);
 
         // Add the workspace packages and any additional dependency-group roots to the queue.
-        for (root_name, include_production) in target
+        for (root_name, root_kind) in target
             .roots()
-            .map(|root| (root, true))
-            .chain(target.group_roots(groups).map(|root| (root, false)))
+            .map(|root| (root, InstallableRootKind::Production))
+            .chain(
+                target
+                    .group_roots(groups)
+                    .map(|root| (root, InstallableRootKind::DependencyGroups)),
+            )
         {
             if prune.contains(root_name) {
                 continue;
@@ -88,12 +92,12 @@ impl<'lock> ExportableRequirements<'lock> {
                     name: root_name.clone(),
                 })?;
 
-            if include_production {
+            if root_kind == InstallableRootKind::Production {
                 // Track the activated package in the list of known conflicts.
                 activated_items.insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
             }
 
-            if include_production && groups.prod() {
+            if root_kind == InstallableRootKind::Production && groups.prod() {
                 // Add the workspace package to the graph.
                 let index = *inverse
                     .entry(&dist.id)

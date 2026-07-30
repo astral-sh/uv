@@ -18,7 +18,7 @@ use uv_pypi_types::{
     DependencyGroupSpecifier, DependencyGroups, LenientRequirement, ResolverMarkerEnvironment,
     VerbatimParsedUrl,
 };
-use uv_resolver::{Installable, Lock, LockError, Package};
+use uv_resolver::{Installable, InstallableRootKind, Lock, LockError, Package};
 use uv_scripts::Pep723Script;
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
@@ -622,17 +622,20 @@ impl<'lock> InstallTarget<'lock> {
                 let mut queue: VecDeque<(&PackageName, Option<&ExtraName>)> = VecDeque::new();
                 let mut seen: FxHashSet<(&PackageName, Option<&ExtraName>)> = FxHashSet::default();
 
-                for (name, include_production) in roots
+                for (name, root_kind) in roots
                     .iter()
                     .copied()
-                    .map(|name| (name, true))
-                    .chain(self.group_roots(groups).map(|name| (name, false)))
+                    .map(|name| (name, InstallableRootKind::Production))
+                    .chain(
+                        self.group_roots(groups)
+                            .map(|name| (name, InstallableRootKind::DependencyGroups)),
+                    )
                 {
                     let Some(root_package) = packages.get(name) else {
                         continue;
                     };
 
-                    if include_production && groups.prod() {
+                    if root_kind == InstallableRootKind::Production && groups.prod() {
                         // Add the root package
                         if seen.insert((name, None)) {
                             queue.push_back((name, None));

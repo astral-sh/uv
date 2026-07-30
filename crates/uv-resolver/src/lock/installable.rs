@@ -63,6 +63,15 @@ fn add_reachability<'lock>(
     }
 }
 
+/// Determines which dependencies are included from an install target root.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InstallableRootKind {
+    /// Include the root's production dependencies and selected dependency groups.
+    Production,
+    /// Include only the root's selected dependency groups.
+    DependencyGroups,
+}
+
 pub trait Installable<'lock> {
     /// Return the root install path.
     fn install_path(&self) -> &'lock Path;
@@ -313,30 +322,37 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
         // Initialize the workspace roots.
         let mut initialized_roots = vec![];
-        for (dist, include_production) in roots
+        for (dist, root_kind) in roots
             .iter()
             .copied()
-            .map(|dist| (dist, true))
-            .chain(group_roots.iter().copied().map(|dist| (dist, false)))
+            .map(|dist| (dist, InstallableRootKind::Production))
+            .chain(
+                group_roots
+                    .iter()
+                    .copied()
+                    .map(|dist| (dist, InstallableRootKind::DependencyGroups)),
+            )
         {
             // Add the workspace package to the graph.
-            let index = petgraph.add_node(if include_production && groups.prod() {
-                self.package_to_node(dist, tags, build_options, install_options, marker_env)?
-            } else {
-                self.non_installable_node(dist, tags, marker_env)?
-            });
+            let index = petgraph.add_node(
+                if root_kind == InstallableRootKind::Production && groups.prod() {
+                    self.package_to_node(dist, tags, build_options, install_options, marker_env)?
+                } else {
+                    self.non_installable_node(dist, tags, marker_env)?
+                },
+            );
             inverse.insert(&dist.id, index);
 
             // Add an edge from the root.
             petgraph.add_edge(root, index, Edge::Prod);
 
             // Push the package onto the queue.
-            initialized_roots.push((dist, index, include_production));
+            initialized_roots.push((dist, index, root_kind));
         }
 
         // Add the workspace dependencies to the queue.
-        for (dist, index, include_production) in initialized_roots {
-            if include_production && groups.prod() {
+        for (dist, index, root_kind) in initialized_roots {
+            if root_kind == InstallableRootKind::Production && groups.prod() {
                 // Push its dependencies onto the queue.
                 queue.push_back((dist, None));
                 add_reachability(
