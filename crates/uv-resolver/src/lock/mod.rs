@@ -864,14 +864,15 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
 
     /// Restore the resolver node's conflict context, if it is reachable.
     fn context_parent_marker(&self, context: DependencyContext<'_>) -> UniversalMarker {
+        let mut parent_marker = self.package_marker;
+        // An extra is reachable only where at least one incoming edge activates it.
+        if let DependencyContext::Extra(extra) = context
+            && let Some(marker) = self.activated_extras.get(extra)
+        {
+            parent_marker.and(UniversalMarker::from_combined(*marker));
+        }
+
         if self.lock.conflicts.is_empty() {
-            let mut parent_marker = self.package_marker;
-            // An extra is reachable only where at least one incoming edge activates it.
-            if let DependencyContext::Extra(extra) = context
-                && let Some(marker) = self.activated_extras.get(extra)
-            {
-                parent_marker.and(UniversalMarker::from_combined(*marker));
-            }
             return parent_marker;
         }
 
@@ -897,7 +898,6 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             return UniversalMarker::FALSE;
         }
 
-        let mut parent_marker = self.package_marker;
         if project_conflicts && matches!(context, DependencyContext::Production) {
             let mut activation = UniversalMarker::new(
                 MarkerTree::TRUE,
