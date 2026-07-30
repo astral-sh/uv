@@ -13242,8 +13242,6 @@ fn reject_reserved_wheel_data_script_name() -> Result<()> {
 
             let mut command = context.pip_install();
             command.arg(&wheel);
-            #[cfg(windows)]
-            command.env("PATHEXT", ".BAT;.CMD;.CUSTOM");
 
             uv_snapshot!(context.filters(), command, @"
         exit_code: 2 (failure)
