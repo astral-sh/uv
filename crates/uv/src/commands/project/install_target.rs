@@ -13,7 +13,6 @@ use uv_configuration::{
 use uv_distribution_types::{Index, Resolution};
 use uv_normalize::{DEV_DEPENDENCIES, ExtraName, PackageName};
 use uv_platform_tags::Tags;
-use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     DependencyGroupSpecifier, LenientRequirement, ResolverMarkerEnvironment, VerbatimParsedUrl,
 };
@@ -345,8 +344,7 @@ impl<'lock> InstallTarget<'lock> {
                     return Ok(());
                 }
 
-                let metadata_free_lock = lock.supports_missing_package_metadata()
-                    && uv_preview::is_enabled(PreviewFeature::LockWithoutMetadata);
+                let metadata_free_lock = lock.supports_missing_package_metadata();
                 let roots = self.roots().collect::<FxHashSet<_>>();
                 // Collect all known extras from the member packages.
                 let known_extras = lock
@@ -426,8 +424,7 @@ impl<'lock> InstallTarget<'lock> {
             }
             | Self::Workspace { lock, workspace }
             | Self::NonProjectWorkspace { lock, workspace } => {
-                let metadata_free_lock = lock.supports_missing_package_metadata()
-                    && uv_preview::is_enabled(PreviewFeature::LockWithoutMetadata);
+                let metadata_free_lock = lock.supports_missing_package_metadata();
                 let roots = self.roots().collect::<FxHashSet<_>>();
                 let member_groups = lock
                     .packages()
