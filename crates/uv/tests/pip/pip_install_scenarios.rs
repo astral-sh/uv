@@ -4123,7 +4123,8 @@ fn python_greater_than_current_excluded() {
               a>=4.0.0
           we can conclude that a>=2.0.0,<4.0.0 cannot be used. (2)
 
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and a>=4.0.0 depends on Python>=3.12, we can conclude that a>=4.0.0 cannot be used.
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 cannot be used.
+          And because only a<=4.0.0 is available, we can conclude that a>=4.0.0 cannot be used.
           And because we know from (2) that a>=2.0.0,<4.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
           And because you require a>=2.0.0, we can conclude that your requirements are unsatisfiable.
     ");

@@ -637,7 +637,13 @@ impl NoSolutionError {
             derivation_tree,
             |external| match external {
                 External::FromDependencyOf(package1, versions1, package2, versions2) => {
-                    let versions1 = narrow(&package1, versions1);
+                    // A rejected version is recorded as a dependency on Python, so the widened
+                    // side is an exclusion and stops at the listing like any other.
+                    let versions1 = if matches!(&*package2, PubGrubPackageInner::Python(_)) {
+                        narrow_unavailable(&package1, versions1)
+                    } else {
+                        narrow(&package1, versions1)
+                    };
                     DerivationTree::External(External::FromDependencyOf(
                         package1, versions1, package2, versions2,
                     ))
@@ -975,30 +981,53 @@ fn restate_available_versions(
         tree,
         DerivationTree::External,
         |metadata, cause1, cause2| {
-            let restated = unlisted_versions(&metadata.terms, &cause1, &cause2, included_versions)
-                .map(|(package, unlisted)| {
-                    // Carry the range on the cause it follows, so that the causes still meet.
-                    let first = reported_versions(&package, &cause1);
-                    let second = reported_versions(&package, &cause2);
-                    (package, starts_lower(&first, &second), unlisted)
-                });
-            let Some((package, first_carries, unlisted)) = restated else {
+            let Some((package, unlisted)) =
+                unlisted_versions(&metadata.terms, &cause1, &cause2, included_versions)
+            else {
                 return derived_tree(metadata, cause1, cause2);
             };
 
+            let statement = || {
+                DerivationTree::External(External::NoVersions(package.clone(), unlisted.clone()))
+            };
             let carry = |cause: ErrorTree| {
-                let carried = reported_versions(&package, &cause).union(&unlisted);
+                let carried = ruled_out_versions(&package, &cause).union(&unlisted);
                 DerivationTree::Derived(Derived {
                     terms: Map::from_iter([(package.clone(), Term::Positive(carried))]),
                     shared_id: None,
                     cause1: Arc::new(cause),
-                    cause2: Arc::new(DerivationTree::External(External::NoVersions(
-                        package.clone(),
-                        unlisted.clone(),
-                    ))),
+                    cause2: Arc::new(statement()),
                 })
             };
-            if first_carries {
+
+            // The statement carries a step that rules the package out, so it goes on the cause that
+            // does the ruling out.  Where neither does, the step reaches past its causes on its own
+            // and the statement carries the step itself.
+            let first = ruled_out_versions(&package, &cause1);
+            let second = ruled_out_versions(&package, &cause2);
+            if first.is_empty() && second.is_empty() {
+                let concluded = metadata
+                    .terms
+                    .get(&package)
+                    .cloned()
+                    .unwrap_or_else(|| Term::Positive(unlisted.clone()));
+                let mut inner = metadata;
+                let shared_id = inner.shared_id.take();
+                inner.terms = Map::from_iter([(
+                    package.clone(),
+                    Term::Positive(
+                        reported_versions(&package, &cause1)
+                            .union(&reported_versions(&package, &cause2)),
+                    ),
+                )]);
+                return DerivationTree::Derived(Derived {
+                    terms: Map::from_iter([(package.clone(), concluded)]),
+                    shared_id,
+                    cause1: Arc::new(derived_tree(inner, cause1, cause2)),
+                    cause2: Arc::new(statement()),
+                });
+            }
+            if starts_lower(&first, &second) {
                 derived_tree(metadata, carry(cause1), cause2)
             } else {
                 derived_tree(metadata, cause1, carry(cause2))

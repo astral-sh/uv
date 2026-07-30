@@ -5813,7 +5813,8 @@ fn lock_requires_python() -> Result<()> {
               pygls>=1.3.0
           we can conclude that pygls>=1.1.0,<1.3.0 cannot be used. (1)
 
-          Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls>=1.3.0 depends on Python>=3.8, we can conclude that pygls>=1.3.0 cannot be used.
+          Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
+          And because only pygls<=1.3.0 is available, we can conclude that pygls>=1.3.0 cannot be used.
           And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
