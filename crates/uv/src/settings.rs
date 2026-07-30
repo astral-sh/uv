@@ -24,9 +24,9 @@ use uv_cli::{
     VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, CheckArgs, ExcludeNewerArgs, ExportArgs, FormatArgs, HashCheckingArgs,
-    PackageExcludeNewerArgs, PublishArgs, PythonDirArgs, RegistryClientArgs, ResolverInstallerArgs,
-    ToolUpgradeArgs,
+    AuthorFrom, BuildArgs, BuildOptionsArgs, CheckArgs, ExcludeNewerArgs, ExportArgs, FormatArgs,
+    HashCheckingArgs, PackageExcludeNewerArgs, PublishArgs, PythonDirArgs, RegistryClientArgs,
+    ResolverArgs, ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
         Flag, FlagSource, check_conflicts, flag, resolve_flag, resolve_flag_pair,
         resolver_installer_options, resolver_options,
@@ -832,11 +832,12 @@ impl RunSettings {
             python: python.and_then(Maybe::into_option),
             python_platform,
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build)?,
+            settings: ResolverInstallerSettings::resolve(
+                installer,
+                build,
                 filesystem,
                 &environment,
-            ),
+            )?,
             env_file: EnvFile::from_args(env_file, no_env_file),
             install_mirrors: environment
                 .install_mirrors
@@ -1825,11 +1826,8 @@ impl SyncSettings {
             .unwrap_or_default();
 
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
-        let settings = ResolverInstallerSettings::combine(
-            resolver_installer_options(installer, build)?,
-            filesystem,
-            &environment,
-        );
+        let settings =
+            ResolverInstallerSettings::resolve(installer, build, filesystem, &environment)?;
 
         let check = flag(check, no_check, "check")?.unwrap_or_default();
         let dry_run = if check {
@@ -2020,11 +2018,7 @@ impl LockSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverSettings::combine(
-                resolver_options(resolver, build)?,
-                filesystem,
-                &environment,
-            ),
+            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2133,11 +2127,7 @@ impl MetadataSettings {
             active,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverSettings::combine(
-                resolver_options(resolver, build)?,
-                filesystem,
-                &environment,
-            ),
+            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2528,11 +2518,12 @@ impl RemoveSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build)?,
+            settings: ResolverInstallerSettings::resolve(
+                installer,
+                build,
                 filesystem,
                 &environment,
-            ),
+            )?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2617,11 +2608,12 @@ impl VersionSettings {
             package,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build)?,
+            settings: ResolverInstallerSettings::resolve(
+                installer,
+                build,
                 filesystem,
                 &environment,
-            ),
+            )?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2732,11 +2724,7 @@ impl TreeSettings {
             python_version,
             python_platform,
             python: python.and_then(Maybe::into_option),
-            resolver: ResolverSettings::combine(
-                resolver_options(resolver, build)?,
-                filesystem,
-                &environment,
-            ),
+            resolver: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2907,11 +2895,7 @@ impl ExportSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverSettings::combine(
-                resolver_options(resolver, build)?,
-                filesystem,
-                &environment,
-            ),
+            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -3046,11 +3030,8 @@ impl CheckSettings {
             Some(environment.no_dev),
         );
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
-        let settings = ResolverInstallerSettings::combine(
-            resolver_installer_options(installer, build)?,
-            filesystem,
-            &environment,
-        );
+        let settings =
+            ResolverInstallerSettings::resolve(installer, build, filesystem, &environment)?;
         Ok(Self {
             ty_path: environment.ty_path,
             script,
@@ -3185,11 +3166,7 @@ impl AuditSettings {
             frozen: resolve_frozen(frozen),
             python_version,
             python_platform,
-            settings: ResolverSettings::combine(
-                resolver_options(resolver, build)?,
-                filesystem,
-                &environment,
-            ),
+            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -4147,11 +4124,7 @@ impl BuildSettings {
             ),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverSettings::combine(
-                resolver_options(resolver, build)?,
-                filesystem,
-                &environment,
-            ),
+            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -4330,6 +4303,18 @@ fn warn_if_deprecated_prerelease_mode(prerelease: PrereleaseMode) -> PrereleaseM
 }
 
 impl ResolverSettings {
+    /// Resolve the [`ResolverSettings`] from the CLI, environment, and filesystem configuration.
+    fn resolve(
+        args: ResolverArgs,
+        build: BuildOptionsArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Result<Self> {
+        let args = resolver_options(args, build)?;
+
+        Ok(Self::combine(args, filesystem, environment))
+    }
+
     /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
     fn combine(
         mut args: ResolverOptions,
@@ -4419,6 +4404,18 @@ pub(crate) struct ResolverInstallerSettings {
 }
 
 impl ResolverInstallerSettings {
+    /// Resolve the [`ResolverInstallerSettings`] from CLI, environment, and filesystem options.
+    fn resolve(
+        args: ResolverInstallerArgs,
+        build: BuildOptionsArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Result<Self> {
+        let args = resolver_installer_options(args, build)?;
+
+        Ok(Self::combine(args, filesystem, environment))
+    }
+
     /// Reconcile the [`ResolverInstallerSettings`] from the CLI and filesystem configuration.
     fn combine(
         args: ResolverInstallerOptions,
