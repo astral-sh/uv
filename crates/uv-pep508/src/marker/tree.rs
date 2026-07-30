@@ -2972,7 +2972,6 @@ mod test {
                 or (sys_platform != 'win32' and os_name == 'nt')",
             "(implementation_name == 'pypy' and sys_platform != 'win32') \
                 or (implementation_name != 'pypy' and sys_platform == 'win32') \
-                or (os_name != 'nt' and sys_platform == 'win32') \
                 or (os_name == 'nt' and sys_platform != 'win32')",
         );
 
@@ -3001,7 +3000,7 @@ mod test {
             "(os_name == 'Linux' and sys_platform == 'win32') \
                 or (os_name != 'Linux' and sys_platform == 'win32' and python_version == '3.7') \
                 or (os_name != 'Linux' and sys_platform == 'win32' and python_version == '3.8')",
-            "(python_full_version >= '3.7' and python_full_version < '3.9' and sys_platform == 'win32') or (os_name == 'Linux' and sys_platform == 'win32')",
+            "python_full_version >= '3.7' and python_full_version < '3.9' and os_name != 'Linux' and sys_platform == 'win32'",
         );
 
         assert_simplifies(
@@ -3202,6 +3201,7 @@ mod test {
         for (implementation_name, platform_python_implementation) in
             [("cpython", "CPython"), ("pypy", "PyPy")]
         {
+            let is_cpython = implementation_name == "cpython";
             let implementation_name = format!("implementation_name == '{implementation_name}'");
             let platform_python_implementation =
                 format!("platform_python_implementation == '{platform_python_implementation}'");
@@ -3214,10 +3214,12 @@ mod test {
                 &implementation_name,
                 platform_python_implementation.replace("==", "!=")
             ));
-            assert!(is_disjoint(
-                implementation_name.replace("==", "!="),
-                &platform_python_implementation
-            ));
+            if !is_cpython {
+                assert!(is_disjoint(
+                    implementation_name.replace("==", "!="),
+                    &platform_python_implementation
+                ));
+            }
         }
 
         assert!(is_disjoint(
@@ -3241,6 +3243,15 @@ mod test {
         assert!(is_disjoint(
             "platform_machine == 'x86_64' and implementation_name == 'pypy'",
             "platform_machine == 'x86_64' and platform_python_implementation == 'CPython'"
+        ));
+
+        assert!(!is_disjoint(
+            "implementation_name == 'pyston'",
+            "platform_python_implementation == 'CPython'"
+        ));
+        assert!(!is_disjoint(
+            "implementation_name != 'cpython'",
+            "platform_python_implementation == 'CPython'"
         ));
 
         // Unknown implementations may use implementation-specific names, so do not
@@ -3287,10 +3298,13 @@ mod test {
         }
 
         assert!(!is_disjoint("os_name == 'nt'", "sys_platform == 'win32'"));
+        assert!(is_disjoint("os_name != 'nt'", "sys_platform == 'win32'"));
         assert!(!is_disjoint(
             "os_name != 'posix'",
             "sys_platform == 'win32'"
         ));
+        // IronPython can use `cli` on Windows, so the converse implication is not valid.
+        assert!(!is_disjoint("os_name == 'nt'", "sys_platform == 'cli'"));
         assert!(!is_disjoint(
             "os_name == 'java'",
             "sys_platform == 'unidentified'"

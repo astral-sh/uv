@@ -1121,7 +1121,7 @@ impl InternerGuard<'_> {
         //
         // For example: `os_name == 'nt' and sys_platform == 'aix'` and
         // `os_name != 'posix' and platform_system == 'FreeBSD'` are impossible.
-        let mut pairs = vec![(os_name_posix, sys_platform_win32)];
+        let mut pairs = vec![(os_name_nt.not(), sys_platform_win32)];
         for sys_platform in [
             sys_platform_aix,
             sys_platform_android,
@@ -1155,15 +1155,12 @@ impl InternerGuard<'_> {
         ]);
 
         // CPython and PyPy expose the same interpreter identity through both marker names,
-        // using different spellings. Other implementations do not have a guaranteed mapping.
+        // using different spellings. However, Pyston also reports `CPython` through the platform
+        // API, so only PyPy has a bidirectional mapping.
         pairs.extend([
             (
                 implementation_name_cpython,
                 platform_python_implementation_cpython.not(),
-            ),
-            (
-                implementation_name_cpython.not(),
-                platform_python_implementation_cpython,
             ),
             (
                 implementation_name_pypy,

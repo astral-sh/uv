@@ -16129,6 +16129,38 @@ fn lock_python_implementation_markers() -> Result<()> {
     Ok(())
 }
 
+/// Pyston reports `CPython` as its platform implementation, despite having its own name.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_pyston_implementation_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; implementation_name == 'pyston'",
+            "ok==2.0.0 ; platform_python_implementation == 'CPython'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: implementation_name == 'pyston' and platform_python_implementation == 'CPython'):
+      ╰─▶ Because your project depends on ok{implementation_name == 'pyston'}==1.0.0 and ok{platform_python_implementation == 'CPython'}==2.0.0, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+
+    Ok(())
+}
+
 /// Recognize incompatible Windows and Unix-like operating-system markers across both platform
 /// marker names.
 #[cfg(feature = "test-universal")]
@@ -16156,6 +16188,42 @@ fn lock_unix_operating_system_markers() -> Result<()> {
             "ok==2.0.0 ; platform_system == 'SunOS'",
             "ok==2.0.0 ; platform_system == 'iOS'",
             "ok==2.0.0 ; platform_system == 'iPadOS'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Windows platform markers imply the NT operating-system API, while preserving other runtimes.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_windows_operating_system_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; sys_platform == 'win32'",
+            "ok==1.0.0 ; platform_system == 'Windows'",
+            "ok==2.0.0 ; os_name != 'nt'",
         ]
         "#,
     )?;
