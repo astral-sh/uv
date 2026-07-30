@@ -15,7 +15,7 @@ use crate::middleware::OfflineError;
 use crate::{FlatIndexError, html};
 use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
-use uv_distribution_types::IndexUrl;
+use uv_distribution_types::{IndexUrl, ProxyIndexError};
 use uv_errors::{Hinted, Hints};
 use uv_git::GitError;
 use uv_normalize::PackageName;
@@ -163,6 +163,7 @@ impl Error {
     pub fn is_user_failure(&self) -> bool {
         match self.kind() {
             ErrorKind::InvalidUrl(_)
+            | ErrorKind::ProxyIndex(_)
             | ErrorKind::MissingWheelGitLfsArtifacts(..)
             | ErrorKind::NonFileUrl(_)
             | ErrorKind::CannotBeABase(_)
@@ -441,6 +442,9 @@ impl From<ErrorKind> for Error {
 pub enum ErrorKind {
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
+
+    #[error(transparent)]
+    ProxyIndex(#[from] ProxyIndexError),
 
     #[error(transparent)]
     Flat(#[from] FlatIndexError),
