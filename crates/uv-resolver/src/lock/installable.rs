@@ -112,36 +112,23 @@ pub trait Installable<'lock> {
         build_options: &BuildOptions,
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
+        let resolve_root = |root_name: &PackageName| {
+            self.lock()
+                .find_by_name(root_name)
+                .map_err(|_| LockErrorKind::MultipleRootPackages {
+                    name: root_name.clone(),
+                })?
+                .ok_or_else(|| {
+                    LockError::from(LockErrorKind::MissingRootPackage {
+                        name: root_name.clone(),
+                    })
+                })
+        };
         let roots = self
             .roots()
-            .map(|root_name| {
-                self.lock()
-                    .find_by_name(root_name)
-                    .map_err(|_| LockErrorKind::MultipleRootPackages {
-                        name: root_name.clone(),
-                    })?
-                    .ok_or_else(|| {
-                        LockError::from(LockErrorKind::MissingRootPackage {
-                            name: root_name.clone(),
-                        })
-                    })
-            })
+            .map(&resolve_root)
             .collect::<Result<Vec<_>, LockError>>()?;
-        let group_root = self
-            .group_root(groups)
-            .map(|root_name| {
-                self.lock()
-                    .find_by_name(root_name)
-                    .map_err(|_| LockErrorKind::MultipleRootPackages {
-                        name: root_name.clone(),
-                    })?
-                    .ok_or_else(|| {
-                        LockError::from(LockErrorKind::MissingRootPackage {
-                            name: root_name.clone(),
-                        })
-                    })
-            })
-            .transpose()?;
+        let group_root = self.group_root(groups).map(resolve_root).transpose()?;
 
         InstallableExt::to_resolution_from_packages(
             self,
