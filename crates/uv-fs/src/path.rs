@@ -15,19 +15,34 @@ pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
     })
 });
 
-/// The list of valid executable extensions, on Windows.
+/// The list of valid executable extensions on Windows.
+///
+/// This always includes `.exe`, even if not explicitly included.
 #[cfg(windows)]
 pub static PATHEXT: LazyLock<Vec<Cow<'static, str>>> = LazyLock::new(|| {
-    if let Ok(pathext) = std::env::var("PATHEXT") {
-        pathext.split(';').map(|e| Cow::Owned(e.into())).collect()
+    let mut extensions: Vec<_> = if let Ok(pathext) = std::env::var("PATHEXT") {
+        pathext
+            .split(';')
+            .filter(|extension| !extension.is_empty())
+            .map(|extension| Cow::Owned(extension.to_ascii_lowercase()))
+            .collect()
     } else {
         [
-            ".COM", ".EXE", ".BAT", ".CMD", ".VBS", ".VBE", ".JS", ".JSE", ".WSF", ".WSH", ".MSC",
+            ".com", ".exe", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".msc",
         ]
         .into_iter()
         .map(Cow::Borrowed)
         .collect()
+    };
+
+    if !extensions
+        .iter()
+        .any(|extension| extension.as_ref() == ".exe")
+    {
+        extensions.push(Cow::Borrowed(".exe"));
     }
+
+    extensions
 });
 
 pub trait Simplified {

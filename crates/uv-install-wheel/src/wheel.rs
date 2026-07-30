@@ -245,7 +245,7 @@ fn validate_data_script_destination(target: &Path, scripts: &Path) -> Result<(),
         windows => {
             uv_fs::PATHEXT
                 .iter()
-                .find_map(|ext| normalized_name.strip_suffix(ext))
+                .find_map(|extension| normalized_name.strip_suffix(extension.as_ref()))
                 .unwrap_or(&normalized_name)
         },
         // On all other platforms, strip `.exe` if present.
