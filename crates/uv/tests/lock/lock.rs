@@ -16196,6 +16196,41 @@ fn lock_pyston_incompatible_platform_marker() -> Result<()> {
     Ok(())
 }
 
+/// CPython exposes the same release through both implementation and Python version markers.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_cpython_implementation_version_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; implementation_name == 'cpython' and implementation_version >= '3.13'",
+            "ok==2.0.0 ; python_full_version < '3.13'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Recognize incompatible Windows and Unix-like operating-system markers across both platform
 /// marker names.
 #[cfg(feature = "test-universal")]

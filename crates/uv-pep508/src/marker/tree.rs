@@ -3126,6 +3126,38 @@ mod test {
     }
 
     #[test]
+    fn test_cpython_implementation_version_disjointness() {
+        assert!(is_disjoint(
+            "implementation_name == 'cpython' and implementation_version >= '3.13'",
+            "python_full_version < '3.13'",
+        ));
+        assert!(is_disjoint(
+            "platform_python_implementation == 'CPython' and implementation_version < '3.13'",
+            "python_full_version >= '3.13'",
+        ));
+        assert!(!is_disjoint(
+            "implementation_name == 'pypy' and implementation_version >= '3.13'",
+            "python_full_version < '3.13'",
+        ));
+        assert!(!is_disjoint(
+            "implementation_version >= '3.13'",
+            "python_full_version < '3.13'",
+        ));
+    }
+
+    #[test]
+    fn test_ios_platform_system_disjointness() {
+        assert!(is_disjoint(
+            "sys_platform == 'ios'",
+            "platform_system != 'iOS' and platform_system != 'iPadOS'",
+        ));
+        assert!(!is_disjoint(
+            "sys_platform == 'ios'",
+            "platform_system == 'iOS' or platform_system == 'iPadOS'",
+        ));
+    }
+
+    #[test]
     fn test_string_disjointness() {
         assert!(!is_disjoint(
             "os_name == 'Linux'",
