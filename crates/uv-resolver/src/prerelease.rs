@@ -145,7 +145,7 @@ impl<'a> IntoIterator for &'a PrereleasePackage {
 
 impl PrereleasePackage {
     /// Returns whether no package-specific policies are configured.
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }
