@@ -637,7 +637,13 @@ impl NoSolutionError {
             derivation_tree,
             |external| match external {
                 External::FromDependencyOf(package1, versions1, package2, versions2) => {
-                    let versions1 = narrow(&package1, versions1);
+                    // A rejected version is recorded as a dependency on Python, so the widened
+                    // side is an exclusion and stops at the listing like any other.
+                    let versions1 = if matches!(&*package2, PubGrubPackageInner::Python(_)) {
+                        narrow_unavailable(&package1, versions1)
+                    } else {
+                        narrow(&package1, versions1)
+                    };
                     DerivationTree::External(External::FromDependencyOf(
                         package1, versions1, package2, versions2,
                     ))
@@ -764,7 +770,8 @@ impl NoSolutionError {
             &self.env,
         );
 
-        // This needs to be applied _after_ simplification of the ranges
+        // These need to be applied _after_ simplification of the ranges
+        tree = restate_available_versions(tree, &self.included_versions);
         tree = collapse_redundant_no_versions(tree);
 
         loop {
@@ -954,6 +961,224 @@ fn display_tree_inner(
                 }
             }
         }
+    }
+}
+
+/// Given a [`DerivationTree`], restate the availability of a package where a derivation reaches
+/// past the versions its causes rule out.
+///
+/// A derivation rules out the union of what its causes rule out, but the reported version sets are
+/// simplified onto the versions that exist, which drops the versions that do not. The derivation
+/// then reaches past its causes over a range that holds nothing, and the report has to say so, as it
+/// does for the ranges the resolver itself finds empty. The version sets are left as they are; only
+/// the statement that carries them is added, and only when every version it adds is one that the
+/// package does not have.
+fn restate_available_versions(
+    tree: ErrorTree,
+    included_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
+) -> ErrorTree {
+    map_derivation_tree(
+        tree,
+        DerivationTree::External,
+        |metadata, cause1, cause2| {
+            let Some((package, unlisted)) =
+                unlisted_versions(&metadata.terms, &cause1, &cause2, included_versions)
+            else {
+                return derived_tree(metadata, cause1, cause2);
+            };
+
+            let statement = || {
+                DerivationTree::External(External::NoVersions(package.clone(), unlisted.clone()))
+            };
+            let carry = |cause: ErrorTree| {
+                let carried = ruled_out_versions(&package, &cause).union(&unlisted);
+                DerivationTree::Derived(Derived {
+                    terms: Map::from_iter([(package.clone(), Term::Positive(carried))]),
+                    shared_id: None,
+                    cause1: Arc::new(cause),
+                    cause2: Arc::new(statement()),
+                })
+            };
+
+            // The statement carries a step that rules the package out, so it goes on the cause that
+            // does the ruling out. Where neither does, the step reaches past its causes on its own
+            // and the statement carries the step itself.
+            let first = ruled_out_versions(&package, &cause1);
+            let second = ruled_out_versions(&package, &cause2);
+            if first.is_empty() && second.is_empty() {
+                let concluded = metadata
+                    .terms
+                    .get(&package)
+                    .cloned()
+                    .unwrap_or_else(|| Term::Positive(unlisted.clone()));
+                let mut inner = metadata;
+                let shared_id = inner.shared_id.take();
+                inner.terms = Map::from_iter([(
+                    package.clone(),
+                    Term::Positive(
+                        reported_versions(&package, &cause1)
+                            .union(&reported_versions(&package, &cause2)),
+                    ),
+                )]);
+                return DerivationTree::Derived(Derived {
+                    terms: Map::from_iter([(package.clone(), concluded)]),
+                    shared_id,
+                    cause1: Arc::new(derived_tree(inner, cause1, cause2)),
+                    cause2: Arc::new(statement()),
+                });
+            }
+            if starts_lower(&first, &second) {
+                derived_tree(metadata, carry(cause1), cause2)
+            } else {
+                derived_tree(metadata, cause1, carry(cause2))
+            }
+        },
+    )
+}
+
+/// The versions a derivation rules out without either cause mentioning them, when they are versions
+/// the package does not have.
+///
+/// A derivation reaches past its causes in two places: the conclusion it draws about a package, and
+/// the requirement it resolves for a package it drops from its terms.
+fn unlisted_versions(
+    terms: &ErrorTerms,
+    cause1: &ErrorTree,
+    cause2: &ErrorTree,
+    included_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
+) -> Option<(PubGrubPackage, Range<Version>)> {
+    // What the causes establish about the package carries its conclusion, but only what they rule
+    // out can carry a requirement: a dependency of the package is not a statement that it cannot be
+    // used.
+    let concluded = concluded_package(terms).map(|(package, concluded)| {
+        let reported =
+            reported_versions(package, cause1).union(&reported_versions(package, cause2));
+        (package, concluded.clone(), reported)
+    });
+    let resolved = cause_packages(cause1)
+        .into_iter()
+        .chain(cause_packages(cause2))
+        .filter(|package| !terms.contains_key(*package))
+        .map(|package| {
+            let required =
+                required_versions(package, cause1).union(&required_versions(package, cause2));
+            let ruled_out =
+                ruled_out_versions(package, cause1).union(&ruled_out_versions(package, cause2));
+            (package, required, ruled_out)
+        });
+
+    for (package, covered, reported) in concluded.into_iter().chain(resolved) {
+        // A requirement that no cause rules out any of is unavailable outright rather than across a
+        // range, which [`collapse_redundant_depends_on_no_versions`] reports without the listing.
+        if reported.is_empty() {
+            continue;
+        }
+        let unlisted = covered.intersection(&reported.complement());
+        if unlisted.is_empty() {
+            continue;
+        }
+        // Only a version the package does not have can go unmentioned; anything else is a
+        // derivation its causes really do not support.
+        let Some(versions) = package
+            .name_no_root()
+            .and_then(|name| included_versions.get(name))
+        else {
+            continue;
+        };
+        if versions.iter().any(|version| unlisted.contains(version)) {
+            continue;
+        }
+        return Some((package.clone(), unlisted));
+    }
+    None
+}
+
+/// Whether the first version set starts below the second, treating an empty set as starting above
+/// every other.
+fn starts_lower(first: &Range<Version>, second: &Range<Version>) -> bool {
+    let lowest = |versions: &Range<Version>| {
+        versions.bounding_range().map(|(lower, _)| match lower {
+            Bound::Unbounded => None,
+            Bound::Included(version) | Bound::Excluded(version) => Some(version.clone()),
+        })
+    };
+    match (lowest(first), lowest(second)) {
+        // An unbounded start sorts below every version.
+        (Some(first), Some(second)) => first <= second,
+        (Some(_), None) => true,
+        (None, _) => false,
+    }
+}
+
+/// The package a derivation concludes about, when it concludes about one alone.
+fn concluded_package(terms: &ErrorTerms) -> Option<(&PubGrubPackage, &Range<Version>)> {
+    let mut terms = terms.iter();
+    let (package, Term::Positive(versions)) = terms.next()? else {
+        return None;
+    };
+    terms.next().is_none().then_some((package, versions))
+}
+
+/// The packages a cause states something about.
+fn cause_packages(cause: &ErrorTree) -> Vec<&PubGrubPackage> {
+    match cause {
+        DerivationTree::Derived(derived) => derived.terms.keys().collect(),
+        DerivationTree::External(
+            External::Custom(package, ..)
+            | External::NoVersions(package, ..)
+            | External::NotRoot(package, ..),
+        ) => vec![package],
+        DerivationTree::External(External::FromDependencyOf(package, _, dependency, _)) => {
+            vec![package, dependency]
+        }
+    }
+}
+
+/// The versions of `package` that a cause requires to remain usable.
+fn required_versions(package: &PubGrubPackage, cause: &ErrorTree) -> Range<Version> {
+    match cause {
+        DerivationTree::Derived(derived) => match derived.terms.get(package) {
+            Some(Term::Negative(versions)) => versions.clone(),
+            _ => Range::empty(),
+        },
+        DerivationTree::External(External::FromDependencyOf(_, _, required, versions))
+            if required == package =>
+        {
+            versions.clone()
+        }
+        DerivationTree::External(_) => Range::empty(),
+    }
+}
+
+/// The versions of `package` that a cause states cannot be used.
+fn ruled_out_versions(package: &PubGrubPackage, cause: &ErrorTree) -> Range<Version> {
+    match cause {
+        DerivationTree::Derived(derived) => match concluded_package(&derived.terms) {
+            Some((concluded, versions)) if concluded == package => versions.clone(),
+            _ => Range::empty(),
+        },
+        DerivationTree::External(External::Custom(ruled_out, versions, _))
+            if ruled_out == package =>
+        {
+            versions.clone()
+        }
+        DerivationTree::External(_) => Range::empty(),
+    }
+}
+
+/// The versions of `package` that a cause is reported as establishing something about.
+fn reported_versions(package: &PubGrubPackage, cause: &ErrorTree) -> Range<Version> {
+    match cause {
+        DerivationTree::Derived(derived) => match derived.terms.get(package) {
+            Some(Term::Positive(versions)) => versions.clone(),
+            _ => Range::empty(),
+        },
+        DerivationTree::External(
+            External::Custom(reported, versions, _)
+            | External::NoVersions(reported, versions)
+            | External::FromDependencyOf(reported, versions, ..),
+        ) if reported == package => versions.clone(),
+        DerivationTree::External(_) => Range::empty(),
     }
 }
 

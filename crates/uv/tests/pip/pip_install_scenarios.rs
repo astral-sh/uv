@@ -4110,13 +4110,22 @@ fn python_greater_than_current_excluded() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==2.0.0 depends on Python>=3.10, we can conclude that a==2.0.0 cannot be used. (1)
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==2.0.0 depends on Python>=3.10, we can conclude that a==2.0.0 cannot be used.
+          And because only the following versions of a are available:
+              a<=2.0.0
+              a>=3.0.0
+          we can conclude that a>=2.0.0,<3.0.0 cannot be used. (1)
 
           Because the current Python version (3.9.[X]) does not satisfy Python>=3.11 and a==3.0.0 depends on Python>=3.11, we can conclude that a==3.0.0 cannot be used.
-          And because we know from (1) that a==2.0.0 cannot be used, we can conclude that a>=2.0.0,<=3.0.0 cannot be used. (2)
+          And because we know from (1) that a>=2.0.0,<3.0.0 cannot be used, we can conclude that a>=2.0.0,<=3.0.0 cannot be used.
+          And because only the following versions of a are available:
+              a<=3.0.0
+              a>=4.0.0
+          we can conclude that a>=2.0.0,<4.0.0 cannot be used. (2)
 
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and a>=4.0.0 depends on Python>=3.12, we can conclude that a>=4.0.0 cannot be used.
-          And because we know from (2) that a>=2.0.0,<=3.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 cannot be used.
+          And because only a<=4.0.0 is available, we can conclude that a>=4.0.0 cannot be used.
+          And because we know from (2) that a>=2.0.0,<4.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
           And because you require a>=2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -4828,7 +4837,11 @@ fn package_only_yanked_in_range() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 was yanked and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because a==1.0.0 was yanked and only the following versions of a are available:
+              a<=0.1.0
+              a==1.0.0
+          we can conclude that a>0.1.0 cannot be used.
+          And because you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Since there are other versions of `a` available, yanked versions should not be selected without explicit opt-in.
@@ -5005,8 +5018,11 @@ fn transitive_package_only_yanked_in_range() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because b==1.0.0 was yanked and all versions of a depend on b>0.1, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because b==1.0.0 was yanked and only the following versions of b are available:
+              b<=0.1
+              b==1.0.0
+          we can conclude that b>0.1 cannot be used.
+          And because all versions of a depend on b>0.1 and you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only valid version in a range.

@@ -3978,7 +3978,12 @@ fn compile_yanked_version_indirect() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because attrs==21.1.0 was yanked (reason: Installable but not importable on Python 3.4) and you require attrs>20.3.0,<21.2.0, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because attrs==21.1.0 was yanked (reason: Installable but not importable on Python 3.4) and only the following versions of attrs are available:
+              attrs<=20.3.0
+              attrs==21.1.0
+              attrs>=21.2.0
+          we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
+          And because you require attrs>20.3.0,<21.2.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -14151,7 +14156,8 @@ fn no_binary_only_binary() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because source-distribution==0.0.1 has no usable wheels and you require source-distribution<=0.0.1, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because source-distribution==0.0.1 has no usable wheels and only source-distribution>=0.0.1 is available, we can conclude that source-distribution<=0.0.1 cannot be used.
+          And because you require source-distribution<=0.0.1, we can conclude that your requirements are unsatisfiable.
 
     hint: Wheels are required for `source-distribution` because building from source is disabled for all packages (i.e., with `--no-build`)
     "
@@ -15351,8 +15357,11 @@ fn invalid_platform() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`) and open3d>=0.16.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`), we can conclude that all versions of open3d cannot be used.
-          And because you require open3d, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`) and only the following versions of open3d are available:
+              open3d<=0.15.2
+              open3d>=0.16.0
+          we can conclude that open3d<0.16.0 cannot be used.
+          And because open3d>=0.16.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
 
     hint: You require CPython 3.10 (`cp310`), but we only found wheels for `open3d` (v0.15.2) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
     hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`

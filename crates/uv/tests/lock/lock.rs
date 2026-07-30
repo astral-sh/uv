@@ -5854,10 +5854,15 @@ fn lock_requires_python() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies for split (markers: python_full_version >= '3.7' and python_full_version < '3.7.9'):
-      ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.7.9 and pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4, we can conclude that pygls>=1.1.0,<=1.2.1 cannot be used. (1)
+      ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.7.9 and pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4, we can conclude that pygls>=1.1.0,<=1.2.1 cannot be used.
+          And because only the following versions of pygls are available:
+              pygls<=1.2.1
+              pygls>=1.3.0
+          we can conclude that pygls>=1.1.0,<1.3.0 cannot be used. (1)
 
-          Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls>=1.3.0 depends on Python>=3.8, we can conclude that pygls>=1.3.0 cannot be used.
-          And because we know from (1) that pygls>=1.1.0,<=1.2.1 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
+          Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
+          And because only pygls<=1.3.0 is available, we can conclude that pygls>=1.3.0 cannot be used.
+          And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
     hint: While the active Python version is 3.12, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
@@ -37616,8 +37621,11 @@ fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() ->
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies for split (markers: sys_platform == 'linux'):
-      ╰─▶ Because pywin32<=305 has no wheels with a matching Python version tag (e.g., `cp312`) and pywin32>=306 has no Linux-compatible wheels, we can conclude that all versions of pywin32 cannot be used.
-          And because your project depends on pywin32, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because pywin32<=305 has no wheels with a matching Python version tag (e.g., `cp312`) and only the following versions of pywin32 are available:
+              pywin32<=305
+              pywin32>=306
+          we can conclude that pywin32<306 cannot be used.
+          And because pywin32>=306 has no Linux-compatible wheels and your project depends on pywin32, we can conclude that your project's requirements are unsatisfiable.
 
     hint: Wheels are available for `pywin32` (v305) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
     ");
