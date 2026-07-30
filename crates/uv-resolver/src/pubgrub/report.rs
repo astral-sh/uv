@@ -15,7 +15,7 @@ use rustc_hash::FxHashMap;
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
-    IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
+    IndexLocations, IndexMetadata, IndexRoutes, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -742,6 +742,8 @@ impl PubGrubReportFormatter<'_> {
         inherited_exclude_newer_ranges: &FxHashMap<PackageName, Range<Version>>,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
+        let index_routes = IndexRoutes::try_from(index_locations).ok();
+
         // Check for disjoint target hints (only applicable to universal resolution).
         if let Some(markers) = env.fork_markers() {
             // TODO(konsti): This is a crude approximation to telling the user the difference
@@ -783,6 +785,7 @@ impl PubGrubReportFormatter<'_> {
                             set,
                             selector,
                             index_locations,
+                            index_routes.as_ref(),
                             index_capabilities,
                             available_indexes,
                             unavailable_packages,
@@ -841,6 +844,7 @@ impl PubGrubReportFormatter<'_> {
                             set,
                             selector,
                             index_locations,
+                            index_routes.as_ref(),
                             index_capabilities,
                             available_indexes,
                             unavailable_packages,
@@ -1178,6 +1182,7 @@ impl PubGrubReportFormatter<'_> {
         set: &Range<Version>,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
+        index_routes: Option<&IndexRoutes>,
         index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
@@ -1297,19 +1302,52 @@ impl PubGrubReportFormatter<'_> {
             }
         }
 
-        // Add hints due to an index returning an unauthorized response.
+        // Add hints due to a physical index returning an authentication error.
+        if let Some(index_routes) = index_routes {
+            Self::authentication_hints(
+                index_locations,
+                index_routes,
+                index_capabilities,
+                available_indexes,
+                hints,
+            );
+        }
+    }
+
+    fn authentication_hints(
+        index_locations: &IndexLocations,
+        index_routes: &IndexRoutes,
+        index_capabilities: &IndexCapabilities,
+        available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
+        hints: &mut IndexSet<PubGrubHint>,
+    ) {
+        let mut physical_indexes = BTreeMap::<IndexUrl, bool>::new();
+
         for index in index_locations.allowed_indexes() {
-            if index_capabilities.unauthorized(&index.url) {
+            let route = index_routes.route_for(&index.url);
+            physical_indexes.entry(route.physical).or_default();
+        }
+        for route in index_routes.proxy_routes() {
+            physical_indexes.entry(route.physical.clone()).or_default();
+        }
+
+        for canonical in available_indexes.values().flatten() {
+            let physical = index_routes.route_for(canonical).physical;
+            if let Some(any_successful_response) = physical_indexes.get_mut(&physical) {
+                *any_successful_response = true;
+            }
+        }
+
+        for (physical, any_successful_response) in physical_indexes {
+            if index_capabilities.unauthorized(&physical) {
                 hints.insert(PubGrubHint::UnauthorizedIndex {
-                    index: index.url.clone(),
+                    index: physical.clone(),
                 });
             }
-            if index_capabilities.forbidden(&index.url) {
+            if index_capabilities.forbidden(&physical) {
                 hints.insert(PubGrubHint::ForbiddenIndex {
-                    index: index.url.clone(),
-                    any_successful_response: available_indexes
-                        .values()
-                        .any(|indexes| indexes.contains(&index.url)),
+                    index: physical,
+                    any_successful_response,
                 });
             }
         }
@@ -2712,9 +2750,12 @@ fn padded<'a, T: std::fmt::Display + ?Sized>(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use pubgrub::{DefaultStringReporter, Reporter};
-    use uv_distribution_types::RequiresPython;
+    use uv_distribution_types::{IndexName, IndexStatusCodeStrategy, RequiresPython};
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
+    use uv_redacted::DisplaySafeUrl;
 
     use super::*;
 
@@ -2774,6 +2815,178 @@ mod tests {
                 tags: None,
             }
         }
+    }
+
+    #[test]
+    fn proxy_authentication_hints_use_physical_indexes() -> Result<(), Box<dyn std::error::Error>> {
+        let first_canonical = IndexUrl::from_str("https://canonical-a.example.com/simple")?;
+        let second_canonical = IndexUrl::from_str(
+            "https://canonical-user:canonical-secret@canonical-b.example.com/simple",
+        )?;
+        let redacted_second_canonical =
+            IndexUrl::from_str("https://canonical-b.example.com/simple")?;
+        let physical =
+            IndexUrl::from_str("https://proxy-user:proxy-secret@proxy.example.com/simple")?;
+        let unrelated = IndexUrl::from_str("https://unrelated.example.com/simple")?;
+
+        let first_name = IndexName::from_str("canonical-a")?;
+        let second_name = IndexName::from_str("canonical-b")?;
+
+        let mut first_index = Index::from_extra_index_url(first_canonical.clone());
+        first_index.name = Some(first_name.clone());
+        first_index.artifact_base_url = Some(DisplaySafeUrl::parse(
+            "https://canonical-a.example.com/packages/",
+        )?);
+
+        let mut second_index = Index::from_extra_index_url(second_canonical.clone());
+        second_index.name = Some(second_name.clone());
+        second_index.artifact_base_url = Some(DisplaySafeUrl::parse(
+            "https://canonical-b.example.com/packages/",
+        )?);
+
+        let mut first_proxy = Index::from_extra_index_url(physical.clone());
+        first_proxy.name = Some(IndexName::from_str("proxy-a")?);
+        first_proxy.proxy_for = Some(first_name);
+        first_proxy.artifact_base_url = Some(DisplaySafeUrl::parse(
+            "https://proxy-user:proxy-secret@proxy.example.com/files/",
+        )?);
+
+        let mut second_proxy = Index::from_extra_index_url(physical.clone());
+        second_proxy.name = Some(IndexName::from_str("proxy-b")?);
+        second_proxy.proxy_for = Some(second_name);
+        second_proxy.artifact_base_url = Some(DisplaySafeUrl::parse(
+            "https://proxy-user:proxy-secret@proxy.example.com/files/",
+        )?);
+
+        let index_locations = IndexLocations::new(
+            vec![first_index, first_proxy, second_index, second_proxy],
+            Vec::new(),
+            false,
+        );
+        let index_routes = IndexRoutes::try_from(&index_locations)?;
+
+        assert_eq!(index_routes.proxy_routes().count(), 2);
+        assert_eq!(index_routes.route_for(&first_canonical).physical, physical);
+        assert_eq!(
+            index_routes.route_for(&redacted_second_canonical).physical,
+            physical
+        );
+
+        let index_capabilities = IndexCapabilities::default();
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::UNAUTHORIZED,
+            &physical,
+            &index_capabilities,
+        );
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::FORBIDDEN,
+            &physical,
+            &index_capabilities,
+        );
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::UNAUTHORIZED,
+            &unrelated,
+            &index_capabilities,
+        );
+
+        let available_indexes = FxHashMap::from_iter([
+            (
+                PackageName::from_str("example")?,
+                BTreeSet::from([redacted_second_canonical]),
+            ),
+            (
+                PackageName::from_str("unrelated")?,
+                BTreeSet::from([unrelated]),
+            ),
+        ]);
+        let mut hints = IndexSet::new();
+
+        PubGrubReportFormatter::authentication_hints(
+            &index_locations,
+            &index_routes,
+            &index_capabilities,
+            &available_indexes,
+            &mut hints,
+        );
+
+        for hint in &hints {
+            let rendered = hint.to_string();
+            assert!(!rendered.contains("canonical-user"));
+            assert!(!rendered.contains("canonical-secret"));
+            assert!(!rendered.contains("proxy-user"));
+            assert!(!rendered.contains("proxy-secret"));
+        }
+
+        let hints = hints
+            .iter()
+            .map(|hint| match hint {
+                PubGrubHint::UnauthorizedIndex { index } => Ok((
+                    "unauthorized",
+                    index.without_credentials().to_string(),
+                    None,
+                )),
+                PubGrubHint::ForbiddenIndex {
+                    index,
+                    any_successful_response,
+                } => Ok((
+                    "forbidden",
+                    index.without_credentials().to_string(),
+                    Some(*any_successful_response),
+                )),
+                _ => Err(std::io::Error::other("unexpected authentication hint")),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        insta::assert_debug_snapshot!(hints, @r#"
+        [
+            (
+                "unauthorized",
+                "https://proxy.example.com/simple",
+                None,
+            ),
+            (
+                "forbidden",
+                "https://proxy.example.com/simple",
+                Some(
+                    true,
+                ),
+            ),
+        ]
+        "#);
+
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_authentication_hints_respect_no_index() -> Result<(), Box<dyn std::error::Error>> {
+        let physical = IndexUrl::from_str("https://proxy.example.com/simple")?;
+
+        let mut proxy = Index::from_extra_index_url(physical.clone());
+        proxy.name = Some(IndexName::from_str("proxy")?);
+        proxy.proxy_for = Some(IndexName::from_str("pypi")?);
+        proxy.artifact_base_url = Some(DisplaySafeUrl::parse("https://proxy.example.com/files/")?);
+
+        let index_locations = IndexLocations::new(vec![proxy], Vec::new(), true);
+        let index_routes = IndexRoutes::try_from(&index_locations)?;
+        let index_capabilities = IndexCapabilities::default();
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::UNAUTHORIZED,
+            &physical,
+            &index_capabilities,
+        );
+
+        let mut hints = IndexSet::new();
+        PubGrubReportFormatter::authentication_hints(
+            &index_locations,
+            &index_routes,
+            &index_capabilities,
+            &FxHashMap::default(),
+            &mut hints,
+        );
+
+        assert!(hints.is_empty());
+
+        Ok(())
     }
 
     #[test]

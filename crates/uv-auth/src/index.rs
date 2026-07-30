@@ -124,7 +124,18 @@ impl Indexes {
     }
 
     fn find_prefix_index(&self, url: &Url) -> Option<&Index> {
-        self.0.iter().find(|&index| index.is_prefix_for(url))
+        self.0
+            .iter()
+            .filter(|index| index.is_prefix_for(url))
+            .max_by_key(|index| {
+                (
+                    index.root_url.path().len(),
+                    is_path_prefix(index.url.path(), url.path()),
+                    index.url.path().len(),
+                    index.url.as_str(),
+                    index.auth_policy,
+                )
+            })
     }
 }
 
@@ -166,5 +177,36 @@ mod tests {
                 "Should not match URL with partial path segment: {url}"
             );
         }
+    }
+
+    #[test]
+    fn test_authentication_uses_most_specific_index_root() {
+        let indexes = Indexes::from_indexes([
+            index("https://example.com/", AuthPolicy::Never),
+            index("https://example.com/private/", AuthPolicy::Always),
+        ]);
+
+        let url = Url::parse("https://example.com/private/simple/package/").unwrap();
+        assert_eq!(indexes.auth_policy_for(&url), AuthPolicy::Always);
+    }
+
+    #[test]
+    fn test_authentication_prefers_matching_index_when_roots_overlap() {
+        let root_url = DisplaySafeUrl::parse("https://example.com/").unwrap();
+        let indexes = Indexes::from_indexes([
+            Index {
+                url: DisplaySafeUrl::parse("https://example.com/simple/").unwrap(),
+                root_url: root_url.clone(),
+                auth_policy: AuthPolicy::Never,
+            },
+            Index {
+                url: DisplaySafeUrl::parse("https://example.com/private/simple/").unwrap(),
+                root_url,
+                auth_policy: AuthPolicy::Always,
+            },
+        ]);
+
+        let url = Url::parse("https://example.com/private/simple/package/").unwrap();
+        assert_eq!(indexes.auth_policy_for(&url), AuthPolicy::Always);
     }
 }

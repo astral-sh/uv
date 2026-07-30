@@ -225,17 +225,21 @@ impl<T> UrlTrie<T> {
 
     fn get(&self, url: &Url) -> Option<&T> {
         let mut state = 0;
+        let mut best = None;
         let realm = Realm::from(url).to_string();
         for component in [realm.as_str()]
             .into_iter()
             .chain(url.path_segments().unwrap().filter(|item| !item.is_empty()))
         {
-            state = self.states[state].get(component)?;
+            let Some(next_state) = self.states[state].get(component) else {
+                break;
+            };
+            state = next_state;
             if let Some(ref value) = self.states[state].value {
-                return Some(value);
+                best = Some(value);
             }
         }
-        self.states[state].value.as_ref()
+        best
     }
 
     fn insert(&mut self, url: &Url, value: T) {
@@ -315,6 +319,8 @@ mod tests {
             Credentials::basic(Some("username3".to_string()), Some("password3".to_string()));
         let credentials4 =
             Credentials::basic(Some("username4".to_string()), Some("password4".to_string()));
+        let credentials5 =
+            Credentials::basic(Some("username5".to_string()), Some("password5".to_string()));
 
         let mut trie = UrlTrie::new();
         trie.insert(
@@ -333,6 +339,10 @@ mod tests {
             &Url::parse("https://example.com/bar").unwrap(),
             credentials4.clone(),
         );
+        trie.insert(
+            &Url::parse("https://example.com/foo/bar").unwrap(),
+            credentials5.clone(),
+        );
 
         let url = Url::parse("https://burntsushi.net/regex-internals").unwrap();
         assert_eq!(trie.get(&url), Some(&credentials1));
@@ -350,6 +360,12 @@ mod tests {
         assert_eq!(trie.get(&url), Some(&credentials3));
 
         let url = Url::parse("https://example.com/foo/bar").unwrap();
+        assert_eq!(trie.get(&url), Some(&credentials5));
+
+        let url = Url::parse("https://example.com/foo/bar/baz").unwrap();
+        assert_eq!(trie.get(&url), Some(&credentials5));
+
+        let url = Url::parse("https://example.com/foo/baz").unwrap();
         assert_eq!(trie.get(&url), Some(&credentials3));
 
         let url = Url::parse("https://example.com/bar").unwrap();
