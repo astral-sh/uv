@@ -102,6 +102,100 @@ fn extra_conflict_discovery_respects_parent_reachability() -> Result<()> {
     Ok(())
 }
 
+/// Workspace-member extras remain selectable outside the conflicting path that first reached them.
+#[test]
+fn workspace_extra_selection_ignores_unrelated_conflict_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root-project"
+        version = "1.0.0"
+        requires-python = ">=3.10"
+
+        [project.optional-dependencies]
+        left = ["alpha[one]"]
+
+        [dependency-groups]
+        right = ["zeta[two]"]
+
+        [tool.uv]
+        conflicts = [
+            [{ extra = "left" }, { group = "right" }],
+            [{ package = "alpha", extra = "one" }, { package = "zeta", extra = "two" }],
+        ]
+
+        [tool.uv.workspace]
+        members = ["alpha", "zeta"]
+
+        [tool.uv.sources]
+        alpha = { workspace = true }
+        zeta = { workspace = true }
+        leaf = { path = "leaf" }
+        "#,
+    )?;
+    context.temp_dir.child("alpha/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "alpha"
+        version = "1.0.0"
+        requires-python = ">=3.10"
+
+        [project.optional-dependencies]
+        one = ["zeta[one]"]
+        two = ["leaf"]
+        "#,
+    )?;
+    context.temp_dir.child("zeta/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "zeta"
+        version = "1.0.0"
+        requires-python = ">=3.10"
+
+        [project.optional-dependencies]
+        one = ["alpha[two]"]
+        two = []
+        "#,
+    )?;
+    context.temp_dir.child("leaf/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+        requires-python = ">=3.10"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--package")
+        .arg("zeta")
+        .arg("--extra")
+        .arg("one")
+        .arg("--no-hashes")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./alpha
+    -e ./zeta
+    ./leaf
+    ");
+
+    Ok(())
+}
+
 /// This tests a "basic" case for specifying conflicting extras.
 ///
 /// Namely, we check that 1) without declaring them conflicting,
