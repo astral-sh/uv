@@ -33,6 +33,28 @@ fn lock_without_package_metadata(lock: &str) -> Result<toml_edit::DocumentMut> {
         anyhow::bail!("lockfile did not contain a package array");
     };
     for package in packages.iter_mut() {
+        let extras = package
+            .get("metadata")
+            .and_then(|metadata| metadata.get("provides-extras"))
+            .and_then(toml_edit::Item::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(toml_edit::Value::as_str)
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        if !extras.is_empty() {
+            let optional_dependencies = package
+                .entry("optional-dependencies")
+                .or_insert(toml_edit::table());
+            let Some(optional_dependencies) = optional_dependencies.as_table_like_mut() else {
+                anyhow::bail!("package optional dependencies were not a table");
+            };
+            for extra in extras {
+                optional_dependencies
+                    .entry(&extra)
+                    .or_insert(toml_edit::value(toml_edit::Array::new()));
+            }
+        }
         package.remove("metadata");
     }
     lock["revision"] = toml_edit::value(4);
@@ -17673,6 +17695,12 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     name = "project"
     version = "0.1.0"
     source = { virtual = "." }
+
+    [package.optional-dependencies]
+    feature = []
+
+    [package.dev-dependencies]
+    dev = []
     "#);
 
     uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--check").arg("--offline"), @"
@@ -18691,6 +18719,136 @@ fn lock_metadata_free_forked_source_declared_empty_extra() -> Result<()> {
     ----- stderr -----
     DEBUG Existing `uv.lock` satisfies workspace requirements
     Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Dependency groups on non-workspace source trees cannot be selected independently.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_ignores_non_workspace_self_referential_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider[one]"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = ["provider[two]"]
+        two = []
+
+        [dependency-groups]
+        nested = ["provider[one]"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Preserve self-extra activation when overrides are applied before recursive flattening.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_recursive_extra_preserves_override_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider[one]"]
+
+        [tool.uv]
+        override-dependencies = ["ok==2.0.0"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        ok = { path = "ok" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = ["provider[two] ; platform_machine == 'aarch64'"]
+        two = ["ok==1.0.0"]
+        "#})?;
+    context
+        .temp_dir
+        .child("ok/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "ok"
+        version = "2.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())

@@ -1309,15 +1309,20 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         package: &'lock Package,
         activated_package: ActivatedPackage,
         workspace_root: &'lock Path,
+        declarations_preprocessed: bool,
     ) -> Self {
         let package_context = package_version.map(|version| (&package.id.name, version));
-        let declarations = overrides
-            .apply_for_package(package_context, declarations)
-            .filter(|requirement| {
-                !excludes.contains_for_package(package_context, &requirement.name)
-            })
-            .map(Cow::into_owned)
-            .collect::<BTreeSet<_>>();
+        let declarations = if declarations_preprocessed {
+            declarations.clone()
+        } else {
+            overrides
+                .apply_for_package(package_context, declarations)
+                .filter(|requirement| {
+                    !excludes.contains_for_package(package_context, &requirement.name)
+                })
+                .map(Cow::into_owned)
+                .collect::<BTreeSet<_>>()
+        };
         let dependency_groups = dependency_groups
             .iter()
             .map(|(group, requirements)| {
@@ -2293,6 +2298,7 @@ impl Lock {
     #[must_use]
     pub fn without_package_metadata(mut self) -> Self {
         self.revision = METADATA_FREE_REVISION;
+        let root = self.root().map(|package| package.id.clone());
         for package in &mut self.packages {
             for extra in &package.metadata.provides_extra {
                 package
@@ -2300,8 +2306,12 @@ impl Lock {
                     .entry(extra.clone())
                     .or_default();
             }
-            for group in package.metadata.dependency_groups.keys() {
-                package.dependency_groups.entry(group.clone()).or_default();
+            if self.manifest.members.contains(&package.id.name)
+                || root.as_ref().is_some_and(|id| id == &package.id)
+            {
+                for group in package.metadata.dependency_groups.keys() {
+                    package.dependency_groups.entry(group.clone()).or_default();
+                }
             }
             package.metadata = PackageMetadata::default();
         }
@@ -3181,6 +3191,7 @@ impl Lock {
                 package,
                 package_activation,
                 root,
+                missing_metadata,
             );
             match self.satisfied_no_metadata(
                 package,
@@ -3313,6 +3324,13 @@ impl Lock {
                 expected.comparable_dependencies(&generated, context, activation, conflicts);
             let actual_comparable =
                 expected.comparable_dependencies(actual, context, activation, conflicts);
+            // Production edges must retain their project selection even in a conflicting group
+            // world, rather than hiding a missing project marker behind the current activation.
+            let forbidden_environment = if matches!(context, DependencyContext::Production) {
+                activation.marker.pep508()
+            } else {
+                activation.marker.combined()
+            };
             let equivalent = generated_comparable.len() == actual_comparable.len()
                 && generated_comparable.iter().zip(&actual_comparable).all(
                     |(
@@ -3360,7 +3378,7 @@ impl Lock {
                             let mut forbidden = UniversalMarker::from_combined(
                                 actual_conflict
                                     .and(*generated_forbidden_conflict)
-                                    .and(activation.marker.combined()),
+                                    .and(forbidden_environment),
                             );
                             forbidden.and(UniversalMarker::new(
                                 MarkerTree::TRUE,
