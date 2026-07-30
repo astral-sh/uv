@@ -3284,14 +3284,14 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 /// point.
 ///
 /// In the first case, we are in cleaver 2 and fork on `sys_platform`, in the
-/// second case, we are in foo 1 or bar 1 amd fork over `os_name`.
+/// second case, we are in foo 1 or bar 1 and fork over `platform_machine`.
 ///
 /// First case: We select cleaver 2, fork on `sys_platform`, we reject cleaver 2
-/// (missing fork `os_name`), we select cleaver 1 and don't fork on `os_name` in
-/// `fork-if-not-forked`, done.
-/// Second case: We have preference cleaver 1, fork on `os_name` in
+/// (missing fork `platform_machine`), we select cleaver 1 and don't fork on
+/// `platform_machine` in `fork-if-not-forked`, done.
+/// Second case: We have preference cleaver 1, fork on `platform_machine` in
 /// `fork-if-not-forked`, we reject cleaver 1, we select cleaver 2, we fork on
-/// `sys_platform`, we accept cleaver 2 since we forked on `os_name`, done.
+/// `sys_platform`, we accept cleaver 2 since we forked on `platform_machine`, done.
 ///
 ///
 /// ```text
@@ -3318,15 +3318,15 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 /// │       │   └── satisfied by fork-sys-platform-1.0.0
 /// │       ├── requires fork-sys-platform==2 ; sys_platform != 'linux'
 /// │       │   └── satisfied by fork-sys-platform-2.0.0
-/// │       ├── requires reject-cleaver2==1 ; os_name == 'posix'
+/// │       ├── requires reject-cleaver2==1 ; platform_machine == 'x86_64'
 /// │       │   └── satisfied by reject-cleaver2-1.0.0
 /// │       └── requires reject-cleaver2-proxy
 /// │           └── satisfied by reject-cleaver2-proxy-1.0.0
 /// ├── fork-if-not-forked
 /// │   ├── fork-if-not-forked-1.0.0
-/// │   │   ├── requires fork-os-name==1 ; os_name == 'posix'
+/// │   │   ├── requires fork-os-name==1 ; platform_machine == 'x86_64'
 /// │   │   │   └── satisfied by fork-os-name-1.0.0
-/// │   │   ├── requires fork-os-name==2 ; os_name != 'posix'
+/// │   │   ├── requires fork-os-name==2 ; platform_machine != 'x86_64'
 /// │   │   │   └── satisfied by fork-os-name-2.0.0
 /// │   │   └── requires reject-cleaver1-proxy
 /// │   │       └── satisfied by reject-cleaver1-proxy-1.0.0
@@ -3355,7 +3355,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 /// │   └── reject-cleaver2-2.0.0
 /// └── reject-cleaver2-proxy
 ///     └── reject-cleaver2-proxy-1.0.0
-///         └── requires reject-cleaver2==2 ; os_name != 'posix'
+///         └── requires reject-cleaver2==2 ; platform_machine != 'x86_64'
 ///             └── satisfied by reject-cleaver2-2.0.0
 /// ```
 #[test]
@@ -3649,11 +3649,11 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// │       └── satisfied by foo-2.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires unrelated-dep3==1 ; os_name == 'posix'
+/// │       └── requires unrelated-dep3==1 ; platform_machine == 'x86_64'
 /// │           └── satisfied by unrelated-dep3-1.0.0
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires unrelated-dep3==2 ; os_name != 'posix'
+/// │       └── requires unrelated-dep3==2 ; platform_machine != 'x86_64'
 /// │           └── satisfied by unrelated-dep3-2.0.0
 /// ├── bar
 /// │   ├── bar-1.0.0
@@ -3669,9 +3669,9 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// │   ├── c-1.0.0
 /// │   │   ├── requires reject-cleaver-1
 /// │   │   │   └── satisfied by reject-cleaver-1-1.0.0
-/// │   │   ├── requires unrelated-dep2==1 ; os_name == 'posix'
+/// │   │   ├── requires unrelated-dep2==1 ; platform_machine == 'x86_64'
 /// │   │   │   └── satisfied by unrelated-dep2-1.0.0
-/// │   │   └── requires unrelated-dep2==2 ; os_name != 'posix'
+/// │   │   └── requires unrelated-dep2==2 ; platform_machine != 'x86_64'
 /// │   │       └── satisfied by unrelated-dep2-2.0.0
 /// │   ├── c-2.0.0
 /// │   └── c-3.0.0

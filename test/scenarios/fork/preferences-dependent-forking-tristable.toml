@@ -26,10 +26,10 @@ requires = [
 ]
 
 [packages.a.versions."1.0.0"]
-requires = ["unrelated-dep3==1; os_name == 'posix'"]
+requires = ["unrelated-dep3==1; platform_machine == 'x86_64'"]
 
 [packages.b.versions."1.0.0"]
-requires = ["unrelated-dep3==2; os_name != 'posix'"]
+requires = ["unrelated-dep3==2; platform_machine != 'x86_64'"]
 
 [packages.reject-cleaver-2.versions."1.0.0"]
 requires = ["unrelated-dep3==3"]
@@ -75,8 +75,8 @@ requires = [
 
 [packages.c.versions."1.0.0"]
 requires = [
-  "unrelated-dep2==1; os_name == 'posix'",
-  "unrelated-dep2==2; os_name != 'posix'",
+  "unrelated-dep2==1; platform_machine == 'x86_64'",
+  "unrelated-dep2==2; platform_machine != 'x86_64'",
   "reject-cleaver-1",
 ]
 [packages.c.versions."2.0.0"]

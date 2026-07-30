@@ -1147,6 +1147,13 @@ impl InternerGuard<'_> {
             pairs.push((os_name_posix.not(), platform_system));
         }
 
+        // iOS and iPadOS expose distinct user-facing platform names, but both use `ios` as
+        // their `sys.platform` value.
+        pairs.extend([
+            (platform_system_ios, sys_platform_ios.not()),
+            (platform_system_ipados, sys_platform_ios.not()),
+        ]);
+
         // CPython and PyPy expose the same interpreter identity through both marker names,
         // using different spellings. Other implementations do not have a guaranteed mapping.
         pairs.extend([

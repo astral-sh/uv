@@ -16176,6 +16176,42 @@ fn lock_unix_operating_system_markers() -> Result<()> {
     Ok(())
 }
 
+/// Both user-facing iOS platform names use the same `ios` value for `sys.platform`.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_ios_platform_system_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; platform_system == 'iOS'",
+            "ok==1.0.0 ; platform_system == 'iPadOS'",
+            "ok==2.0.0 ; sys_platform != 'ios'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Change indexes between locking operations.
 #[cfg(feature = "test-universal")]
 #[tokio::test]

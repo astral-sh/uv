@@ -3280,6 +3280,12 @@ mod test {
             assert!(!is_disjoint("os_name == 'posix'", marker));
         }
 
+        for platform_system in ["iOS", "iPadOS"] {
+            let marker = format!("platform_system == '{platform_system}'");
+            assert!(is_disjoint(&marker, "sys_platform != 'ios'"));
+            assert!(!is_disjoint(marker, "sys_platform == 'ios'"));
+        }
+
         assert!(!is_disjoint("os_name == 'nt'", "sys_platform == 'win32'"));
         assert!(!is_disjoint(
             "os_name != 'posix'",
