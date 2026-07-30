@@ -2201,7 +2201,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Left(Either::Left(self.requirements_for_extra(
                 dev_dependencies.get(dev).into_iter().flatten(),
                 extra,
-                name,
                 None,
                 name.zip(version),
                 env,
@@ -2216,7 +2215,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Left(Either::Right(self.requirements_for_extra(
                 dependencies.iter(),
                 extra,
-                name,
                 name.zip(version),
                 name.zip(version),
                 env,
@@ -2228,7 +2226,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .requirements_for_extra(
                     dependencies.iter(),
                     extra,
-                    name,
                     name.zip(version),
                     name.zip(version),
                     env,
@@ -2252,7 +2249,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for requirement in self.requirements_for_extra(
                     dependencies,
                     Some(&extra),
-                    name,
                     name.zip(version),
                     name.zip(version),
                     env,
@@ -2324,7 +2320,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &'data self,
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
-        source_package: Option<&'parameters PackageName>,
         override_package: Option<(&'parameters PackageName, &'parameters Version)>,
         exclusion_package: Option<(&'parameters PackageName, &'parameters Version)>,
         env: &'parameters ResolverEnvironment,
@@ -2374,7 +2369,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Self::is_requirement_applicable(
                     requirement,
                     extra,
-                    source_package,
                     env,
                     python_marker,
                     python_requirement,
@@ -2384,7 +2378,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 iter::once(requirement.clone()).chain(self.constraints_for_requirement(
                     requirement,
                     extra,
-                    source_package,
                     env,
                     python_marker,
                     python_requirement,
@@ -2397,7 +2390,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn is_requirement_applicable(
         requirement: &Requirement,
         extra: Option<&ExtraName>,
-        source_package: Option<&PackageName>,
         env: &ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &PythonRequirement,
@@ -2409,8 +2401,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return false;
                 }
 
-                if let Some(source_package) = source_package
-                    && !env.included_by_group(ConflictItemRef::from((source_package, source_extra)))
+                if (requirement.extras.is_empty() || requirement.extras.contains(source_extra))
+                    && !env
+                        .included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
                 {
                     return false;
                 }
@@ -2448,7 +2441,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &'data self,
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
-        source_package: Option<&'parameters PackageName>,
         env: &'parameters ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
@@ -2545,8 +2537,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         {
                             return None;
                         }
-                        if let Some(source_package) = source_package
-                            && !env.included_by_group(ConflictItemRef::from((source_package, source_extra)))
+                        if (requirement.extras.is_empty()
+                            || requirement.extras.contains(source_extra))
+                            && !env.included_by_group(ConflictItemRef::from((
+                                &requirement.name,
+                                source_extra,
+                            )))
                         {
                             return None;
                         }
