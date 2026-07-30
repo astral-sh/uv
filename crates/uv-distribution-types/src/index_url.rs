@@ -10,7 +10,7 @@ use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use url::{ParseError, Url};
-use uv_auth::RealmRef;
+use uv_auth::{Index as AuthIndex, RealmRef};
 use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_pypi_types::HashAlgorithm;
@@ -553,19 +553,41 @@ impl<'a> IndexLocations {
 }
 
 impl From<&IndexLocations> for uv_auth::Indexes {
+    /// Configure authentication policies and credential lookups for package indexes.
+    ///
+    /// Include proxy indexes and their artifact bases so both metadata and package downloads use
+    /// the proxy's authentication policy. Artifact bases use their own URL as the authentication
+    /// root and credential lookup URL.
     fn from(index_locations: &IndexLocations) -> Self {
-        Self::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
-            let mut url = index.url().url().clone();
-            url.set_username("").ok();
-            url.set_password(None).ok();
-            let mut root_url = index.url().root().unwrap_or_else(|| url.clone());
-            root_url.set_username("").ok();
-            root_url.set_password(None).ok();
-            uv_auth::Index {
-                url,
-                root_url,
+        let indexes = index_locations
+            .allowed_indexes()
+            .into_iter()
+            .chain(index_locations.proxy_indexes())
+            .map(|index| {
+                let url = index.raw_url().clone();
+                let root_url = index.root_url().unwrap_or_else(|| url.clone());
+                AuthIndex {
+                    url,
+                    root_url,
+                    auth_policy: index.authenticate,
+                }
+            });
+        let artifact_indexes = index_locations.proxy_indexes().filter_map(|index| {
+            index.artifact_base_url.as_ref().map(|url| AuthIndex {
+                url: url.clone(),
+                root_url: url.clone(),
                 auth_policy: index.authenticate,
+            })
+        });
+
+        Self::from_indexes(indexes.chain(artifact_indexes).map(|mut index| {
+            // Credential lookups use these URLs with the username supplied separately.
+            // The client caches credentials separately from these lookup URLs.
+            for url in [&mut index.url, &mut index.root_url] {
+                url.set_username("").ok();
+                url.set_password(None).ok();
             }
+            index
         }))
     }
 }
