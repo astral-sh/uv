@@ -483,7 +483,7 @@ impl<'a> LockedDependencyBuilder<'a> {
         dependencies: &mut Vec<Dependency>,
         expected: &ExpectedPackageDependencies<'_>,
         context: DependencyContext<'_>,
-        activated_extras: &mut FxHashMap<PackageId, BTreeSet<ExtraName>>,
+        activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, MarkerTree>>,
     ) -> Result<bool, LockError> {
         let empty_requirements = BTreeSet::new();
         let requirements = match context {
@@ -564,10 +564,14 @@ impl<'a> LockedDependencyBuilder<'a> {
                 }
                 covered_marker = covered_marker.or(marker.combined());
 
-                activated_extras
-                    .entry(dependency.id.clone())
-                    .or_default()
-                    .extend(requirement.extras.iter().cloned());
+                let activated = activated_extras.entry(dependency.id.clone()).or_default();
+                let activation_marker = marker.pep508();
+                for extra in &requirement.extras {
+                    activated
+                        .entry(extra.clone())
+                        .and_modify(|existing| *existing = existing.or(activation_marker))
+                        .or_insert(activation_marker);
+                }
 
                 let extras = requirement
                     .extras
@@ -659,7 +663,8 @@ struct ExpectedPackageDependencies<'lock> {
     declarations: BTreeSet<Requirement>,
     provides_extra: &'lock [ExtraName],
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
-    activated_extras: BTreeSet<ExtraName>,
+    /// The marker environments in which each requested extra is active.
+    activated_extras: BTreeMap<ExtraName, MarkerTree>,
     /// The environment under which this package can be selected.
     package_marker: UniversalMarker,
     /// The package environment before platform-specific source forks are applied.
@@ -680,7 +685,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         package_requires_python: Option<&VersionSpecifiers>,
         package_version: Option<&Version>,
         package: &'lock Package,
-        activated_extras: BTreeSet<ExtraName>,
+        activated_extras: BTreeMap<ExtraName, MarkerTree>,
         workspace_root: &'lock Path,
     ) -> Self {
         let package_context = package_version.map(|version| (&package.id.name, version));
@@ -788,7 +793,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         let extras = self
             .provides_extra
             .iter()
-            .filter(|extra| is_workspace_package || self.activated_extras.contains(*extra))
+            .filter(|extra| is_workspace_package || self.activated_extras.contains_key(*extra))
             .chain(self.package.optional_dependencies.keys())
             .collect::<BTreeSet<_>>();
         let groups = self
@@ -860,7 +865,14 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
     /// Restore the resolver node's conflict context, if it is reachable.
     fn context_parent_marker(&self, context: DependencyContext<'_>) -> UniversalMarker {
         if self.lock.conflicts.is_empty() {
-            return self.package_marker;
+            let mut parent_marker = self.package_marker;
+            // An extra is reachable only where at least one incoming edge activates it.
+            if let DependencyContext::Extra(extra) = context
+                && let Some(marker) = self.activated_extras.get(extra)
+            {
+                parent_marker.and(UniversalMarker::from_combined(*marker));
+            }
+            return parent_marker;
         }
 
         let project_conflicts = self
@@ -2040,7 +2052,7 @@ impl Lock {
         package_requires_python: Option<&VersionSpecifiers>,
         package_version: Option<&Version>,
         package: &'lock Package,
-        activated_extras: &mut FxHashMap<PackageId, BTreeSet<ExtraName>>,
+        activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, MarkerTree>>,
         remotes: &mut Option<BTreeSet<UrlString>>,
         locals: &mut Option<BTreeSet<Box<Path>>>,
         root: &Path,
@@ -2200,7 +2212,7 @@ impl Lock {
     fn satisfied_no_metadata<'lock>(
         &self,
         package: &'lock Package,
-        activated_extras: &mut FxHashMap<PackageId, BTreeSet<ExtraName>>,
+        activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, MarkerTree>>,
         missing_metadata: bool,
         expected: &ExpectedPackageDependencies,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
@@ -2314,8 +2326,10 @@ impl Lock {
             allow_missing_package_metadata && self.supports_missing_package_metadata();
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
-        let mut activated_extras: FxHashMap<PackageId, BTreeSet<ExtraName>> = FxHashMap::default();
-        let mut validated_extras: FxHashMap<PackageId, BTreeSet<ExtraName>> = FxHashMap::default();
+        let mut activated_extras: FxHashMap<PackageId, BTreeMap<ExtraName, MarkerTree>> =
+            FxHashMap::default();
+        let mut validated_extras: FxHashMap<PackageId, BTreeMap<ExtraName, MarkerTree>> =
+            FxHashMap::default();
 
         // Validate that the lockfile was generated with the same root members.
         {
@@ -2639,10 +2653,13 @@ impl Lock {
                         continue;
                     }
 
-                    activated_extras
-                        .entry(package.id.clone())
-                        .or_default()
-                        .extend(requirement.extras.iter().cloned());
+                    let activated = activated_extras.entry(package.id.clone()).or_default();
+                    for extra in &requirement.extras {
+                        activated
+                            .entry(extra.clone())
+                            .and_modify(|existing| *existing = existing.or(marker))
+                            .or_insert(marker);
+                    }
 
                     if seen.insert(&package.id) {
                         queue.push_back(package);
@@ -3034,7 +3051,7 @@ impl Lock {
                 let needs_extra_validation = validated_extras
                     .get(&dependency.package_id)
                     .zip(activated_extras.get(&dependency.package_id))
-                    .is_some_and(|(validated, activated)| !activated.is_subset(validated));
+                    .is_some_and(|(validated, activated)| validated != activated);
                 if seen.insert(&dependency.package_id) || needs_extra_validation {
                     let dependency_package = self.find_by_id(&dependency.package_id);
                     queue.push_back(dependency_package);
