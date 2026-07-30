@@ -2366,13 +2366,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 requirement
             })
             .filter(move |requirement| {
-                Self::is_requirement_applicable(
-                    requirement,
-                    extra,
-                    env,
-                    python_marker,
-                    python_requirement,
-                )
+                Self::is_requirement_applicable(requirement, env, python_marker, python_requirement)
             })
             .flat_map(move |requirement| {
                 iter::once(requirement.clone()).chain(self.constraints_for_requirement(
@@ -2385,34 +2379,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             })
     }
 
-    /// Whether a requirement is applicable for the Python version, the markers of this fork and the
-    /// requested extra.
+    /// Whether a requirement is applicable for the Python version and the markers of this fork.
     fn is_requirement_applicable(
         requirement: &Requirement,
-        extra: Option<&ExtraName>,
         env: &ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &PythonRequirement,
     ) -> bool {
         // If the requirement isn't relevant for the current platform, skip it.
-        match extra {
-            Some(source_extra) => {
-                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
-                    return false;
-                }
-
-                if (requirement.extras.is_empty() || requirement.extras.contains(source_extra))
-                    && !env
-                        .included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
-                {
-                    return false;
-                }
-            }
-            None => {
-                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
-                    return false;
-                }
-            }
+        if !requirement.evaluate_markers(env.marker_environment(), &[]) {
+            return false;
         }
 
         // If the requirement would not be selected with any Python version
@@ -2534,15 +2510,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     Some(source_extra) => {
                         if !constraint
                             .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
-                        {
-                            return None;
-                        }
-                        if (requirement.extras.is_empty()
-                            || requirement.extras.contains(source_extra))
-                            && !env.included_by_group(ConflictItemRef::from((
-                                &requirement.name,
-                                source_extra,
-                            )))
                         {
                             return None;
                         }
