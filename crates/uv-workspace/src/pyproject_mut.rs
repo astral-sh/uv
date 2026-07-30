@@ -12,7 +12,7 @@ use toml_edit::{
 
 use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::{Index, IndexFormat, IndexUrl};
-use uv_fs::{PortablePath, is_same_file_allow_missing};
+use uv_fs::{PortablePath, is_same_file_allow_missing, try_relative_to_if};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
@@ -530,17 +530,24 @@ impl PyProjectTomlMut {
             table.insert("name", Value::String(formatted).into());
         }
 
+        let url = if let IndexUrl::Path(url) = &index.url
+            && let Ok(path) = url.to_file_path()
+            && let Ok(path) = try_relative_to_if(path, root_dir, !url.was_given_absolute())
+        {
+            PortablePath::from(&path).to_string()
+        } else {
+            index.url.without_credentials().to_string()
+        };
         let existing_url = table.get("url").and_then(|item| item.as_str());
 
         // Update the stored URL independently of whether the index location changed.
-        let url_needs_update =
-            existing_url.is_none_or(|url| url != index.url.without_credentials().as_str());
-        let index_location_changed =
-            existing_url.is_none_or(|url| !index_locations_equal(url, &index.url, root_dir));
+        let url_needs_update = existing_url.is_none_or(|existing| existing != url);
+        let index_location_changed = existing_url
+            .is_none_or(|existing| !index_locations_equal(existing, &index.url, root_dir));
 
         // If necessary, update the URL.
         if url_needs_update {
-            let mut formatted = Formatted::new(index.url.without_credentials().to_string());
+            let mut formatted = Formatted::new(url);
             if let Some(value) = table.get("url").and_then(Item::as_value) {
                 if let Some(prefix) = value.decor().prefix() {
                     formatted.decor_mut().set_prefix(prefix.clone());
@@ -2539,14 +2546,13 @@ format = "flat"
         let new_index = Index::from_str(r"index=C:\links")?;
         doc.add_index(&new_index, &std::env::current_dir()?)?;
 
-        let expected_url = new_index.url.without_credentials();
         let index = doc.doc["tool"]["uv"]["index"]
             .as_array_of_tables()
             .and_then(|indexes| indexes.get(0))
             .expect("index table");
         assert_eq!(
             index.get("url").and_then(|item| item.as_str()),
-            Some(expected_url.as_str())
+            Some("C:/links")
         );
         assert_eq!(
             index.get("format").and_then(|item| item.as_str()),
