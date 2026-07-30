@@ -237,9 +237,27 @@ fn validate_data_script_destination(target: &Path, scripts: &Path) -> Result<(),
     };
 
     let normalized_name = name.to_ascii_lowercase();
-    let normalized_name = normalized_name
-        .strip_suffix(".exe")
-        .unwrap_or(&normalized_name);
+
+    let normalized_name = cfg_select! {
+        // On Windows, check (and strip) any prefix matching `%PATHEXT%`.
+        // This ensures that we reject e.g. `python.bat`, which Windows
+        // would otherwise execute as `python`.
+        windows => {
+            uv_fs::PATHEXT
+                .iter()
+                .find(|ext| normalized_name.strip_suffix(ext))
+                .unwrap_or(&normalized_name)
+        },
+        // On all other platforms, strip `.exe` if present.
+        // We could probably remove this since non-Windows doesn't
+        // have the equivalent of `%PATHEXT%`.
+        _ => {
+            normalized_name
+                .strip_suffix(".exe")
+                .unwrap_or(&normalized_name)
+        }
+    };
+
     if let Some(reserved) = reserved_script_name(normalized_name) {
         return Err(Error::ReservedScriptName {
             reserved: reserved.to_string(),

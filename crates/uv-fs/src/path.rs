@@ -15,6 +15,21 @@ pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
     })
 });
 
+/// The list of valid executable extensions, on Windows.
+#[cfg(windows)]
+pub static PATHEXT: LazyLock<Vec<Cow<'static, str>>> = LazyLock::new(|| {
+    if let Ok(pathext) = std::env::var("PATHEXT") {
+        pathext.split(";").collect()
+    } else {
+        [
+            ".COM", ".EXE", ".BAT", ".CMD", ".VBS", ".VBE", ".JS", ".JSE", ".WSF", ".WSH", ".MSC",
+        ]
+        .into_iter()
+        .map(Cow::Borrowed)
+        .collect()
+    }
+});
+
 pub trait Simplified {
     /// Simplify a [`Path`].
     ///
