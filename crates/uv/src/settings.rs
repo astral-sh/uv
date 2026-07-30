@@ -57,8 +57,8 @@ use uv_resolver::{
     ForkStrategy, PrereleaseMode, ResolutionMode,
 };
 use uv_settings::{
-    Combine, EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, Options, PipOptions,
-    PreviewFeaturesOption, PreviewOption, PublishOptions, PythonInstallMirrors,
+    Combine, EnvironmentOptions, FilesystemOptions, IndexOptions, MalwareCheckSettings, Options,
+    PipOptions, PreviewFeaturesOption, PreviewOption, PublishOptions, PythonInstallMirrors,
     ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
 };
 use uv_static::EnvVars;
@@ -1261,7 +1261,10 @@ impl ToolListSettings {
             .map(|options| options.top_level)
             .unwrap_or_default();
         let filesystem = ResolverInstallerOptions {
-            index: top_level.index,
+            indexes: IndexOptions {
+                index: top_level.index,
+                ..IndexOptions::default()
+            },
             exclude_newer: top_level.exclude_newer,
             exclude_newer_package: top_level.exclude_newer_package,
             ..ResolverInstallerOptions::default()
@@ -2388,7 +2391,7 @@ impl AddSettings {
         );
         let refresh = Refresh::try_from(refresh)?;
         let options = resolver_installer_options(installer, build)?;
-        let indexes = options.index.clone().unwrap_or_default();
+        let indexes = options.indexes.index.clone().unwrap_or_default();
 
         Ok(Self {
             lock_check: resolve_lock_check(locked),
@@ -4362,24 +4365,8 @@ impl ResolverSettings {
 
 impl From<ResolverOptions> for ResolverSettings {
     fn from(value: ResolverOptions) -> Self {
-        let index_locations = IndexLocations::new(
-            value
-                .index
-                .into_iter()
-                .flatten()
-                .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
-                .chain(value.index_url.into_iter().map(Index::from))
-                .collect(),
-            value
-                .find_links
-                .into_iter()
-                .flatten()
-                .map(Index::from)
-                .collect(),
-            value.no_index.unwrap_or_default(),
-        );
         Self {
-            index_locations,
+            index_locations: value.indexes.into(),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: warn_if_deprecated_prerelease_mode(value.prerelease.unwrap_or_default()),
             fork_strategy: value.fork_strategy.unwrap_or_default(),
@@ -4477,22 +4464,7 @@ fn resolver_installer_options_with_environment(
 
 impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
     fn from(value: ResolverInstallerOptions) -> Self {
-        let index_locations = IndexLocations::new(
-            value
-                .index
-                .into_iter()
-                .flatten()
-                .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
-                .chain(value.index_url.into_iter().map(Index::from))
-                .collect(),
-            value
-                .find_links
-                .into_iter()
-                .flatten()
-                .map(Index::from)
-                .collect(),
-            value.no_index.unwrap_or_default(),
-        );
+        let index_locations = value.indexes.into();
         Self {
             resolver: ResolverSettings {
                 build_options: BuildOptions::new(
