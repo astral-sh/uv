@@ -1,4 +1,4 @@
-// MD5 and BLAKE2 still use the `digest` 0.10 trait, while SHA-2 uses 0.11.
+// BLAKE2 still uses the `digest` 0.10 trait, while MD5 and SHA-2 use 0.11.
 use blake2::digest::{Digest as _, consts::U32};
 use sha2::Digest;
 use std::pin::Pin;
