@@ -10765,11 +10765,61 @@ fn add_index_with_existing_relative_path_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "local"
-        url = "file://[TEMP_DIR]/project/test-index"
+        url = "[TEMP_DIR]/project/test-index"
         format = "flat"
 
         [tool.uv.sources]
         iniconfig = { index = "local" }
+        "#);
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_index_with_relative_path_for_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.create_dir_all()?;
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let packages = project.child("test-index");
+    packages.create_dir_all()?;
+    packages.child("placeholder").touch()?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--frozen").arg("--project").arg(project.path()).arg("--index").arg("local=./project/test-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig",
+        ]
+
+        [tool.uv.sources]
+        iniconfig = { index = "local" }
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "test-index"
         "#);
     });
 
@@ -10822,7 +10872,7 @@ fn add_index_with_existing_relative_path_in_script() -> Result<()> {
         #
         # [[tool.uv.index]]
         # name = "local"
-        # url = "file://[TEMP_DIR]/links"
+        # url = "links"
         # format = "flat"
         #
         # [tool.uv.sources]
