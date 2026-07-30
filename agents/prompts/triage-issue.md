@@ -45,7 +45,7 @@ Set `type` to exactly one of these repository label names and explain the choice
 - `duplicate` when an existing issue or pull request tracks the same underlying problem or request
   closely enough that discussion can be centralized there, even if the new issue adds a more
   specific reproduction or triggering condition. This classification takes precedence over the other
-  types.
+  types unless a previously fixed bug has regressed.
 - `bug` when existing behavior is incorrect or does not work as intended. A source-confirmed
   correctness problem is still a bug when the reporter cannot provide a reproduction or frames the
   report as a question; a documented limitation does not make incorrect behavior correct. Treat
@@ -58,6 +58,11 @@ Set `type` to exactly one of these repository label names and explain the choice
 
 Do not classify the new issue as a duplicate just because a pull request created in response to it
 fixes or implements the reported behavior.
+
+If a previously fixed bug has returned, classify the new issue as a `bug`, not a duplicate of the
+closed original issue or merged fix. Include the historical issue and fixing pull request in
+`related.items`, and explain the regression in `type_reason`. Only classify it as a duplicate if an
+open issue or pull request already tracks the same regression.
 
 If an issue could fit multiple non-duplicate types, prioritize correctness: classify established
 incorrect behavior as a bug, even when the primary maintainer action requested is clarification.
