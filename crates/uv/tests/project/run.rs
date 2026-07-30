@@ -6453,27 +6453,20 @@ fn run_target_workspace_discovery_workspace_root_group() -> Result<()> {
     Ok(())
 }
 
-fn setup_target_workspace_group_context(project_root: bool) -> Result<TestContext> {
+/// A member-local script selects that member, while explicit targeting remains authoritative.
+#[test]
+fn run_target_workspace_discovery_workspace_member_selection() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let project = if project_root {
-        indoc! { r#"
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
             [project]
             name = "root"
             version = "0.1.0"
             requires-python = ">=3.12"
             dependencies = ["iniconfig"]
-            "#
-        }
-    } else {
-        ""
-    };
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&formatdoc! { r#"
-            {project}
 
             [dependency-groups]
             root-only = ["sniffio"]
@@ -6525,14 +6518,6 @@ fn setup_target_workspace_group_context(project_root: bool) -> Result<TestContex
             print(f"installed: {', '.join(installed)}")
             "#
         })?;
-
-    Ok(context)
-}
-
-/// A member-local script selects that member, while explicit targeting remains authoritative.
-#[test]
-fn run_target_workspace_discovery_workspace_member_selection() -> Result<()> {
-    let context = setup_target_workspace_group_context(true)?;
 
     uv_snapshot!(context.filters(), context.run()
         .arg("--isolated")
@@ -6684,7 +6669,7 @@ fn run_target_workspace_discovery_workspace_member_selection() -> Result<()> {
 /// Workspace defaults and member-defined groups remain distinct when a member is selected.
 #[test]
 fn run_target_workspace_discovery_workspace_group_defaults() -> Result<()> {
-    let context = setup_target_workspace_group_context(true)?;
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -6717,6 +6702,28 @@ fn run_target_workspace_discovery_workspace_group_defaults() -> Result<()> {
         dependencies = ["typing-extensions"]
         "#
     })?;
+
+    child
+        .child("scripts")
+        .child("groups.py")
+        .write_str(indoc! { r#"
+            import importlib.util
+
+            installed = [
+                package
+                for package in (
+                    "iniconfig",
+                    "typing_extensions",
+                    "sniffio",
+                    "packaging",
+                    "idna",
+                    "six",
+                )
+                if importlib.util.find_spec(package) is not None
+            ]
+            print(f"installed: {', '.join(installed)}")
+            "#
+        })?;
 
     uv_snapshot!(context.filters(), context.run()
         .arg("--isolated")
@@ -6820,7 +6827,68 @@ fn run_target_workspace_discovery_workspace_group_defaults() -> Result<()> {
 /// Dependency groups are scoped to the selected project in project-backed workspaces.
 #[test]
 fn run_target_workspace_discovery_workspace_project_groups() -> Result<()> {
-    let context = setup_target_workspace_group_context(true)?;
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["iniconfig"]
+
+            [dependency-groups]
+            root-only = ["sniffio"]
+            shared = ["idna"]
+
+            [tool.uv]
+            default-groups = ["root-only"]
+
+            [tool.uv.workspace]
+            members = ["child"]
+            "#
+        })?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        member-only = ["packaging"]
+        shared = ["six"]
+
+        [tool.uv]
+        default-groups = ["member-only"]
+        "#
+    })?;
+
+    child
+        .child("scripts")
+        .child("groups.py")
+        .write_str(indoc! { r#"
+            import importlib.util
+
+            installed = [
+                package
+                for package in (
+                    "iniconfig",
+                    "typing_extensions",
+                    "sniffio",
+                    "packaging",
+                    "idna",
+                    "six",
+                )
+                if importlib.util.find_spec(package) is not None
+            ]
+            print(f"installed: {', '.join(installed)}")
+            "#
+        })?;
 
     uv_snapshot!(context.filters(), context.run()
         .arg("--isolated")
@@ -6987,7 +7055,62 @@ fn run_target_workspace_discovery_workspace_project_groups() -> Result<()> {
 /// Non-project workspace roots retain manifest-level groups even for selected members.
 #[test]
 fn run_target_workspace_discovery_virtual_workspace_groups() -> Result<()> {
-    let context = setup_target_workspace_group_context(false)?;
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [dependency-groups]
+            root-only = ["sniffio"]
+            shared = ["idna"]
+
+            [tool.uv]
+            default-groups = ["root-only"]
+
+            [tool.uv.workspace]
+            members = ["child"]
+            "#
+        })?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        member-only = ["packaging"]
+        shared = ["six"]
+
+        [tool.uv]
+        default-groups = ["member-only"]
+        "#
+    })?;
+
+    child
+        .child("scripts")
+        .child("groups.py")
+        .write_str(indoc! { r#"
+            import importlib.util
+
+            installed = [
+                package
+                for package in (
+                    "iniconfig",
+                    "typing_extensions",
+                    "sniffio",
+                    "packaging",
+                    "idna",
+                    "six",
+                )
+                if importlib.util.find_spec(package) is not None
+            ]
+            print(f"installed: {', '.join(installed)}")
+            "#
+        })?;
 
     uv_snapshot!(context.filters(), context.run()
         .arg("--isolated")
@@ -7158,7 +7281,49 @@ fn run_target_workspace_discovery_virtual_workspace_groups() -> Result<()> {
 /// Workspace group selection should be consistent across run, sync, and export.
 #[test]
 fn run_target_workspace_discovery_workspace_project_group_commands() -> Result<()> {
-    let context = setup_target_workspace_group_context(true)?;
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["iniconfig"]
+
+            [dependency-groups]
+            root-only = ["sniffio"]
+            shared = ["idna"]
+
+            [tool.uv]
+            default-groups = ["root-only"]
+
+            [tool.uv.workspace]
+            members = ["child"]
+            "#
+        })?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+
+            [dependency-groups]
+            member-only = ["packaging"]
+            shared = ["six"]
+
+            [tool.uv]
+            default-groups = ["member-only"]
+            "#
+        })?;
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--package")
@@ -7244,7 +7409,43 @@ fn run_target_workspace_discovery_workspace_project_group_commands() -> Result<(
 /// Projectless root groups should also behave consistently across commands.
 #[test]
 fn run_target_workspace_discovery_virtual_workspace_group_commands() -> Result<()> {
-    let context = setup_target_workspace_group_context(false)?;
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [dependency-groups]
+            root-only = ["sniffio"]
+            shared = ["idna"]
+
+            [tool.uv]
+            default-groups = ["root-only"]
+
+            [tool.uv.workspace]
+            members = ["child"]
+            "#
+        })?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+
+            [dependency-groups]
+            member-only = ["packaging"]
+            shared = ["six"]
+
+            [tool.uv]
+            default-groups = ["member-only"]
+            "#
+        })?;
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--package")
