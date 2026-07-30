@@ -121,8 +121,15 @@ impl UniversalMarker {
     /// intersects them. That is, the updated marker will evaluate to `true` if
     /// `self` and `other` evaluate to `true`.
     pub(crate) fn and(&mut self, other: Self) {
+        // Eliminating conflict selections is existential, so it cannot be distributed over an
+        // intersection when both markers depend on those selections.
+        let project_combined_marker = self.has_conflict_marker() && other.has_conflict_marker();
         self.marker = self.marker.and(other.marker);
-        self.pep508 = self.pep508.and(other.pep508);
+        self.pep508 = if project_combined_marker {
+            self.marker.without_extras()
+        } else {
+            self.pep508.and(other.pep508)
+        };
     }
 
     /// Imbibes the world knowledge expressed by `conflicts` into this marker.
@@ -1076,6 +1083,23 @@ mod tests {
             MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression");
         assert!(!UniversalMarker::from_combined(pep508).has_conflict_marker());
         assert!(UniversalMarker::new(pep508, create_extra_marker("foo")).has_conflict_marker());
+    }
+
+    #[test]
+    fn intersection_preserves_environment_conflict_correlation() {
+        let python =
+            MarkerTree::from_str("python_full_version >= '3.13'").expect("valid Python marker");
+        let foo = create_extra_marker("foo");
+        let bar = create_extra_marker("bar");
+        let mut marker =
+            UniversalMarker::from_combined(python.and(foo.marker).or(foo.marker.and(bar.marker)));
+
+        marker.and(UniversalMarker::new(
+            MarkerTree::TRUE,
+            foo.negate().or(bar.negate()),
+        ));
+
+        assert_eq!(marker.pep508(), python);
     }
 
     #[test]
