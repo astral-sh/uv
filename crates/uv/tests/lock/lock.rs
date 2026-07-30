@@ -1868,6 +1868,53 @@ fn lock_project_group_disjoint_platform_markers() -> Result<()> {
     Ok(())
 }
 
+/// Platform-specific constraints can diverge across production, optional, and group contexts.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_disjoint_platform_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let lockfile = context.temp_dir.child("uv.lock");
+
+    for section in [
+        "[project.optional-dependencies]\nfeature",
+        "[dependency-groups]\ntest",
+    ] {
+        pyproject_toml.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok ; sys_platform == 'win32'"]
+
+            {section} = ["ok ; sys_platform != 'win32'"]
+
+            [tool.uv]
+            constraint-dependencies = [
+                "ok==1.0.0 ; sys_platform == 'win32'",
+                "ok==2.0.0 ; sys_platform != 'win32'",
+            ]
+            "#})?;
+        if lockfile.exists() {
+            fs_err::remove_file(&lockfile)?;
+        }
+
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--offline")
+                .arg("--no-index")
+                .arg("--find-links")
+                .arg(context.workspace_root.join("test/links")), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            ");
+        }
+    }
+
+    Ok(())
+}
+
 /// Production and optional requirements can select different direct URLs per platform.
 #[cfg(feature = "test-universal")]
 #[test]

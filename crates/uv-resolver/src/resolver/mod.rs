@@ -2111,6 +2111,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     .values()
                                     .flat_map(|requirements| requirements.iter()),
                             )
+                            .chain(self.constraints.get(dependency_name).into_iter().flatten())
                             .filter(|requirement| requirement.name == *dependency_name)
                             .filter(|requirement| {
                                 !dependency.package.marker().is_disjoint(requirement.marker)
@@ -2129,6 +2130,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     .values()
                                     .flat_map(|requirements| requirements.iter()),
                             )
+                            .chain(self.constraints.get(dependency_name).into_iter().flatten())
                             .filter(|requirement| requirement.name == *dependency_name)
                             .any(|requirement| {
                                 let incompatible_version = requirement
@@ -4157,8 +4159,9 @@ impl Forks {
                         // Unless that "same marker" is a Python requirement that is stricter than
                         // the current Python requirement. In that case, we need to fork to respect
                         // the stricter requirement.
-                        if marker::requires_python(marker)
-                            .is_none_or(|bound| !python_requirement.raises(&bound))
+                        if !cross_context_forks.contains(&name)
+                            && marker::requires_python(marker)
+                                .is_none_or(|bound| !python_requirement.raises(&bound))
                         {
                             for dep in deps {
                                 for fork in &mut forks {
