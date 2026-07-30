@@ -51,8 +51,8 @@ use uv_platform_tags::{
 };
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
-    ConflictItem, ConflictKindRef, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
-    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ConflictItem, ConflictKindRef, ConflictSet, Conflicts, HashAlgorithm, HashDigest, HashDigests,
+    Hashes, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -862,6 +862,28 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         Some(marker)
     }
 
+    /// Preserve project selections while removing extra and group selections from activation.
+    fn extra_activation_marker(&self, activation: UniversalMarker) -> UniversalMarker {
+        let mut marker = UniversalMarker::from_combined(activation.pep508());
+        for project in self
+            .lock
+            .conflicts
+            .iter()
+            .flat_map(ConflictSet::iter)
+            .filter(|item| matches!(item.kind().as_ref(), ConflictKindRef::Project))
+        {
+            let mut without_project = activation;
+            without_project.assume_not_conflict_item(project);
+            if without_project.is_false() {
+                marker.and(UniversalMarker::new(
+                    MarkerTree::TRUE,
+                    ConflictMarker::from_conflict_item(project),
+                ));
+            }
+        }
+        marker
+    }
+
     /// Restore the resolver node's conflict context, if it is reachable.
     fn context_parent_marker(&self, context: DependencyContext<'_>) -> UniversalMarker {
         let mut parent_marker = self.package_marker;
@@ -869,7 +891,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         if let DependencyContext::Extra(extra) = context
             && let Some(marker) = self.activated_extras.get(extra)
         {
-            parent_marker.and(UniversalMarker::from_combined(marker.pep508()));
+            parent_marker.and(self.extra_activation_marker(*marker));
         }
 
         if self.lock.conflicts.is_empty() {
