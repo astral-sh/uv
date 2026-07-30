@@ -51,15 +51,13 @@ impl std::fmt::Display for PrereleaseMode {
 impl FromStr for PrereleaseMode {
     type Err = String;
 
-    // Continue accepting the deprecated alias for backwards compatibility; resolved settings
-    // normalize it to `if-necessary` after emitting the existing deprecation warning.
-    #[allow(deprecated)]
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "disallow" => Ok(Self::Disallow),
             "allow" => Ok(Self::Allow),
             "if-necessary" => Ok(Self::IfNecessary),
             "explicit" => Ok(Self::Explicit),
+            #[allow(deprecated)]
             "if-necessary-or-explicit" => Ok(Self::IfNecessaryOrExplicit),
             _ => Err(format!(
                 "expected one of `disallow`, `allow`, `if-necessary`, `explicit`, or `if-necessary-or-explicit`, found `{value}`"
