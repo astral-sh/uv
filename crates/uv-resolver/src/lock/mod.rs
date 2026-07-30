@@ -2595,9 +2595,6 @@ impl Lock {
                     if marker.is_false() {
                         continue;
                     }
-                    if !marker.evaluate(markers, &[]) {
-                        continue;
-                    }
 
                     activated_extras
                         .entry(package.id.clone())

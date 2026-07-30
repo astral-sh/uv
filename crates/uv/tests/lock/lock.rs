@@ -20118,6 +20118,88 @@ fn lock_non_project_conditional() -> Result<()> {
     Ok(())
 }
 
+/// Validate conditional root dependencies across every platform covered by the lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_non_project_conditional_path_dependency_change() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let platform = if cfg!(windows) { "linux" } else { "win32" };
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        dev = ["child; sys_platform == '{platform}'"]
+
+        [tool.uv.sources]
+        child = {{ path = "child" }}
+        "#})?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==1.0.0"]
+        "#})?;
+
+    let links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==2.0.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Lock a non-project workspace root with `dependency-groups`.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -31371,6 +31453,88 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Validate script dependencies for Python versions other than the current interpreter.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_script_conditional_path_dependency_change() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child; python_full_version >= '3.13'"]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child" }
+        # ///
+
+        print("hello")
+        "#})?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==1.0.0"]
+        "#})?;
+
+    let links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==2.0.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
 
     Ok(())
 }
