@@ -18,7 +18,7 @@ use uv_fs::Simplified;
 #[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
-use uv_test::packse::PackseServer;
+use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::uv_snapshot;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
@@ -18395,6 +18395,313 @@ fn lock_metadata_free_root_extra_and_group_project_conflict() -> Result<()> {
      + leaf-one @ file://[TEMP_DIR]/leaf-one
      + leaf-two @ file://[TEMP_DIR]/leaf-two
      + provider @ file://[TEMP_DIR]/provider
+    ");
+
+    Ok(())
+}
+
+/// Production dependencies remain active in ordinary group-selected project-conflict worlds.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_group_source_fork_project_conflict_production() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        left = ["provider[first]>=1,<3 ; python_full_version < '3.13'"]
+
+        [dependency-groups]
+        dev = ["provider[second]>=1,<3 ; python_full_version >= '3.13'"]
+
+        [tool.uv]
+        conflicts = [[{ package = "provider" }, { package = "provider", extra = "first" }]]
+
+        [tool.uv.sources]
+        provider = [
+            { path = "provider-a", marker = "sys_platform == 'win32'" },
+            { path = "provider-b", marker = "sys_platform != 'win32'" },
+        ]
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+        "#})?;
+    for (directory, version) in [("provider-a", "1.0.0"), ("provider-b", "2.0.0")] {
+        context
+            .temp_dir
+            .child(format!("{directory}/pyproject.toml"))
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "provider"
+            version = "{version}"
+            requires-python = ">=3.12"
+            dependencies = ["leaf-three ; python_full_version >= '3.13'"]
+
+            [project.optional-dependencies]
+            first = ["child[alpha] ; python_full_version < '3.13'"]
+            second = ["child[beta] ; python_full_version >= '3.13'"]
+
+            [tool.uv.sources]
+            child = [
+                {{ path = "../child-a", marker = "platform_machine == 'aarch64'" }},
+                {{ path = "../child-b", marker = "platform_machine != 'aarch64'" }},
+            ]
+            leaf-three = {{ path = "../leaf-three" }}
+            "#})?;
+    }
+    for (directory, version) in [("child-a", "1.0.0"), ("child-b", "2.0.0")] {
+        context
+            .temp_dir
+            .child(format!("{directory}/pyproject.toml"))
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "child"
+            version = "{version}"
+            requires-python = ">=3.12"
+
+            [project.optional-dependencies]
+            alpha = []
+            beta = ["leaf-two ; python_full_version >= '3.13'"]
+
+            [tool.uv.sources]
+            leaf-two = {{ path = "../leaf-two" }}
+            "#})?;
+    }
+    for name in ["leaf-three", "leaf-two"] {
+        context
+            .temp_dir
+            .child(format!("{name}/pyproject.toml"))
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "{name}"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            "#})?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 7 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("dev")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 4 packages
+    Would install 4 packages
+     + child @ file://[TEMP_DIR]/child-b
+     + leaf-three @ file://[TEMP_DIR]/leaf-three
+     + leaf-two @ file://[TEMP_DIR]/leaf-two
+     + provider @ file://[TEMP_DIR]/provider-b
+    ");
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    let Some(provider) = packages.iter_mut().find(|package| {
+        package["name"].as_str() == Some("provider") && package["version"].as_str() == Some("2.0.0")
+    }) else {
+        anyhow::bail!("lockfile did not contain the group-selected provider");
+    };
+    let Some(dependencies) = provider["dependencies"].as_array_mut() else {
+        anyhow::bail!("provider did not contain its production dependency");
+    };
+    dependencies.clear();
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Registry fallback must not inherit activation from a source scoped to another group.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_group_scoped_source_registry_fallback() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "group-scoped-source-registry-fallback"
+
+        [root]
+        requires = []
+
+        [expected]
+        satisfiable = true
+
+        [packages.ok.versions."2.0.0".extras]
+        first = []
+        second = []
+        third = []
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["ok[first]>=1,<3 ; python_full_version < '3.13' or sys_platform != 'win32'"]
+        other = ["ok[second]>=1,<3"]
+        nested = [
+            { include-group = "dev" },
+            "ok[third]>=1,<3 ; python_full_version < '3.13' or sys_platform != 'win32'",
+        ]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "ok", extra = "first" },
+            { package = "ok", extra = "second" },
+        ]]
+
+        [tool.uv.sources]
+        ok = [{ path = "ok-local", group = "dev", marker = "sys_platform == 'win32'" }]
+        "#})?;
+    context
+        .temp_dir
+        .child("ok-local/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "ok"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        first = []
+        second = []
+        third = []
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("dev")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + ok @ file://[TEMP_DIR]/ok-local
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("other")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + ok==2.0.0
+    ");
+
+    let pyproject = context.read("pyproject.toml").replace(
+        "ok = [{ path = \"ok-local\", group = \"dev\", marker = \"sys_platform == 'win32'\" }]",
+        "",
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())

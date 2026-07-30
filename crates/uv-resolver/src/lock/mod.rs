@@ -837,6 +837,7 @@ impl<'a> LockedDependencyBuilder<'a> {
                         requirement.source,
                         RequirementSource::Registry { index: None, .. }
                     )
+                    && !matches!(dependency.id.source, Source::Registry(_))
                     && let Some(activation) = activated_packages.get(&dependency.id)
                 {
                     marker.and(activation.marker);
@@ -1688,6 +1689,9 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                         ))),
                     ));
                 }
+            }
+            if !self.is_workspace_package() {
+                activation.or(self.activated_package.marker);
             }
             parent_marker.and(activation);
         } else if project_conflicts
@@ -3484,6 +3488,20 @@ impl Lock {
                                 if matches!(context, DependencyContext::Production)
                                     && actual_conflict.is_true()
                                 {
+                                    let actual_raw_marker = actual
+                                        .iter()
+                                        .filter(|dependency| {
+                                            &dependency.package_id == actual_package
+                                                && &dependency.extra == actual_extras
+                                        })
+                                        .fold(MarkerTree::FALSE, |marker, dependency| {
+                                            marker.or(dependency.complexified_marker.combined())
+                                        });
+                                    forbidden
+                                        .and(UniversalMarker::from_combined(actual_raw_marker));
+                                    forbidden.and(UniversalMarker::from_combined(
+                                        generated_marker.negate(),
+                                    ));
                                     forbidden.and(UniversalMarker::new(
                                         MarkerTree::TRUE,
                                         ConflictMarker::from_relevant_conflicts(
