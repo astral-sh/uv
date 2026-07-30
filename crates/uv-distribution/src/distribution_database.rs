@@ -25,8 +25,8 @@ use uv_client::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
-    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionRecorder,
-    SourceDist, SourceUrl, parse_url_hashes,
+    HashValidation, Hashed, IndexRoutes, IndexUrl, InstalledDist, MetadataHashPolicy, Name,
+    ResolutionRecorder, SourceDist, SourceUrl, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -1726,6 +1726,11 @@ impl<'a> ManagedClient<'a> {
     /// Return whether the client is configured for offline use.
     pub fn is_offline(&self) -> bool {
         self.unmanaged.connectivity().is_offline()
+    }
+
+    /// Return the routes used by the underlying registry client.
+    pub fn routes(&self) -> &IndexRoutes {
+        self.unmanaged.routes()
     }
 
     /// Perform a request using the client, respecting the concurrency limit.
