@@ -30,11 +30,11 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist, Identifier,
-    IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement,
-    RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
-    ToUrlError, UrlString,
+    Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
+    HashGeneration, HashPolicy, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
+    PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{
     PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
@@ -2578,7 +2578,7 @@ impl Lock {
 
             for requirement in root_requirements {
                 for package in by_name.get(&requirement.name).into_iter().flatten() {
-                    if !package.id.source.is_source_tree() {
+                    if !package.id.source.is_local() {
                         continue;
                     }
 
@@ -2722,49 +2722,66 @@ impl Lock {
                 if !statically_satisfied {
                     // For a non-dynamic package without usable static metadata, fetch the metadata
                     // from the distribution database.
-                    let HashedDist { dist, .. } = package.to_dist(
+                    let HashedDist { dist, hashes } = package.to_dist(
                         root,
                         TagPolicy::Preferred(tags),
                         build_options,
                         markers,
                     )?;
+                    let validate_local_hash =
+                        matches!(&package.id.source, Source::Path(..)) && !hashes.is_empty();
+                    let hash_policy = if validate_local_hash {
+                        HashPolicy::Generate(HashGeneration::Url)
+                    } else {
+                        hasher.get(&dist)
+                    };
 
                     let metadata = {
                         let id = dist.distribution_id();
-                        if let Some(archive) =
-                            index
-                                .distributions()
-                                .get(&id)
-                                .as_deref()
-                                .and_then(|response| {
-                                    if let MetadataResponse::Found(archive, ..) = response {
-                                        Some(archive)
-                                    } else {
-                                        None
-                                    }
-                                })
-                        {
+                        let archive = if let Some(archive) = index
+                            .distributions()
+                            .get(&id)
+                            .as_deref()
+                            .and_then(|response| {
+                                if let MetadataResponse::Found(archive, ..) = response {
+                                    Some(archive)
+                                } else {
+                                    None
+                                }
+                            }) {
                             // If the metadata is already in the index, return it.
-                            archive.metadata.clone()
+                            archive.clone()
                         } else {
                             // Run the PEP 517 build process to extract metadata from the source distribution.
                             let archive = database
-                                .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                                .get_or_build_wheel_metadata(&dist, hash_policy)
                                 .await
                                 .map_err(|err| LockErrorKind::Resolution {
                                     id: package.id.clone(),
                                     err,
                                 })?;
 
-                            let metadata = archive.metadata.clone();
-
                             // Insert the metadata into the index.
                             index
                                 .distributions()
-                                .done(id, Arc::new(MetadataResponse::Found(archive)));
+                                .done(id, Arc::new(MetadataResponse::Found(archive.clone())));
 
-                            metadata
+                            archive
+                        };
+
+                        if validate_local_hash
+                            && !HashPolicy::All(hashes.as_slice())
+                                .matches(archive.hashes.as_slice())
+                        {
+                            return Ok(SatisfiesResult::MismatchedPackageHashes(
+                                &package.id.name,
+                                package.id.version.as_ref(),
+                                hashes,
+                                archive.hashes,
+                            ));
                         }
+
+                        archive.metadata
                     };
 
                     // If this is a local package, validate that it hasn't become dynamic (in which
@@ -3169,6 +3186,13 @@ pub enum SatisfiesResult<'lock> {
         Option<&'lock Version>,
         Vec<Dependency>,
         &'lock [Dependency],
+    ),
+    /// A local archive's current contents no longer match the locked hashes.
+    MismatchedPackageHashes(
+        &'lock PackageName,
+        Option<&'lock Version>,
+        HashDigests,
+        HashDigests,
     ),
     /// A package in the lockfile contains different `provides-extra` metadata than expected.
     MismatchedPackageProvidesExtra(

@@ -1540,6 +1540,20 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedPackageHashes(name, version, expected, actual) => {
+                if let Some(version) = version {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched hashes for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        actual, expected
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched hashes for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        actual, expected
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedPackageDependencyGroups(name, version, expected, actual) => {
                 if let Some(version) = version {
                     debug!(

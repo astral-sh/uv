@@ -2,6 +2,12 @@ use anyhow::Result;
 #[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+#[cfg(feature = "test-universal")]
+use async_zip::base::write::ZipFileWriter;
+#[cfg(feature = "test-universal")]
+use async_zip::{Compression, ZipEntryBuilder};
+#[cfg(feature = "test-universal")]
+use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 #[cfg(feature = "test-universal")]
@@ -31518,6 +31524,118 @@ fn lock_script_conditional_path_dependency_change() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["ok==2.0.0"]
         "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Local wheel requirements must participate in script lock freshness checks.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_script_local_wheel_dependency_change() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child"]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child-1.0.0-py3-none-any.whl" }
+        # ///
+
+        print("hello")
+        "#})?;
+
+    let wheel = context.temp_dir.child("child-1.0.0-py3-none-any.whl");
+    let write_wheel = |dependency: &str, payload: &str| -> Result<()> {
+        let mut archive = ZipFileWriter::new(Vec::new());
+        for (path, contents) in [
+            ("child/__init__.py", payload.to_string()),
+            (
+                "child-1.0.0.dist-info/METADATA",
+                format!(
+                    "Metadata-Version: 2.4\nName: child\nVersion: 1.0.0\nRequires-Dist: ok=={dependency}\n"
+                ),
+            ),
+            (
+                "child-1.0.0.dist-info/WHEEL",
+                "Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+                    .to_string(),
+            ),
+            ("child-1.0.0.dist-info/RECORD", String::new()),
+        ] {
+            let entry = ZipEntryBuilder::new(path.into(), Compression::Stored);
+            block_on(archive.write_entry_whole(entry, contents.as_bytes()))?;
+        }
+        fs_err::write(wheel.path(), block_on(archive.close())?)?;
+        Ok(())
+    };
+    write_wheel("1.0.0", "before")?;
+
+    let links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    write_wheel("1.0.0", "after")?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    write_wheel("2.0.0", "after")?;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--script")
