@@ -52,6 +52,66 @@ $ UV_INDEX=pytorch=https://download.pytorch.org/whl/cpu uv lock
 
 With `--preview-features index-by-name`, configured index names take precedence over matching paths.
 
+## Proxy indexes
+
+!!! note
+
+    Proxy indexes are in [preview](./preview.md) and may change in future releases.
+
+Proxy indexes route package resolution and downloads through an alternative registry without
+changing the upstream index and package download URLs recorded in lockfiles.
+
+This is useful when a local policy requires some contributors to use a registry that excludes newly
+published packages, while others use the upstream index directly. Configuring the relationship
+between the proxy and upstream index lets both groups share a lockfile without changing its URLs.
+
+To configure a proxy index, add a `[[tool.uv.index]]` entry with `proxy-for` set to the upstream
+index's name. The proxy's `url` tells uv where to look up packages, and its `artifact-base-url`
+tells uv where to download them.
+
+For example, to configure a proxy for PyPI:
+
+```toml
+[[tool.uv.index]]
+name = "pypi-proxy"
+url = "https://proxy.example.com/simple/"
+artifact-base-url = "https://proxy.example.com/files/"
+proxy-for = "pypi"
+```
+
+!!! note
+
+    PyPI does not need to be configured separately. uv uses `https://pypi.org/simple/` as its index URL
+    and `https://files.pythonhosted.org/packages/` as its package download URL prefix.
+
+uv records the upstream index and package download URLs in the lockfile. When installing from an
+existing lockfile, uv translates these package URLs to proxy URLs without querying the proxy's
+index.
+
+To proxy a different index, give the upstream index a `name` and an `artifact-base-url`:
+
+```toml
+[[tool.uv.index]]
+name = "private"
+url = "https://packages.example.com/simple/"
+artifact-base-url = "https://downloads.example.com/packages/"
+
+[[tool.uv.index]]
+name = "private-proxy"
+url = "https://proxy.example.com/simple/"
+artifact-base-url = "https://proxy.example.com/files/"
+proxy-for = "private"
+```
+
+An index can have at most one proxy. Package files must have the same path after each index's
+`artifact-base-url`. For example, `https://downloads.example.com/packages/example/package.whl` maps
+to `https://proxy.example.com/files/example/package.whl`. Proxies that change package file paths are
+not supported. Proxies must also provide supported hashes for package files included in `uv.lock` or
+`pylock.toml`.
+
+If artifact downloads require authentication on a different host, configure the credentials on
+`artifact-base-url`. Credentials from the proxy index are not copied to another host.
+
 ## Pinning a package to an index
 
 A package can be pinned to a specific index by specifying the index in its `tool.uv.sources` entry.
