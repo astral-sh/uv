@@ -32,13 +32,13 @@ impl fmt::Display for ArgumentError {
 
 impl Error for ArgumentError {}
 
-/// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
-pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
-    debug_assert!(
-        !name.starts_with("no-"),
-        "flag names must not include the `no-` prefix"
-    );
-
+/// Given a boolean flag pair with custom names (like `--exact` and `--inexact`), resolve the value of the flag.
+pub fn flag_custom(
+    yes: bool,
+    no: bool,
+    yes_name: &str,
+    no_name: &str,
+) -> anyhow::Result<Option<bool>> {
     match (yes, no) {
         (true, false) => Ok(Some(true)),
         (false, true) => Ok(Some(false)),
@@ -48,11 +48,22 @@ pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
                 "`{}` and `{}` cannot be used together. \
                 Boolean flags on different levels are currently not supported \
                 (https://github.com/clap-rs/clap/issues/6049)",
-                format!("--{name}").green(),
-                format!("--no-{name}").green(),
+                format!("--{yes_name}").green(),
+                format!("--{no_name}").green(),
             )));
         }
     }
+}
+
+/// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
+pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
+    debug_assert!(
+        !name.starts_with("no-"),
+        "flag names must not include the `no-` prefix"
+    );
+
+    let no_name = format!("no-{name}");
+    flag_custom(yes, no, name, &no_name)
 }
 
 /// The source of a boolean flag value.
@@ -819,4 +830,15 @@ pub fn resolver_installer_options(
     }
     .relative_to(&env::current_dir()?)
     .map_err(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_flag_custom_error_message() {
+        let err = flag_custom(true, true, "exact", "inexact").unwrap_err();
+        assert!(err.to_string().contains("`--exact` and `--inexact` cannot be used together"));
+    }
 }
