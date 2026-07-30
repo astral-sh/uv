@@ -171,7 +171,7 @@ impl<'env> TreeDisplay<'env> {
                 }
 
                 if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
+                    .is_some_and(|markers| !dep.complexified_marker.pep508().evaluate(markers, &[]))
                 {
                     continue;
                 }
@@ -350,7 +350,7 @@ impl<'env> TreeDisplay<'env> {
                 }
 
                 if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
+                    .is_some_and(|markers| !dep.complexified_marker.pep508().evaluate(markers, &[]))
                 {
                     continue;
                 }

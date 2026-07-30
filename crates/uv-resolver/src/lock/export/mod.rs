@@ -13,7 +13,7 @@ use uv_configuration::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::ConflictItem;
+use uv_pypi_types::{ConflictItem, ConflictKindRef, ConflictSet, Conflicts};
 
 use crate::graph_ops::Reachable;
 use crate::lock::LockErrorKind;
@@ -308,7 +308,8 @@ impl<'lock> ExportableRequirements<'lock> {
         }
 
         // Determine the reachability of each node in the graph.
-        let mut reachability = conflict_marker_reachability(&graph, &[], &activated_items);
+        let mut reachability =
+            conflict_marker_reachability(&graph, &[], &activated_items, target.lock().conflicts());
 
         // Collect all packages.
         let nodes = graph
@@ -422,6 +423,7 @@ fn conflict_marker_reachability<'lock>(
     graph: &Graph<Node<'lock>, Edge<'lock>>,
     fork_markers: &[Edge<'lock>],
     known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
+    conflicts: &Conflicts,
 ) -> FxHashMap<NodeIndex, MarkerTree> {
     // For each node, track the conditions under which each conflict item is enabled.
     let mut conflict_maps =
@@ -493,6 +495,29 @@ fn conflict_marker_reachability<'lock>(
                 for extra in child_edge.weight().dep_extras() {
                     let item = ConflictItem::from((child.name().clone(), (*extra).clone()));
                     parent_map.insert(item, parent_marker);
+                }
+
+                if conflicts.contains(child.name(), ConflictKindRef::Project) {
+                    let project = ConflictItem::from(child.name().clone());
+                    let mut project_marker = parent_marker;
+                    for conflict in conflicts
+                        .iter()
+                        .filter(|conflict| {
+                            conflict.contains(child.name(), ConflictKindRef::Project)
+                        })
+                        .flat_map(ConflictSet::iter)
+                        .filter(|item| *item != &project)
+                    {
+                        if let Some(marker) = parent_map.get(conflict) {
+                            project_marker = project_marker.and(marker.negate());
+                        }
+                    }
+                    if !project_marker.is_false() {
+                        parent_map
+                            .entry(project)
+                            .and_modify(|marker| *marker = marker.or(project_marker))
+                            .or_insert(project_marker);
+                    }
                 }
             }
 
