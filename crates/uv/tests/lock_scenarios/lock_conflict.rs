@@ -186,6 +186,123 @@ fn workspace_extra_preserves_independently_requested_conflicting_extra() -> Resu
     Ok(())
 }
 
+/// Recursive workspace extras must retain their independently conflicting target selections.
+#[test]
+fn workspace_recursive_extra_preserves_independently_conflicting_target_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["provider[two] ; platform_machine == 'aarch64'"]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "leaf-one" },
+            { package = "leaf-one", extra = "nested" },
+        ]]
+
+        [tool.uv.workspace]
+        members = ["provider"]
+
+        [tool.uv.sources]
+        provider = { workspace = true }
+        leaf-one = { path = "leaf-one" }
+        leaf-two = { path = "leaf-two" }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = ["provider[bridge] ; python_full_version >= '3.13'"]
+        two = ["leaf-two ; platform_machine == 'aarch64'"]
+        bridge = ["leaf-one[nested] ; platform_machine == 'aarch64'"]
+
+        [dependency-groups]
+        provider-dev = ["leaf-one ; python_full_version >= '3.13'"]
+
+        [tool.uv.sources]
+        leaf-one = { path = "../leaf-one" }
+        leaf-two = { path = "../leaf-two" }
+        "#,
+        )?;
+    context
+        .temp_dir
+        .child("leaf-one/pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "leaf-one"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        nested = ["leaf-two ; python_full_version >= '3.13'"]
+
+        [tool.uv.sources]
+        leaf-two = { path = "../leaf-two" }
+        "#,
+        )?;
+    context
+        .temp_dir
+        .child("leaf-two/pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "leaf-two"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+        )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--dry-run")
+        .arg("--package")
+        .arg("provider")
+        .arg("--extra")
+        .arg("one")
+        .arg("--no-default-groups")
+        .arg("--python-platform")
+        .arg("aarch64-unknown-linux-gnu")
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 3 packages
+    Would install 3 packages
+     + leaf-one @ file://[TEMP_DIR]/leaf-one
+     + leaf-two @ file://[TEMP_DIR]/leaf-two
+     + provider @ file://[TEMP_DIR]/provider
+    ");
+
+    Ok(())
+}
+
 /// Workspace-member extras remain selectable outside the conflicting path that first reached them.
 #[test]
 fn workspace_extra_selection_ignores_unrelated_conflict_paths() -> Result<()> {
