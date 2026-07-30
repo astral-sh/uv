@@ -2133,6 +2133,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .chain(self.constraints.get(dependency_name).into_iter().flatten())
                             .filter(|requirement| requirement.name == *dependency_name)
                             .any(|requirement| {
+                                // Equal environments are handled as siblings in the current fork.
+                                if requirement.marker.without_extras()
+                                    == dependency.package.marker()
+                                {
+                                    return false;
+                                }
+
                                 let incompatible_version = requirement
                                     .source
                                     .version_specifiers()
