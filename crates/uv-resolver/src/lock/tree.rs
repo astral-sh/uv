@@ -18,13 +18,13 @@ use uv_fs::PortablePathBuf;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
-use uv_pypi_types::ResolverMarkerEnvironment;
+use uv_pypi_types::{ConflictKindRef, ResolverMarkerEnvironment};
 
 use crate::lock::export::{
     MetadataNode, MetadataNodeId, MetadataNodeKind, MetadataScript, MetadataWorkspace,
     MetadataWorkspaceMember,
 };
-use crate::lock::{Package, PackageId};
+use crate::lock::{Dependency, Package, PackageId};
 use crate::{ConflictMarker, Lock, PackageMap, UniversalMarker};
 
 #[derive(Debug, Clone, Copy)]
@@ -110,6 +110,41 @@ impl<'env> TreeDisplay<'env> {
             MarkerTree::TRUE,
             ConflictMarker::from_conflicts(lock.conflicts()),
         );
+        let roots = members
+            .iter()
+            .map(|package| lock.find_by_id(package))
+            .collect::<Vec<_>>();
+        // Tree rendering includes every optional root branch, so all root extras are selected.
+        let selected_conflicts =
+            lock.selected_conflict_activations(&roots, groups, |_, _| true, markers);
+        let is_relevant = |dependency: &Dependency| {
+            markers.is_none_or(|environment| {
+                // Eliminate impossible conflict combinations before projecting to the concrete
+                // environment; otherwise a conflicting `extra && project` branch appears valid on
+                // platforms where its dependency was never requested.
+                let mut marker = UniversalMarker::from_combined(
+                    dependency
+                        .complexified_marker
+                        .combined()
+                        .and(conflict_marker.combined()),
+                );
+                for (conflict, selected_marker) in &selected_conflicts {
+                    if !selected_marker.evaluate(environment, &[]) {
+                        continue;
+                    }
+                    if lock.conflicts().iter().any(|set| {
+                        set.contains(conflict.package(), conflict.kind().as_ref())
+                            && set.iter().any(|other| {
+                                other.package() != conflict.package()
+                                    && *other.kind() == ConflictKindRef::Project
+                            })
+                    }) {
+                        marker.assume_conflict_item(conflict);
+                    }
+                }
+                marker.pep508().evaluate(environment, &[])
+            })
+        };
 
         // Create a graph.
         let size_guess = lock.packages.len();
@@ -170,9 +205,7 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if !is_relevant(dep) {
                     continue;
                 }
 
@@ -349,9 +382,7 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if !is_relevant(dep) {
                     continue;
                 }
 
