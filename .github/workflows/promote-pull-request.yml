@@ -101,10 +101,59 @@ jobs:
           fi
 
           source_head=$(jq --raw-output '.head.sha' <<< "$source_pull_request")
+          base_head=$(jq --raw-output '.base.sha' <<< "$source_pull_request")
 
           if ! gh api --method GET "repos/astral-sh/uv/git/ref/heads/$BASE_REF" --silent; then
-            echo "The upstream base branch $BASE_REF does not exist; refusing to promote." >&2
-            exit 1
+            parent_pull_requests=$(
+              gh pr list \
+                --repo astral-sh/uv \
+                --state open \
+                --head "$BASE_REF" \
+              --limit 2 \
+              --json headRefName,headRefOid,headRepository
+            )
+
+            if [ "$(jq 'length' <<< "$parent_pull_requests")" = "0" ]; then
+              source_parent_pull_requests=$(
+                gh pr list \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --state open \
+                  --head "$BASE_REF" \
+                  --limit 2 \
+                  --json number,headRefName,headRefOid,headRepository
+              )
+              if ! jq --exit-status \
+                --arg base_ref "$BASE_REF" \
+                --arg base_head "$base_head" \
+                'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == "astral-sh/uv-dev"' \
+                <<< "$source_parent_pull_requests" > /dev/null; then
+                echo "The upstream base branch $BASE_REF does not have a matching open parent pull request; refusing to create its stack." >&2
+                exit 1
+              fi
+
+              parent_number=$(jq --raw-output '.[0].number' <<< "$source_parent_pull_requests")
+              gh pr comment "$PULL_REQUEST_NUMBER" \
+                --repo "$GITHUB_REPOSITORY" \
+                --body "Waiting for promotion of parent #$parent_number"
+              echo "queued=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if ! jq --exit-status \
+              --arg base_ref "$BASE_REF" \
+              --arg base_head "$base_head" \
+              'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == "astral-sh/uv-dev"' \
+              <<< "$parent_pull_requests" > /dev/null; then
+              echo "The upstream base branch $BASE_REF does not have a matching open parent pull request; refusing to create its stack." >&2
+              exit 1
+            fi
+
+            gh api \
+              --method POST \
+              repos/astral-sh/uv/git/refs \
+              --raw-field ref="refs/heads/$BASE_REF" \
+              --raw-field sha="$base_head" \
+              --silent
           fi
 
           existing_pull_requests=$(
@@ -195,6 +244,7 @@ jobs:
           echo "number=$upstream_number" >> "$GITHUB_OUTPUT"
 
       - name: Close uv-dev pull request
+        if: steps.promote.outputs.queued != 'true'
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
