@@ -88,8 +88,10 @@ impl<'lock> ExportableRequirements<'lock> {
                     name: root_name.clone(),
                 })?;
 
-            // Track the activated package in the list of known conflicts.
-            activated_items.insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
+            if include_production {
+                // Track the activated package in the list of known conflicts.
+                activated_items.insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
+            }
 
             if include_production && groups.prod() {
                 // Add the workspace package to the graph.
@@ -104,9 +106,6 @@ impl<'lock> ExportableRequirements<'lock> {
                         dep_extras: Vec::new(),
                     },
                 );
-
-                // Track the activated project in the list of known conflicts.
-                activated_items.insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
 
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));

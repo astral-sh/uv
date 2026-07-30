@@ -3412,13 +3412,6 @@ pub struct RunArgs {
     #[command(flatten)]
     pub dependency_groups: ProjectDependencyGroupsArgs,
 
-    /// Do not inherit dependency groups defined by the workspace root.
-    ///
-    /// By default, workspace root groups are available when running a workspace member, unless
-    /// the member defines a group with the same name.
-    #[arg(long)]
-    pub no_workspace_groups: bool,
-
     /// Run a Python module.
     ///
     /// Equivalent to `python -m <module>`.
@@ -3701,13 +3694,6 @@ pub struct SyncArgs {
 
     #[command(flatten)]
     pub dependency_groups: ConflictCheckedDependencyGroupsArgs,
-
-    /// Do not inherit dependency groups defined by the workspace root.
-    ///
-    /// By default, workspace root groups are available when syncing a workspace member, unless the
-    /// member defines a group with the same name.
-    #[arg(long)]
-    pub no_workspace_groups: bool,
 
     /// Install any non-editable dependencies, including the project and any workspace members, as
     /// editable.
@@ -4617,13 +4603,6 @@ pub struct ExportArgs {
 
     #[command(flatten)]
     pub dependency_groups: ProjectDependencyGroupsArgs,
-
-    /// Do not inherit dependency groups defined by the workspace root.
-    ///
-    /// By default, workspace root groups are available when exporting a workspace member, unless
-    /// the member defines a group with the same name.
-    #[arg(long)]
-    pub no_workspace_groups: bool,
 
     /// Exclude comment annotations indicating the source of each package.
     #[arg(long, overrides_with("annotate"))]

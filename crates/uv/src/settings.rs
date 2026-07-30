@@ -712,7 +712,6 @@ impl RunSettings {
                     only_group,
                     all_groups,
                 },
-            no_workspace_groups,
             module: _,
             editable,
             no_editable,
@@ -804,8 +803,7 @@ impl RunSettings {
                 no_default_groups,
                 only_group,
                 all_groups,
-            )
-            .with_workspace_groups(!no_workspace_groups),
+            ),
             editable: EditableMode::from_args(
                 flag(editable.into(), no_editable.into(), "editable")?,
                 no_editable_package,
@@ -1798,7 +1796,6 @@ impl SyncSettings {
                     only_group,
                     all_groups,
                 },
-            no_workspace_groups,
             editable,
             no_editable,
             no_editable_package,
@@ -1936,8 +1933,7 @@ impl SyncSettings {
                 no_default_groups,
                 only_group,
                 all_groups,
-            )
-            .with_workspace_groups(!no_workspace_groups),
+            ),
             editable: EditableMode::from_args(
                 flag(editable.into(), no_editable.into(), "editable")?,
                 no_editable_package,
@@ -2799,7 +2795,6 @@ impl ExportSettings {
                     only_group,
                     all_groups,
                 },
-            no_workspace_groups,
             annotate,
             no_annotate,
             header,
@@ -2884,8 +2879,7 @@ impl ExportSettings {
                 no_default_groups,
                 only_group,
                 all_groups,
-            )
-            .with_workspace_groups(!no_workspace_groups),
+            ),
             editable: EditableMode::from_args(
                 flag(editable.into(), no_editable.into(), "editable")?,
                 no_editable_package,

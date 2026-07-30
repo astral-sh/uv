@@ -298,18 +298,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         activated_extras.push((&dist.id.name, extra));
                     }
                 }
-
-                // Track the activated groups.
-                for group in dist
-                    .dependency_groups
-                    .keys()
-                    .filter(|group| self.includes_group(Some(&dist.id.name), group, groups))
-                {
-                    activated_groups.push((&dist.id.name, group));
-                }
             }
 
-            for dist in group_roots.iter().copied() {
+            for dist in roots.iter().copied().chain(group_roots.iter().copied()) {
                 for group in dist
                     .dependency_groups
                     .keys()
@@ -322,9 +313,14 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
         // Initialize the workspace roots.
         let mut initialized_roots = vec![];
-        for dist in roots.iter().copied() {
+        for (dist, include_production) in roots
+            .iter()
+            .copied()
+            .map(|dist| (dist, true))
+            .chain(group_roots.iter().copied().map(|dist| (dist, false)))
+        {
             // Add the workspace package to the graph.
-            let index = petgraph.add_node(if groups.prod() {
+            let index = petgraph.add_node(if include_production && groups.prod() {
                 self.package_to_node(dist, tags, build_options, install_options, marker_env)?
             } else {
                 self.non_installable_node(dist, tags, marker_env)?
@@ -335,14 +331,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
             petgraph.add_edge(root, index, Edge::Prod);
 
             // Push the package onto the queue.
-            initialized_roots.push((dist, index, true));
-        }
-
-        for dist in group_roots.iter().copied() {
-            let index = petgraph.add_node(self.non_installable_node(dist, tags, marker_env)?);
-            inverse.insert(&dist.id, index);
-            petgraph.add_edge(root, index, Edge::Prod);
-            initialized_roots.push((dist, index, false));
+            initialized_roots.push((dist, index, include_production));
         }
 
         // Add the workspace dependencies to the queue.

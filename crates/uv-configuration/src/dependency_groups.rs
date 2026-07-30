@@ -38,7 +38,6 @@ impl DependencyGroups {
             mut no_group,
             all_groups,
             no_default_groups,
-            no_workspace_groups: _,
             mut defaults,
         } = history.clone();
 
@@ -102,18 +101,9 @@ impl DependencyGroups {
             no_group,
             all_groups,
             no_default_groups,
-            no_workspace_groups: false,
             // This is unknown at CLI-time, use `.with_defaults(...)` to apply this later!
             defaults: DefaultGroups::default(),
         })
-    }
-
-    /// Configure whether dependency groups can be inherited from the workspace root.
-    #[must_use]
-    pub fn with_workspace_groups(&self, enabled: bool) -> Self {
-        let mut history = self.0.history.clone();
-        history.no_workspace_groups = !enabled;
-        Self::from_history(history)
     }
 
     /// Helper to make a spec from just a --dev flag
@@ -181,11 +171,6 @@ impl DependencyGroupsInner {
         !self.exclude.contains(group) && self.include.contains(group)
     }
 
-    /// Returns whether dependency groups can be inherited from the workspace root.
-    pub fn includes_workspace_groups(&self) -> bool {
-        !self.history.no_workspace_groups
-    }
-
     /// Returns an iterator over all groups that are included in the specification,
     /// assuming `all_names` is an iterator over all groups.
     pub fn group_names<'a, Names>(
@@ -212,7 +197,6 @@ impl DependencyGroupsInner {
             // These reference no groups explicitly
             all_groups: _,
             no_default_groups: _,
-            no_workspace_groups: _,
             // This doesn't include defaults because the `dev` group may not be defined
             // but gets implicitly added as a default sometimes!
             defaults: _,
@@ -236,7 +220,6 @@ pub struct DependencyGroupsHistory {
     no_group: Vec<GroupName>,
     all_groups: bool,
     no_default_groups: bool,
-    no_workspace_groups: bool,
     defaults: DefaultGroups,
 }
 
@@ -257,7 +240,6 @@ impl DependencyGroupsHistory {
             no_group,
             all_groups,
             no_default_groups,
-            no_workspace_groups,
             // defaults aren't CLI flags!
             defaults: _,
         } = self;
@@ -268,9 +250,6 @@ impl DependencyGroupsHistory {
         }
         if *no_default_groups {
             flags.push(Cow::Borrowed("--no-default-groups"));
-        }
-        if *no_workspace_groups {
-            flags.push(Cow::Borrowed("--no-workspace-groups"));
         }
         if let Some(dev_mode) = dev_mode {
             flags.push(Cow::Borrowed(dev_mode.as_flag()));

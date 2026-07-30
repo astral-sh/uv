@@ -103,13 +103,28 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
         groups: &DependencyGroupsWithDefaults,
     ) -> impl Iterator<Item = &PackageName> {
         match self {
-            Self::Project { name, lock, .. } => lock
+            Self::Project {
+                name,
+                lock,
+                workspace,
+            } => lock
                 .root()
                 .filter(|root| {
+                    let root_member = workspace.packages().get(root.name());
+                    let declared_groups = root_member
+                        .and_then(|member| member.pyproject_toml().dependency_groups.as_ref())
+                        .into_iter()
+                        .flat_map(|dependency_groups| dependency_groups.keys());
+                    let legacy_dev = root_member
+                        .and_then(|member| member.pyproject_toml().tool.as_ref())
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.dev_dependencies.as_ref())
+                        .is_some()
+                        .then_some(&*DEV_DEPENDENCIES);
+
                     root.name() != *name
-                        && root
-                            .dependency_groups()
-                            .keys()
+                        && declared_groups
+                            .chain(legacy_dev)
                             .any(|group| self.includes_group(Some(root.name()), group, groups))
                 })
                 .map(Package::name),
@@ -140,10 +155,6 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
 
         if package.is_some_and(|package| package == *name) {
             return true;
-        }
-
-        if !groups.includes_workspace_groups() {
-            return false;
         }
 
         !workspace.packages().get(*name).is_some_and(|member| {
@@ -542,10 +553,9 @@ impl<'lock> InstallTarget<'lock> {
 
                 // Groups defined directly on a non-project workspace root are not members.
                 let include_workspace_groups = match self {
-                    Self::Project { workspace, .. } => {
-                        workspace.is_non_project() && groups.includes_workspace_groups()
+                    Self::Project { workspace, .. } | Self::Projects { workspace, .. } => {
+                        workspace.is_non_project()
                     }
-                    Self::Projects { workspace, .. } => workspace.is_non_project(),
                     Self::Workspace { .. } | Self::NonProjectWorkspace { .. } => true,
                     Self::Script { .. } => false,
                 };
@@ -609,12 +619,17 @@ impl<'lock> InstallTarget<'lock> {
                 let mut queue: VecDeque<(&PackageName, Option<&ExtraName>)> = VecDeque::new();
                 let mut seen: FxHashSet<(&PackageName, Option<&ExtraName>)> = FxHashSet::default();
 
-                for name in roots {
+                for (name, include_production) in roots
+                    .iter()
+                    .copied()
+                    .map(|name| (name, true))
+                    .chain(self.group_roots(groups).map(|name| (name, false)))
+                {
                     let Some(root_package) = packages.get(name) else {
                         continue;
                     };
 
-                    if groups.prod() {
+                    if include_production && groups.prod() {
                         // Add the root package
                         if seen.insert((name, None)) {
                             queue.push_back((name, None));
@@ -642,28 +657,6 @@ impl<'lock> InstallTarget<'lock> {
                             for extra in dependency.extra() {
                                 if seen.insert((dep_name, Some(extra))) {
                                     queue.push_back((dep_name, Some(extra)));
-                                }
-                            }
-                        }
-                    }
-                }
-
-                for root_package in self
-                    .group_roots(groups)
-                    .filter_map(|name| packages.get(name))
-                {
-                    for (group_name, dependencies) in root_package.resolved_dependency_groups() {
-                        if !self.includes_group(Some(root_package.name()), group_name, groups) {
-                            continue;
-                        }
-                        for dependency in dependencies {
-                            let dependency_name = dependency.package_name();
-                            if seen.insert((dependency_name, None)) {
-                                queue.push_back((dependency_name, None));
-                            }
-                            for extra in dependency.extra() {
-                                if seen.insert((dependency_name, Some(extra))) {
-                                    queue.push_back((dependency_name, Some(extra)));
                                 }
                             }
                         }
