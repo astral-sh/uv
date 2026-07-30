@@ -855,6 +855,36 @@ impl<'a> LockedDependencyBuilder<'a> {
                     base_edge_marker.and(UniversalMarker::from_combined(dependency_marker));
                     requested_edge_marker.and(UniversalMarker::from_combined(dependency_marker));
                 }
+                if matches!(dependency.id.source, Source::Registry(_))
+                    && candidates.iter().any(|candidate| {
+                        candidate.id != dependency.id && candidate.id.source == dependency.id.source
+                    })
+                {
+                    // Package-level forks lose impossible conflict combinations when projected
+                    // into PEP 508 environments. Resolved edges retain the per-context selection
+                    // between otherwise compatible versions from the same registry.
+                    let mut selected = context
+                        .dependencies(expected.package)
+                        .iter()
+                        .filter(|existing| existing.package_id == dependency.id)
+                        .fold(UniversalMarker::FALSE, |mut selected, existing| {
+                            selected.or(existing.complexified_marker);
+                            selected
+                        });
+                    if selected.is_false() {
+                        continue;
+                    }
+                    selected.and(UniversalMarker::new(
+                        MarkerTree::TRUE,
+                        ConflictMarker::from_relevant_conflicts(
+                            &expected.lock.conflicts,
+                            [selected],
+                        ),
+                    ));
+                    marker.and(selected);
+                    base_edge_marker.and(selected);
+                    requested_edge_marker.and(selected);
+                }
                 if marker.is_false() {
                     continue;
                 }
@@ -1103,6 +1133,47 @@ impl<'a> LockedDependencyBuilder<'a> {
             // Check that we cover at least the required marker.
             let mut coverage_marker = UniversalMarker::from_combined(required_marker);
             coverage_marker.and(self.activation.marker);
+            if matches!(context, DependencyContext::Group(_))
+                && requirement
+                    .extras
+                    .iter()
+                    .all(|extra| !project_conflicts_with_extra(extra))
+            {
+                let mut selected_marker = MarkerTree::FALSE;
+                let mut selected_world = UniversalMarker::FALSE;
+                for candidate in requirements
+                    .iter()
+                    .filter(|candidate| candidate.name == requirement.name)
+                {
+                    for extra in candidate
+                        .extras
+                        .iter()
+                        .filter(|extra| project_conflicts_with_extra(extra))
+                    {
+                        let marker = context.requirement_marker(candidate);
+                        selected_marker = selected_marker.or(marker);
+                        let mut world = UniversalMarker::new(
+                            MarkerTree::TRUE,
+                            ConflictMarker::from_conflict_item(&ConflictItem::from(
+                                requirement.name.clone(),
+                            )),
+                        );
+                        world.or(UniversalMarker::new(
+                            MarkerTree::TRUE,
+                            ConflictMarker::from_conflict_item(&ConflictItem::from((
+                                requirement.name.clone(),
+                                extra.clone(),
+                            ))),
+                        ));
+                        world.and(UniversalMarker::from_combined(marker));
+                        selected_world.or(world);
+                    }
+                }
+                if !selected_world.is_false() {
+                    selected_world.or(UniversalMarker::from_combined(selected_marker.negate()));
+                    coverage_marker.and(selected_world);
+                }
+            }
             if !expected.lock.conflicts.is_empty()
                 && (coverage_marker.has_conflict_marker()
                     || UniversalMarker::from_combined(covered_marker).has_conflict_marker())
