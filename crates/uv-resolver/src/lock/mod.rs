@@ -1444,7 +1444,7 @@ impl Lock {
     /// Conflict selections can be introduced by root extras or groups and by arbitrarily nested
     /// dependency extras. Revisit their marker-valued reachability until those selections settle
     /// before deciding whether a conflicting project branch is applicable.
-    pub(crate) fn selected_conflict_activations<'lock>(
+    fn selected_conflict_activations<'lock>(
         &'lock self,
         roots: &[&'lock Package],
         groups: &DependencyGroupsWithDefaults,
