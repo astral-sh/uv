@@ -525,7 +525,14 @@ impl<'a> LockedDependencyBuilder<'a> {
             {
                 // Self-requirements do not create graph edges, but their source and version
                 // constraints must still be satisfied by the locked parent package.
-                if !expected.package_satisfies_requirement(expected.package, requirement)? {
+                let source_marker =
+                    expected.package_satisfies_requirement(expected.package, requirement)?;
+                if source_marker.is_none_or(|source_marker| {
+                    !required_marker
+                        .combined()
+                        .and(source_marker.negate())
+                        .is_false()
+                }) {
                     complete = false;
                 }
                 continue;
@@ -535,11 +542,14 @@ impl<'a> LockedDependencyBuilder<'a> {
 
             let mut covered_marker = MarkerTree::FALSE;
             for dependency in expected.packages_for_name(&requirement.name) {
-                if !expected.package_satisfies_requirement(dependency, requirement)? {
+                let Some(source_marker) =
+                    expected.package_satisfies_requirement(dependency, requirement)?
+                else {
                     continue;
-                }
+                };
 
                 let mut marker = UniversalMarker::from_combined(required_marker);
+                marker.and(UniversalMarker::from_combined(source_marker));
                 if !dependency.fork_markers.is_empty() {
                     let dependency_marker = dependency
                         .fork_markers
@@ -649,7 +659,7 @@ struct ExpectedPackageDependencies<'lock> {
     declarations: BTreeSet<Requirement>,
     provides_extra: &'lock [ExtraName],
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
-    constraints: &'lock Constraints,
+    source_requirements: &'lock Constraints,
     activated_extras: BTreeSet<ExtraName>,
     /// The environment under which this package can be selected.
     package_marker: UniversalMarker,
@@ -664,7 +674,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         declarations: &BTreeSet<Requirement>,
         provides_extra: &'lock [ExtraName],
         dependency_groups: &BTreeMap<GroupName, BTreeSet<Requirement>>,
-        constraints: &'lock Constraints,
+        source_requirements: &'lock Constraints,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -724,7 +734,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             declarations,
             provides_extra,
             dependency_groups,
-            constraints,
+            source_requirements,
             activated_extras,
             package_marker,
             lock_marker,
@@ -748,39 +758,42 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         &self,
         package: &Package,
         requirement: &Requirement,
-    ) -> Result<bool, LockError> {
-        let mut source_matches = package
+    ) -> Result<Option<MarkerTree>, LockError> {
+        let source_matches = package
             .id
             .source
-            .satisfies_requirement_source(&requirement.source, self.workspace_root)?;
+            .satisfies_requirement_source(&requirement.source, self.workspace_root)?
+            || package.id == self.package.id
+                && matches!(
+                    requirement.source,
+                    RequirementSource::Registry { index: None, .. }
+                );
+        let mut source_marker = if source_matches {
+            MarkerTree::TRUE
+        } else {
+            MarkerTree::FALSE
+        };
 
-        // A constraint can select a direct source for an otherwise unqualified registry
-        // requirement. Sources apply globally, even across disjoint marker environments,
-        // but the locked source must still match that constraint exactly.
-        if !source_matches
+        // A direct source can be selected by both constraints and explicit requirements. Preserve
+        // the union of their markers so another requirement can widen a conditional constraint.
+        if source_marker.is_false()
             && matches!(
                 requirement.source,
                 RequirementSource::Registry { index: None, .. }
             )
-            && let Some(constraints) = self.constraints.get(&requirement.name)
+            && let Some(source_requirements) = self.source_requirements.get(&requirement.name)
         {
-            for constraint in constraints {
+            for source_requirement in source_requirements {
                 if package
                     .id
                     .source
-                    .satisfies_requirement_source(&constraint.source, self.workspace_root)?
+                    .satisfies_requirement_source(&source_requirement.source, self.workspace_root)?
                 {
-                    source_matches = true;
-                    break;
+                    source_marker = source_marker.or(source_requirement.marker);
                 }
             }
         }
 
-        source_matches |= package.id == self.package.id
-            && matches!(
-                requirement.source,
-                RequirementSource::Registry { index: None, .. }
-            );
         let version_matches = requirement
             .source
             .version_specifiers()
@@ -788,7 +801,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             // Dynamic local packages intentionally omit their version from the lockfile.
             .is_none_or(|(specifiers, version)| specifiers.contains(version));
 
-        Ok(source_matches && version_matches)
+        Ok((!source_marker.is_false() && version_matches).then_some(source_marker))
     }
 
     /// Include locked-only contexts too, so stale extra and group sections cannot be retained.
@@ -2061,7 +2074,7 @@ impl Lock {
         requires_dist: Box<[Requirement]>,
         provides_extra: &[ExtraName],
         dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
-        constraints: &Constraints,
+        source_requirements: &Constraints,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -2178,7 +2191,7 @@ impl Lock {
                 declarations,
                 provides_extra,
                 &expected_groups,
-                constraints,
+                source_requirements,
                 overrides,
                 excludes,
                 package_requires_python,
@@ -2214,7 +2227,7 @@ impl Lock {
         package: &'lock Package,
         activated_extras: &mut FxHashMap<PackageId, BTreeSet<ExtraName>>,
         missing_metadata: bool,
-        expected: &ExpectedPackageDependencies<'_>,
+        expected: &ExpectedPackageDependencies,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
         // Use the same dependency builder as lockfile construction, including extra
         // activation for packages whose metadata does not need to be regenerated.
@@ -2454,11 +2467,6 @@ impl Lock {
             }
         }
 
-        let dependency_constraints = if allow_missing_package_metadata {
-            Constraints::from_requirements(normalized_constraints.into_iter())
-        } else {
-            Constraints::default()
-        };
         let dependency_overrides = if allow_missing_package_metadata {
             Overrides::from_entries(normalized_overrides.into_iter().collect())
                 .map_err(LockErrorKind::InvalidScopedOverride)?
@@ -2546,6 +2554,135 @@ impl Lock {
                 return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
             }
         }
+
+        let source_requirements = if allow_missing_package_metadata {
+            let mut source_requirements = normalized_constraints.into_iter().collect::<Vec<_>>();
+            let conditional_source_names = source_requirements
+                .iter()
+                .filter(|requirement| {
+                    !matches!(requirement.source, RequirementSource::Registry { .. })
+                        && !requirement.marker.is_true()
+                })
+                .map(|requirement| requirement.name.clone())
+                .collect::<FxHashSet<_>>();
+
+            if !conditional_source_names.is_empty() {
+                let mut registry_markers = FxHashMap::<PackageName, MarkerTree>::default();
+                let mut unconditional_registries = FxHashSet::<PackageName>::default();
+
+                for requirement in requirements
+                    .iter()
+                    .chain(dependency_groups.values().flatten())
+                {
+                    if !conditional_source_names.contains(&requirement.name)
+                        || requirement.marker.top_level_extra().is_some()
+                    {
+                        continue;
+                    }
+
+                    if matches!(
+                        requirement.source,
+                        RequirementSource::Registry { index: None, .. }
+                    ) {
+                        if requirement.marker.is_true() {
+                            unconditional_registries.insert(requirement.name.clone());
+                        } else {
+                            registry_markers
+                                .entry(requirement.name.clone())
+                                .and_modify(|marker| *marker = marker.or(requirement.marker))
+                                .or_insert(requirement.marker);
+                        }
+                    } else if !matches!(requirement.source, RequirementSource::Registry { .. }) {
+                        source_requirements.push(normalize_requirement(
+                            requirement.clone(),
+                            root,
+                            &self.requires_python,
+                        )?);
+                    }
+                }
+
+                for name in packages.keys() {
+                    let Some(package) = self.find_by_name(name).ok().flatten() else {
+                        continue;
+                    };
+                    let Some(source_tree) = package.id.source.as_source_tree() else {
+                        continue;
+                    };
+                    let Some(SourceTreeRequiresDist { metadata, .. }) =
+                        Self::source_tree_requires_dist(source_tree, root, package, database)
+                            .await?
+                    else {
+                        continue;
+                    };
+
+                    let package_context = package
+                        .id
+                        .version
+                        .as_ref()
+                        .map(|version| (&package.id.name, version));
+                    for requirement in dependency_overrides.apply_for_package(
+                        package_context,
+                        metadata
+                            .requires_dist
+                            .iter()
+                            .chain(metadata.dependency_groups.values().flatten()),
+                    ) {
+                        if !conditional_source_names.contains(&requirement.name)
+                            || requirement.marker.top_level_extra().is_some()
+                            || dependency_excludes
+                                .contains_for_package(package_context, &requirement.name)
+                        {
+                            continue;
+                        }
+
+                        if matches!(
+                            requirement.source,
+                            RequirementSource::Registry { index: None, .. }
+                        ) {
+                            if requirement.marker.is_true() {
+                                unconditional_registries.insert(requirement.name.clone());
+                            } else {
+                                registry_markers
+                                    .entry(requirement.name.clone())
+                                    .and_modify(|marker| *marker = marker.or(requirement.marker))
+                                    .or_insert(requirement.marker);
+                            }
+                        } else if !matches!(requirement.source, RequirementSource::Registry { .. })
+                        {
+                            source_requirements.push(normalize_requirement(
+                                requirement.into_owned(),
+                                root,
+                                &self.requires_python,
+                            )?);
+                        }
+                    }
+                }
+
+                // Conditional direct sources can be selected globally across disjoint,
+                // marker-scoped requirements. An unconditional registry declaration, however,
+                // must retain its uncovered environments and cannot inherit that source.
+                let widened_sources = source_requirements
+                    .iter()
+                    .filter_map(|requirement| {
+                        if !conditional_source_names.contains(&requirement.name)
+                            || unconditional_registries.contains(&requirement.name)
+                            || matches!(requirement.source, RequirementSource::Registry { .. })
+                        {
+                            return None;
+                        }
+
+                        let mut widened = requirement.clone();
+                        widened.marker = *registry_markers.get(&requirement.name)?;
+                        Some(widened)
+                    })
+                    .collect::<Vec<_>>();
+                source_requirements.extend(widened_sources);
+            }
+
+            Constraints::from_requirements(source_requirements.into_iter())
+        } else {
+            Constraints::default()
+        };
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let mut remotes = indexes.map(|locations| {
@@ -2752,7 +2889,7 @@ impl Lock {
                             metadata.requires_dist,
                             &metadata.provides_extra,
                             metadata.dependency_groups,
-                            &dependency_constraints,
+                            &source_requirements,
                             &dependency_overrides,
                             &dependency_excludes,
                             requires_python.as_ref(),
@@ -2851,7 +2988,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
-                        &dependency_constraints,
+                        &source_requirements,
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
@@ -2907,7 +3044,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
-                        &dependency_constraints,
+                        &source_requirements,
                         &dependency_overrides,
                         &dependency_excludes,
                         requires_python.as_ref(),
@@ -3005,7 +3142,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
-                        &dependency_constraints,
+                        &source_requirements,
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
