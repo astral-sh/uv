@@ -41,6 +41,53 @@ fn lock_without_package_metadata(lock: &str) -> Result<toml_edit::DocumentMut> {
 
 #[cfg(feature = "test-universal")]
 #[test]
+fn lock_preserves_noncanonical_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#
+    })?;
+
+    context.lock().arg("--offline").assert().success();
+
+    let noncanonical_lock = indoc! {
+        r"
+        version = 1
+        revision = 3
+        requires-python = '>=3.12'
+
+        [options]
+        exclude-newer = '2024-03-25T00:00:00Z'
+
+        [[package]]
+        name = 'project'
+        version = '0.1.0'
+        source = { virtual = '.' }
+        "
+    };
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(noncanonical_lock)?;
+
+    context
+        .lock()
+        .arg("--locked")
+        .arg("--offline")
+        .assert()
+        .success();
+    assert_eq!(context.read("uv.lock"), noncanonical_lock);
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
 fn lock_wheel_registry() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

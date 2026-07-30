@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_fs::fixture::ChildPath;
 use insta::assert_snapshot;
 use std::path::Path;
+use uv_resolver::Lock;
 use uv_static::EnvVars;
 
 // These tests just run `uv lock` on an assorted of ecosystem
@@ -165,7 +166,18 @@ fn lock_ecosystem_package_with_args(python_version: &str, name: &str, args: &[&s
         None,
     );
 
+    // Ensure generated lockfiles take the canonical fast path and produce the
+    // same lock as the general TOML parser.
     let lock = context.read("uv.lock");
+    let expected = toml::from_str::<Lock>(&lock)
+        .with_context(|| format!("failed to parse the `{name}` lockfile as TOML"))?;
+    let actual = Lock::from_canonical_toml(&lock)
+        .with_context(|| format!("the `{name}` lockfile did not use the canonical fast path"))?;
+    assert_eq!(
+        actual, expected,
+        "the canonical fast path changed the `{name}` lockfile"
+    );
+
     insta::with_settings!({
         filters => context.filters(),
     }, {
