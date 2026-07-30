@@ -17715,7 +17715,7 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     Ok(())
 }
 
-/// Validate a platform-markered dependency without expanding independent conflict sets.
+/// Validate an unrelated requested extra without expanding independent conflict sets.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_many_conflicts() -> Result<()> {
@@ -17749,7 +17749,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["dep ; sys_platform == 'linux'"]
+        dependencies = ["dep[ordinary] ; sys_platform == 'linux'"]
 
         [project.optional-dependencies]
         {extra_declarations}
@@ -17760,7 +17760,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         ]
 
         [tool.uv.workspace]
-        members = ["dep"]
+        members = ["dep", "leaf"]
 
         [tool.uv.sources]
         dep = {{ workspace = true }}
@@ -17770,6 +17770,20 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
     dependency.child("pyproject.toml").write_str(indoc! {r#"
         [project]
         name = "dep"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        ordinary = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { workspace = true }
+        "#})?;
+    let leaf = context.temp_dir.child("leaf");
+    leaf.create_dir_all()?;
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
         version = "1.0.0"
         requires-python = ">=3.12"
         "#})?;
@@ -17788,24 +17802,32 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        members = ["dep", "project"]
+        members = ["dep", "leaf", "project"]
 
         [[package]]
         name = "dep"
         version = "1.0.0"
         source = {{ editable = "dep" }}
 
+        [package.optional-dependencies]
+        ordinary = [{{ name = "leaf" }}]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = {{ editable = "leaf" }}
+
         [[package]]
         name = "project"
         version = "0.1.0"
         source = {{ virtual = "." }}
-        dependencies = [{{ name = "dep", marker = "sys_platform == 'linux'" }}]
+        dependencies = [{{ name = "dep", extra = ["ordinary"], marker = "sys_platform == 'linux'" }}]
         "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked").arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())

@@ -594,17 +594,23 @@ impl<'a> LockedDependencyBuilder<'a> {
                     )),
                 )
             });
-            let project_implies_extra = |extra: &ExtraName, project_marker: UniversalMarker| {
-                let mut alternatives = expected.conflicting_alternatives(&ConflictItem::from((
-                    requirement.name.clone(),
-                    extra.clone(),
-                )));
-                alternatives.and(project_marker);
-                alternatives.and(UniversalMarker::new(
-                    MarkerTree::TRUE,
-                    ConflictMarker::from_conflicts(&expected.lock.conflicts),
-                ));
-                marker_is_unreachable(self.requires_python, alternatives.combined())
+            let project_implies_extra = |extra: &ExtraName| {
+                let selected = ConflictItem::from((requirement.name.clone(), extra.clone()));
+                let project = ConflictItem::from(requirement.name.clone());
+                expected
+                    .lock
+                    .conflicts
+                    .iter()
+                    .filter(|conflicts| conflicts.contains(&requirement.name, extra))
+                    .flat_map(ConflictSet::iter)
+                    .filter(|alternative| *alternative != &selected)
+                    .all(|alternative| {
+                        alternative != &project
+                            && expected.lock.conflicts.iter().any(|conflicts| {
+                                conflicts.contains(&requirement.name, ConflictKindRef::Project)
+                                    && conflicts.iter().any(|conflict| conflict == alternative)
+                            })
+                    })
             };
             // Serialized graph edges omit empty or inactive conflict alternatives, but explicitly
             // requested selections still activate the target and must refresh its metadata.
@@ -780,9 +786,7 @@ impl<'a> LockedDependencyBuilder<'a> {
                             requested_edge_marker
                         };
                     if expected.lock.conflicts.contains(&requirement.name, extra)
-                        && project_conflict_marker.is_none_or(|project_conflict_marker| {
-                            !project_implies_extra(extra, project_conflict_marker)
-                        })
+                        && project_conflict_marker.is_none_or(|_| !project_implies_extra(extra))
                     {
                         extra_activation_marker.and(UniversalMarker::new(
                             MarkerTree::TRUE,
@@ -850,9 +854,8 @@ impl<'a> LockedDependencyBuilder<'a> {
                     for extra in extras {
                         let mut extra_marker = base_edge_marker;
                         if expected.lock.conflicts.contains(&requirement.name, &extra)
-                            && project_conflict_marker.is_none_or(|project_conflict_marker| {
-                                !project_implies_extra(&extra, project_conflict_marker)
-                            })
+                            && project_conflict_marker
+                                .is_none_or(|_| !project_implies_extra(&extra))
                         {
                             extra_marker.and(UniversalMarker::new(
                                 MarkerTree::TRUE,
@@ -884,7 +887,13 @@ impl<'a> LockedDependencyBuilder<'a> {
             {
                 coverage_marker.and(UniversalMarker::new(
                     MarkerTree::TRUE,
-                    ConflictMarker::from_conflicts(&expected.lock.conflicts),
+                    ConflictMarker::from_relevant_conflicts(
+                        &expected.lock.conflicts,
+                        [
+                            coverage_marker,
+                            UniversalMarker::from_combined(covered_marker),
+                        ],
+                    ),
                 ));
             }
             let covered_marker = SimplifiedMarkerTree::new(self.requires_python, covered_marker)
@@ -1288,7 +1297,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                 reachable_fork.and(*fork_marker);
                 reachable_fork.and(UniversalMarker::new(
                     MarkerTree::TRUE,
-                    ConflictMarker::from_conflicts(&self.lock.conflicts),
+                    ConflictMarker::from_relevant_conflicts(&self.lock.conflicts, [reachable_fork]),
                 ));
                 if !reachable_fork.is_false() {
                     selected_forks.or(*fork_marker);
@@ -1356,15 +1365,15 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             return MarkerTree::TRUE;
         }
 
-        let conflicts = UniversalMarker::new(
-            MarkerTree::TRUE,
-            ConflictMarker::from_conflicts(&self.lock.conflicts),
-        );
+        if extras.iter().any(|extra| {
+            !self.lock.conflicts.contains(&package.id.name, extra)
+                || !package.optional_dependencies.contains_key(extra)
+        }) {
+            return MarkerTree::TRUE;
+        }
+
         let mut payload_marker = MarkerTree::FALSE;
         for extra in extras {
-            if !self.lock.conflicts.contains(&package.id.name, extra) {
-                return MarkerTree::TRUE;
-            }
             let Some(dependencies) = package.optional_dependencies.get(extra) else {
                 return MarkerTree::TRUE;
             };
@@ -1374,7 +1383,10 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                 let mut fork = *fork_marker;
                 fork.and(activation.marker);
                 fork.and(UniversalMarker::from_combined(environment));
-                fork.and(conflicts);
+                fork.and(UniversalMarker::new(
+                    MarkerTree::TRUE,
+                    ConflictMarker::from_relevant_conflicts(&self.lock.conflicts, [fork]),
+                ));
                 if marker_is_unreachable(&self.lock.requires_python, fork.combined()) {
                     continue;
                 }
@@ -1398,7 +1410,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         dependencies: &[Dependency],
         context: DependencyContext<'_>,
         activation: DependencyActivation,
-        apply_conflicts: bool,
+        conflicts: ConflictMarker,
     ) -> Vec<(
         PackageId,
         BTreeSet<ExtraName>,
@@ -1410,8 +1422,6 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             return Vec::new();
         }
 
-        let conflicts = (!self.lock.conflicts.is_empty() && apply_conflicts)
-            .then(|| ConflictMarker::from_conflicts(&self.lock.conflicts));
         let mut comparable: BTreeMap<
             (PackageId, BTreeSet<ExtraName>),
             (MarkerTree, MarkerTree, MarkerTree),
@@ -1483,7 +1493,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             marker.and(UniversalMarker::from_combined(
                 self.lock.requires_python.to_marker_tree(),
             ));
-            if let Some(conflicts) = conflicts {
+            if !conflicts.is_true() {
                 marker.and(UniversalMarker::new(MarkerTree::TRUE, conflicts));
             }
             if marker_is_unreachable(&self.lock.requires_python, marker.combined()) {
@@ -2830,15 +2840,19 @@ impl Lock {
                 continue;
             }
             let actual = context.dependencies(package);
-            let apply_conflicts = activation.marker.has_conflict_marker()
-                || generated
-                    .iter()
-                    .chain(actual)
-                    .any(|dependency| dependency.complexified_marker.has_conflict_marker());
+            let conflicts = ConflictMarker::from_relevant_conflicts(
+                &self.conflicts,
+                std::iter::once(activation.marker).chain(
+                    generated
+                        .iter()
+                        .chain(actual)
+                        .map(|dependency| dependency.complexified_marker),
+                ),
+            );
             let generated_comparable =
-                expected.comparable_dependencies(&generated, context, activation, apply_conflicts);
+                expected.comparable_dependencies(&generated, context, activation, conflicts);
             let actual_comparable =
-                expected.comparable_dependencies(actual, context, activation, apply_conflicts);
+                expected.comparable_dependencies(actual, context, activation, conflicts);
             let equivalent = generated_comparable.len() == actual_comparable.len()
                 && generated_comparable.iter().zip(&actual_comparable).all(
                     |(
@@ -2883,17 +2897,17 @@ impl Lock {
                                 .and(generated_marker.negate())
                                 .and(payload_marker),
                         ) && (generated_forbidden_conflict.is_false() || {
-                            let forbidden = actual_conflict.and(*generated_forbidden_conflict);
-                            marker_is_unreachable(
-                                &self.requires_python,
-                                forbidden.and(
-                                    UniversalMarker::new(
-                                        MarkerTree::TRUE,
-                                        ConflictMarker::from_conflicts(&self.conflicts),
-                                    )
-                                    .combined(),
+                            let mut forbidden = UniversalMarker::from_combined(
+                                actual_conflict.and(*generated_forbidden_conflict),
+                            );
+                            forbidden.and(UniversalMarker::new(
+                                MarkerTree::TRUE,
+                                ConflictMarker::from_relevant_conflicts(
+                                    &self.conflicts,
+                                    [forbidden],
                                 ),
-                            )
+                            ));
+                            marker_is_unreachable(&self.requires_python, forbidden.combined())
                         })
                     },
                 );
@@ -3763,23 +3777,22 @@ impl Lock {
         }
 
         for (package_id, activation) in activated_packages {
-            let mut unauthorized = activation
-                .source_authority_required
-                .combined()
-                .and(activation.source_marker.combined().negate());
+            let mut unauthorized = UniversalMarker::from_combined(
+                activation
+                    .source_authority_required
+                    .combined()
+                    .and(activation.source_marker.combined().negate()),
+            );
             if unauthorized.is_false() {
                 continue;
             }
             if !self.conflicts.is_empty() {
-                unauthorized = unauthorized.and(
-                    UniversalMarker::new(
-                        MarkerTree::TRUE,
-                        ConflictMarker::from_conflicts(&self.conflicts),
-                    )
-                    .combined(),
-                );
+                unauthorized.and(UniversalMarker::new(
+                    MarkerTree::TRUE,
+                    ConflictMarker::from_relevant_conflicts(&self.conflicts, [unauthorized]),
+                ));
             }
-            if !marker_is_unreachable(&self.requires_python, unauthorized) {
+            if !marker_is_unreachable(&self.requires_python, unauthorized.combined()) {
                 let package = self.find_by_id(&package_id);
                 return Ok(SatisfiesResult::MismatchedPackageDependencies(
                     &package.id.name,
