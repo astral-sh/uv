@@ -2092,7 +2092,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .map(|mut dependencies| {
                     // Production, optional, and group requirements are separate PubGrub
                     // packages. Split now when another context can require an incompatible
-                    // version; otherwise, those requirements never become sibling dependencies.
+                    // version or source; otherwise, those requirements never become siblings.
                     for dependency in &dependencies {
                         if dependency.package.marker().is_true() {
                             continue;
@@ -2112,12 +2112,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     .flat_map(|requirements| requirements.iter()),
                             )
                             .filter(|requirement| requirement.name == *dependency_name)
-                            .filter_map(|requirement| requirement.source.version_specifiers())
-                            .any(|specifier| {
-                                dependency
-                                    .version
-                                    .intersection(&Range::from(specifier.clone()))
-                                    == Range::empty()
+                            .any(|requirement| {
+                                let incompatible_version = requirement
+                                    .source
+                                    .version_specifiers()
+                                    .is_some_and(|specifier| {
+                                        dependency
+                                            .version
+                                            .intersection(&Range::from(specifier.clone()))
+                                            == Range::empty()
+                                    });
+
+                                let incompatible_source = match (
+                                    dependency.source.verbatim_url(),
+                                    requirement.source.to_verbatim_parsed_url(),
+                                ) {
+                                    (Some(current), Some(candidate)) => current != &candidate,
+                                    (Some(_), None) | (None, Some(_)) => true,
+                                    (None, None) => false,
+                                };
+
+                                incompatible_version || incompatible_source
                             });
 
                         if has_conflicting_context {
@@ -3956,7 +3971,7 @@ enum Dependencies {
     /// These conflicts are resolved via `Dependencies::fork`.
     Available {
         dependencies: Vec<PubGrubDependency>,
-        /// Dependencies with incompatible versions in another extra or group context.
+        /// Dependencies with incompatible versions or sources in another extra or group context.
         cross_context_forks: BTreeSet<PackageName>,
     },
     /// Package metadata has a `Requires-Python` specifier that is incompatible with the target.
@@ -3974,7 +3989,7 @@ impl Dependencies {
     /// groups of dependencies.
     ///
     /// A fork occurs when sibling dependencies, or dependencies from different
-    /// extras or groups of the same distribution, require incompatible versions
+    /// extras or groups of the same distribution, require incompatible versions or sources
     /// behind distinct marker expressions.
     fn fork(
         self,
