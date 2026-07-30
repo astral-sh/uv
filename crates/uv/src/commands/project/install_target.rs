@@ -500,10 +500,13 @@ impl<'lock> InstallTarget<'lock> {
             | Self::NonProjectWorkspace { lock, workspace } => {
                 let metadata_free_lock = lock.supports_missing_package_metadata()
                     && uv_preview::is_enabled(PreviewFeature::LockWithoutMetadata);
-                let roots = self
-                    .roots()
-                    .chain(self.group_root(groups))
-                    .collect::<FxHashSet<_>>();
+                // Validate inherited root groups even when `--no-group` excludes them from
+                // installation and therefore omits the root from the selected group roots.
+                let workspace_root = matches!(self, Self::Project { .. })
+                    .then(|| lock.root())
+                    .flatten()
+                    .map(Package::name);
+                let roots = self.roots().chain(workspace_root).collect::<FxHashSet<_>>();
                 let member_groups = lock
                     .packages()
                     .iter()

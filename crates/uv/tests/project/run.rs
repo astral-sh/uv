@@ -6458,6 +6458,61 @@ fn run_target_workspace_discovery_workspace_root_group() -> Result<()> {
     Ok(())
 }
 
+/// Excluded inherited groups must still be recognized during group validation.
+#[test]
+fn run_target_workspace_discovery_excluded_workspace_root_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [dependency-groups]
+            root-only = []
+
+            [tool.uv.workspace]
+            members = ["child"]
+            "#
+        })?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            "#
+        })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--offline")
+        .arg("--project")
+        .arg("child")
+        .arg("--no-group")
+        .arg("root-only")
+        .arg("python")
+        .arg("-c")
+        .arg("print('success')"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    success
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Workspace defaults and member-defined groups remain distinct when a member is selected.
 #[test]
 fn run_target_workspace_discovery_workspace_group_defaults() -> Result<()> {
