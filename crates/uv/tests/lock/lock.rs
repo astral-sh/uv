@@ -17715,16 +17715,16 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     Ok(())
 }
 
-/// Validate a metadata-free lock without expanding independent conflict sets.
+/// Validate a platform-markered dependency without expanding independent conflict sets.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_many_conflicts() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let extra_declarations = (1..=12)
+    let extra_declarations = (1..=24)
         .map(|conflict_number| format!("a{conflict_number} = []\nb{conflict_number} = []"))
         .collect::<Vec<_>>()
         .join("\n");
-    let project_conflicts = (1..=12)
+    let project_conflicts = (1..=24)
         .map(|conflict_number| {
             format!(
                 "  [{{ extra = \"a{conflict_number}\" }}, {{ extra = \"b{conflict_number}\" }}],"
@@ -17732,7 +17732,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let lock_conflicts = (1..=12)
+    let lock_conflicts = (1..=24)
         .map(|conflict_number| {
             format!(
                 "[{{ package = \"project\", extra = \"a{conflict_number}\" }}, {{ package = \"project\", extra = \"b{conflict_number}\" }}]"
@@ -17749,7 +17749,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["dep"]
+        dependencies = ["dep ; sys_platform == 'linux'"]
 
         [project.optional-dependencies]
         {extra_declarations}
@@ -17799,7 +17799,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = {{ virtual = "." }}
-        dependencies = [{{ name = "dep" }}]
+        dependencies = [{{ name = "dep", marker = "sys_platform == 'linux'" }}]
         "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked").arg("--offline"), @"

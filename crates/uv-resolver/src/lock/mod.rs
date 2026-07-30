@@ -878,7 +878,10 @@ impl<'a> LockedDependencyBuilder<'a> {
             // Check that we cover at least the required marker.
             let mut coverage_marker = UniversalMarker::from_combined(required_marker);
             coverage_marker.and(self.activation.marker);
-            if !expected.lock.conflicts.is_empty() {
+            if !expected.lock.conflicts.is_empty()
+                && (coverage_marker.has_conflict_marker()
+                    || UniversalMarker::from_combined(covered_marker).has_conflict_marker())
+            {
                 coverage_marker.and(UniversalMarker::new(
                     MarkerTree::TRUE,
                     ConflictMarker::from_conflicts(&expected.lock.conflicts),
@@ -1220,24 +1223,6 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             })
         });
 
-        let mut world = UniversalMarker::new(
-            MarkerTree::TRUE,
-            ConflictMarker::from_conflicts(&self.lock.conflicts),
-        );
-        if project_conflicts
-            && !matches!(context, DependencyContext::Group(_))
-            && !selected_conflicts_with_project
-        {
-            world.assume_conflict_item(&project);
-        }
-        if let Some(selected) = &selected {
-            world.assume_conflict_item(selected);
-        }
-        // https://github.com/astral-sh/uv/issues/20694
-        if world.is_false() {
-            return UniversalMarker::FALSE;
-        }
-
         if project_conflicts && matches!(context, DependencyContext::Production) {
             let mut activation = UniversalMarker::new(
                 MarkerTree::TRUE,
@@ -1413,6 +1398,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         dependencies: &[Dependency],
         context: DependencyContext<'_>,
         activation: DependencyActivation,
+        apply_conflicts: bool,
     ) -> Vec<(
         PackageId,
         BTreeSet<ExtraName>,
@@ -1420,7 +1406,12 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         MarkerTree,
         MarkerTree,
     )> {
-        let conflicts = ConflictMarker::from_conflicts(&self.lock.conflicts);
+        if dependencies.is_empty() {
+            return Vec::new();
+        }
+
+        let conflicts = (!self.lock.conflicts.is_empty() && apply_conflicts)
+            .then(|| ConflictMarker::from_conflicts(&self.lock.conflicts));
         let mut comparable: BTreeMap<
             (PackageId, BTreeSet<ExtraName>),
             (MarkerTree, MarkerTree, MarkerTree),
@@ -1492,7 +1483,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             marker.and(UniversalMarker::from_combined(
                 self.lock.requires_python.to_marker_tree(),
             ));
-            if !self.lock.conflicts.is_empty() {
+            if let Some(conflicts) = conflicts {
                 marker.and(UniversalMarker::new(MarkerTree::TRUE, conflicts));
             }
             if marker_is_unreachable(&self.lock.requires_python, marker.combined()) {
@@ -2839,9 +2830,15 @@ impl Lock {
                 continue;
             }
             let actual = context.dependencies(package);
+            let apply_conflicts = activation.marker.has_conflict_marker()
+                || generated
+                    .iter()
+                    .chain(actual)
+                    .any(|dependency| dependency.complexified_marker.has_conflict_marker());
             let generated_comparable =
-                expected.comparable_dependencies(&generated, context, activation);
-            let actual_comparable = expected.comparable_dependencies(actual, context, activation);
+                expected.comparable_dependencies(&generated, context, activation, apply_conflicts);
+            let actual_comparable =
+                expected.comparable_dependencies(actual, context, activation, apply_conflicts);
             let equivalent = generated_comparable.len() == actual_comparable.len()
                 && generated_comparable.iter().zip(&actual_comparable).all(
                     |(
@@ -2885,16 +2882,19 @@ impl Lock {
                             actual_marker
                                 .and(generated_marker.negate())
                                 .and(payload_marker),
-                        ) && marker_is_unreachable(
-                            &self.requires_python,
-                            actual_conflict.and(*generated_forbidden_conflict).and(
-                                UniversalMarker::new(
-                                    MarkerTree::TRUE,
-                                    ConflictMarker::from_conflicts(&self.conflicts),
-                                )
-                                .combined(),
-                            ),
-                        )
+                        ) && (generated_forbidden_conflict.is_false() || {
+                            let forbidden = actual_conflict.and(*generated_forbidden_conflict);
+                            marker_is_unreachable(
+                                &self.requires_python,
+                                forbidden.and(
+                                    UniversalMarker::new(
+                                        MarkerTree::TRUE,
+                                        ConflictMarker::from_conflicts(&self.conflicts),
+                                    )
+                                    .combined(),
+                                ),
+                            )
+                        })
                     },
                 );
             if !complete || !equivalent {
@@ -3763,17 +3763,22 @@ impl Lock {
         }
 
         for (package_id, activation) in activated_packages {
-            let unauthorized = activation
+            let mut unauthorized = activation
                 .source_authority_required
                 .combined()
-                .and(activation.source_marker.combined().negate())
-                .and(
+                .and(activation.source_marker.combined().negate());
+            if unauthorized.is_false() {
+                continue;
+            }
+            if !self.conflicts.is_empty() {
+                unauthorized = unauthorized.and(
                     UniversalMarker::new(
                         MarkerTree::TRUE,
                         ConflictMarker::from_conflicts(&self.conflicts),
                     )
                     .combined(),
                 );
+            }
             if !marker_is_unreachable(&self.requires_python, unauthorized) {
                 let package = self.find_by_id(&package_id);
                 return Ok(SatisfiesResult::MismatchedPackageDependencies(
