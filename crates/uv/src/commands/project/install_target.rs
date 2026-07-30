@@ -615,7 +615,6 @@ impl<'lock> InstallTarget<'lock> {
                     .map(|name| (name, InstallableRootKind::Production))
                     .chain(
                         self.group_root(groups)
-                            .into_iter()
                             .map(|name| (name, InstallableRootKind::DependencyGroups)),
                     )
                 {

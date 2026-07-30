@@ -75,7 +75,6 @@ impl<'lock> ExportableRequirements<'lock> {
             .chain(
                 target
                     .group_root(groups)
-                    .into_iter()
                     .map(|root| (root, InstallableRootKind::DependencyGroups)),
             )
         {
