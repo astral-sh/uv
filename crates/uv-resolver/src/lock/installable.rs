@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
+use std::iter;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -17,7 +18,7 @@ use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{
-    ConflictKind, ConflictKindRef, ConflictSet, Conflicts, ResolverMarkerEnvironment,
+    ConflictItem, ConflictKind, ConflictKindRef, ConflictSet, Conflicts, ResolverMarkerEnvironment,
 };
 
 use crate::lock::{
@@ -74,6 +75,69 @@ fn newly_activated_project<'lock>(
         });
 
     (!selected_conflicting_item).then_some(package)
+}
+
+/// Return whether newly selected extras supersede an incompatible project selection.
+fn project_conflicts_with_extras(
+    project: &PackageName,
+    extras: &[(&PackageName, &ExtraName)],
+    conflicts: &Conflicts,
+) -> bool {
+    extras
+        .iter()
+        .any(|(package, extra)| project_conflicts_with_extra(project, package, extra, conflicts))
+}
+
+/// Return whether a project selection conflicts with a specific selected extra.
+fn project_conflicts_with_extra(
+    project: &PackageName,
+    package: &PackageName,
+    extra: &ExtraName,
+    conflicts: &Conflicts,
+) -> bool {
+    conflicts
+        .iter()
+        .any(|set| set.contains(project, ConflictKindRef::Project) && set.contains(package, extra))
+}
+
+/// Return the project context for non-conflicting extras selected on a dependency edge.
+fn project_for_selected_extras<'lock>(
+    package: &'lock PackageName,
+    extras: impl IntoIterator<Item = &'lock ExtraName>,
+    activated_projects: &[&PackageName],
+    activated_extras: &[(&PackageName, &ExtraName)],
+    activated_groups: &[(&PackageName, &GroupName)],
+    conflicts: &Conflicts,
+) -> Option<&'lock PackageName> {
+    if !conflicts.contains(package, ConflictKindRef::Project) {
+        return None;
+    }
+
+    let mut extras = extras.into_iter().peekable();
+    if extras.peek().is_none()
+        || extras.any(|extra| project_conflicts_with_extra(package, package, extra, conflicts))
+    {
+        return None;
+    }
+
+    if conflicts
+        .iter()
+        .filter(|set| set.contains(package, ConflictKindRef::Project))
+        .flat_map(ConflictSet::iter)
+        .any(|item| match item.kind() {
+            ConflictKind::Project => {
+                item.package() != package && activated_projects.contains(&item.package())
+            }
+            ConflictKind::Extra(extra) => {
+                item.package() != package && activated_extras.contains(&(item.package(), extra))
+            }
+            ConflictKind::Group(group) => activated_groups.contains(&(item.package(), group)),
+        })
+    {
+        return None;
+    }
+
+    Some(package)
 }
 
 /// Record another condition under which a locked package and optional extra are reachable.
@@ -253,6 +317,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
         let mut activated_projects: Vec<&PackageName> = vec![];
         let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
         let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
+        let mut contextual_projects: FxHashMap<
+            (&PackageId, Option<&ExtraName>),
+            BTreeSet<&PackageName>,
+        > = FxHashMap::default();
         let has_conflicts = !self.lock().conflicts().is_empty();
         let validate_conflicts = !include_manifest && has_conflicts;
         let mut dependencies_for_conflict_validation = vec![];
@@ -308,6 +376,27 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     .filter(|group| groups.contains(group))
                 {
                     activated_groups.push((&dist.id.name, group));
+                }
+            }
+
+            let selected_conflicts = self.lock().selected_conflict_activations(
+                roots,
+                groups,
+                |_, extra| extras.contains(extra),
+                Some(marker_env),
+            );
+            for package in &self.lock().packages {
+                for extra in package.optional_dependencies.keys() {
+                    let item = ConflictItem::from((package.id.name.clone(), extra.clone()));
+                    if selected_conflicts
+                        .get(&item)
+                        .is_some_and(|marker| marker.evaluate(marker_env, &[]))
+                    {
+                        let activated_extra = (&package.id.name, extra);
+                        if !activated_extras.contains(&activated_extra) {
+                            activated_extras.push(activated_extra);
+                        }
+                    }
                 }
             }
         }
@@ -374,15 +463,46 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     &activated_groups,
                     self.lock().conflicts(),
                 );
+                let contextual_project = additional_activated_project
+                    .is_none()
+                    .then(|| {
+                        project_for_selected_extras(
+                            &dep.package_id.name,
+                            dep.extra.iter(),
+                            &activated_projects,
+                            &activated_extras,
+                            &activated_groups,
+                            self.lock().conflicts(),
+                        )
+                    })
+                    .flatten();
                 if !dep.complexified_marker.evaluate(
                     marker_env,
                     activated_projects
                         .iter()
                         .copied()
-                        .chain(additional_activated_project),
+                        .filter(|project| {
+                            !project_conflicts_with_extras(
+                                project,
+                                &additional_activated_extras,
+                                self.lock().conflicts(),
+                            )
+                        })
+                        .chain(additional_activated_project)
+                        .chain(contextual_project),
                     activated_extras
                         .iter()
                         .chain(additional_activated_extras.iter())
+                        .filter(|(package, extra)| {
+                            contextual_project.is_none_or(|project| {
+                                !project_conflicts_with_extra(
+                                    project,
+                                    package,
+                                    extra,
+                                    self.lock().conflicts(),
+                                )
+                            })
+                        })
                         .copied(),
                     activated_groups.iter().copied(),
                 ) {
@@ -437,6 +557,13 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 // that references `pkg[extra]`). Without this, conflict markers on transitive
                 // dependencies gated by the activated extra would not evaluate to `true`
                 // during the graph traversals below.
+                activated_projects.retain(|project| {
+                    !project_conflicts_with_extras(
+                        project,
+                        &additional_activated_extras,
+                        self.lock().conflicts(),
+                    )
+                });
                 if let Some(project) = additional_activated_project {
                     activated_projects.push(project);
                 }
@@ -454,6 +581,12 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     queue.push_back((dep_dist, None));
                 }
                 for extra in &dep.extra {
+                    if let Some(project) = contextual_project {
+                        contextual_projects
+                            .entry((&dep.package_id, Some(extra)))
+                            .or_default()
+                            .insert(project);
+                    }
                     add_reachability(
                         &mut conflict_reachability,
                         (&dep.package_id, Some(extra)),
@@ -664,6 +797,22 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 } else {
                     Either::Right(package.dependencies.iter())
                 };
+                let mut parent_contextual_projects = contextual_projects
+                    .get(&(&package.id, extra))
+                    .cloned()
+                    .unwrap_or_default();
+                if let Some(project) = extra.and_then(|extra| {
+                    project_for_selected_extras(
+                        &package.id.name,
+                        iter::once(extra),
+                        &activated_projects,
+                        &activated_extras,
+                        &activated_groups,
+                        self.lock().conflicts(),
+                    )
+                }) {
+                    parent_contextual_projects.insert(project);
+                }
                 for dep in deps {
                     let mut dep_reachability = dep.complexified_marker;
                     dep_reachability.and(parent_reachability);
@@ -676,15 +825,51 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         &activated_groups,
                         self.lock().conflicts(),
                     );
+                    let contextual_project = additional_activated_project
+                        .is_none()
+                        .then(|| {
+                            project_for_selected_extras(
+                                &dep.package_id.name,
+                                dep.extra.iter(),
+                                &activated_projects,
+                                &activated_extras,
+                                &activated_groups,
+                                self.lock().conflicts(),
+                            )
+                        })
+                        .flatten();
                     if !dep_reachability.evaluate(
                         marker_env,
                         activated_projects
                             .iter()
                             .copied()
-                            .chain(additional_activated_project),
+                            .filter(|project| {
+                                !project_conflicts_with_extras(
+                                    project,
+                                    &additional_activated_extras,
+                                    self.lock().conflicts(),
+                                )
+                            })
+                            .chain(additional_activated_project)
+                            .chain(parent_contextual_projects.iter().copied())
+                            .chain(contextual_project),
                         activated_extras
                             .iter()
                             .chain(additional_activated_extras.iter())
+                            .filter(|(package, extra)| {
+                                parent_contextual_projects
+                                    .iter()
+                                    .copied()
+                                    .chain(contextual_project)
+                                    .all(|project| {
+                                        !project_conflicts_with_extra(
+                                            project,
+                                            package,
+                                            extra,
+                                            self.lock().conflicts(),
+                                        )
+                                    })
+                            })
                             .copied(),
                         activated_groups.iter().copied(),
                     ) {
@@ -698,6 +883,13 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     // preliminary traversal. Otherwise, an unreachable package could activate an
                     // extra and cause the conflict check below to report a false positive.
 
+                    activated_projects.retain(|project| {
+                        !project_conflicts_with_extras(
+                            project,
+                            &additional_activated_extras,
+                            self.lock().conflicts(),
+                        )
+                    });
                     if let Some(project) = additional_activated_project {
                         activated_projects.push(project);
                     }
@@ -706,6 +898,16 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         activated_extras.push(key);
                     }
                     let dep_dist = self.lock().find_by_id(&dep.package_id);
+                    let mut inherited_contextual_projects = parent_contextual_projects.clone();
+                    if let Some(project) = contextual_project {
+                        inherited_contextual_projects.insert(project);
+                    }
+                    if !inherited_contextual_projects.is_empty() {
+                        contextual_projects
+                            .entry((&dep.package_id, None))
+                            .or_default()
+                            .extend(inherited_contextual_projects.iter().copied());
+                    }
                     // Push its dependencies on the queue.
                     if add_reachability(
                         &mut reachability,
@@ -715,6 +917,12 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         queue.push_back((dep_dist, None));
                     }
                     for extra in &dep.extra {
+                        if !inherited_contextual_projects.is_empty() {
+                            contextual_projects
+                                .entry((&dep.package_id, Some(extra)))
+                                .or_default()
+                                .extend(inherited_contextual_projects.iter().copied());
+                        }
                         if add_reachability(
                             &mut reachability,
                             (&dep.package_id, Some(extra)),
@@ -765,20 +973,68 @@ trait InstallableExt<'lock>: Installable<'lock> {
             } else {
                 Either::Right(package.dependencies.iter())
             };
+            let mut active_contextual_projects = contextual_projects
+                .get(&(&package.id, extra))
+                .cloned()
+                .unwrap_or_default();
+            if let Some(project) = extra.and_then(|extra| {
+                project_for_selected_extras(
+                    &package.id.name,
+                    iter::once(extra),
+                    &activated_projects,
+                    &activated_extras,
+                    &activated_groups,
+                    self.lock().conflicts(),
+                )
+            }) {
+                active_contextual_projects.insert(project);
+            }
             for dep in deps {
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
                 }
+                let mut dependency_contextual_projects = active_contextual_projects.clone();
+                if let Some(project) = project_for_selected_extras(
+                    &dep.package_id.name,
+                    dep.extra.iter(),
+                    &activated_projects,
+                    &activated_extras,
+                    &activated_groups,
+                    self.lock().conflicts(),
+                ) {
+                    dependency_contextual_projects.insert(project);
+                }
                 if !dep.complexified_marker.evaluate(
                     marker_env,
-                    activated_projects.iter().copied(),
-                    activated_extras.iter().copied(),
+                    activated_projects
+                        .iter()
+                        .copied()
+                        .chain(dependency_contextual_projects.iter().copied()),
+                    activated_extras
+                        .iter()
+                        .filter(|(package, extra)| {
+                            dependency_contextual_projects.iter().all(|project| {
+                                !project_conflicts_with_extra(
+                                    project,
+                                    package,
+                                    extra,
+                                    self.lock().conflicts(),
+                                )
+                            })
+                        })
+                        .copied(),
                     activated_groups.iter().copied(),
                 ) {
                     continue;
                 }
 
                 let dep_dist = self.lock().find_by_id(&dep.package_id);
+                if !dependency_contextual_projects.is_empty() {
+                    contextual_projects
+                        .entry((&dep.package_id, None))
+                        .or_default()
+                        .extend(dependency_contextual_projects.iter().copied());
+                }
 
                 // Add the dependency to the graph.
                 let dep_index = match inverse.entry(&dep.package_id) {
@@ -813,6 +1069,12 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     queue.push_back((dep_dist, None));
                 }
                 for extra in &dep.extra {
+                    if !dependency_contextual_projects.is_empty() {
+                        contextual_projects
+                            .entry((&dep.package_id, Some(extra)))
+                            .or_default()
+                            .extend(dependency_contextual_projects.iter().copied());
+                    }
                     if seen.insert((&dep.package_id, Some(extra))) {
                         queue.push_back((dep_dist, Some(extra)));
                     }
@@ -896,7 +1158,7 @@ impl<'lock> Installable<'lock> for LockedPackages<'lock> {
     }
 
     fn roots(&self) -> impl Iterator<Item = &PackageName> {
-        std::iter::empty()
+        iter::empty()
     }
 
     fn project_name(&self) -> Option<&PackageName> {
@@ -1400,7 +1662,7 @@ provides-extras = ["cli"]
         }
 
         fn roots(&self) -> impl Iterator<Item = &PackageName> {
-            std::iter::once(self.root_name)
+            iter::once(self.root_name)
         }
 
         fn project_name(&self) -> Option<&PackageName> {

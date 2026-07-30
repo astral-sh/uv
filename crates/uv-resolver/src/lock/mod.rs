@@ -51,8 +51,9 @@ use uv_platform_tags::{
 };
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
-    ConflictItem, ConflictKindRef, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
-    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ConflictItem, ConflictKindRef, ConflictSet, Conflicts, HashAlgorithm, HashDigest, HashDigests,
+    Hashes, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ResolverMarkerEnvironment,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -397,7 +398,7 @@ impl<'lock> DependencySelectionContext<'lock> {
 }
 
 /// The dependency section in which a locked edge is stored.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum DependencyContext<'a> {
     Production,
     Extra(&'a ExtraName),
@@ -1436,6 +1437,272 @@ impl Lock {
     /// Returns the dependency groups that were used to generate this lock.
     pub(crate) fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
         &self.manifest.dependency_groups
+    }
+
+    /// Discover selected conflict items across all reachable locked dependency contexts.
+    ///
+    /// Conflict selections can be introduced by root extras or groups and by arbitrarily nested
+    /// dependency extras. Revisit their marker-valued reachability until those selections settle
+    /// before deciding whether a conflicting project branch is applicable.
+    pub(crate) fn selected_conflict_activations<'lock>(
+        &'lock self,
+        roots: &[&'lock Package],
+        groups: &DependencyGroupsWithDefaults,
+        selected_root_extra: impl Fn(&Package, &ExtraName) -> bool,
+        marker_environment: Option<&ResolverMarkerEnvironment>,
+    ) -> FxHashMap<ConflictItem, MarkerTree> {
+        if self.conflicts.is_empty() {
+            return FxHashMap::default();
+        }
+
+        let world = UniversalMarker::new(
+            MarkerTree::TRUE,
+            ConflictMarker::from_conflicts(&self.conflicts),
+        );
+        let mut previous: FxHashMap<ConflictItem, MarkerTree> = FxHashMap::default();
+
+        loop {
+            // Activation follows the installer's discovery semantics: once a reachable path
+            // selects an extra, that choice remains active even if it subsequently suppresses
+            // another project that was visited provisionally.
+            let mut activated = previous.clone();
+            let mut queue = VecDeque::new();
+            let mut reached = FxHashMap::default();
+
+            let enqueue = |queue: &mut VecDeque<_>,
+                           reached: &mut FxHashMap<_, MarkerTree>,
+                           package: &'lock Package,
+                           context: DependencyContext<'lock>,
+                           contextual_projects: BTreeSet<&'lock PackageName>,
+                           marker: MarkerTree| {
+                let key = (&package.id, context, contextual_projects.clone());
+                let combined = reached
+                    .get(&key)
+                    .copied()
+                    .unwrap_or(MarkerTree::FALSE)
+                    .or(marker);
+                if reached
+                    .get(&key)
+                    .is_some_and(|existing| *existing == combined)
+                {
+                    return;
+                }
+                reached.insert(key, combined);
+                queue.push_back((package, context, contextual_projects, combined));
+            };
+
+            for root in roots {
+                if groups.prod() {
+                    if self
+                        .conflicts
+                        .contains(&root.id.name, ConflictKindRef::Project)
+                    {
+                        activated
+                            .insert(ConflictItem::from(root.id.name.clone()), MarkerTree::TRUE);
+                    }
+                    enqueue(
+                        &mut queue,
+                        &mut reached,
+                        root,
+                        DependencyContext::Production,
+                        BTreeSet::new(),
+                        MarkerTree::TRUE,
+                    );
+                    for extra in root.optional_dependencies.keys() {
+                        if !selected_root_extra(root, extra) {
+                            continue;
+                        }
+                        if let Some(item) = DependencyContext::Extra(extra)
+                            .selected_conflict(&root.id.name, &self.conflicts)
+                        {
+                            activated.insert(item, MarkerTree::TRUE);
+                        }
+                        enqueue(
+                            &mut queue,
+                            &mut reached,
+                            root,
+                            DependencyContext::Extra(extra),
+                            BTreeSet::new(),
+                            MarkerTree::TRUE,
+                        );
+                    }
+                }
+
+                for group in root
+                    .dependency_groups
+                    .keys()
+                    .filter(|group| groups.contains(group))
+                {
+                    if let Some(item) = DependencyContext::Group(group)
+                        .selected_conflict(&root.id.name, &self.conflicts)
+                    {
+                        activated.insert(item, MarkerTree::TRUE);
+                    }
+                    enqueue(
+                        &mut queue,
+                        &mut reached,
+                        root,
+                        DependencyContext::Group(group),
+                        BTreeSet::new(),
+                        MarkerTree::TRUE,
+                    );
+                }
+            }
+
+            while let Some((package, context, inherited_projects, parent_marker)) =
+                queue.pop_front()
+            {
+                for dependency in context.dependencies(package) {
+                    let mut known = previous.clone();
+                    for (item, marker) in &activated {
+                        known
+                            .entry(item.clone())
+                            .and_modify(|existing| *existing = existing.or(*marker))
+                            .or_insert(*marker);
+                    }
+
+                    if let Some(item) = context.selected_conflict(&package.id.name, &self.conflicts)
+                    {
+                        known.insert(item, parent_marker);
+                    }
+
+                    for extra in &dependency.extra {
+                        if self.conflicts.contains(&dependency.package_id.name, extra) {
+                            known.insert(
+                                ConflictItem::from((
+                                    dependency.package_id.name.clone(),
+                                    extra.clone(),
+                                )),
+                                parent_marker,
+                            );
+                        }
+                    }
+
+                    let child = self.find_by_id(&dependency.package_id);
+                    let mut contextual_projects = inherited_projects.clone();
+                    let selected_nonconflicting_extra = dependency.extra.iter().any(|extra| {
+                        self.conflicts
+                            .contains(&child.id.name, ConflictKindRef::Project)
+                            && !self.conflicts.iter().any(|set| {
+                                set.contains(&child.id.name, ConflictKindRef::Project)
+                                    && set.contains(&child.id.name, extra)
+                            })
+                    });
+                    if selected_nonconflicting_extra {
+                        contextual_projects.insert(&child.id.name);
+                    }
+
+                    for project in &contextual_projects {
+                        known.insert(ConflictItem::from((*project).clone()), parent_marker);
+                        for set in self
+                            .conflicts
+                            .iter()
+                            .filter(|set| set.contains(project, ConflictKindRef::Project))
+                        {
+                            for item in set.iter().filter(|item| item.package() != *project) {
+                                known.remove(item);
+                            }
+                            for item in set.iter().filter(|item| item.package() == *project) {
+                                if item.extra().is_some() {
+                                    known.remove(item);
+                                }
+                            }
+                        }
+                    }
+
+                    if self
+                        .conflicts
+                        .contains(&child.id.name, ConflictKindRef::Project)
+                    {
+                        let project = ConflictItem::from(child.id.name.clone());
+                        let mut project_marker = parent_marker;
+                        for conflict in self
+                            .conflicts
+                            .iter()
+                            .filter(|set| set.contains(&child.id.name, ConflictKindRef::Project))
+                            .flat_map(ConflictSet::iter)
+                            .filter(|item| *item != &project)
+                        {
+                            if contextual_projects.contains(&child.id.name)
+                                && conflict.package() == &child.id.name
+                            {
+                                continue;
+                            }
+                            if let Some(marker) = activated
+                                .get(conflict)
+                                .or_else(|| previous.get(conflict))
+                                .or_else(|| known.get(conflict))
+                            {
+                                project_marker = project_marker.and(marker.negate());
+                            }
+                        }
+                        if !project_marker.is_false() {
+                            known.insert(project, project_marker);
+                            if dependency.extra.iter().all(|extra| {
+                                !self.conflicts.iter().any(|set| {
+                                    set.contains(&child.id.name, ConflictKindRef::Project)
+                                        && set.contains(&child.id.name, extra)
+                                })
+                            }) {
+                                contextual_projects.insert(&child.id.name);
+                            }
+                        }
+                    }
+
+                    let marker = self.simplify_environment(
+                        crate::universal_marker::resolve_activated_extras(
+                            dependency
+                                .complexified_marker
+                                .combined()
+                                .and(world.combined()),
+                            Some(&package.id.name),
+                            &known,
+                        )
+                        .and(parent_marker),
+                    );
+                    if marker.is_false()
+                        || marker_environment
+                            .is_some_and(|environment| !marker.evaluate(environment, &[]))
+                    {
+                        continue;
+                    }
+
+                    for extra in &dependency.extra {
+                        if self.conflicts.contains(&child.id.name, extra) {
+                            let item = ConflictItem::from((child.id.name.clone(), extra.clone()));
+                            activated
+                                .entry(item)
+                                .and_modify(|existing| *existing = existing.or(marker))
+                                .or_insert(marker);
+                        }
+                    }
+
+                    enqueue(
+                        &mut queue,
+                        &mut reached,
+                        child,
+                        DependencyContext::Production,
+                        contextual_projects.clone(),
+                        marker,
+                    );
+                    for extra in &dependency.extra {
+                        enqueue(
+                            &mut queue,
+                            &mut reached,
+                            child,
+                            DependencyContext::Extra(extra),
+                            contextual_projects.clone(),
+                            marker,
+                        );
+                    }
+                }
+            }
+
+            if activated == previous {
+                return activated;
+            }
+            previous = activated;
+        }
     }
 
     /// Returns the environment-specific direct dependency selections for a lock target.

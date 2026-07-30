@@ -64,26 +64,30 @@ impl<'lock> ExportableRequirements<'lock> {
 
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
-        let mut activated_items = FxHashMap::default();
+        let roots = target
+            .roots()
+            .filter(|name| !prune.contains(name))
+            .map(|name| {
+                target
+                    .lock()
+                    .find_by_name(name)
+                    .map_err(|_| LockErrorKind::MultipleRootPackages { name: name.clone() })?
+                    .ok_or_else(|| {
+                        LockError::from(LockErrorKind::MissingRootPackage { name: name.clone() })
+                    })
+            })
+            .collect::<Result<Vec<_>, LockError>>()?;
+        let mut activated_items = target.lock().selected_conflict_activations(
+            &roots,
+            groups,
+            |_, extra| extras.contains(extra),
+            None,
+        );
 
         let root = graph.add_node(Node::Root);
 
         // Add the workspace packages to the queue.
-        for root_name in target.roots() {
-            if prune.contains(root_name) {
-                continue;
-            }
-
-            let dist = target
-                .lock()
-                .find_by_name(root_name)
-                .map_err(|_| LockErrorKind::MultipleRootPackages {
-                    name: root_name.clone(),
-                })?
-                .ok_or_else(|| LockErrorKind::MissingRootPackage {
-                    name: root_name.clone(),
-                })?;
-
+        for dist in roots {
             // Track the activated package in the list of known conflicts.
             activated_items.insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
 
@@ -219,6 +223,15 @@ impl<'lock> ExportableRequirements<'lock> {
                     else {
                         continue;
                     };
+
+                    for extra in &requirement.extras {
+                        if target.lock().conflicts().contains(&dist.id.name, extra) {
+                            activated_items
+                                .entry(ConflictItem::from((dist.id.name.clone(), extra.clone())))
+                                .and_modify(|existing| *existing = existing.or(marker))
+                                .or_insert(marker);
+                        }
+                    }
 
                     // Add the dependency to the graph and get its index.
                     let dep_index = *inverse
@@ -499,6 +512,12 @@ fn conflict_marker_reachability<'lock>(
 
                 if conflicts.contains(child.name(), ConflictKindRef::Project) {
                     let project = ConflictItem::from(child.name().clone());
+                    let contextual_project = child_edge.weight().dep_extras().iter().any(|extra| {
+                        !conflicts.iter().any(|conflict| {
+                            conflict.contains(child.name(), ConflictKindRef::Project)
+                                && conflict.contains(child.name(), *extra)
+                        })
+                    });
                     let mut project_marker = parent_marker;
                     for conflict in conflicts
                         .iter()
@@ -508,6 +527,9 @@ fn conflict_marker_reachability<'lock>(
                         .flat_map(ConflictSet::iter)
                         .filter(|item| *item != &project)
                     {
+                        if contextual_project && conflict.package() == child.name() {
+                            continue;
+                        }
                         if let Some(marker) = parent_map.get(conflict) {
                             project_marker = project_marker.and(marker.negate());
                         }

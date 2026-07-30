@@ -3037,6 +3037,507 @@ fn project_conflicting_dependency_extra_installs_selected_package() -> Result<()
     Ok(())
 }
 
+/// Project-conflict branches cannot make platform-inactive dependencies reachable.
+#[test]
+fn project_conflicting_dependency_tree_respects_platform() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["provider[first,second] ; sys_platform == 'win32'"]
+
+        [tool.uv]
+        conflicts = [[{ package = "provider" }, { package = "provider", extra = "first" }]]
+
+        [tool.uv.sources]
+        provider = [
+            { path = "provider-a", marker = "sys_platform == 'win32'" },
+            { path = "provider-b", marker = "sys_platform != 'win32'" },
+        ]
+        "#,
+    )?;
+    for (directory, version) in [("provider-a", "1.0.0"), ("provider-b", "2.0.0")] {
+        context
+            .temp_dir
+            .child(format!("{directory}/pyproject.toml"))
+            .write_str(&format!(
+                r#"
+                [project]
+                name = "provider"
+                version = "{version}"
+                requires-python = ">=3.12"
+
+                [project.optional-dependencies]
+                first = []
+                second = ["leaf"]
+
+                [tool.uv.sources]
+                leaf = {{ path = "../leaf" }}
+                "#
+            ))?;
+    }
+    context.temp_dir.child("leaf/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features=package-conflicts"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group=dev")
+        .arg("--python-platform=x86_64-unknown-linux-gnu")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group=dev")
+        .arg("--python-version=3.12")
+        .arg("--python-platform=x86_64-unknown-linux-gnu"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group=dev")
+        .arg("--python-version=3.12")
+        .arg("--python-platform=x86_64-pc-windows-msvc"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    ├── provider[second] v1.0.0 (group: dev)
+    │   └── leaf v1.0.0 (extra: second)
+    ├── provider v1.0.0 (group: dev)
+    └── provider v1.0.0 (group: dev)
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features=package-conflicts,json-output")
+        .arg("--frozen")
+        .arg("--only-group=dev")
+        .arg("--python-version=3.12")
+        .arg("--python-platform=x86_64-unknown-linux-gnu")
+        .arg("--format=json"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [],
+      "inverted": false,
+      "members": [
+        {
+          "name": "project",
+          "path": "[TEMP_DIR]/",
+          "id": "project==1.0.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "project==1.0.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+    "#);
+
+    Ok(())
+}
+
+/// Selecting an incompatible extra cannot discard a separately selected, compatible extra.
+#[test]
+fn project_conflicting_dependency_preserves_non_conflicting_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        features = ["provider[first,third]"]
+
+        [dependency-groups]
+        dev = ["provider[first,third]"]
+
+        [tool.uv]
+        conflicts = [
+            [{ package = "provider" }, { package = "provider", extra = "first" }],
+            [{ package = "child" }, { package = "child", extra = "alpha" }],
+        ]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "provider"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+
+            [project.optional-dependencies]
+            first = ["first-leaf", "child[alpha]"]
+            third = ["third-leaf", "child[beta]"]
+
+            [tool.uv.sources]
+            first-leaf = { path = "../first-leaf" }
+            third-leaf = { path = "../third-leaf" }
+            child = { path = "../child" }
+            "#,
+        )?;
+    context.temp_dir.child("child/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        alpha = ["alpha-leaf"]
+        beta = ["beta-leaf"]
+
+        [tool.uv.sources]
+        alpha-leaf = { path = "../alpha-leaf" }
+        beta-leaf = { path = "../beta-leaf" }
+        "#,
+    )?;
+    for leaf in ["first-leaf", "third-leaf", "alpha-leaf", "beta-leaf"] {
+        context
+            .temp_dir
+            .child(format!("{leaf}/pyproject.toml"))
+            .write_str(&format!(
+                r#"
+                [project]
+                name = "{leaf}"
+                version = "1.0.0"
+                requires-python = ">=3.12"
+                "#
+            ))?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features=package-conflicts"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group=dev")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 6 packages
+    Would install 6 packages
+     + alpha-leaf @ file://[TEMP_DIR]/alpha-leaf
+     + beta-leaf @ file://[TEMP_DIR]/beta-leaf
+     + child @ file://[TEMP_DIR]/child
+     + first-leaf @ file://[TEMP_DIR]/first-leaf
+     + provider @ file://[TEMP_DIR]/provider
+     + third-leaf @ file://[TEMP_DIR]/third-leaf
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--no-default-groups")
+        .arg("--extra=features")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 6 packages
+    Would install 6 packages
+     + alpha-leaf @ file://[TEMP_DIR]/alpha-leaf
+     + beta-leaf @ file://[TEMP_DIR]/beta-leaf
+     + child @ file://[TEMP_DIR]/child
+     + first-leaf @ file://[TEMP_DIR]/first-leaf
+     + provider @ file://[TEMP_DIR]/provider
+     + third-leaf @ file://[TEMP_DIR]/third-leaf
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group=dev")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --preview-features=package-conflicts --frozen --only-group=dev --no-hashes
+    ./alpha-leaf
+        # via child
+    ./beta-leaf
+        # via child
+    ./child
+        # via provider
+    ./first-leaf
+        # via provider
+    ./provider
+    ./third-leaf
+        # via provider
+    ");
+
+    Ok(())
+}
+
+/// Selecting another package's conflicting extra disables the incompatible project branch.
+#[test]
+fn project_conflicting_dependency_respects_other_selected_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        provider = ["provider"]
+        other = ["other[first]"]
+
+        [dependency-groups]
+        provider = ["provider"]
+        bridge = ["bridge"]
+        other = ["other[first]"]
+        both = [{ include-group = "provider" }, { include-group = "bridge" }]
+
+        [tool.uv]
+        conflicts = [[{ package = "provider" }, { package = "other", extra = "first" }]]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        bridge = { path = "bridge" }
+        other = { path = "other" }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "provider"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["provider-leaf"]
+
+            [tool.uv.sources]
+            provider-leaf = { path = "../provider-leaf" }
+            "#,
+        )?;
+    context.temp_dir.child("other/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "other"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        first = ["other-leaf"]
+
+        [tool.uv.sources]
+        other-leaf = { path = "../other-leaf" }
+        "#,
+    )?;
+    context.temp_dir.child("bridge/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "bridge"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["other[first]"]
+
+        [tool.uv.sources]
+        other = { path = "../other" }
+        "#,
+    )?;
+    for leaf in ["provider-leaf", "other-leaf"] {
+        context
+            .temp_dir
+            .child(format!("{leaf}/pyproject.toml"))
+            .write_str(&format!(
+                r#"
+                [project]
+                name = "{leaf}"
+                version = "1.0.0"
+                requires-python = ">=3.12"
+                "#
+            ))?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features=package-conflicts"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group=both")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 3 packages
+    Would install 3 packages
+     + bridge @ file://[TEMP_DIR]/bridge
+     + other @ file://[TEMP_DIR]/other
+     + other-leaf @ file://[TEMP_DIR]/other-leaf
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group=both"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    └── bridge v1.0.0 (group: both)
+        ├── other[first] v1.0.0
+        │   └── other-leaf v1.0.0 (extra: first)
+        └── other v1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group=both")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --preview-features=package-conflicts --frozen --only-group=both --no-hashes
+    ./bridge
+    ./other
+        # via bridge
+    ./other-leaf
+        # via other
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group=provider"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    └── provider v1.0.0 (group: provider)
+        └── provider-leaf v1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group=provider")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --preview-features=package-conflicts --frozen --only-group=provider --no-hashes
+    ./provider
+    ./provider-leaf
+        # via provider
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--no-default-groups")
+        .arg("--extra=provider")
+        .arg("--extra=other")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --preview-features=package-conflicts --frozen --no-default-groups --extra=provider --extra=other --no-hashes
+    ./other
+        # via project
+    ./other-leaf
+        # via other
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--no-default-groups")
+        .arg("--extra=provider")
+        .arg("--extra=other")
+        .arg("--format=pylock.toml")
+        .arg("--no-hashes"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --preview-features=package-conflicts --frozen --no-default-groups --extra=provider --extra=other --format=pylock.toml --no-hashes
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "other"
+    directory = { path = "other", editable = false }
+
+    [[packages]]
+    name = "other-leaf"
+    directory = { path = "other-leaf", editable = false }
+    "#);
+
+    Ok(())
+}
+
 #[test]
 fn multiple_sources_index_disjoint_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
