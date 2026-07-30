@@ -781,7 +781,12 @@ jobs:
 
       - name: "Validate global Python install"
         shell: bash -el {0}
-        run: python ./scripts/check_system_python.py --uv ./uv
+        run: |
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            # Conda sets SSL_CERT_FILE to a nonexistent path on Windows.
+            unset SSL_CERT_FILE
+          fi
+          python ./scripts/check_system_python.py --uv ./uv
 
   system-test-amazonlinux:
     timeout-minutes: 10
