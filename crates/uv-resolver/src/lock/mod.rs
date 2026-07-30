@@ -483,7 +483,7 @@ impl<'a> LockedDependencyBuilder<'a> {
         dependencies: &mut Vec<Dependency>,
         expected: &ExpectedPackageDependencies<'_>,
         context: DependencyContext<'_>,
-        activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, MarkerTree>>,
+        activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, UniversalMarker>>,
     ) -> Result<bool, LockError> {
         let empty_requirements = BTreeSet::new();
         let requirements = match context {
@@ -565,11 +565,11 @@ impl<'a> LockedDependencyBuilder<'a> {
                 covered_marker = covered_marker.or(marker.combined());
 
                 let activated = activated_extras.entry(dependency.id.clone()).or_default();
-                let activation_marker = marker.pep508();
+                let activation_marker = marker;
                 for extra in &requirement.extras {
                     activated
                         .entry(extra.clone())
-                        .and_modify(|existing| *existing = existing.or(activation_marker))
+                        .and_modify(|existing| existing.or(activation_marker))
                         .or_insert(activation_marker);
                 }
 
@@ -663,8 +663,8 @@ struct ExpectedPackageDependencies<'lock> {
     declarations: BTreeSet<Requirement>,
     provides_extra: &'lock [ExtraName],
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
-    /// The marker environments in which each requested extra is active.
-    activated_extras: BTreeMap<ExtraName, MarkerTree>,
+    /// The marker environments and conflict contexts in which each requested extra is active.
+    activated_extras: BTreeMap<ExtraName, UniversalMarker>,
     /// The environment under which this package can be selected.
     package_marker: UniversalMarker,
     /// The package environment before platform-specific source forks are applied.
@@ -685,7 +685,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         package_requires_python: Option<&VersionSpecifiers>,
         package_version: Option<&Version>,
         package: &'lock Package,
-        activated_extras: BTreeMap<ExtraName, MarkerTree>,
+        activated_extras: BTreeMap<ExtraName, UniversalMarker>,
         workspace_root: &'lock Path,
     ) -> Self {
         let package_context = package_version.map(|version| (&package.id.name, version));
@@ -869,7 +869,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         if let DependencyContext::Extra(extra) = context
             && let Some(marker) = self.activated_extras.get(extra)
         {
-            parent_marker.and(UniversalMarker::from_combined(*marker));
+            parent_marker.and(UniversalMarker::from_combined(marker.pep508()));
         }
 
         if self.lock.conflicts.is_empty() {
@@ -2052,7 +2052,7 @@ impl Lock {
         package_requires_python: Option<&VersionSpecifiers>,
         package_version: Option<&Version>,
         package: &'lock Package,
-        activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, MarkerTree>>,
+        activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, UniversalMarker>>,
         remotes: &mut Option<BTreeSet<UrlString>>,
         locals: &mut Option<BTreeSet<Box<Path>>>,
         root: &Path,
@@ -2212,7 +2212,7 @@ impl Lock {
     fn satisfied_no_metadata<'lock>(
         &self,
         package: &'lock Package,
-        activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, MarkerTree>>,
+        activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, UniversalMarker>>,
         missing_metadata: bool,
         expected: &ExpectedPackageDependencies,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
@@ -2238,7 +2238,16 @@ impl Lock {
             let parent_marker = expected.context_parent_marker(context);
             // Conflict resolution retains source-fork predicates on child edges, even when the
             // parent package is reachable only within that fork.
-            let simplification_parent_marker = if self.conflicts.is_empty() {
+            let selected_extra = if let DependencyContext::Extra(extra) = context {
+                expected
+                    .activated_extras
+                    .get(extra)
+                    .is_some_and(|marker| marker.has_conflict_marker())
+                    && package.fork_markers.is_empty()
+            } else {
+                false
+            };
+            let simplification_parent_marker = if self.conflicts.is_empty() || selected_extra {
                 parent_marker
             } else {
                 expected.unforked_package_marker
@@ -2326,9 +2335,9 @@ impl Lock {
             allow_missing_package_metadata && self.supports_missing_package_metadata();
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
-        let mut activated_extras: FxHashMap<PackageId, BTreeMap<ExtraName, MarkerTree>> =
+        let mut activated_extras: FxHashMap<PackageId, BTreeMap<ExtraName, UniversalMarker>> =
             FxHashMap::default();
-        let mut validated_extras: FxHashMap<PackageId, BTreeMap<ExtraName, MarkerTree>> =
+        let mut validated_extras: FxHashMap<PackageId, BTreeMap<ExtraName, UniversalMarker>> =
             FxHashMap::default();
 
         // Validate that the lockfile was generated with the same root members.
@@ -2657,8 +2666,10 @@ impl Lock {
                     for extra in &requirement.extras {
                         activated
                             .entry(extra.clone())
-                            .and_modify(|existing| *existing = existing.or(marker))
-                            .or_insert(marker);
+                            .and_modify(|existing| {
+                                existing.or(UniversalMarker::from_combined(marker));
+                            })
+                            .or_insert_with(|| UniversalMarker::from_combined(marker));
                     }
 
                     if seen.insert(&package.id) {
