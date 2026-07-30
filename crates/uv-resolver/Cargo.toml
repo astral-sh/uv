@@ -64,7 +64,10 @@ tokio-stream = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+uv-small-str = { workspace = true }
+
 insta = { workspace = true }
+serde_json = { workspace = true }
 
 [features]
 clap = ["uv-configuration/clap"]

@@ -1858,8 +1858,8 @@ mod tests {
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
-        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
-        IndexMetadataRef, IndexName, IndexUrl, ToUrlError,
+        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+        IndexName, IndexUrl, ToUrlError,
     };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path, path_regex};
