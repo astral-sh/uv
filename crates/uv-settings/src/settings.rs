@@ -855,6 +855,19 @@ pub struct ResolverInstallerSchema {
     /// If an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is
     /// given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
     /// PyPI default index.
+    ///
+    /// An index can proxy another named index with `proxy-for`. Set `artifact-base-url` to the
+    /// URL prefix where the proxy serves package files. uv downloads from the proxy without
+    /// changing the original index or package URLs recorded in lockfiles. Use
+    /// `proxy-for = "pypi"` to proxy PyPI without configuring it separately:
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "socket"
+    /// url = "https://proxy.example.com/simple/"
+    /// artifact-base-url = "https://proxy.example.com/files/"
+    /// proxy-for = "pypi"
+    /// ```
     #[option(
         default = "\"[]\"",
         value_type = "dict",

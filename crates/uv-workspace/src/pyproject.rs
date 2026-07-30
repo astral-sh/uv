@@ -341,6 +341,19 @@ pub struct ToolUv {
     /// If an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is
     /// given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
     /// PyPI default index.
+    ///
+    /// An index can proxy another named index with `proxy-for`. Set `artifact-base-url` to the
+    /// URL prefix where the proxy serves package files. uv downloads from the proxy without
+    /// changing the original index or package URLs recorded in lockfiles. Use
+    /// `proxy-for = "pypi"` to proxy PyPI without configuring it separately:
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "socket"
+    /// url = "https://proxy.example.com/simple/"
+    /// artifact-base-url = "https://proxy.example.com/files/"
+    /// proxy-for = "pypi"
+    /// ```
     #[option(
         default = "[]",
         value_type = "dict",
@@ -1996,5 +2009,137 @@ impl OptionsMetadata for BuildBackendSettingsSchema {
         Self: Sized + 'static,
     {
         BuildBackendSettings::metadata()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::{Context, Result};
+    use uv_distribution_types::Index;
+
+    use super::{PyProjectToml, PyprojectTomlError};
+
+    fn configured_indexes(value: &str) -> Result<Vec<Index>> {
+        PyProjectToml::from_string(value.to_owned(), "pyproject.toml")?
+            .tool
+            .context("missing tool configuration")?
+            .uv
+            .context("missing uv configuration")?
+            .index
+            .context("missing index configuration")
+    }
+
+    fn assert_index(
+        index: &Index,
+        name: &str,
+        artifact_base_url: Option<&str>,
+        proxy_for: Option<&str>,
+    ) {
+        assert_eq!(index.name.as_deref(), Some(name));
+        assert_eq!(
+            index.artifact_base_url.as_ref().map(|url| url.as_str()),
+            artifact_base_url
+        );
+        assert_eq!(index.proxy_for.as_deref(), proxy_for);
+    }
+
+    #[test]
+    fn canonical_and_proxy_artifact_bases_preserve_index_order() -> Result<()> {
+        let indexes = configured_indexes(
+            r#"
+            [[tool.uv.index]]
+            name = "internal"
+            url = "https://index.example.com/simple/"
+            artifact-base-url = "https://files.example.com/packages/"
+
+            [[tool.uv.index]]
+            name = "internal-proxy"
+            url = "https://proxy.example.com/simple/"
+            artifact-base-url = "https://proxy.example.com/files/"
+            proxy-for = "internal"
+
+            [[tool.uv.index]]
+            name = "pypi-proxy"
+            url = "https://pypi-proxy.example.com/simple/"
+            artifact-base-url = "https://pypi-proxy.example.com/files/"
+            proxy-for = "pypi"
+
+            [[tool.uv.index]]
+            name = "ordinary"
+            url = "https://ordinary.example.com/simple/"
+            "#,
+        )?;
+
+        assert_eq!(indexes.len(), 4);
+        assert_index(
+            &indexes[0],
+            "internal",
+            Some("https://files.example.com/packages/"),
+            None,
+        );
+        assert_index(
+            &indexes[1],
+            "internal-proxy",
+            Some("https://proxy.example.com/files/"),
+            Some("internal"),
+        );
+        assert_index(
+            &indexes[2],
+            "pypi-proxy",
+            Some("https://pypi-proxy.example.com/files/"),
+            Some("pypi"),
+        );
+        assert_index(&indexes[3], "ordinary", None, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_proxy_index_names_and_defaults_are_rejected() -> Result<()> {
+        for (configuration, expected) in [
+            (
+                r#"
+                [[tool.uv.index]]
+                name = "socket"
+                url = "https://proxy-one.example.com/simple/"
+                artifact-base-url = "https://proxy-one.example.com/files/"
+                proxy-for = "pypi"
+
+                [[tool.uv.index]]
+                name = "socket"
+                url = "https://proxy-two.example.com/simple/"
+                artifact-base-url = "https://proxy-two.example.com/files/"
+                proxy-for = "pypi"
+                "#,
+                "duplicate index name `socket`",
+            ),
+            (
+                r#"
+                [[tool.uv.index]]
+                name = "internal"
+                url = "https://index.example.com/simple/"
+                artifact-base-url = "https://files.example.com/packages/"
+                default = true
+
+                [[tool.uv.index]]
+                name = "socket"
+                url = "https://proxy.example.com/simple/"
+                artifact-base-url = "https://proxy.example.com/files/"
+                proxy-for = "internal"
+                default = true
+                "#,
+                "found multiple indexes with `default = true`; only one index may be marked as default",
+            ),
+        ] {
+            let error = PyProjectToml::from_string(configuration.to_owned(), "pyproject.toml")
+                .err()
+                .context("invalid proxy index configuration should be rejected")?;
+            let PyprojectTomlError::Toml(error) = error else {
+                anyhow::bail!("invalid proxy index configuration should fail TOML deserialization");
+            };
+            assert_eq!(error.message(), expected);
+        }
+
+        Ok(())
     }
 }
