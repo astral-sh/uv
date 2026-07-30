@@ -147,7 +147,7 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
             return true;
         };
 
-        if package.is_some_and(|package| package == *name) {
+        if package == Some(*name) {
             return true;
         }
 
