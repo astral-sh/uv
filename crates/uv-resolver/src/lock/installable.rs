@@ -82,12 +82,9 @@ pub trait Installable<'lock> {
     /// Return the [`PackageName`] of the root packages in the target.
     fn roots(&self) -> impl Iterator<Item = &PackageName>;
 
-    /// Return packages whose dependency groups, but not production dependencies, are included.
-    fn group_roots(
-        &self,
-        _groups: &DependencyGroupsWithDefaults,
-    ) -> impl Iterator<Item = &PackageName> {
-        std::iter::empty()
+    /// Return the package whose dependency groups, but not production dependencies, are included.
+    fn group_root(&self, _groups: &DependencyGroupsWithDefaults) -> Option<&PackageName> {
+        None
     }
 
     /// Return whether a dependency group should be included for its owning package.
@@ -130,8 +127,8 @@ pub trait Installable<'lock> {
                     })
             })
             .collect::<Result<Vec<_>, LockError>>()?;
-        let group_roots = self
-            .group_roots(groups)
+        let group_root = self
+            .group_root(groups)
             .map(|root_name| {
                 self.lock()
                     .find_by_name(root_name)
@@ -144,12 +141,12 @@ pub trait Installable<'lock> {
                         })
                     })
             })
-            .collect::<Result<Vec<_>, LockError>>()?;
+            .transpose()?;
 
         InstallableExt::to_resolution_from_packages(
             self,
             &roots,
-            &group_roots,
+            group_root,
             true,
             DependencySelectionContext::None,
             marker_env,
@@ -240,7 +237,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
     fn to_resolution_from_packages(
         &self,
         roots: &[&Package],
-        group_roots: &[&Package],
+        group_root: Option<&Package>,
         include_manifest: bool,
         selection_context: DependencySelectionContext<'lock>,
         marker_env: &ResolverMarkerEnvironment,
@@ -309,7 +306,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 }
             }
 
-            for dist in roots.iter().copied().chain(group_roots.iter().copied()) {
+            for dist in roots.iter().copied().chain(group_root) {
                 for group in dist
                     .dependency_groups
                     .keys()
@@ -326,12 +323,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
             .iter()
             .copied()
             .map(|dist| (dist, InstallableRootKind::Production))
-            .chain(
-                group_roots
-                    .iter()
-                    .copied()
-                    .map(|dist| (dist, InstallableRootKind::DependencyGroups)),
-            )
+            .chain(group_root.map(|dist| (dist, InstallableRootKind::DependencyGroups)))
         {
             // Add the workspace package to the graph.
             let index = petgraph.add_node(
@@ -938,7 +930,7 @@ impl Lock {
         }
         .to_resolution_from_packages(
             &[package],
-            &[],
+            None,
             false,
             dependency.context(),
             marker_env,
@@ -1003,7 +995,7 @@ impl Lock {
         }
         .to_resolution_from_packages(
             &concrete_roots,
-            &[],
+            None,
             false,
             DependencySelectionContext::None,
             marker_env,

@@ -99,10 +99,7 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
         }
     }
 
-    fn group_roots(
-        &self,
-        groups: &DependencyGroupsWithDefaults,
-    ) -> impl Iterator<Item = &PackageName> {
+    fn group_root(&self, groups: &DependencyGroupsWithDefaults) -> Option<&PackageName> {
         match self {
             Self::Project {
                 name,
@@ -134,7 +131,6 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
             | Self::NonProjectWorkspace { .. }
             | Self::Script { .. } => None,
         }
-        .into_iter()
     }
 
     fn includes_group(
@@ -219,7 +215,7 @@ impl<'lock> InstallTarget<'lock> {
                 Self::NonProjectWorkspace { .. } | Self::Script { .. } => false,
             };
         if use_concrete_roots
-            && self.group_roots(groups).next().is_none()
+            && self.group_root(groups).is_none()
             && let Some(roots) = self
                 .roots()
                 .map(|root_name| self.lock().find_by_name(root_name).ok().flatten())
@@ -509,7 +505,7 @@ impl<'lock> InstallTarget<'lock> {
                     && uv_preview::is_enabled(PreviewFeature::LockWithoutMetadata);
                 let roots = self
                     .roots()
-                    .chain(self.group_roots(groups))
+                    .chain(self.group_root(groups))
                     .collect::<FxHashSet<_>>();
                 let member_groups = lock
                     .packages()
@@ -627,7 +623,8 @@ impl<'lock> InstallTarget<'lock> {
                     .copied()
                     .map(|name| (name, InstallableRootKind::Production))
                     .chain(
-                        self.group_roots(groups)
+                        self.group_root(groups)
+                            .into_iter()
                             .map(|name| (name, InstallableRootKind::DependencyGroups)),
                     )
                 {
