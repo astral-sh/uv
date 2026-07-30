@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -2102,6 +2102,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             continue;
                         };
 
+                        let dependency_index = metadata
+                            .requires_dist
+                            .iter()
+                            .chain(
+                                metadata
+                                    .dependency_groups
+                                    .values()
+                                    .flat_map(|requirements| requirements.iter()),
+                            )
+                            .filter(|requirement| requirement.name == *dependency_name)
+                            .filter(|requirement| {
+                                !dependency.package.marker().is_disjoint(requirement.marker)
+                            })
+                            .find_map(|requirement| match &requirement.source {
+                                RequirementSource::Registry { index, .. } => index.as_ref(),
+                                _ => None,
+                            });
+
                         let has_conflicting_context = metadata
                             .requires_dist
                             .iter()
@@ -2132,7 +2150,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     (None, None) => false,
                                 };
 
-                                incompatible_version || incompatible_source
+                                let incompatible_index = matches!(
+                                    &requirement.source,
+                                    RequirementSource::Registry { index, .. }
+                                        if dependency_index != index.as_ref()
+                                );
+
+                                incompatible_version || incompatible_source || incompatible_index
                             });
 
                         if has_conflicting_context {
@@ -3971,7 +3995,7 @@ enum Dependencies {
     /// These conflicts are resolved via `Dependencies::fork`.
     Available {
         dependencies: Vec<PubGrubDependency>,
-        /// Dependencies with incompatible versions or sources in another extra or group context.
+        /// Dependencies with incompatible versions, URLs, or indexes in another extra or group.
         cross_context_forks: BTreeSet<PackageName>,
     },
     /// Package metadata has a `Requires-Python` specifier that is incompatible with the target.

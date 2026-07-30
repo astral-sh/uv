@@ -2018,6 +2018,77 @@ fn lock_project_disjoint_platform_registry_urls() -> Result<()> {
     Ok(())
 }
 
+/// Different explicit indexes can be selected in disjoint optional or group contexts.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_disjoint_platform_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let windows_index = context.temp_dir.child("windows-index");
+    let other_index = context.temp_dir.child("other-index");
+    windows_index.create_dir_all()?;
+    other_index.create_dir_all()?;
+    fs_err::copy(&wheel, windows_index.join("ok-1.0.0-py3-none-any.whl"))?;
+    fs_err::copy(&wheel, other_index.join("ok-1.0.0-py3-none-any.whl"))?;
+    let windows_url = Url::from_file_path(&windows_index)
+        .map_err(|()| anyhow::anyhow!("invalid Windows index path"))?;
+    let other_url = Url::from_file_path(&other_index)
+        .map_err(|()| anyhow::anyhow!("invalid fallback index path"))?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let lockfile = context.temp_dir.child("uv.lock");
+
+    for (section, scope) in [
+        (
+            "[project.optional-dependencies]\nfeature",
+            "extra = 'feature'",
+        ),
+        ("[dependency-groups]\ntest", "group = 'test'"),
+    ] {
+        pyproject_toml.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok==1.0.0 ; sys_platform == 'win32'"]
+
+            {section} = ["ok==1.0.0 ; sys_platform != 'win32'"]
+
+            [tool.uv.sources]
+            ok = [
+                {{ index = "windows", marker = "sys_platform == 'win32'" }},
+                {{ index = "other", {scope}, marker = "sys_platform != 'win32'" }},
+            ]
+
+            [[tool.uv.index]]
+            name = "windows"
+            url = "{windows_url}"
+            format = "flat"
+            explicit = true
+
+            [[tool.uv.index]]
+            name = "other"
+            url = "{other_url}"
+            format = "flat"
+            explicit = true
+            "#})?;
+        if lockfile.exists() {
+            fs_err::remove_file(&lockfile)?;
+        }
+
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-cache"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            ");
+        }
+    }
+
+    Ok(())
+}
+
 /// Lock a project with `uv.tool.override-dependencies`.
 #[cfg(feature = "test-universal")]
 #[test]
