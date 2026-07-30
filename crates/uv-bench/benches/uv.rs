@@ -14,6 +14,7 @@ use criterion::{BatchSize, Criterion, criterion_group, criterion_main, measureme
 use flate2::write::GzEncoder;
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
+use sha2::{Digest, Sha256};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
@@ -29,6 +30,15 @@ const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
 const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
 const MANY_FILES_SDIST_TOP_LEVEL: &str = "manyfiles-0.0.0";
 const MANY_FILES_SDIST_FILE_COUNT: usize = 10_000;
+const SHA256_BENCHMARK_SIZE: usize = 1024 * 1024;
+
+fn hash_sha256(c: &mut Criterion<WallTime>) {
+    let bytes = vec![0_u8; SHA256_BENCHMARK_SIZE];
+
+    c.bench_function("hash_sha256", |b| {
+        b.iter(|| black_box(Sha256::digest(black_box(&bytes))));
+    });
+}
 
 fn create_many_files_wheel() -> tempfile::NamedTempFile {
     let archive = tempfile::NamedTempFile::new().expect("Failed to create temporary archive");
@@ -330,6 +340,7 @@ criterion_group! {
     name = uv;
     config = criterion_with_preview();
     targets =
+        hash_sha256,
         unpack_sdist_many_files,
         unzip_wheel_many_files,
         prepare_wheel_many_files,
