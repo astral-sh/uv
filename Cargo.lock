@@ -6158,6 +6158,7 @@ dependencies = [
  "jiff",
  "rustc-hash",
  "serde",
+ "toml",
  "uv-audit",
  "uv-auth",
  "uv-cache",
