@@ -15,7 +15,7 @@ use flate2::write::GzEncoder;
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
 use sha2::{Digest, Sha256};
-use tokio_util::compat::FuturesAsyncWriteCompatExt;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
