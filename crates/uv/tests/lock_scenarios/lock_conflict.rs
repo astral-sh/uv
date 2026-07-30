@@ -2906,6 +2906,110 @@ fn group_activates_self_extra_non_project_workspace() -> Result<()> {
     Ok(())
 }
 
+/// A conflicting empty dependency extra still selects its base package when materialized.
+#[test]
+fn project_conflicting_dependency_extra_installs_selected_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["provider[first,second]"]
+
+        [dependency-groups]
+        dev = ["provider[first,second]"]
+
+        [tool.uv]
+        conflicts = [[{ package = "provider" }, { package = "provider", extra = "first" }]]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "provider"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+
+            [project.optional-dependencies]
+            first = []
+            second = ["leaf"]
+
+            [tool.uv.sources]
+            leaf = { path = "../leaf" }
+            "#,
+        )?;
+    context.temp_dir.child("leaf/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features=package-conflicts"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--group=dev")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + leaf @ file://[TEMP_DIR]/leaf
+     + provider @ file://[TEMP_DIR]/provider
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group=dev")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + leaf @ file://[TEMP_DIR]/leaf
+     + provider @ file://[TEMP_DIR]/provider
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features=package-conflicts")
+        .arg("--frozen")
+        .arg("--no-default-groups")
+        .arg("--extra=feature")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + leaf @ file://[TEMP_DIR]/leaf
+     + provider @ file://[TEMP_DIR]/provider
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn multiple_sources_index_disjoint_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");

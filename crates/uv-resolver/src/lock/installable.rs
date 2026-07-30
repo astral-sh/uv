@@ -16,7 +16,9 @@ use uv_configuration::{
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
+use uv_pypi_types::{
+    ConflictKind, ConflictKindRef, ConflictSet, Conflicts, ResolverMarkerEnvironment,
+};
 
 use crate::lock::{
     Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, PackageId,
@@ -35,6 +37,43 @@ fn newly_activated_extras<'lock>(
             (!activated_extras.contains(&key)).then_some(key)
         })
         .collect()
+}
+
+/// Return a dependency's project selection when its base distribution can be activated.
+///
+/// A project conflict marker can guard the very edge that selects the package. Include that
+/// selection provisionally when evaluating the edge, unless one of the package's selected extras
+/// belongs to the same conflict set.
+fn newly_activated_project<'lock>(
+    dependency: &'lock Dependency,
+    activated_projects: &[&'lock PackageName],
+    activated_extras: &[(&'lock PackageName, &'lock ExtraName)],
+    activated_groups: &[(&'lock PackageName, &'lock GroupName)],
+    conflicts: &Conflicts,
+) -> Option<&'lock PackageName> {
+    let package = &dependency.package_id.name;
+    if activated_projects.contains(&package)
+        || !conflicts.contains(package, ConflictKindRef::Project)
+    {
+        return None;
+    }
+
+    let selected_conflicting_item = conflicts
+        .iter()
+        .filter(|set| set.contains(package, ConflictKindRef::Project))
+        .flat_map(ConflictSet::iter)
+        .any(|item| match item.kind() {
+            ConflictKind::Project => {
+                item.package() != package && activated_projects.contains(&item.package())
+            }
+            ConflictKind::Extra(extra) => {
+                item.package() == package && dependency.extra.contains(extra)
+                    || activated_extras.contains(&(item.package(), extra))
+            }
+            ConflictKind::Group(group) => activated_groups.contains(&(item.package(), group)),
+        });
+
+    (!selected_conflicting_item).then_some(package)
 }
 
 /// Record another condition under which a locked package and optional extra are reachable.
@@ -328,9 +367,19 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     dependencies_for_conflict_validation.push((dist, dep));
                 }
                 let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
+                let additional_activated_project = newly_activated_project(
+                    dep,
+                    &activated_projects,
+                    &activated_extras,
+                    &activated_groups,
+                    self.lock().conflicts(),
+                );
                 if !dep.complexified_marker.evaluate(
                     marker_env,
-                    activated_projects.iter().copied(),
+                    activated_projects
+                        .iter()
+                        .copied()
+                        .chain(additional_activated_project),
                     activated_extras
                         .iter()
                         .chain(additional_activated_extras.iter())
@@ -388,6 +437,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 // that references `pkg[extra]`). Without this, conflict markers on transitive
                 // dependencies gated by the activated extra would not evaluate to `true`
                 // during the graph traversals below.
+                if let Some(project) = additional_activated_project {
+                    activated_projects.push(project);
+                }
                 for key in additional_activated_extras {
                     activated_extras.push(key);
                 }
@@ -617,9 +669,19 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     dep_reachability.and(parent_reachability);
                     let additional_activated_extras =
                         newly_activated_extras(dep, &activated_extras);
+                    let additional_activated_project = newly_activated_project(
+                        dep,
+                        &activated_projects,
+                        &activated_extras,
+                        &activated_groups,
+                        self.lock().conflicts(),
+                    );
                     if !dep_reachability.evaluate(
                         marker_env,
-                        activated_projects.iter().copied(),
+                        activated_projects
+                            .iter()
+                            .copied()
+                            .chain(additional_activated_project),
                         activated_extras
                             .iter()
                             .chain(additional_activated_extras.iter())
@@ -636,6 +698,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     // preliminary traversal. Otherwise, an unreachable package could activate an
                     // extra and cause the conflict check below to report a false positive.
 
+                    if let Some(project) = additional_activated_project {
+                        activated_projects.push(project);
+                    }
                     for key in additional_activated_extras {
                         activated_extras_set.insert(key);
                         activated_extras.push(key);
