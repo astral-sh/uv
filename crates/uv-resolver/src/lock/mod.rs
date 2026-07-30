@@ -34,10 +34,10 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    Identifier, IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString,
+    Identifier, IndexLocations, IndexMetadata, IndexRoutes, IndexUrl, Name, PYPI_URL,
+    PathBuiltDist, PathSourceDist, ProxyIndexError, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -977,7 +977,8 @@ impl Lock {
     /// Initialize a [`Lock`] from a [`ResolverOutput`] and [`ResolverManifest`], applying any
     /// index-specific hash requirements to registry artifacts.
     ///
-    /// Returns an error if an artifact does not advertise its index's required algorithm.
+    /// Returns an error if a proxied artifact has no hash or an artifact does not
+    /// advertise its index's required algorithm.
     pub fn from_resolution(
         resolution: &ResolverOutput,
         manifest: ResolverManifest,
@@ -985,6 +986,7 @@ impl Lock {
         supported_environments: Vec<MarkerTree>,
         index_locations: &IndexLocations,
     ) -> Result<Self, LockError> {
+        let index_routes = IndexRoutes::try_from(index_locations)?;
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
         let supported_environments = supported_environments
@@ -1048,6 +1050,36 @@ impl Lock {
                     None,
                 )
             });
+
+            if let Some(index) = dist.index() {
+                let route = index_routes.route_for(index);
+                if route.is_proxy()
+                    && let Some(filename) = package
+                        .wheels
+                        .iter()
+                        .find_map(|wheel| wheel.hash.is_none().then(|| wheel.filename.to_string()))
+                        .or_else(|| {
+                            package
+                                .sdist
+                                .as_ref()
+                                .filter(|sdist| sdist.hash().is_none())
+                                .and_then(SourceDist::filename)
+                                .map(Cow::into_owned)
+                        })
+                {
+                    let mut physical = route.effective_url().url().clone();
+                    physical.remove_credentials();
+                    physical.set_query(None);
+                    physical.set_fragment(None);
+
+                    return Err(ProxyIndexError::MissingHash {
+                        package: package.id.name.clone(),
+                        filename,
+                        physical: Box::new(physical),
+                    }
+                    .into());
+                }
+            }
 
             package.add_dependencies(
                 DependencyContext::Production,
@@ -7245,6 +7277,9 @@ enum LockErrorKind {
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]
     InvalidScopedOverride(#[from] ScopedOverrideSourceError),
+    /// An error that occurs when a proxy route or its selected lock artifacts are invalid.
+    #[error(transparent)]
+    ProxyIndex(#[from] ProxyIndexError),
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]
