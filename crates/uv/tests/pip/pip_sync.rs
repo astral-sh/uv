@@ -3907,7 +3907,7 @@ fn require_hashes_wheel_path() -> Result<()> {
     Ok(())
 }
 
-/// Include a BLAKE2b hash for a built distribution specified as a local path dependency.
+/// Include a `BLAKE2b` hash for a built distribution specified as a local path dependency.
 #[test]
 fn require_hashes_wheel_path_blake2b() -> Result<()> {
     let context = uv_test::test_context!("3.12");
