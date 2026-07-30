@@ -15,7 +15,8 @@ use uv_normalize::{DEV_DEPENDENCIES, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
-    DependencyGroupSpecifier, LenientRequirement, ResolverMarkerEnvironment, VerbatimParsedUrl,
+    DependencyGroupSpecifier, DependencyGroups, LenientRequirement, ResolverMarkerEnvironment,
+    VerbatimParsedUrl,
 };
 use uv_resolver::{Installable, Lock, LockError, Package};
 use uv_scripts::Pep723Script;
@@ -114,7 +115,7 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
                     let declared_groups = root_member
                         .and_then(|member| member.pyproject_toml().dependency_groups.as_ref())
                         .into_iter()
-                        .flat_map(|dependency_groups| dependency_groups.keys());
+                        .flat_map(DependencyGroups::keys);
                     let legacy_dev = root_member
                         .and_then(|member| member.pyproject_toml().tool.as_ref())
                         .and_then(|tool| tool.uv.as_ref())
