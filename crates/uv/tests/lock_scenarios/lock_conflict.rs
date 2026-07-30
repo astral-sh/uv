@@ -102,6 +102,90 @@ fn extra_conflict_discovery_respects_parent_reachability() -> Result<()> {
     Ok(())
 }
 
+/// An independently requested target extra must not be dropped due to the source extra's name.
+#[test]
+fn workspace_extra_preserves_independently_requested_conflicting_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicts = [[
+            { package = "child", extra = "one" },
+            { package = "child", extra = "two" },
+        ]]
+
+        [tool.uv.workspace]
+        members = ["provider", "child"]
+
+        [tool.uv.sources]
+        provider = { workspace = true }
+        child = { workspace = true }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = ["child[two]"]
+        "#,
+        )?;
+    context.temp_dir.child("child/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = []
+        two = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--dry-run")
+        .arg("--package")
+        .arg("provider")
+        .arg("--extra")
+        .arg("one")
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + child @ file://[TEMP_DIR]/child
+     + provider @ file://[TEMP_DIR]/provider
+    ");
+
+    Ok(())
+}
+
 /// Workspace-member extras remain selectable outside the conflicting path that first reached them.
 #[test]
 fn workspace_extra_selection_ignores_unrelated_conflict_paths() -> Result<()> {
