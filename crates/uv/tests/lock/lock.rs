@@ -19256,6 +19256,11 @@ fn lock_metadata_free_shared_legacy_direct_source() -> Result<()> {
         .arg("ensurepip")
         .assert()
         .success();
+    context
+        .pip_install()
+        .arg(server.file_url("wheel-0.42.0-py3-none-any.whl"))
+        .assert()
+        .success();
 
     context
         .temp_dir
