@@ -3332,6 +3332,140 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     Ok(())
 }
 
+/// Overlapping project conflicts must preserve every explicitly requested extra fork.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_conflicting_project_preserves_requested_extra_forks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider[one,two]"]
+
+        [tool.uv]
+        conflicts = [
+            [{ package = "provider" }, { package = "provider", extra = "one" }],
+            [{ package = "provider" }, { package = "provider", extra = "two" }],
+            [{ package = "provider", extra = "one" }, { package = "provider", extra = "two" }],
+        ]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = ["leaf-one"]
+        two = ["leaf-two"]
+
+        [tool.uv.sources]
+        leaf-one = { path = "../leaf-one" }
+        leaf-two = { path = "../leaf-two" }
+        "#})?;
+    for name in ["leaf-one", "leaf-two"] {
+        context
+            .temp_dir
+            .child(format!("{name}/pyproject.toml"))
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "{name}"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            "#})?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "provider", extra = "one" },
+            { package = "provider" },
+        ], [
+            { package = "provider", extra = "two" },
+            { package = "provider" },
+        ], [
+            { package = "provider", extra = "one" },
+            { package = "provider", extra = "two" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "leaf-one"
+        version = "1.0.0"
+        source = { directory = "leaf-one" }
+
+        [[package]]
+        name = "leaf-two"
+        version = "1.0.0"
+        source = { directory = "leaf-two" }
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "provider" },
+            { name = "provider", extra = ["one"], marker = "extra == 'extra-8-provider-one' or (extra == 'extra-8-provider-two' and extra == 'project-8-provider')" },
+            { name = "provider", extra = ["two"], marker = "extra == 'extra-8-provider-two' or (extra == 'extra-8-provider-one' and extra == 'project-8-provider')" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "provider", extras = ["one", "two"], directory = "provider" }]
+
+        [[package]]
+        name = "provider"
+        version = "1.0.0"
+        source = { directory = "provider" }
+
+        [package.optional-dependencies]
+        one = [
+            { name = "leaf-one" },
+        ]
+        two = [
+            { name = "leaf-two" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "leaf-one", marker = "extra == 'one'", directory = "leaf-one" },
+            { name = "leaf-two", marker = "extra == 'two'", directory = "leaf-two" },
+        ]
+        provides-extras = ["one", "two"]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// This tests a "basic" case for specifying a group that conflicts with the
 /// project itself.
 #[cfg(feature = "test-universal")]

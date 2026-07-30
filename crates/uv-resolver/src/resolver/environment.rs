@@ -221,6 +221,18 @@ impl ResolverEnvironment {
         }
     }
 
+    /// Returns whether a conflict item can still be explicitly included in this environment.
+    ///
+    /// Project exclusions implicitly disable their extras, but a later conflict fork can
+    /// explicitly select one of those extras. Only an exclusion of the item itself rules out
+    /// that possibility.
+    pub(crate) fn may_include_group(&self, group: ConflictItemRef<'_>) -> bool {
+        match self.kind {
+            Kind::Specific { .. } => true,
+            Kind::Universal { ref exclude, .. } => !exclude.contains(&group),
+        }
+    }
+
     /// Returns the bounding Python versions that can satisfy this
     /// resolver environment's marker, if it's constrained.
     pub(crate) fn requires_python(&self) -> Option<RequiresPythonRange> {
