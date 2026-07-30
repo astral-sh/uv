@@ -11,13 +11,14 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::{Index, Resolution};
-use uv_normalize::{DEV_DEPENDENCIES, ExtraName, PackageName};
+use uv_normalize::{DEV_DEPENDENCIES, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
-    DependencyGroupSpecifier, LenientRequirement, ResolverMarkerEnvironment, VerbatimParsedUrl,
+    DependencyGroupSpecifier, DependencyGroups, LenientRequirement, ResolverMarkerEnvironment,
+    VerbatimParsedUrl,
 };
-use uv_resolver::{Installable, Lock, LockError, Package};
+use uv_resolver::{Installable, InstallableRootKind, Lock, LockError, Package};
 use uv_scripts::Pep723Script;
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
@@ -98,6 +99,76 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
         }
     }
 
+    fn group_root(&self, groups: &DependencyGroupsWithDefaults) -> Option<&PackageName> {
+        let Self::Project {
+            name,
+            lock,
+            workspace,
+        } = self
+        else {
+            return None;
+        };
+        let root = lock.root().filter(|root| root.name() != *name)?;
+        let root_member = workspace.packages().get(root.name())?;
+        let pyproject = root_member.pyproject_toml();
+        let declared_groups = pyproject
+            .dependency_groups
+            .as_ref()
+            .into_iter()
+            .flat_map(DependencyGroups::keys);
+        let legacy_dev = pyproject
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.dev_dependencies.as_ref())
+            .is_some()
+            .then_some(&*DEV_DEPENDENCIES);
+
+        declared_groups
+            .chain(legacy_dev)
+            .any(|group| self.includes_group(Some(root.name()), group, groups))
+            .then_some(root.name())
+    }
+
+    fn includes_group(
+        &self,
+        package: Option<&PackageName>,
+        group: &GroupName,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> bool {
+        if !groups.contains(group) {
+            return false;
+        }
+
+        let Self::Project {
+            workspace, name, ..
+        } = self
+        else {
+            return true;
+        };
+
+        if package == Some(*name) {
+            return true;
+        }
+
+        !workspace.packages().get(*name).is_some_and(|member| {
+            let pyproject = member.pyproject_toml();
+            pyproject
+                .dependency_groups
+                .as_ref()
+                .is_some_and(|member_groups| member_groups.contains_key(group))
+                // Legacy development dependencies also define the member's `dev` group, so
+                // they take precedence over an inherited `dev` group from the workspace root.
+                || group == &*DEV_DEPENDENCIES
+                    && pyproject
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.dev_dependencies.as_ref())
+                        .is_some()
+        })
+    }
+
     fn project_name(&self) -> Option<&PackageName> {
         match self {
             Self::Project { name, .. } => Some(name),
@@ -141,6 +212,7 @@ impl<'lock> InstallTarget<'lock> {
                 Self::NonProjectWorkspace { .. } | Self::Script { .. } => false,
             };
         if use_concrete_roots
+            && self.group_root(groups).is_none()
             && let Some(roots) = self
                 .roots()
                 .map(|root_name| self.lock().find_by_name(root_name).ok().flatten())
@@ -428,7 +500,13 @@ impl<'lock> InstallTarget<'lock> {
             | Self::NonProjectWorkspace { lock, workspace } => {
                 let metadata_free_lock = lock.supports_missing_package_metadata()
                     && uv_preview::is_enabled(PreviewFeature::LockWithoutMetadata);
-                let roots = self.roots().collect::<FxHashSet<_>>();
+                // Validate inherited root groups even when `--no-group` excludes them from
+                // installation and therefore omits the root from the selected group roots.
+                let workspace_root = matches!(self, Self::Project { .. })
+                    .then(|| lock.root())
+                    .flatten()
+                    .map(Package::name);
+                let roots = self.roots().chain(workspace_root).collect::<FxHashSet<_>>();
                 let member_groups = lock
                     .packages()
                     .iter()
@@ -473,14 +551,12 @@ impl<'lock> InstallTarget<'lock> {
                     });
 
                 // Groups defined directly on a non-project workspace root are not members.
-                let workspace_groups = matches!(
-                    self,
-                    Self::Workspace { .. } | Self::NonProjectWorkspace { .. }
-                )
-                .then(|| workspace.workspace_dependency_groups().ok())
-                .flatten()
-                .into_iter()
-                .flat_map(|dependency_groups| dependency_groups.into_keys().map(Cow::Owned));
+                let workspace_groups = workspace
+                    .is_non_project()
+                    .then(|| workspace.workspace_dependency_groups().ok())
+                    .flatten()
+                    .into_iter()
+                    .flat_map(|dependency_groups| dependency_groups.into_keys().map(Cow::Owned));
 
                 let known_groups = member_groups
                     .chain(workspace_groups)
@@ -536,12 +612,20 @@ impl<'lock> InstallTarget<'lock> {
                 let mut queue: VecDeque<(&PackageName, Option<&ExtraName>)> = VecDeque::new();
                 let mut seen: FxHashSet<(&PackageName, Option<&ExtraName>)> = FxHashSet::default();
 
-                for name in roots {
+                for (name, root_kind) in roots
+                    .iter()
+                    .copied()
+                    .map(|name| (name, InstallableRootKind::Production))
+                    .chain(
+                        self.group_root(groups)
+                            .map(|name| (name, InstallableRootKind::DependencyGroups)),
+                    )
+                {
                     let Some(root_package) = packages.get(name) else {
                         continue;
                     };
 
-                    if groups.prod() {
+                    if root_kind == InstallableRootKind::Production && groups.prod() {
                         // Add the root package
                         if seen.insert((name, None)) {
                             queue.push_back((name, None));
@@ -558,7 +642,7 @@ impl<'lock> InstallTarget<'lock> {
 
                     // Add activated dependency groups for the root package
                     for (group_name, dependencies) in root_package.resolved_dependency_groups() {
-                        if !groups.contains(group_name) {
+                        if !self.includes_group(Some(root_package.name()), group_name, groups) {
                             continue;
                         }
                         for dependency in dependencies {

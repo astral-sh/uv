@@ -26,7 +26,7 @@ pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::universal_marker::resolve_activated_extras;
-use crate::{Installable, LockError, Package};
+use crate::{Installable, InstallableRootKind, LockError, Package};
 
 pub mod cyclonedx_json;
 mod metadata;
@@ -68,8 +68,16 @@ impl<'lock> ExportableRequirements<'lock> {
 
         let root = graph.add_node(Node::Root);
 
-        // Add the workspace packages to the queue.
-        for root_name in target.roots() {
+        // Add the workspace packages and any additional dependency-group roots to the queue.
+        for (root_name, root_kind) in target
+            .roots()
+            .map(|root| (root, InstallableRootKind::Production))
+            .chain(
+                target
+                    .group_root(groups)
+                    .map(|root| (root, InstallableRootKind::DependencyGroups)),
+            )
+        {
             if prune.contains(root_name) {
                 continue;
             }
@@ -84,10 +92,12 @@ impl<'lock> ExportableRequirements<'lock> {
                     name: root_name.clone(),
                 })?;
 
-            // Track the activated package in the list of known conflicts.
-            activated_items.insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
+            if root_kind == InstallableRootKind::Production {
+                // Track the activated package in the list of known conflicts.
+                activated_items.insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
+            }
 
-            if groups.prod() {
+            if root_kind == InstallableRootKind::Production && groups.prod() {
                 // Add the workspace package to the graph.
                 let index = *inverse
                     .entry(&dist.id)
@@ -100,9 +110,6 @@ impl<'lock> ExportableRequirements<'lock> {
                         dep_extras: Vec::new(),
                     },
                 );
-
-                // Track the activated project in the list of known conflicts.
-                activated_items.insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
 
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));
@@ -120,7 +127,7 @@ impl<'lock> ExportableRequirements<'lock> {
                 .dependency_groups
                 .iter()
                 .filter_map(|(group, deps)| {
-                    if groups.contains(group) {
+                    if target.includes_group(Some(&dist.id.name), group, groups) {
                         Some(deps.iter().map(move |dep| (group, dep)))
                     } else {
                         None
@@ -182,7 +189,7 @@ impl<'lock> ExportableRequirements<'lock> {
                     .dependency_groups()
                     .iter()
                     .filter_map(|(group, deps)| {
-                        if groups.contains(group) {
+                        if target.includes_group(None, group, groups) {
                             Some(deps)
                         } else {
                             None
