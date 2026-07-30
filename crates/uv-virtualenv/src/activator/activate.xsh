@@ -35,9 +35,9 @@ class _VirtualEnvActivator:
         from os.path import dirname, realpath
 
         self.env = __xonsh__.env
-        self.embedded_virtual_env = {{ VIRTUAL_ENV_DIR }}
-        self.embedded_virtual_prompt = {{ VIRTUAL_PROMPT_LITERAL }}
-        self.embedded_bin_name = {{ BIN_NAME_LITERAL }}
+        self.embedded_virtual_env = dirname(dirname(realpath(__file__)))
+        self.embedded_virtual_prompt = {{ VIRTUAL_PROMPT }}
+        self.embedded_bin_name = {{ BIN_NAME }}
         self.managed_vars = ("PATH", "PYTHONHOME")
 
     def _backup_name(self, name):

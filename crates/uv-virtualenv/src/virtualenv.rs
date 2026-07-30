@@ -505,24 +505,28 @@ pub(crate) fn create(
                 "'{}'",
                 escape_posix_for_single_quotes(location_string)
             )),
-            (_, "activate.xsh") => Cow::Borrowed(r"dirname(dirname(realpath(__file__)))"),
             // Note: `activate.ps1` is already relocatable by default.
             _ => escape_posix_for_single_quotes(location_string),
         };
 
         let virtual_prompt = prompt.as_deref().unwrap_or_default();
+        let virtual_prompt = match *name {
+            "activate.xsh" => Cow::Owned(format!(
+                r#"b"{}".decode("utf-8")"#,
+                virtual_prompt.as_bytes().escape_ascii(),
+            )),
+            _ => Cow::Borrowed(virtual_prompt),
+        };
+
+        let bin_name = match *name {
+            "activate.xsh" => Cow::Owned(bin_name.escape_for_python()),
+            _ => Cow::Borrowed(bin_name),
+        };
+
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
-            .replace("{{ BIN_NAME }}", bin_name)
-            .replace(
-                "{{ BIN_NAME_LITERAL }}",
-                &format!(r#""{}""#, bin_name.escape_for_python()),
-            )
-            .replace("{{ VIRTUAL_PROMPT }}", virtual_prompt)
-            .replace(
-                "{{ VIRTUAL_PROMPT_LITERAL }}",
-                &format!(r#""{}""#, virtual_prompt.escape_for_python()),
-            )
+            .replace("{{ BIN_NAME }}", &bin_name)
+            .replace("{{ VIRTUAL_PROMPT }}", &virtual_prompt)
             .replace("{{ PATH_SEP }}", path_sep)
             .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
         fs_err::write(scripts.join(name), activator)?;
