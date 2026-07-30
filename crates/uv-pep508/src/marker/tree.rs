@@ -3127,8 +3127,55 @@ mod test {
 
     #[test]
     fn test_cpython_implementation_version_disjointness() {
+        for (implementation, python) in [
+            (
+                "implementation_version >= '3.13'",
+                "python_full_version < '3.13'",
+            ),
+            (
+                "implementation_version < '3.13'",
+                "python_full_version >= '3.13'",
+            ),
+            (
+                "implementation_version == '3.13'",
+                "python_full_version != '3.13'",
+            ),
+            (
+                "implementation_version != '3.13'",
+                "python_full_version == '3.13'",
+            ),
+            (
+                "implementation_version == '3.13.*'",
+                "python_full_version >= '3.14'",
+            ),
+            (
+                "implementation_version ~= '3.13.0'",
+                "python_full_version < '3.13'",
+            ),
+            (
+                "implementation_version ~= '3.13.0'",
+                "python_full_version >= '3.14'",
+            ),
+            (
+                "implementation_version < '3.13'",
+                "python_version >= '3.13'",
+            ),
+        ] {
+            assert!(
+                is_disjoint(
+                    format!("implementation_name == 'cpython' and {implementation}"),
+                    python,
+                ),
+                "{implementation} overlaps with {python}",
+            );
+        }
+
         assert!(is_disjoint(
-            "implementation_name == 'cpython' and implementation_version >= '3.13'",
+            "implementation_name == 'cpython' and (implementation_version >= '3.13' or implementation_version == '3.14')",
+            "python_full_version < '3.13'",
+        ));
+        assert!(!is_disjoint(
+            "(implementation_name == 'cpython' and implementation_version >= '3.13') or (implementation_name == 'pypy' and implementation_version >= '3.13')",
             "python_full_version < '3.13'",
         ));
         assert!(!is_disjoint(
@@ -3136,8 +3183,32 @@ mod test {
             "python_full_version < '3.13'",
         ));
         assert!(!is_disjoint(
+            "implementation_name == 'pyston' and implementation_version >= '3.13'",
+            "python_full_version < '3.13'",
+        ));
+        assert!(!is_disjoint(
+            "platform_python_implementation == 'CPython' and implementation_version >= '3.13'",
+            "python_full_version < '3.13'",
+        ));
+        assert!(!is_disjoint(
             "implementation_version >= '3.13'",
             "python_full_version < '3.13'",
+        ));
+    }
+
+    #[test]
+    fn test_graalpy_implementation_disjointness() {
+        assert!(is_disjoint(
+            "implementation_name == 'graalpy'",
+            "platform_python_implementation != 'GraalVM'",
+        ));
+        assert!(is_disjoint(
+            "implementation_name != 'graalpy'",
+            "platform_python_implementation == 'GraalVM'",
+        ));
+        assert!(!is_disjoint(
+            "implementation_name == 'pyston'",
+            "platform_python_implementation == 'CPython'",
         ));
     }
 
@@ -3230,8 +3301,9 @@ mod test {
             ("cpython", "CPython"),
             ("pyston", "CPython"),
             ("pypy", "PyPy"),
+            ("graalpy", "GraalVM"),
         ] {
-            let is_bidirectional = implementation_name == "pypy";
+            let is_bidirectional = matches!(implementation_name, "pypy" | "graalpy");
             let implementation_name = format!("implementation_name == '{implementation_name}'");
             let platform_python_implementation =
                 format!("platform_python_implementation == '{platform_python_implementation}'");
@@ -3291,11 +3363,7 @@ mod test {
         // Unknown implementations may use implementation-specific names, so do not
         // infer a correspondence between their two marker values.
         assert!(!is_disjoint(
-            "implementation_name == 'graalpy'",
-            "platform_python_implementation == 'GraalVM'"
-        ));
-        assert!(!is_disjoint(
-            "implementation_name == 'graalpy'",
+            "implementation_name == 'custom-runtime'",
             "platform_python_implementation == 'Jython'"
         ));
     }
