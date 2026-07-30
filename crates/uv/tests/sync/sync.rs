@@ -11062,6 +11062,86 @@ fn path_hash_mismatch() -> Result<()> {
     Ok(())
 }
 
+/// Upgrading one package must not replace the locked hash of an unrelated local archive.
+#[test]
+fn scoped_upgrade_preserves_unrelated_archive_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.workspace_root.join("test/links");
+    let wheel = context
+        .temp_dir
+        .child("simple_launcher-0.1.0-py3-none-any.whl");
+    fs_err::copy(links.join("simple_launcher-0.1.0-py3-none-any.whl"), &wheel)?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["simple-launcher", "ok==1.0.0"]
+
+        [tool.uv.sources]
+        simple-launcher = {{ path = "{}" }}
+        "#,
+        wheel.path().portable_display()
+        })?;
+
+    context
+        .sync()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .assert()
+        .success();
+
+    let mut archive = fs_err::read(&wheel)?;
+    let comment_length_offset = archive.len() - 2;
+    archive[comment_length_offset..].copy_from_slice(&8u16.to_le_bytes());
+    archive.extend_from_slice(b"tampered");
+    fs_err::write(&wheel, archive)?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--upgrade-package")
+        .arg("ok")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+      × Failed to read `simple-launcher @ file://[TEMP_DIR]/simple_launcher-0.1.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `simple-launcher @ file://[TEMP_DIR]/simple_launcher-0.1.0-py3-none-any.whl`
+
+          Expected:
+            sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
+
+          Computed:
+            sha256:b6b1e19063b10118c0181105fe9cd5b25dccb0f7c761cee3b319566d5d306d66
+
+    hint: `simple-launcher` (v0.1.0) was included because `project` (v0.1.0) depends on `simple-launcher`
+    ");
+
+    // Explicitly selecting the changed package permits refreshing its archive hash.
+    context
+        .sync()
+        .arg("--upgrade-package")
+        .arg("simple-launcher")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 #[test]
 fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
     let context = uv_test::test_context!("3.12");

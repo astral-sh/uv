@@ -34,7 +34,7 @@ use uv_python::{
 use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
-    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
+    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker, UpgradePackages,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -1353,23 +1353,8 @@ impl ValidatedLock {
             return Ok(Self::Preferable(lock));
         }
 
-        // If the user specified `--upgrade-package` or `--upgrade-group`, then at best we can
-        // prefer some of the existing versions.
-        if !(upgrade.is_none() || upgrade.is_all()) {
-            debug!(
-                "Resolving despite existing lockfile due to `--upgrade-package` or `--upgrade-group`"
-            );
-            return Ok(Self::Preferable(lock));
-        }
-
         if !lock.satisfies_hash_algorithms(install_path, index_locations)? {
             debug!("Resolving despite existing lockfile due to mismatched hash algorithm");
-            return Ok(Self::Preferable(lock));
-        }
-
-        // If the user specified `--refresh`, then we have to re-resolve.
-        if matches!(refresh, Some(Refresh::All(..) | Refresh::Packages(..))) {
-            debug!("Resolving despite existing lockfile due to `--refresh`");
             return Ok(Self::Preferable(lock));
         }
 
@@ -1412,6 +1397,21 @@ impl ValidatedLock {
             .await?
         {
             SatisfiesResult::Satisfied => {
+                // Validate locked archive hashes before a scoped upgrade can trigger a fresh
+                // resolution, which could otherwise silently replace an unrelated locked hash.
+                if !(upgrade.is_none() || upgrade.is_all()) {
+                    debug!(
+                        "Resolving despite existing lockfile due to `--upgrade-package` or `--upgrade-group`"
+                    );
+                    return Ok(Self::Preferable(lock));
+                }
+
+                // If the user specified `--refresh`, then we have to re-resolve.
+                if matches!(refresh, Some(Refresh::All(..) | Refresh::Packages(..))) {
+                    debug!("Resolving despite existing lockfile due to `--refresh`");
+                    return Ok(Self::Preferable(lock));
+                }
+
                 debug!("Existing `uv.lock` satisfies workspace requirements");
                 Ok(Self::Satisfies(lock))
             }
@@ -1576,7 +1576,9 @@ impl ValidatedLock {
                         actual, expected
                     );
                 }
-                if hash_mismatch_policy == HashMismatchPolicy::Update {
+                if hash_mismatch_policy == HashMismatchPolicy::Update
+                    || UpgradePackages::for_workspace(&lock, upgrade).contains(name)
+                {
                     Ok(Self::Preferable(lock))
                 } else {
                     Ok(Self::Satisfies(lock))
