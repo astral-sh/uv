@@ -1,4 +1,4 @@
-# Analyze newly opened issues without modifying them.
+# Analyze newly opened issues and persist their triage context.
 name: "issue-triage"
 
 on:
@@ -23,6 +23,7 @@ jobs:
       contents: read
       issues: read
     outputs:
+      issue-context: ${{ steps.issue.outputs.context }}
       result: ${{ steps.triage.outputs.final-message }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -30,11 +31,23 @@ jobs:
           persist-credentials: false
 
       - name: "Collect issue context"
+        id: issue
         run: |
           gh issue view "$ISSUE" \
             --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,author \
+            --json number,title,body,author,url \
             > .issue-triage-event.json
+
+          if ! jq --exit-status \
+            --arg repository "$GITHUB_REPOSITORY" \
+            '.url | startswith("https://github.com/\($repository)/issues/")' \
+            .issue-triage-event.json > /dev/null; then
+            echo "The issue must belong to $GITHUB_REPOSITORY." >&2
+            exit 1
+          fi
+
+          jq --raw-output '"context=\(tojson)"' \
+            .issue-triage-event.json >> "$GITHUB_OUTPUT"
 
           {
             printf 'Issue triage for #%s: %s\n\n' \
@@ -68,6 +81,77 @@ jobs:
           path: agents/codex/sessions
           if-no-files-found: warn
 
+  context:
+    needs: triage
+    if: needs.triage.outputs.result != ''
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 10
+    concurrency:
+      group: issue-context-${{ fromJSON(needs.triage.outputs.issue-context).number }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write # for the cross-repository issue-context credential broker
+    steps:
+      - name: "Prepare issue context"
+        run: |
+          printf '%s\n' "$ISSUE_CONTEXT" > "$RUNNER_TEMP/issue.json"
+          printf '%s\n' "$TRIAGE_RESULT" | jq '.' > "$RUNNER_TEMP/triage.json"
+          printf '%s\n%s\n%s\n' '```json' "$TRIAGE_RESULT" '```' >> "$GITHUB_STEP_SUMMARY"
+        env:
+          ISSUE_CONTEXT: ${{ needs.triage.outputs.issue-context }}
+          TRIAGE_RESULT: ${{ needs.triage.outputs.result }}
+
+      - name: "Get issue context token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repositories: |
+            astral-sh/uv
+            astral-sh/uv-dev
+          # Linking an upstream issue to a fork branch requires both permissions on one token.
+          permissions: |
+            contents: write
+            issues: write
+
+      - name: "Persist issue context"
+        run: |
+          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue.json")"
+          branch="issue/$issue_number"
+
+          git init --quiet "$RUNNER_TEMP/issue-context"
+          cd "$RUNNER_TEMP/issue-context"
+          git remote add origin \
+            "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git"
+
+          gh issue develop "$issue_number" \
+            --repo "$GITHUB_REPOSITORY" \
+            --branch-repo astral-sh/uv-dev \
+            --base issue/base \
+            --name "$branch" \
+            --checkout
+
+          cp "$RUNNER_TEMP/issue.json" "$RUNNER_TEMP/triage.json" .
+          git add issue.json triage.json
+
+          if git diff --cached --quiet; then
+            echo "The existing issue context is unchanged."
+            exit 0
+          fi
+
+          git \
+            -c user.name="github-actions[bot]" \
+            -c user.email="github-actions[bot]@users.noreply.github.com" \
+            commit --message "Update issue context for $GITHUB_REPOSITORY#$issue_number"
+          git push origin "HEAD:refs/heads/$branch"
+
+          printf 'Issue context: https://github.com/astral-sh/uv-dev/tree/%s\n' "$branch" \
+            >> "$GITHUB_STEP_SUMMARY"
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+
   reproduce-bug:
     needs: triage
     if: needs.triage.outputs.result != '' && fromJSON(needs.triage.outputs.result).type == 'bug'
@@ -80,14 +164,3 @@ jobs:
       issue: ${{ inputs.issue || github.event.issue.number }}
       runner: ubuntu-latest
     secrets: inherit # zizmor: ignore[secrets-inherit] -- protected environment secrets are needed for reproduction
-
-  report:
-    needs: triage
-    if: needs.triage.outputs.result != ''
-    runs-on: ubuntu-latest
-    permissions: {}
-    steps:
-      - name: "Write triage summary"
-        run: printf '```json\n%s\n```\n' "$TRIAGE_RESULT" >> "$GITHUB_STEP_SUMMARY"
-        env:
-          TRIAGE_RESULT: ${{ needs.triage.outputs.result }}
