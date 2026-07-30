@@ -4534,6 +4534,113 @@ fn explicit_prerelease_disallows_transitive_marker() {
     ");
 }
 
+/// Package-specific policies can allow a transitive pre-release while keeping other packages
+/// subject to the global policy.
+#[test]
+fn prerelease_package_allows_transitive_prerelease() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/transitive-prerelease-and-stable-dependency.toml");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=disallow")
+        .arg("--prerelease-package")
+        .arg("c=allow")
+        .arg("a")
+        .arg("b"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==2.0.0b1
+    ");
+
+    context.assert_installed("c", "2.0.0b1");
+}
+
+/// Package-specific policies can tighten a globally permissive pre-release policy.
+#[test]
+fn prerelease_package_disallows_transitive_prerelease() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/transitive-prerelease-and-stable-dependency.toml");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=allow")
+        .arg("--prerelease-package")
+        .arg("c=disallow")
+        .arg("a")
+        .arg("b"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
+
+    hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    ");
+
+    context.assert_not_installed("c");
+}
+
+/// Command-line package policies merge with top-level configuration, taking precedence for
+/// duplicate package names.
+#[test]
+fn prerelease_package_combines_with_top_level_configuration() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/transitive-prerelease-and-stable-dependency.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv]
+        prerelease = "disallow"
+        prerelease-package = { a = "disallow", c = "disallow" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease-package")
+        .arg("c=allow")
+        .arg("a")
+        .arg("b"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==2.0.0b1
+    ");
+
+    Ok(())
+}
+
+/// Report malformed package-specific pre-release policies at the CLI boundary.
+#[test]
+fn prerelease_package_invalid_mode() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--prerelease-package")
+        .arg("a=invalid")
+        .arg("a"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: invalid value 'a=invalid' for '--prerelease-package <PRERELEASE_PACKAGE>': Invalid `prerelease-package` mode: expected one of `disallow`, `allow`, `if-necessary`, `explicit`, or `if-necessary-or-explicit`, found `invalid`
+
+    For more information, try '--help'.
+    ");
+}
+
 /// `--prerelease=if-necessary-or-explicit` should warn and behave like `if-necessary`.
 #[test]
 fn if_necessary_or_explicit_is_deprecated_alias() {

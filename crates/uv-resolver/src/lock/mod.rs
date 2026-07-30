@@ -73,7 +73,8 @@ use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
-    InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
+    InMemoryIndex, MetadataResponse, PrereleaseMode, PrereleasePackage, ResolutionMode,
+    ResolverOutput,
 };
 
 pub(crate) mod export;
@@ -1083,6 +1084,7 @@ impl Lock {
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
             prerelease_mode: resolution.options.prerelease_mode,
+            prerelease_package: resolution.options.prerelease_package.clone(),
             fork_strategy: resolution.options.fork_strategy,
             exclude_newer: resolution.options.exclude_newer.clone(),
         };
@@ -1375,6 +1377,11 @@ impl Lock {
     /// Returns the pre-release mode used to generate this lock.
     pub fn prerelease_mode(&self) -> PrereleaseMode {
         self.options.prerelease_mode
+    }
+
+    /// Returns package-specific pre-release policies used to generate this lock.
+    pub fn prerelease_package(&self) -> &PrereleasePackage {
+        &self.options.prerelease_package
     }
 
     /// Returns the multi-version mode used to generate this lock.
@@ -3198,6 +3205,8 @@ struct ResolverOptions {
     resolution_mode: ResolutionMode,
     /// The [`PrereleaseMode`] used to generate this lock.
     prerelease_mode: PrereleaseMode,
+    /// Package-specific pre-release policies used to generate this lock.
+    prerelease_package: PrereleasePackage,
     /// The [`ForkStrategy`] used to generate this lock.
     fork_strategy: ForkStrategy,
     /// The [`ExcludeNewer`] setting used to generate this lock.
@@ -3214,6 +3223,9 @@ struct ResolverOptionsWire {
     /// The [`PrereleaseMode`] used to generate this lock.
     #[serde(default)]
     prerelease_mode: PrereleaseMode,
+    /// Package-specific pre-release policies used to generate this lock.
+    #[serde(default)]
+    prerelease_package: PrereleasePackage,
     /// The [`ForkStrategy`] used to generate this lock.
     #[serde(default)]
     fork_strategy: ForkStrategy,
@@ -3476,6 +3488,7 @@ impl TryFrom<LockWire> for Lock {
         let options = ResolverOptions {
             resolution_mode: options_wire.resolution_mode,
             prerelease_mode: options_wire.prerelease_mode,
+            prerelease_package: options_wire.prerelease_package,
             fork_strategy: options_wire.fork_strategy,
             exclude_newer: options_wire.exclude_newer.into(),
         };

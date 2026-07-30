@@ -532,6 +532,7 @@ async fn do_lock(
         keyring_provider,
         resolution,
         prerelease,
+        prerelease_package,
         fork_strategy,
         dependency_metadata,
         config_setting,
@@ -828,6 +829,7 @@ async fn do_lock(
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
         .prerelease_mode(*prerelease)
+        .prerelease_package(prerelease_package.clone())
         .fork_strategy(*fork_strategy)
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
@@ -1325,6 +1327,13 @@ impl ValidatedLock {
                 "Resolving despite existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
                 lock.prerelease_mode().cyan(),
                 options.prerelease_mode.cyan()
+            );
+            return Ok(Self::Preferable(lock));
+        }
+
+        if lock.prerelease_package() != &options.prerelease_package {
+            debug!(
+                "Resolving despite existing lockfile due to change in package-specific pre-release modes"
             );
             return Ok(Self::Preferable(lock));
         }

@@ -3,13 +3,14 @@ use uv_pypi_types::SupportedEnvironments;
 use uv_torch::TorchStrategy;
 
 use crate::fork_strategy::ForkStrategy;
-use crate::{DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
+use crate::{DependencyMode, ExcludeNewer, PrereleaseMode, PrereleasePackage, ResolutionMode};
 
 /// Options for resolving a manifest.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Options {
     pub resolution_mode: ResolutionMode,
     pub prerelease_mode: PrereleaseMode,
+    pub prerelease_package: PrereleasePackage,
     pub dependency_mode: DependencyMode,
     pub fork_strategy: ForkStrategy,
     pub exclude_newer: ExcludeNewer,
@@ -25,6 +26,7 @@ pub struct Options {
 pub struct OptionsBuilder {
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
+    prerelease_package: PrereleasePackage,
     dependency_mode: DependencyMode,
     fork_strategy: ForkStrategy,
     exclude_newer: ExcludeNewer,
@@ -52,6 +54,13 @@ impl OptionsBuilder {
     #[must_use]
     pub fn prerelease_mode(mut self, prerelease_mode: PrereleaseMode) -> Self {
         self.prerelease_mode = prerelease_mode;
+        self
+    }
+
+    /// Sets package-specific pre-release selection policies.
+    #[must_use]
+    pub fn prerelease_package(mut self, prerelease_package: PrereleasePackage) -> Self {
+        self.prerelease_package = prerelease_package;
         self
     }
 
@@ -116,6 +125,7 @@ impl OptionsBuilder {
         Options {
             resolution_mode: self.resolution_mode,
             prerelease_mode: self.prerelease_mode,
+            prerelease_package: self.prerelease_package,
             dependency_mode: self.dependency_mode,
             fork_strategy: self.fork_strategy,
             exclude_newer: self.exclude_newer,

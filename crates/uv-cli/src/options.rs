@@ -7,7 +7,7 @@ use anyhow::bail;
 use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
 use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
-use uv_resolver::{ExcludeNewerPackage, PrereleaseMode};
+use uv_resolver::{ExcludeNewerPackage, PrereleaseMode, PrereleasePackage};
 use uv_settings::{
     Combine, EnvFlag, IndexOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
 };
@@ -254,6 +254,7 @@ impl TryFrom<ResolverArgs> for PipOptions {
                 VersionSelectionArgs {
                     resolution,
                     prerelease,
+                    prerelease_package,
                     pre,
                     fork_strategy,
                 },
@@ -300,6 +301,7 @@ impl TryFrom<ResolverArgs> for PipOptions {
             } else {
                 prerelease
             },
+            prerelease_package: prerelease_package.map(PrereleasePackage::from_iter),
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
             config_settings_package: config_settings_package.map(|config_settings| {
@@ -418,6 +420,7 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
                 VersionSelectionArgs {
                     resolution,
                     prerelease,
+                    prerelease_package,
                     pre,
                     fork_strategy,
                 },
@@ -470,6 +473,7 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
             } else {
                 prerelease
             },
+            prerelease_package: prerelease_package.map(PrereleasePackage::from_iter),
             fork_strategy,
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
@@ -588,6 +592,7 @@ pub fn resolver_options(
             VersionSelectionArgs {
                 resolution,
                 prerelease,
+                prerelease_package,
                 pre,
                 fork_strategy,
             },
@@ -638,6 +643,7 @@ pub fn resolver_options(
         } else {
             prerelease
         },
+        prerelease_package: prerelease_package.map(PrereleasePackage::from_iter),
         fork_strategy,
         dependency_metadata: None,
         config_settings: config_setting
@@ -706,6 +712,7 @@ pub fn resolver_installer_options(
             VersionSelectionArgs {
                 resolution,
                 prerelease,
+                prerelease_package,
                 pre,
                 fork_strategy,
             },
@@ -765,6 +772,7 @@ pub fn resolver_installer_options(
         } else {
             prerelease
         },
+        prerelease_package: prerelease_package.map(PrereleasePackage::from_iter),
         fork_strategy,
         dependency_metadata: None,
         config_settings: config_setting

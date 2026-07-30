@@ -297,6 +297,7 @@ pub(crate) async fn install(
             client: &client,
             capabilities: &capabilities,
             prerelease: settings.resolver.prerelease,
+            prerelease_package: &settings.resolver.prerelease_package,
             exclude_newer: &settings.resolver.exclude_newer,
             index_locations: &settings.resolver.index_locations,
             tags: None,

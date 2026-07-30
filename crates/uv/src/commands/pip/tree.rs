@@ -23,7 +23,7 @@ use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
 use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_resolver::{ExcludeNewer, PrereleaseMode};
+use uv_resolver::{ExcludeNewer, PrereleaseMode, PrereleasePackage};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
@@ -42,6 +42,7 @@ pub(crate) async fn pip_tree(
     invert: bool,
     outdated: bool,
     prerelease: PrereleaseMode,
+    prerelease_package: PrereleasePackage,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
@@ -113,6 +114,7 @@ pub(crate) async fn pip_tree(
             client: &client,
             capabilities: &capabilities,
             prerelease,
+            prerelease_package: &prerelease_package,
             exclude_newer: &exclude_newer,
             index_locations: &latest_index_locations,
             tags: Some(tags),

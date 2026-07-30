@@ -9777,6 +9777,62 @@ fn lock_explicit_prerelease_mode() -> Result<()> {
     Ok(())
 }
 
+/// Merge package-specific pre-release policies from project configuration and the CLI, and persist
+/// the effective policies in the lockfile.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_prerelease_package_configuration() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        prerelease = "disallow"
+        prerelease-package = { bar = "explicit", foo = "allow" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--prerelease-package")
+        .arg("foo=if-necessary")
+        .arg("--prerelease-package")
+        .arg("baz=allow"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        prerelease-mode = "disallow"
+
+        [options.prerelease-package]
+        bar = "explicit"
+        baz = "allow"
+        foo = "if-necessary"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Lock a requirement from PyPI, filtering out wheels that target an ABI that is non-overlapping
 /// with the `Requires-Python` constraint.
 #[cfg(feature = "test-universal")]

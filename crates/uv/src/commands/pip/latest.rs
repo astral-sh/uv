@@ -8,7 +8,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
-use uv_resolver::{ExcludeNewer, PrereleaseMode};
+use uv_resolver::{ExcludeNewer, PrereleaseMode, PrereleasePackage};
 use uv_warnings::warn_user_once;
 
 /// A client to fetch the latest version of a package from an index.
@@ -20,6 +20,7 @@ pub(crate) struct LatestClient<'env> {
     pub(crate) client: &'env RegistryClient,
     pub(crate) capabilities: &'env IndexCapabilities,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) prerelease_package: &'env PrereleasePackage,
     pub(crate) exclude_newer: &'env ExcludeNewer,
     pub(crate) index_locations: &'env IndexLocations,
     pub(crate) tags: Option<&'env Tags>,
@@ -38,6 +39,7 @@ impl LatestClient<'_> {
 
     fn consider_candidate(
         &self,
+        package: &PackageName,
         filename: &DistFilename,
         file: &File,
         exclude_newer: Option<&jiff::Timestamp>,
@@ -60,7 +62,12 @@ impl LatestClient<'_> {
         }
 
         // Unless explicitly allowed, skip pre-release artifacts.
-        if !filename.version().is_stable() && !matches!(self.prerelease, PrereleaseMode::Allow) {
+        let prerelease = self
+            .prerelease_package
+            .get(package)
+            .copied()
+            .unwrap_or(self.prerelease);
+        if !filename.version().is_stable() && !matches!(prerelease, PrereleaseMode::Allow) {
             return false;
         }
 
@@ -155,7 +162,12 @@ impl LatestClient<'_> {
                                 .expect("archived version files always deserializes");
 
                         for (filename, file) in files.all(package) {
-                            if self.consider_candidate(&filename, &file, exclude_newer.as_ref()) {
+                            if self.consider_candidate(
+                                package,
+                                &filename,
+                                &file,
+                                exclude_newer.as_ref(),
+                            ) {
                                 update_latest(filename);
                             }
                         }
@@ -164,7 +176,12 @@ impl LatestClient<'_> {
                 MetadataFormat::Flat(entries) => {
                     for entry in entries {
                         let (filename, file, _) = entry.into_parts();
-                        if self.consider_candidate(&filename, &file, exclude_newer.as_ref()) {
+                        if self.consider_candidate(
+                            package,
+                            &filename,
+                            &file,
+                            exclude_newer.as_ref(),
+                        ) {
                             update_latest(filename);
                         }
                     }
@@ -180,7 +197,7 @@ impl LatestClient<'_> {
             {
                 let (filename, file, index) = entry.into_parts();
                 let exclude_newer = self.effective_exclude_newer(package, &index);
-                if self.consider_candidate(&filename, &file, exclude_newer.as_ref()) {
+                if self.consider_candidate(package, &filename, &file, exclude_newer.as_ref()) {
                     update_latest(filename);
                 }
             }

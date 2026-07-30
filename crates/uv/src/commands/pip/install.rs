@@ -35,8 +35,8 @@ use uv_python::{
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
-    ResolutionMode, ResolverEnvironment,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PrereleasePackage,
+    PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_torch::{AmdGpuArchitecture, TorchMode, TorchSource, TorchStrategy};
@@ -91,6 +91,7 @@ pub(crate) async fn pip_install(
     groups: &GroupsSpecification,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
+    prerelease_package: PrereleasePackage,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
@@ -568,6 +569,7 @@ pub(crate) async fn pip_install(
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)
             .prerelease_mode(prerelease_mode)
+            .prerelease_package(prerelease_package)
             .dependency_mode(dependency_mode)
             .exclude_newer(exclude_newer.clone())
             .index_strategy(index_strategy)

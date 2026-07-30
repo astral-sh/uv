@@ -54,7 +54,7 @@ use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
     AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage,
-    ForkStrategy, PrereleaseMode, ResolutionMode,
+    ForkStrategy, PrereleaseMode, PrereleasePackage, ResolutionMode,
 };
 use uv_settings::{
     Combine, EnvironmentOptions, FilesystemOptions, IndexOptions, MalwareCheckSettings, Options,
@@ -4297,6 +4297,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) prerelease_package: PrereleasePackage,
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: NoSources,
     pub(crate) torch_backend: Option<TorchMode>,
@@ -4369,6 +4370,7 @@ impl From<ResolverOptions> for ResolverSettings {
             index_locations: value.indexes.into(),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: warn_if_deprecated_prerelease_mode(value.prerelease.unwrap_or_default()),
+            prerelease_package: value.prerelease_package.unwrap_or_default(),
             fork_strategy: value.fork_strategy.unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 value.dependency_metadata.into_iter().flatten(),
@@ -4511,6 +4513,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 prerelease: warn_if_deprecated_prerelease_mode(
                     value.prerelease.unwrap_or_default(),
                 ),
+                prerelease_package: value.prerelease_package.unwrap_or_default(),
                 resolution: value.resolution.unwrap_or_default(),
                 sources: NoSources::from_args(
                     value.no_sources,
@@ -4556,6 +4559,7 @@ pub(crate) struct PipSettings {
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) prerelease_package: PrereleasePackage,
     pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) output_file: Option<PathBuf>,
@@ -4632,6 +4636,7 @@ impl PipSettings {
             allow_empty_requirements,
             resolution,
             prerelease,
+            prerelease_package: _,
             fork_strategy,
             dependency_metadata,
             output_file,
@@ -4677,6 +4682,7 @@ impl PipSettings {
             keyring_provider: top_level_keyring_provider,
             resolution: top_level_resolution,
             prerelease: top_level_prerelease,
+            prerelease_package: top_level_prerelease_package,
             fork_strategy: top_level_fork_strategy,
             dependency_metadata: top_level_dependency_metadata,
             config_settings: top_level_config_settings,
@@ -4715,6 +4721,10 @@ impl PipSettings {
         let keyring_provider = keyring_provider.combine(top_level_keyring_provider);
         let resolution = resolution.combine(top_level_resolution);
         let prerelease = prerelease.combine(top_level_prerelease);
+        let prerelease_package = args
+            .prerelease_package
+            .combine(top_level_prerelease_package)
+            .unwrap_or_default();
         let fork_strategy = fork_strategy.combine(top_level_fork_strategy);
         let dependency_metadata = dependency_metadata.combine(top_level_dependency_metadata);
         let config_settings = config_settings.combine(top_level_config_settings);
@@ -4787,6 +4797,7 @@ impl PipSettings {
             prerelease: warn_if_deprecated_prerelease_mode(
                 args.prerelease.combine(prerelease).unwrap_or_default(),
             ),
+            prerelease_package,
             fork_strategy: args
                 .fork_strategy
                 .combine(fork_strategy)
