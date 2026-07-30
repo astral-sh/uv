@@ -67,6 +67,7 @@ schemars = ["dep:schemars", "uv-pypi-types/schemars"]
 uv-preview = { workspace = true, features = ["testing"] }
 
 anstream = { workspace = true }
+hex = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
 regex = { workspace = true }
