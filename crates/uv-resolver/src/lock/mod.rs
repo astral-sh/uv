@@ -2578,7 +2578,7 @@ impl Lock {
 
             for requirement in root_requirements {
                 for package in by_name.get(&requirement.name).into_iter().flatten() {
-                    if !package.id.source.is_local() {
+                    if package.id.source.is_immutable() {
                         continue;
                     }
 
@@ -2728,9 +2728,10 @@ impl Lock {
                         build_options,
                         markers,
                     )?;
-                    let validate_local_hash =
-                        matches!(&package.id.source, Source::Path(..)) && !hashes.is_empty();
-                    let hash_policy = if validate_local_hash {
+                    let validate_archive_hash =
+                        matches!(&package.id.source, Source::Path(..) | Source::Direct(..))
+                            && !hashes.is_empty();
+                    let hash_policy = if validate_archive_hash {
                         HashPolicy::Generate(HashGeneration::Url)
                     } else {
                         hasher.get(&dist)
@@ -2769,7 +2770,7 @@ impl Lock {
                             archive
                         };
 
-                        if validate_local_hash
+                        if validate_archive_hash
                             && !HashPolicy::All(hashes.as_slice())
                                 .matches(archive.hashes.as_slice())
                         {

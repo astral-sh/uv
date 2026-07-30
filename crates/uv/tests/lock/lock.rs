@@ -31657,6 +31657,150 @@ fn lock_script_local_wheel_dependency_change() -> Result<()> {
     Ok(())
 }
 
+/// Direct URL requirements must validate mutable remote archives when a network is available.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_script_direct_url_dependency_change() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let wheel_path = "/child-1.0.0-py3-none-any.whl";
+
+    let wheel = |dependency: &str, payload: &str| -> Result<Vec<u8>> {
+        let mut archive = ZipFileWriter::new(Vec::new());
+        for (path, contents) in [
+            ("child/__init__.py", payload.to_string()),
+            (
+                "child-1.0.0.dist-info/METADATA",
+                format!(
+                    "Metadata-Version: 2.4\nName: child\nVersion: 1.0.0\nRequires-Dist: ok=={dependency}\n"
+                ),
+            ),
+            (
+                "child-1.0.0.dist-info/WHEEL",
+                "Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+                    .to_string(),
+            ),
+            ("child-1.0.0.dist-info/RECORD", String::new()),
+        ] {
+            let entry = ZipEntryBuilder::new(path.into(), Compression::Stored);
+            block_on(archive.write_entry_whole(entry, contents.as_bytes()))?;
+        }
+        Ok(block_on(archive.close())?)
+    };
+
+    Mock::given(method("GET"))
+        .and(path(wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel("1.0.0", "before")?))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("script.py")
+        .write_str(&formatdoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child"]
+        #
+        # [tool.uv.sources]
+        # child = {{ url = "{}{wheel_path}" }}
+        # ///
+
+        print("hello")
+        "#,
+            server.uri()
+        })?;
+
+    let links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Preserve the existing offline behavior when the direct URL cannot be refreshed.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel("1.0.0", "after")?))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel("2.0.0", "after")?))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// `uv lock --script` should add a PEP 723 tag, if it doesn't exist already.
 #[cfg(feature = "test-universal")]
 #[test]
