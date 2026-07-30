@@ -98,14 +98,16 @@ pub(super) async fn update_shell(
                 }
 
                 // Append the command to the file.
-                fs_err::tokio::OpenOptions::new()
+                let mut configuration_file = fs_err::tokio::OpenOptions::new()
                     .create(true)
                     .truncate(true)
                     .write(true)
                     .open(&file)
-                    .await?
+                    .await?;
+                configuration_file
                     .write_all(format!("{contents}\n# uv\n{command}\n").as_bytes())
                     .await?;
+                configuration_file.flush().await?;
 
                 writeln!(
                     printer.stderr(),
@@ -121,14 +123,16 @@ pub(super) async fn update_shell(
                 }
 
                 // Append the command to the file.
-                fs_err::tokio::OpenOptions::new()
+                let mut configuration_file = fs_err::tokio::OpenOptions::new()
                     .create(true)
                     .truncate(true)
                     .write(true)
                     .open(&file)
-                    .await?
+                    .await?;
+                configuration_file
                     .write_all(format!("# uv\n{command}\n").as_bytes())
                     .await?;
+                configuration_file.flush().await?;
 
                 writeln!(
                     printer.stderr(),
