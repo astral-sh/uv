@@ -2,7 +2,7 @@
 title: Using uv with PyTorch
 description:
   A guide to using uv with PyTorch, including installing PyTorch, configuring per-platform and
-  per-accelerator builds, and more.
+  per-accelerator builds, and installing GPU-enabled PyTorch extensions.
 ---
 
 # Using uv with PyTorch
@@ -436,6 +436,46 @@ explicit = true
 
     Since GPU-accelerated builds aren't available on macOS, the above configuration will fail to install
     on macOS when the `cu130` extra is enabled.
+
+## Installing GPU-enabled PyTorch extensions
+
+Many packages in the PyTorch ecosystem include GPU-enabled extensions that are compiled for a
+specific combination of CUDA and PyTorch versions. Building these packages from source often
+requires access to the CUDA development toolkit and additional build configuration.
+
+The [Astral GPU indexes](https://wheels.astral.sh/) provide pre-built wheels for packages like
+`flash-attn`, `deepspeed`, `deep-gemm`, `torch-scatter`, and `vllm`, across a range of Python, CUDA,
+and PyTorch versions.
+
+To install `flash-attn` from the index for CUDA 12.8, run:
+
+```console
+$ uv add flash-attn --index astral-cu128=https://wheels.astral.sh/simple/cu128/
+```
+
+The command adds `flash-attn` to the project dependencies, configures the Astral GPU index, and pins
+`flash-attn` to that index.
+
+As with the PyTorch indexes, set `explicit = true` to restrict the Astral GPU index to packages that
+are explicitly pinned to it:
+
+```toml title="pyproject.toml"
+[tool.uv.sources]
+flash-attn = { index = "astral-cu128" }
+
+[[tool.uv.index]]
+name = "astral-cu128"
+url = "https://wheels.astral.sh/simple/cu128/"
+explicit = true
+```
+
+Each Astral GPU index targets a specific CUDA version, and its wheels are built for specific PyTorch
+versions. For example, a wheel with a `+cu.12.8.torch.2.11` local version is built for CUDA 12.8 and
+PyTorch 2.11. Select the index and wheel that match your Python version, platform, CUDA version, and
+PyTorch installation.
+
+For the available packages, CUDA versions, and PyTorch versions, see the
+[Astral GPU indexes](https://wheels.astral.sh/).
 
 ## The `uv pip` interface
 
