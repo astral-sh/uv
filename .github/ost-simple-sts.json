@@ -38,7 +38,11 @@
       "environment": "automations",
       "caller_workflow": "promote-pull-request.yml",
       "on": ["workflow_dispatch"],
-      "permissions": { "contents": "write", "pull_requests": "write" },
+      "permissions": {
+        "contents": "write",
+        "pull_requests": "write",
+        "workflows": "write"
+      },
       "targets": ["uv", "uv-dev"],
       "installation": "automations"
     },
