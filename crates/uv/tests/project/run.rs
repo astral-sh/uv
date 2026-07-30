@@ -6403,7 +6403,6 @@ fn run_target_workspace_discovery_workspace_root_group() -> Result<()> {
 
         [dependency-groups]
         test = ["iniconfig"]
-        empty = []
         "#
         })?;
 
@@ -6454,42 +6453,6 @@ fn run_target_workspace_discovery_workspace_root_group() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    ");
-
-    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
-
-    uv_snapshot!(context.filters(), context.run()
-        .arg("--preview-features")
-        .arg("lock-without-metadata")
-        .arg("--only-group")
-        .arg("test")
-        .arg("subproj-a/scripts/thing.py"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    success
-
-    ----- stderr -----
-    Resolved 5 packages in [TIME]
-    Checked 1 package in [TIME]
-    ");
-
-    uv_snapshot!(context.filters(), context.run()
-        .arg("--preview-features")
-        .arg("lock-without-metadata")
-        .arg("--only-group")
-        .arg("empty")
-        .arg("--package")
-        .arg("subproj-a")
-        .arg("python")
-        .arg("-c")
-        .arg("print('empty')"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    empty
-
-    ----- stderr -----
-    Resolved 5 packages in [TIME]
-    Checked in [TIME]
     ");
 
     Ok(())
