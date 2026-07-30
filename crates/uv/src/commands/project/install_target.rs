@@ -100,37 +100,34 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
     }
 
     fn group_root(&self, groups: &DependencyGroupsWithDefaults) -> Option<&PackageName> {
-        match self {
-            Self::Project {
-                name,
-                lock,
-                workspace,
-            } => lock
-                .root()
-                .filter(|root| root.name() != *name)
-                .filter(|root| {
-                    let root_member = workspace.packages().get(root.name());
-                    let declared_groups = root_member
-                        .and_then(|member| member.pyproject_toml().dependency_groups.as_ref())
-                        .into_iter()
-                        .flat_map(DependencyGroups::keys);
-                    let legacy_dev = root_member
-                        .and_then(|member| member.pyproject_toml().tool.as_ref())
-                        .and_then(|tool| tool.uv.as_ref())
-                        .and_then(|uv| uv.dev_dependencies.as_ref())
-                        .is_some()
-                        .then_some(&*DEV_DEPENDENCIES);
+        let Self::Project {
+            name,
+            lock,
+            workspace,
+        } = self
+        else {
+            return None;
+        };
+        let root = lock.root().filter(|root| root.name() != *name)?;
+        let root_member = workspace.packages().get(root.name())?;
+        let pyproject = root_member.pyproject_toml();
+        let declared_groups = pyproject
+            .dependency_groups
+            .as_ref()
+            .into_iter()
+            .flat_map(DependencyGroups::keys);
+        let legacy_dev = pyproject
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.dev_dependencies.as_ref())
+            .is_some()
+            .then_some(&*DEV_DEPENDENCIES);
 
-                    declared_groups
-                        .chain(legacy_dev)
-                        .any(|group| self.includes_group(Some(root.name()), group, groups))
-                })
-                .map(Package::name),
-            Self::Projects { .. }
-            | Self::Workspace { .. }
-            | Self::NonProjectWorkspace { .. }
-            | Self::Script { .. } => None,
-        }
+        declared_groups
+            .chain(legacy_dev)
+            .any(|group| self.includes_group(Some(root.name()), group, groups))
+            .then_some(root.name())
     }
 
     fn includes_group(
