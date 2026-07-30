@@ -16329,7 +16329,9 @@ fn lock_ios_platform_system_markers() -> Result<()> {
         dependencies = [
             "ok==1.0.0 ; platform_system == 'iOS'",
             "ok==1.0.0 ; platform_system == 'iPadOS'",
+            "ok==1.0.0 ; sys_platform == 'ios'",
             "ok==2.0.0 ; sys_platform != 'ios'",
+            "ok==2.0.0 ; platform_system != 'iOS' and platform_system != 'iPadOS'",
         ]
         "#,
     )?;

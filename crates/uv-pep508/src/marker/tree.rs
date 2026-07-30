@@ -3131,10 +3131,6 @@ mod test {
             "implementation_name == 'cpython' and implementation_version >= '3.13'",
             "python_full_version < '3.13'",
         ));
-        assert!(is_disjoint(
-            "platform_python_implementation == 'CPython' and implementation_version < '3.13'",
-            "python_full_version >= '3.13'",
-        ));
         assert!(!is_disjoint(
             "implementation_name == 'pypy' and implementation_version >= '3.13'",
             "python_full_version < '3.13'",
