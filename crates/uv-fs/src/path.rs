@@ -15,35 +15,23 @@ pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
     })
 });
 
-/// The list of valid executable extensions on Windows.
+/// A common list of valid executable suffixes on Windows.
 ///
-/// This always includes `.exe`, even if not explicitly included.
+/// This is similar to the default value of `PATHEXT` but not derived from it.
 #[cfg(windows)]
-pub static PATHEXT: LazyLock<Vec<Cow<'static, str>>> = LazyLock::new(|| {
-    let mut extensions: Vec<_> = if let Ok(pathext) = std::env::var("PATHEXT") {
-        pathext
-            .split(';')
-            .filter(|extension| !extension.is_empty())
-            .map(|extension| Cow::Owned(extension.to_ascii_lowercase()))
-            .collect()
-    } else {
-        [
-            ".com", ".exe", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".msc",
-        ]
-        .into_iter()
-        .map(Cow::Borrowed)
-        .collect()
-    };
+pub static EXE_SUFFIXES: &[&str] = &[
+    // Default on Windows 10+
+    // learn.microsoft.com/en-us/windows-server/administration/windows-commands/start
+    ".com", ".exe", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".msc",
+    // Honored by PowerShell, but not in the default `PATHEXT`.
+    ".ps1",
+];
 
-    if !extensions
-        .iter()
-        .any(|extension| extension.as_ref() == ".exe")
-    {
-        extensions.push(Cow::Borrowed(".exe"));
-    }
-
-    extensions
-});
+/// Like [`EXE_SUFFIXES`], but without leading dots.
+#[cfg(windows)]
+pub static EXE_EXTENSIONS: &[&str] = &[
+    "com", "exe", "bat", "cmd", "vbs", "vbe", "js", "jse", "wsf", "wsh", "msc", "ps1",
+];
 
 pub trait Simplified {
     /// Simplify a [`Path`].
