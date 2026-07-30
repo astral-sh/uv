@@ -457,7 +457,7 @@ impl ToolLock {
 
         let options = OptionsBuilder::new()
             .resolution_mode(*resolution)
-            .prerelease_mode(*prerelease)
+            .prerelease(prerelease.clone())
             .fork_strategy(*fork_strategy)
             .exclude_newer(exclude_newer.clone())
             .index_strategy(*index_strategy)

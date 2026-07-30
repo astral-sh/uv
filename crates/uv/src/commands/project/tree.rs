@@ -257,7 +257,7 @@ pub(crate) async fn tree(
             let client = LatestClient {
                 client: &client,
                 capabilities: &capabilities,
-                prerelease: lock.prerelease_mode(),
+                prerelease: lock.prerelease(),
                 exclude_newer,
                 index_locations,
                 requires_python: Some(lock.requires_python()),

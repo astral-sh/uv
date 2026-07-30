@@ -827,7 +827,7 @@ async fn do_lock(
 
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
-        .prerelease_mode(*prerelease)
+        .prerelease(prerelease.clone())
         .fork_strategy(*fork_strategy)
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
@@ -1319,13 +1319,19 @@ impl ValidatedLock {
 
         // If the pre-release mode has changed, we have to re-resolve, but can retain the existing
         // versions and forks.
-        if lock.prerelease_mode() != options.prerelease_mode {
-            let _ = writeln!(
-                printer.stderr(),
-                "Resolving despite existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
-                lock.prerelease_mode().cyan(),
-                options.prerelease_mode.cyan()
-            );
+        if lock.prerelease() != &options.prerelease {
+            if lock.prerelease_mode() != options.prerelease.global {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Resolving despite existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
+                    lock.prerelease_mode().cyan(),
+                    options.prerelease.global.cyan()
+                );
+            } else {
+                debug!(
+                    "Resolving despite existing lockfile due to change in package-specific pre-release modes"
+                );
+            }
             return Ok(Self::Preferable(lock));
         }
 

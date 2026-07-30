@@ -136,7 +136,8 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
 
 fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(), WriteError> {
     let has_options = options.resolution_mode != ResolutionMode::default()
-        || options.prerelease_mode != PrereleaseMode::default()
+        || options.prerelease.global != PrereleaseMode::default()
+        || !options.prerelease.package.is_empty()
         || options.fork_strategy != ForkStrategy::default()
         || !options.exclude_newer.is_empty();
     if !has_options {
@@ -147,8 +148,8 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
     if options.resolution_mode != ResolutionMode::default() {
         writer.key_value("resolution-mode", options.resolution_mode.to_string())?;
     }
-    if options.prerelease_mode != PrereleaseMode::default() {
-        writer.key_value("prerelease-mode", options.prerelease_mode.to_string())?;
+    if options.prerelease.global != PrereleaseMode::default() {
+        writer.key_value("prerelease-mode", options.prerelease.global.to_string())?;
     }
     if options.fork_strategy != ForkStrategy::default() {
         writer.key_value("fork-strategy", options.fork_strategy.to_string())?;
@@ -163,6 +164,15 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
             writer.key_value("exclude-newer-span", span.to_string())?;
         } else {
             writer.key_value("exclude-newer", global.to_string())?;
+        }
+    }
+
+    if !options.prerelease.package.is_empty() {
+        writer.table(&["options", "prerelease-package"])?;
+        let mut packages = options.prerelease.package.iter().collect::<Vec<_>>();
+        packages.sort_unstable_by_key(|(name, _)| *name);
+        for (name, mode) in packages {
+            writer.key_value(name.as_ref(), mode.to_string())?;
         }
     }
 

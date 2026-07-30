@@ -328,6 +328,15 @@ resolution.
 Use `--prerelease allow` to consider pre-releases for every package without preferring stable
 candidates first, or `--prerelease disallow` to exclude them entirely.
 
+Use `--prerelease-package foo=allow` to override the global pre-release strategy for a specific
+package. Package-specific strategies can also be configured in `[tool.uv]`:
+
+```toml
+[tool.uv]
+prerelease = "disallow"
+prerelease-package = { foo = "allow", bar = "if-necessary" }
+```
+
 The `explicit` mode considers pre-releases only for first-party requirements that contain a
 pre-release identifier (preferring stable versions and falling back to pre-releases only if
 necessary), while disallowing pre-releases for all other packages.

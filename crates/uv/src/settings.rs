@@ -54,7 +54,7 @@ use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
     AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage,
-    ForkStrategy, PrereleaseMode, ResolutionMode,
+    ForkStrategy, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
 };
 use uv_settings::{
     Combine, EnvironmentOptions, FilesystemOptions, IndexOptions, MalwareCheckSettings, Options,
@@ -4296,7 +4296,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
-    pub(crate) prerelease: PrereleaseMode,
+    pub(crate) prerelease: Prerelease,
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: NoSources,
     pub(crate) torch_backend: Option<TorchMode>,
@@ -4314,6 +4314,17 @@ fn warn_if_deprecated_prerelease_mode(prerelease: PrereleaseMode) -> PrereleaseM
         PrereleaseMode::IfNecessary
     } else {
         prerelease
+    }
+}
+
+fn resolve_prerelease(global: PrereleaseMode, mut package: PrereleasePackage) -> Prerelease {
+    for mode in package.values_mut() {
+        *mode = warn_if_deprecated_prerelease_mode(*mode);
+    }
+
+    Prerelease {
+        global: warn_if_deprecated_prerelease_mode(global),
+        package,
     }
 }
 
@@ -4368,7 +4379,10 @@ impl From<ResolverOptions> for ResolverSettings {
         Self {
             index_locations: value.indexes.into(),
             resolution: value.resolution.unwrap_or_default(),
-            prerelease: warn_if_deprecated_prerelease_mode(value.prerelease.unwrap_or_default()),
+            prerelease: resolve_prerelease(
+                value.prerelease.unwrap_or_default(),
+                value.prerelease_package.unwrap_or_default(),
+            ),
             fork_strategy: value.fork_strategy.unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 value.dependency_metadata.into_iter().flatten(),
@@ -4508,8 +4522,9 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 build_isolation: value.build_isolation.unwrap_or_default(),
                 extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
-                prerelease: warn_if_deprecated_prerelease_mode(
+                prerelease: resolve_prerelease(
                     value.prerelease.unwrap_or_default(),
+                    value.prerelease_package.unwrap_or_default(),
                 ),
                 resolution: value.resolution.unwrap_or_default(),
                 sources: NoSources::from_args(
@@ -4555,7 +4570,7 @@ pub(crate) struct PipSettings {
     pub(crate) strict: bool,
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
-    pub(crate) prerelease: PrereleaseMode,
+    pub(crate) prerelease: Prerelease,
     pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) output_file: Option<PathBuf>,
@@ -4632,6 +4647,7 @@ impl PipSettings {
             allow_empty_requirements,
             resolution,
             prerelease,
+            prerelease_package: _,
             fork_strategy,
             dependency_metadata,
             output_file,
@@ -4677,6 +4693,7 @@ impl PipSettings {
             keyring_provider: top_level_keyring_provider,
             resolution: top_level_resolution,
             prerelease: top_level_prerelease,
+            prerelease_package: top_level_prerelease_package,
             fork_strategy: top_level_fork_strategy,
             dependency_metadata: top_level_dependency_metadata,
             config_settings: top_level_config_settings,
@@ -4715,6 +4732,10 @@ impl PipSettings {
         let keyring_provider = keyring_provider.combine(top_level_keyring_provider);
         let resolution = resolution.combine(top_level_resolution);
         let prerelease = prerelease.combine(top_level_prerelease);
+        let prerelease_package = args
+            .prerelease_package
+            .combine(top_level_prerelease_package)
+            .unwrap_or_default();
         let fork_strategy = fork_strategy.combine(top_level_fork_strategy);
         let dependency_metadata = dependency_metadata.combine(top_level_dependency_metadata);
         let config_settings = config_settings.combine(top_level_config_settings);
@@ -4784,8 +4805,9 @@ impl PipSettings {
                 DependencyMode::Transitive
             },
             resolution: args.resolution.combine(resolution).unwrap_or_default(),
-            prerelease: warn_if_deprecated_prerelease_mode(
+            prerelease: resolve_prerelease(
                 args.prerelease.combine(prerelease).unwrap_or_default(),
+                prerelease_package,
             ),
             fork_strategy: args
                 .fork_strategy

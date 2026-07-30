@@ -23,7 +23,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
     AnnotationStyle, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan,
-    ExcludeNewerValue, ForkStrategy, PrereleaseMode, ResolutionMode,
+    ExcludeNewerValue, ForkStrategy, PrereleaseMode, PrereleasePackage, ResolutionMode,
     serialize_exclude_newer_package_with_spans,
 };
 use uv_torch::TorchMode;
@@ -654,6 +654,7 @@ pub struct ResolverOptions {
     pub keyring_provider: Option<KeyringProviderType>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
+    pub prerelease_package: Option<PrereleasePackage>,
     pub fork_strategy: Option<ForkStrategy>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
@@ -691,6 +692,7 @@ pub struct ResolverInstallerOptions {
     pub keyring_provider: Option<KeyringProviderType>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
+    pub prerelease_package: Option<PrereleasePackage>,
     pub fork_strategy: Option<ForkStrategy>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
@@ -733,6 +735,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             keyring_provider,
             resolution,
             prerelease,
+            prerelease_package,
             fork_strategy,
             dependency_metadata,
             config_settings,
@@ -769,6 +772,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             keyring_provider,
             resolution,
             prerelease,
+            prerelease_package,
             fork_strategy,
             dependency_metadata,
             config_settings,
@@ -979,6 +983,18 @@ pub struct ResolverInstallerSchema {
         possible_values = true
     )]
     pub prerelease: Option<PrereleaseMode>,
+    /// The strategy to use when considering pre-release versions for specific packages.
+    ///
+    /// Package-specific modes take precedence over the global [`prerelease`](#prerelease) mode.
+    /// Accepts a dictionary mapping package names to any supported pre-release mode.
+    #[option(
+        default = "{}",
+        value_type = "dict",
+        example = r#"
+            prerelease-package = { numpy = "allow", scipy = "disallow" }
+        "#
+    )]
+    pub prerelease_package: Option<PrereleasePackage>,
     /// The strategy to use when selecting multiple versions of a given package across Python
     /// versions and platforms.
     ///
@@ -1728,6 +1744,9 @@ pub struct PipOptions {
         possible_values = true
     )]
     pub prerelease: Option<PrereleaseMode>,
+    #[serde(skip)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub prerelease_package: Option<PrereleasePackage>,
     /// The strategy to use when selecting multiple versions of a given package across Python
     /// versions and platforms.
     ///
@@ -2203,6 +2222,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            prerelease_package: value.prerelease_package,
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
@@ -2288,6 +2308,7 @@ pub struct ToolOptions {
     keyring_provider: Option<KeyringProviderType>,
     resolution: Option<ResolutionMode>,
     prerelease: Option<PrereleaseMode>,
+    prerelease_package: Option<PrereleasePackage>,
     fork_strategy: Option<ForkStrategy>,
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
@@ -2321,6 +2342,7 @@ pub struct ToolOptionsWire {
     keyring_provider: Option<KeyringProviderType>,
     resolution: Option<ResolutionMode>,
     prerelease: Option<PrereleaseMode>,
+    prerelease_package: Option<PrereleasePackage>,
     fork_strategy: Option<ForkStrategy>,
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
@@ -2360,6 +2382,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            prerelease_package: value.prerelease_package,
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
@@ -2410,6 +2433,7 @@ impl From<ToolOptionsWire> for ToolOptions {
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            prerelease_package: value.prerelease_package,
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
@@ -2458,6 +2482,7 @@ impl From<ToolOptions> for ToolOptionsWire {
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            prerelease_package: value.prerelease_package,
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
@@ -2495,6 +2520,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            prerelease_package: value.prerelease_package,
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
@@ -2555,6 +2581,7 @@ struct OptionsWire {
     allow_insecure_host: Option<Vec<TrustedHost>>,
     resolution: Option<ResolutionMode>,
     prerelease: Option<PrereleaseMode>,
+    prerelease_package: Option<PrereleasePackage>,
     fork_strategy: Option<ForkStrategy>,
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
@@ -2660,6 +2687,7 @@ impl TryFrom<OptionsWire> for Options {
             allow_insecure_host,
             resolution,
             prerelease,
+            prerelease_package,
             fork_strategy,
             dependency_metadata,
             config_settings,
@@ -2738,6 +2766,7 @@ impl TryFrom<OptionsWire> for Options {
                 keyring_provider,
                 resolution,
                 prerelease,
+                prerelease_package,
                 fork_strategy,
                 dependency_metadata,
                 config_settings,

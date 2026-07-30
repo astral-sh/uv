@@ -431,6 +431,17 @@
         }
       ]
     },
+    "prerelease-package": {
+      "description": "The strategy to use when considering pre-release versions for specific packages.\n\nPackage-specific modes take precedence over the global [`prerelease`](#prerelease) mode.\nAccepts a dictionary mapping package names to any supported pre-release mode.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PrereleasePackage"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "preview": {
       "description": "Whether to enable all experimental, preview features.\n\nUse `preview-features` instead.",
       "type": ["boolean", "null"],
@@ -1759,6 +1770,13 @@
           "deprecated": true
         }
       ]
+    },
+    "PrereleasePackage": {
+      "description": "Pre-release selection policies that apply to individual packages.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/PrereleaseMode"
+      }
     },
     "PreviewFeature": {
       "type": "string",

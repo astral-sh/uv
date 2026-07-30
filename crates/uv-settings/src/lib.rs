@@ -404,6 +404,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 keyring_provider,
                 resolution,
                 prerelease,
+                prerelease_package,
                 fork_strategy,
                 dependency_metadata,
                 config_settings,
@@ -539,6 +540,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if prerelease.is_some() {
         masked_fields.push("prerelease");
+    }
+    if prerelease_package.is_some() {
+        masked_fields.push("prerelease-package");
     }
     if fork_strategy.is_some() {
         masked_fields.push("fork-strategy");

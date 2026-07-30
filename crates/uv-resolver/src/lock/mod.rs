@@ -73,7 +73,8 @@ use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
-    InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
+    InMemoryIndex, MetadataResponse, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
+    ResolverOutput,
 };
 
 pub(crate) mod export;
@@ -1082,7 +1083,7 @@ impl Lock {
 
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
-            prerelease_mode: resolution.options.prerelease_mode,
+            prerelease: resolution.options.prerelease.clone(),
             fork_strategy: resolution.options.fork_strategy,
             exclude_newer: resolution.options.exclude_newer.clone(),
         };
@@ -1374,7 +1375,12 @@ impl Lock {
 
     /// Returns the pre-release mode used to generate this lock.
     pub fn prerelease_mode(&self) -> PrereleaseMode {
-        self.options.prerelease_mode
+        self.options.prerelease.global
+    }
+
+    /// Returns the pre-release policy used to generate this lock.
+    pub fn prerelease(&self) -> &Prerelease {
+        &self.options.prerelease
     }
 
     /// Returns the multi-version mode used to generate this lock.
@@ -3196,8 +3202,8 @@ pub enum SatisfiesResult<'lock> {
 struct ResolverOptions {
     /// The [`ResolutionMode`] used to generate this lock.
     resolution_mode: ResolutionMode,
-    /// The [`PrereleaseMode`] used to generate this lock.
-    prerelease_mode: PrereleaseMode,
+    /// The [`Prerelease`] policy used to generate this lock.
+    prerelease: Prerelease,
     /// The [`ForkStrategy`] used to generate this lock.
     fork_strategy: ForkStrategy,
     /// The [`ExcludeNewer`] setting used to generate this lock.
@@ -3211,15 +3217,33 @@ struct ResolverOptionsWire {
     /// The [`ResolutionMode`] used to generate this lock.
     #[serde(default)]
     resolution_mode: ResolutionMode,
-    /// The [`PrereleaseMode`] used to generate this lock.
-    #[serde(default)]
-    prerelease_mode: PrereleaseMode,
+    /// The [`Prerelease`] policy used to generate this lock.
+    #[serde(flatten)]
+    prerelease: PrereleaseWire,
     /// The [`ForkStrategy`] used to generate this lock.
     #[serde(default)]
     fork_strategy: ForkStrategy,
     /// The [`ExcludeNewer`] setting used to generate this lock.
     #[serde(flatten)]
     exclude_newer: ExcludeNewerWire,
+}
+
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct PrereleaseWire {
+    #[serde(default)]
+    prerelease_mode: PrereleaseMode,
+    #[serde(default)]
+    prerelease_package: PrereleasePackage,
+}
+
+impl From<PrereleaseWire> for Prerelease {
+    fn from(wire: PrereleaseWire) -> Self {
+        Self {
+            global: wire.prerelease_mode,
+            package: wire.prerelease_package,
+        }
+    }
 }
 
 #[expect(clippy::struct_field_names)]
@@ -3475,7 +3499,7 @@ impl TryFrom<LockWire> for Lock {
         }
         let options = ResolverOptions {
             resolution_mode: options_wire.resolution_mode,
-            prerelease_mode: options_wire.prerelease_mode,
+            prerelease: options_wire.prerelease.into(),
             fork_strategy: options_wire.fork_strategy,
             exclude_newer: options_wire.exclude_newer.into(),
         };

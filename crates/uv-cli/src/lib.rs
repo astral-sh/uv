@@ -30,7 +30,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
     AnnotationStyle, ExcludeNewerOverride, ExcludeNewerPackageEntry, ForkStrategy, PrereleaseMode,
-    ResolutionMode,
+    PrereleasePackageEntry, ResolutionMode,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
@@ -6742,6 +6742,15 @@ pub struct VersionSelectionArgs {
         help_heading = "Resolver options"
     )]
     prerelease: Option<PrereleaseMode>,
+
+    /// The strategy to use when considering pre-release versions for a specific package.
+    ///
+    /// Accepts package-mode pairs in the format `PACKAGE=MODE`, where `MODE` is any value
+    /// accepted by `--prerelease`.
+    ///
+    /// May be provided multiple times for different packages.
+    #[arg(long, help_heading = "Resolver options", value_hint = ValueHint::Other)]
+    prerelease_package: Option<Vec<PrereleasePackageEntry>>,
 
     #[arg(long, hide = true, help_heading = "Resolver options")]
     pre: bool,

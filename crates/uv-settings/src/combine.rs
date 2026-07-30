@@ -17,7 +17,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
     AnnotationStyle, ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerValue,
-    ForkStrategy, PrereleaseMode, ResolutionMode,
+    ForkStrategy, PrereleaseMode, PrereleasePackage, ResolutionMode,
 };
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -167,6 +167,21 @@ impl Combine for Option<ExcludeNewerPackage> {
                 Some(a)
             }
             (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<PrereleasePackage> {
+    /// Merge package-specific policies, retaining the higher-precedence value for duplicates.
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(mut current), Some(fallback)) => {
+                for (package, mode) in fallback {
+                    current.entry(package).or_insert(mode);
+                }
+                Some(current)
+            }
+            (current, fallback) => current.or(fallback),
         }
     }
 }

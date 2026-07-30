@@ -43,8 +43,8 @@ impl CandidateSelector {
                 env,
                 options.dependency_mode,
             ),
-            prerelease_strategy: PrereleaseStrategy::from_mode(
-                options.prerelease_mode,
+            prerelease_strategy: PrereleaseStrategy::from_prerelease(
+                &options.prerelease,
                 manifest,
                 env,
                 options.dependency_mode,

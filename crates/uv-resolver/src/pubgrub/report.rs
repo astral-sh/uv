@@ -1364,6 +1364,7 @@ impl PubGrubReportFormatter<'_> {
                     hints.insert(PubGrubHint::PrereleaseRequested {
                         name: name.clone(),
                         range: set.clone(),
+                        package_override: options.prerelease.package.contains_key(name),
                     });
                 }
                 Flexibility::Fixed => {
@@ -1386,6 +1387,7 @@ impl PubGrubReportFormatter<'_> {
                     hints.insert(PubGrubHint::PrereleaseAvailable {
                         package: name.clone(),
                         version: version.clone(),
+                        package_override: options.prerelease.package.contains_key(name),
                     });
                 }
                 Flexibility::Fixed => {
@@ -1423,6 +1425,8 @@ pub enum PubGrubHint {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
+        // excluded from `PartialEq` and `Hash`
+        package_override: bool,
     },
     /// The resolver runs with fixed options (e.g., for build environments) and requires explicit
     /// pre-release opt-in for a package that only has pre-releases available.
@@ -1437,6 +1441,8 @@ pub enum PubGrubHint {
         name: PackageName,
         // excluded from `PartialEq` and `Hash`
         range: Range<Version>,
+        // excluded from `PartialEq` and `Hash`
+        package_override: bool,
     },
     /// A requirement included a pre-release marker, but the resolver runs with fixed options
     /// (e.g., for build environments) and cannot enable pre-releases automatically.
@@ -1803,13 +1809,22 @@ impl Eq for PubGrubHint {}
 impl std::fmt::Display for PubGrubHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PrereleaseAvailable { package, version } => {
+            Self::PrereleaseAvailable {
+                package,
+                version,
+                package_override,
+            } => {
+                let argument = if *package_override {
+                    format!("--prerelease-package {package}=allow")
+                } else {
+                    "--prerelease=allow".to_string()
+                };
                 write!(
                     f,
                     "Pre-releases are available for `{}` in the requested range (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     package.cyan(),
                     version.cyan(),
-                    "--prerelease=allow".green(),
+                    argument.green(),
                 )
             }
             Self::BuildPrereleaseAvailable { package, version } => {
@@ -1822,14 +1837,23 @@ impl std::fmt::Display for PubGrubHint {
                     spec.cyan(),
                 )
             }
-            Self::PrereleaseRequested { name, range } => {
+            Self::PrereleaseRequested {
+                name,
+                range,
+                package_override,
+            } => {
+                let argument = if *package_override {
+                    format!("--prerelease-package {name}=allow")
+                } else {
+                    "--prerelease=allow".to_string()
+                };
                 write!(
                     f,
                     "`{}` was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     name.cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name.clone()), range, None)
                         .cyan(),
-                    "--prerelease=allow".green(),
+                    argument.green(),
                 )
             }
             Self::BuildPrereleaseRequested { name, range } => {
