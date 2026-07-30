@@ -19,7 +19,7 @@ pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
 #[cfg(windows)]
 pub static PATHEXT: LazyLock<Vec<Cow<'static, str>>> = LazyLock::new(|| {
     if let Ok(pathext) = std::env::var("PATHEXT") {
-        pathext.split(";").collect()
+        pathext.split(";").map(|e| e.into()).collect()
     } else {
         [
             ".COM", ".EXE", ".BAT", ".CMD", ".VBS", ".VBE", ".JS", ".JSE", ".WSF", ".WSH", ".MSC",
