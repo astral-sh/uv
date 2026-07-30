@@ -133,7 +133,18 @@ async fn do_uninstall(
     } else {
         let mut entrypoints = vec![];
         for name in names {
-            let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
+            // If the receipt is missing or malformed, the tool is not installed properly; fall
+            // through to removing the dangling environment.
+            let receipt = match installed_tools.get_tool_receipt(&name) {
+                Ok(receipt) => receipt,
+                Err(err @ uv_tool::Error::ReceiptRead(..)) => {
+                    debug!("Failed to read receipt for `{name}`: {err}");
+                    None
+                }
+                Err(err) => return Err(err.into()),
+            };
+
+            let Some(receipt) = receipt else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
                 match installed_tools.remove_environment(&name) {
                     Ok(()) => {
