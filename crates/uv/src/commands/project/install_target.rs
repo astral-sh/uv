@@ -164,6 +164,8 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
                 .dependency_groups
                 .as_ref()
                 .is_some_and(|member_groups| member_groups.contains_key(group))
+                // Legacy development dependencies also define the member's `dev` group, so
+                // they take precedence over an inherited `dev` group from the workspace root.
                 || group == &*DEV_DEPENDENCIES
                     && pyproject
                         .tool
