@@ -752,7 +752,8 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             .satisfies_requirement_source(&requirement.source, self.workspace_root)?;
 
         // A constraint can select a direct source for an otherwise unqualified registry
-        // requirement. The locked source must still match that constraint exactly.
+        // requirement. Sources apply globally, even across disjoint marker environments,
+        // but the locked source must still match that constraint exactly.
         if !source_matches
             && matches!(
                 requirement.source,
@@ -761,11 +762,10 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             && let Some(constraints) = self.constraints.get(&requirement.name)
         {
             for constraint in constraints {
-                if !constraint.marker.is_disjoint(requirement.marker)
-                    && package
-                        .id
-                        .source
-                        .satisfies_requirement_source(&constraint.source, self.workspace_root)?
+                if package
+                    .id
+                    .source
+                    .satisfies_requirement_source(&constraint.source, self.workspace_root)?
                 {
                     source_matches = true;
                     break;
