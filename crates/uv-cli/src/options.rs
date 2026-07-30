@@ -34,6 +34,11 @@ impl Error for ArgumentError {}
 
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
 pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
+    debug_assert!(
+        !name.starts_with("no-"),
+        "flag names must not include the `no-` prefix"
+    );
+
     match (yes, no) {
         (true, false) => Ok(Some(true)),
         (false, true) => Ok(Some(false)),
@@ -229,7 +234,7 @@ impl TryFrom<RefreshArgs> for Refresh {
         } = value;
 
         Ok(Self::from_args(
-            flag(refresh, no_refresh, "no-refresh")?,
+            flag(refresh, no_refresh, "refresh")?,
             refresh_package,
         ))
     }
@@ -289,7 +294,7 @@ impl TryFrom<ResolverArgs> for PipOptions {
         }
 
         Ok(Self {
-            upgrade: flag(upgrade, no_upgrade, "no-upgrade")?,
+            upgrade: flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package: Some(upgrade_package),
             index_strategy,
             keyring_provider,
@@ -626,7 +631,7 @@ pub fn resolver_options(
     ResolverOptions {
         indexes: index_args.resolve(),
         upgrade: Upgrade::from_args(
-            flag(upgrade, no_upgrade, "no-upgrade")?,
+            flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package.into_iter().map(Requirement::from).collect(),
             upgrade_group,
         ),
