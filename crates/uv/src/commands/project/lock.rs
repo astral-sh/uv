@@ -34,7 +34,7 @@ use uv_python::{
 use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
-    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
+    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker, UpgradePackages,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -219,6 +219,7 @@ pub(crate) async fn lock(
             preview,
         )
         .with_refresh(&refresh)
+        .with_hash_updates()
         .with_lockfile_contents_check(
             matches!(&refresh, Refresh::All(..))
                 && preview.is_enabled(PreviewFeature::LockfileFormatCheck),
@@ -297,9 +298,19 @@ pub(crate) enum LockMode<'env> {
     Frozen(MissingLockfileSource),
 }
 
+/// Whether an existing archive hash can be replaced during lock validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HashMismatchPolicy {
+    /// Preserve locked hashes so installation can enforce them.
+    Preserve,
+    /// Allow an explicit lock operation to update stale archive hashes.
+    Update,
+}
+
 /// A lock operation.
 pub(crate) struct LockOperation<'env> {
     mode: LockMode<'env>,
+    hash_mismatch_policy: HashMismatchPolicy,
     constraints: Vec<NameRequirementSpecification>,
     refresh: Option<&'env Refresh>,
     check_lockfile_contents: bool,
@@ -330,6 +341,7 @@ impl<'env> LockOperation<'env> {
     ) -> Self {
         Self {
             mode,
+            hash_mismatch_policy: HashMismatchPolicy::Preserve,
             constraints: vec![],
             refresh: None,
             check_lockfile_contents: false,
@@ -359,6 +371,13 @@ impl<'env> LockOperation<'env> {
     #[must_use]
     pub(crate) fn with_refresh(mut self, refresh: &'env Refresh) -> Self {
         self.refresh = Some(refresh);
+        self
+    }
+
+    /// Allow an explicit lock operation to update mismatched archive hashes.
+    #[must_use]
+    fn with_hash_updates(mut self) -> Self {
+        self.hash_mismatch_policy = HashMismatchPolicy::Update;
         self
     }
 
@@ -427,6 +446,7 @@ impl<'env> LockOperation<'env> {
                     check_lockfile_contents,
                     self.constraints,
                     self.refresh,
+                    self.hash_mismatch_policy,
                     self.settings,
                     self.client_builder,
                     self.state,
@@ -480,6 +500,7 @@ impl<'env> LockOperation<'env> {
                     check_lockfile_contents,
                     self.constraints,
                     self.refresh,
+                    self.hash_mismatch_policy,
                     self.settings,
                     self.client_builder,
                     self.state,
@@ -513,6 +534,7 @@ async fn do_lock(
     check_lockfile_contents: Option<String>,
     external: Vec<NameRequirementSpecification>,
     refresh: Option<&Refresh>,
+    hash_mismatch_policy: HashMismatchPolicy,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
     state: &UniversalState,
@@ -938,6 +960,7 @@ async fn do_lock(
             index_locations,
             upgrade,
             refresh,
+            hash_mismatch_policy,
             &options,
             &hasher,
             state.index(),
@@ -1173,6 +1196,7 @@ impl ValidatedLock {
         index_locations: &IndexLocations,
         upgrade: &Upgrade,
         refresh: Option<&Refresh>,
+        hash_mismatch_policy: HashMismatchPolicy,
         options: &Options,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
@@ -1329,23 +1353,8 @@ impl ValidatedLock {
             return Ok(Self::Preferable(lock));
         }
 
-        // If the user specified `--upgrade-package` or `--upgrade-group`, then at best we can
-        // prefer some of the existing versions.
-        if !(upgrade.is_none() || upgrade.is_all()) {
-            debug!(
-                "Resolving despite existing lockfile due to `--upgrade-package` or `--upgrade-group`"
-            );
-            return Ok(Self::Preferable(lock));
-        }
-
         if !lock.satisfies_hash_algorithms(install_path, index_locations)? {
             debug!("Resolving despite existing lockfile due to mismatched hash algorithm");
-            return Ok(Self::Preferable(lock));
-        }
-
-        // If the user specified `--refresh`, then we have to re-resolve.
-        if matches!(refresh, Some(Refresh::All(..) | Refresh::Packages(..))) {
-            debug!("Resolving despite existing lockfile due to `--refresh`");
             return Ok(Self::Preferable(lock));
         }
 
@@ -1361,6 +1370,28 @@ impl ValidatedLock {
         } else {
             Some(index_locations)
         };
+
+        if hash_mismatch_policy == HashMismatchPolicy::Preserve
+            && !(upgrade.is_none() || upgrade.is_all())
+        {
+            let upgrades = UpgradePackages::for_workspace(&lock, upgrade);
+            if !matches!(
+                lock.satisfies_unmodified_archive_hashes(
+                    install_path,
+                    interpreter.tags()?,
+                    interpreter.markers(),
+                    &options.build_options,
+                    &upgrades,
+                    index,
+                    database,
+                )
+                .await?,
+                SatisfiesResult::Satisfied
+            ) {
+                debug!("Preserving unrelated locked archive hashes during a scoped upgrade");
+                return Ok(Self::Satisfies(lock));
+            }
+        }
 
         // Determine whether the lockfile satisfies the workspace requirements.
         match lock
@@ -1388,6 +1419,21 @@ impl ValidatedLock {
             .await?
         {
             SatisfiesResult::Satisfied => {
+                // Validate locked archive hashes before a scoped upgrade can trigger a fresh
+                // resolution, which could otherwise silently replace an unrelated locked hash.
+                if !(upgrade.is_none() || upgrade.is_all()) {
+                    debug!(
+                        "Resolving despite existing lockfile due to `--upgrade-package` or `--upgrade-group`"
+                    );
+                    return Ok(Self::Preferable(lock));
+                }
+
+                // If the user specified `--refresh`, then we have to re-resolve.
+                if matches!(refresh, Some(Refresh::All(..) | Refresh::Packages(..))) {
+                    debug!("Resolving despite existing lockfile due to `--refresh`");
+                    return Ok(Self::Preferable(lock));
+                }
+
                 debug!("Existing `uv.lock` satisfies workspace requirements");
                 Ok(Self::Satisfies(lock))
             }
@@ -1539,6 +1585,26 @@ impl ValidatedLock {
                     );
                 }
                 Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedPackageHashes(name, version, expected, actual) => {
+                if let Some(version) = version {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched hashes for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        actual, expected
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched hashes for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        actual, expected
+                    );
+                }
+                if hash_mismatch_policy == HashMismatchPolicy::Update
+                    || UpgradePackages::for_workspace(&lock, upgrade).contains(name)
+                {
+                    Ok(Self::Preferable(lock))
+                } else {
+                    Ok(Self::Satisfies(lock))
+                }
             }
             SatisfiesResult::MismatchedPackageDependencyGroups(name, version, expected, actual) => {
                 if let Some(version) = version {

@@ -52,6 +52,7 @@ use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip;
+use crate::commands::project::lock::HashMismatchPolicy;
 
 /// An error raised when a tool package provides no executables.
 #[derive(Debug, Error)]
@@ -539,6 +540,7 @@ impl ToolLock {
             index_locations,
             upgrade,
             Some(refresh),
+            HashMismatchPolicy::Preserve,
             &options,
             &hasher,
             state.index(),

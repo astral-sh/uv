@@ -2,6 +2,12 @@ use anyhow::Result;
 #[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+#[cfg(feature = "test-universal")]
+use async_zip::base::write::ZipFileWriter;
+#[cfg(feature = "test-universal")]
+use async_zip::{Compression, ZipEntryBuilder};
+#[cfg(feature = "test-universal")]
+use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 #[cfg(feature = "test-universal")]
@@ -20118,6 +20124,88 @@ fn lock_non_project_conditional() -> Result<()> {
     Ok(())
 }
 
+/// Validate conditional root dependencies across every platform covered by the lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_non_project_conditional_path_dependency_change() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let platform = if cfg!(windows) { "linux" } else { "win32" };
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        dev = ["child; sys_platform == '{platform}'"]
+
+        [tool.uv.sources]
+        child = {{ path = "child" }}
+        "#})?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==1.0.0"]
+        "#})?;
+
+    let links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==2.0.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Lock a non-project workspace root with `dependency-groups`.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -31371,6 +31459,373 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Validate script dependencies for Python versions other than the current interpreter.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_script_conditional_path_dependency_change() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child; python_full_version >= '3.13'"]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child" }
+        # ///
+
+        print("hello")
+        "#})?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==1.0.0"]
+        "#})?;
+
+    let links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==2.0.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Local wheel requirements must participate in script lock freshness checks.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_script_local_wheel_dependency_change() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child"]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child-1.0.0-py3-none-any.whl" }
+        # ///
+
+        print("hello")
+        "#})?;
+
+    let wheel = context.temp_dir.child("child-1.0.0-py3-none-any.whl");
+    let write_wheel = |dependency: &str, payload: &str| -> Result<()> {
+        let mut archive = ZipFileWriter::new(Vec::new());
+        for (path, contents) in [
+            ("child/__init__.py", payload.to_string()),
+            (
+                "child-1.0.0.dist-info/METADATA",
+                format!(
+                    "Metadata-Version: 2.4\nName: child\nVersion: 1.0.0\nRequires-Dist: ok=={dependency}\n"
+                ),
+            ),
+            (
+                "child-1.0.0.dist-info/WHEEL",
+                "Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+                    .to_string(),
+            ),
+            ("child-1.0.0.dist-info/RECORD", String::new()),
+        ] {
+            let entry = ZipEntryBuilder::new(path.into(), Compression::Stored);
+            block_on(archive.write_entry_whole(entry, contents.as_bytes()))?;
+        }
+        fs_err::write(wheel.path(), block_on(archive.close())?)?;
+        Ok(())
+    };
+    write_wheel("1.0.0", "before")?;
+
+    let links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    write_wheel("1.0.0", "after")?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    write_wheel("2.0.0", "after")?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    // An explicit lock operation is authorized to replace the stale archive hash.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated ok v1.0.0 -> v2.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Direct URL requirements must validate mutable remote archives when a network is available.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_script_direct_url_dependency_change() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let wheel_path = "/child-1.0.0-py3-none-any.whl";
+
+    let wheel = |dependency: &str, payload: &str| -> Result<Vec<u8>> {
+        let mut archive = ZipFileWriter::new(Vec::new());
+        for (path, contents) in [
+            ("child/__init__.py", payload.to_string()),
+            (
+                "child-1.0.0.dist-info/METADATA",
+                format!(
+                    "Metadata-Version: 2.4\nName: child\nVersion: 1.0.0\nRequires-Dist: ok=={dependency}\n"
+                ),
+            ),
+            (
+                "child-1.0.0.dist-info/WHEEL",
+                "Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+                    .to_string(),
+            ),
+            ("child-1.0.0.dist-info/RECORD", String::new()),
+        ] {
+            let entry = ZipEntryBuilder::new(path.into(), Compression::Stored);
+            block_on(archive.write_entry_whole(entry, contents.as_bytes()))?;
+        }
+        Ok(block_on(archive.close())?)
+    };
+
+    Mock::given(method("GET"))
+        .and(path(wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel("1.0.0", "before")?))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("script.py")
+        .write_str(&formatdoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child"]
+        #
+        # [tool.uv.sources]
+        # child = {{ url = "{}{wheel_path}" }}
+        # ///
+
+        print("hello")
+        "#,
+            server.uri()
+        })?;
+
+    let links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Preserve the existing offline behavior when the direct URL cannot be refreshed.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel("1.0.0", "after")?))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel("2.0.0", "after")?))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
 
     Ok(())
 }

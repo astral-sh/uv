@@ -24,17 +24,17 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallTarget, Override, Overrides, PackageOverride,
     ScopedOverrideSourceError,
 };
-use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
+use uv_distribution::{ArchiveMetadata, DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist, Identifier,
-    IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement,
-    RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
-    ToUrlError, UrlString,
+    Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
+    HashGeneration, HashPolicy, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
+    PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{
     PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
@@ -74,6 +74,7 @@ use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
     InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
+    UpgradePackages,
 };
 
 pub(crate) mod export;
@@ -2578,7 +2579,7 @@ impl Lock {
 
             for requirement in root_requirements {
                 for package in by_name.get(&requirement.name).into_iter().flatten() {
-                    if !package.id.source.is_source_tree() {
+                    if package.id.source.is_immutable() {
                         continue;
                     }
 
@@ -2593,9 +2594,6 @@ impl Lock {
                         combined
                     };
                     if marker.is_false() {
-                        continue;
-                    }
-                    if !marker.evaluate(markers, &[]) {
                         continue;
                     }
 
@@ -2725,49 +2723,39 @@ impl Lock {
                 if !statically_satisfied {
                     // For a non-dynamic package without usable static metadata, fetch the metadata
                     // from the distribution database.
-                    let HashedDist { dist, .. } = package.to_dist(
+                    let HashedDist { dist, hashes } = package.to_dist(
                         root,
                         TagPolicy::Preferred(tags),
                         build_options,
                         markers,
                     )?;
+                    let validate_archive_hash =
+                        matches!(&package.id.source, Source::Path(..) | Source::Direct(..))
+                            && !hashes.is_empty();
+                    let hash_policy = if validate_archive_hash {
+                        HashPolicy::Generate(HashGeneration::Url)
+                    } else {
+                        hasher.get(&dist)
+                    };
 
                     let metadata = {
-                        let id = dist.distribution_id();
-                        if let Some(archive) =
-                            index
-                                .distributions()
-                                .get(&id)
-                                .as_deref()
-                                .and_then(|response| {
-                                    if let MetadataResponse::Found(archive, ..) = response {
-                                        Some(archive)
-                                    } else {
-                                        None
-                                    }
-                                })
+                        let archive =
+                            Self::archive_metadata(package, &dist, hash_policy, index, database)
+                                .await?;
+
+                        if validate_archive_hash
+                            && !HashPolicy::All(hashes.as_slice())
+                                .matches(archive.hashes.as_slice())
                         {
-                            // If the metadata is already in the index, return it.
-                            archive.metadata.clone()
-                        } else {
-                            // Run the PEP 517 build process to extract metadata from the source distribution.
-                            let archive = database
-                                .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
-                                .await
-                                .map_err(|err| LockErrorKind::Resolution {
-                                    id: package.id.clone(),
-                                    err,
-                                })?;
-
-                            let metadata = archive.metadata.clone();
-
-                            // Insert the metadata into the index.
-                            index
-                                .distributions()
-                                .done(id, Arc::new(MetadataResponse::Found(archive)));
-
-                            metadata
+                            return Ok(SatisfiesResult::MismatchedPackageHashes(
+                                &package.id.name,
+                                package.id.version.as_ref(),
+                                hashes,
+                                archive.hashes,
+                            ));
                         }
+
+                        archive.metadata
                     };
 
                     // If this is a local package, validate that it hasn't become dynamic (in which
@@ -2994,6 +2982,93 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
+    /// Validate every mutable archive except packages explicitly selected for upgrade.
+    ///
+    /// An authorized hash change must not short-circuit validation of unrelated locked archives.
+    pub async fn satisfies_unmodified_archive_hashes<Context: BuildContext>(
+        &self,
+        root: &Path,
+        tags: &Tags,
+        markers: &MarkerEnvironment,
+        build_options: &BuildOptions,
+        upgrades: &UpgradePackages,
+        index: &InMemoryIndex,
+        database: &DistributionDatabase<'_, Context>,
+    ) -> Result<SatisfiesResult<'_>, LockError> {
+        for package in &self.packages {
+            if !matches!(&package.id.source, Source::Path(..) | Source::Direct(..))
+                || upgrades.contains(&package.id.name)
+                || matches!(&package.id.source, Source::Direct(..))
+                    && database.client().unmanaged.connectivity().is_offline()
+            {
+                continue;
+            }
+
+            let HashedDist { dist, hashes } =
+                package.to_dist(root, TagPolicy::Preferred(tags), build_options, markers)?;
+            if hashes.is_empty() {
+                continue;
+            }
+
+            let archive = Self::archive_metadata(
+                package,
+                &dist,
+                HashPolicy::Generate(HashGeneration::Url),
+                index,
+                database,
+            )
+            .await?;
+            if !HashPolicy::All(hashes.as_slice()).matches(archive.hashes.as_slice()) {
+                return Ok(SatisfiesResult::MismatchedPackageHashes(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    hashes,
+                    archive.hashes,
+                ));
+            }
+        }
+
+        Ok(SatisfiesResult::Satisfied)
+    }
+
+    /// Fetch archive metadata once and share it with later lock validation.
+    async fn archive_metadata<Context: BuildContext>(
+        package: &Package,
+        dist: &Dist,
+        hash_policy: HashPolicy<'_>,
+        index: &InMemoryIndex,
+        database: &DistributionDatabase<'_, Context>,
+    ) -> Result<ArchiveMetadata, LockError> {
+        let id = dist.distribution_id();
+        if let Some(archive) = index
+            .distributions()
+            .get(&id)
+            .as_deref()
+            .and_then(|response| {
+                if let MetadataResponse::Found(archive, ..) = response {
+                    Some(archive)
+                } else {
+                    None
+                }
+            })
+        {
+            return Ok(archive.clone());
+        }
+
+        let archive = database
+            .get_or_build_wheel_metadata(dist, hash_policy)
+            .await
+            .map_err(|err| LockErrorKind::Resolution {
+                id: package.id.clone(),
+                err,
+            })?;
+        index
+            .distributions()
+            .done(id, Arc::new(MetadataResponse::Found(archive.clone())));
+
+        Ok(archive)
+    }
+
     async fn source_tree_requires_dist<Context: BuildContext>(
         source_tree: &Path,
         root: &Path,
@@ -3172,6 +3247,13 @@ pub enum SatisfiesResult<'lock> {
         Option<&'lock Version>,
         Vec<Dependency>,
         &'lock [Dependency],
+    ),
+    /// A local archive's current contents no longer match the locked hashes.
+    MismatchedPackageHashes(
+        &'lock PackageName,
+        Option<&'lock Version>,
+        HashDigests,
+        HashDigests,
     ),
     /// A package in the lockfile contains different `provides-extra` metadata than expected.
     MismatchedPackageProvidesExtra(
