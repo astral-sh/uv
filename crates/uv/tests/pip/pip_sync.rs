@@ -3907,6 +3907,35 @@ fn require_hashes_wheel_path() -> Result<()> {
     Ok(())
 }
 
+/// Include a BLAKE2b hash for a built distribution specified as a local path dependency.
+#[test]
+fn require_hashes_wheel_path_blake2b() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "tqdm @ {} --hash=blake2b:fd611597f5e771ac942d300426f16a38f1579ab572bf4bca968a53709db0a292",
+        context
+            .workspace_root
+            .join("test/links/tqdm-1000.0.0-py3-none-any.whl")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0 (from file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl)
+    "
+    );
+
+    Ok(())
+}
+
 /// Include the _wrong_ hash for a built distribution specified as a local path dependency.
 #[test]
 fn require_hashes_wheel_path_mismatch() -> Result<()> {
