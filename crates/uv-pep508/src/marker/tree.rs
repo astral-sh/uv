@@ -3198,6 +3198,64 @@ mod test {
     }
 
     #[test]
+    fn test_python_implementation_disjointness() {
+        for (implementation_name, platform_python_implementation) in
+            [("cpython", "CPython"), ("pypy", "PyPy")]
+        {
+            let implementation_name = format!("implementation_name == '{implementation_name}'");
+            let platform_python_implementation =
+                format!("platform_python_implementation == '{platform_python_implementation}'");
+
+            assert!(!is_disjoint(
+                &implementation_name,
+                &platform_python_implementation
+            ));
+            assert!(is_disjoint(
+                &implementation_name,
+                platform_python_implementation.replace("==", "!=")
+            ));
+            assert!(is_disjoint(
+                implementation_name.replace("==", "!="),
+                &platform_python_implementation
+            ));
+        }
+
+        assert!(is_disjoint(
+            "implementation_name == 'pypy'",
+            "platform_python_implementation == 'CPython'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name == 'cpython'",
+            "platform_python_implementation == 'PyPy'"
+        ));
+
+        // Implementation markers may be beneath other string variables in the decision tree.
+        assert!(is_disjoint(
+            "platform_machine == 'x86_64' and implementation_name == 'pypy'",
+            "platform_python_implementation == 'CPython'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name == 'pypy'",
+            "platform_machine == 'x86_64' and platform_python_implementation == 'CPython'"
+        ));
+        assert!(is_disjoint(
+            "platform_machine == 'x86_64' and implementation_name == 'pypy'",
+            "platform_machine == 'x86_64' and platform_python_implementation == 'CPython'"
+        ));
+
+        // Unknown implementations may use implementation-specific names, so do not
+        // infer a correspondence between their two marker values.
+        assert!(!is_disjoint(
+            "implementation_name == 'graalpy'",
+            "platform_python_implementation == 'GraalVM'"
+        ));
+        assert!(!is_disjoint(
+            "implementation_name == 'graalpy'",
+            "platform_python_implementation == 'Jython'"
+        ));
+    }
+
+    #[test]
     fn is_disjoint_commutative() {
         let m1 = m("extra == 'Linux' and extra != 'OSX'");
         let m2 = m("extra == 'Linux'");

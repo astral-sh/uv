@@ -16038,6 +16038,97 @@ fn lock_impossible_platform_markers() -> Result<()> {
     Ok(())
 }
 
+/// Recognize that `implementation_name` and `platform_python_implementation` describe the
+/// same interpreter, while preserving their original marker spellings in the lockfile.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_python_implementation_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; implementation_name == 'pypy'",
+            "ok==2.0.0 ; platform_python_implementation == 'CPython'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+        resolution-markers = [
+            "implementation_name == 'pypy'",
+            "implementation_name != 'pypy' and platform_python_implementation == 'CPython'",
+            "implementation_name != 'pypy' and platform_python_implementation != 'CPython'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "ok"
+        version = "1.0.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        resolution-markers = [
+            "implementation_name == 'pypy'",
+        ]
+        wheels = [
+            { path = "[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "ok"
+        version = "2.0.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        resolution-markers = [
+            "implementation_name != 'pypy' and platform_python_implementation == 'CPython'",
+        ]
+        wheels = [
+            { path = "[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "ok", version = "1.0.0", source = { registry = "[WORKSPACE]/test/links" }, marker = "implementation_name == 'pypy'" },
+            { name = "ok", version = "2.0.0", source = { registry = "[WORKSPACE]/test/links" }, marker = "implementation_name != 'pypy' and platform_python_implementation == 'CPython'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "ok", marker = "platform_python_implementation == 'CPython'", specifier = "==2.0.0" },
+            { name = "ok", marker = "implementation_name == 'pypy'", specifier = "==1.0.0" },
+        ]
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Change indexes between locking operations.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
