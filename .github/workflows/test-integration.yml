@@ -71,7 +71,6 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5 # v4.0.1
         with:
           miniconda-version: latest
@@ -104,7 +103,6 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5 # v4.0.1
         with:
           miniconda-version: latest
@@ -910,7 +908,6 @@ jobs:
         with:
           name: uv-linux-musl-${{ inputs.sha }}
 
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - name: "Setup WSL"
         uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
         with:

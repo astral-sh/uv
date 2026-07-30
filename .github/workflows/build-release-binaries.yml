@@ -504,7 +504,6 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
         with:
@@ -562,7 +561,6 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel uv-build"
         with:
@@ -626,7 +624,6 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
 
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
         with:
@@ -684,7 +681,6 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel uv-build"
         with:
@@ -853,7 +849,6 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
         with:
@@ -912,7 +907,6 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel uv-build"
         with:
@@ -1083,7 +1077,6 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
         with:
@@ -1101,7 +1094,6 @@ jobs:
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
@@ -1162,7 +1154,6 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
         with:
@@ -1179,7 +1170,6 @@ jobs:
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'

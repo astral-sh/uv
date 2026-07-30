@@ -751,7 +751,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5 # v4.0.1
         with:
           miniconda-version: "latest"
