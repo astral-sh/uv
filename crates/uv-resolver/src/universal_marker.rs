@@ -458,6 +458,39 @@ impl ConflictMarker {
         marker
     }
 
+    /// Construct only conflict constraints observable in the provided markers.
+    ///
+    /// A pair involving an unreferenced item cannot affect these markers: that item can always be
+    /// disabled. Callers comparing multiple markers must provide every marker involved so both
+    /// sides are evaluated in the same projected conflict world.
+    pub(crate) fn from_relevant_conflicts(
+        conflicts: &Conflicts,
+        markers: impl IntoIterator<Item = UniversalMarker>,
+    ) -> Self {
+        let mut referenced = BTreeSet::new();
+        for marker in markers {
+            marker.marker.visit_extras(|_, extra| {
+                referenced.insert(extra.clone());
+            });
+        }
+
+        let mut marker = Self::TRUE;
+        for set in conflicts.iter() {
+            for (first, second) in set.iter().tuple_combinations() {
+                if !referenced.contains(&encode_conflict_item(first))
+                    || !referenced.contains(&encode_conflict_item(second))
+                {
+                    continue;
+                }
+                let pair = Self::from_conflict_item(first)
+                    .negate()
+                    .or(Self::from_conflict_item(second).negate());
+                marker = marker.and(pair);
+            }
+        }
+        marker
+    }
+
     /// Create a conflict marker that is true only when the given extra or
     /// group (for a specific package) is activated.
     pub(crate) fn from_conflict_item(item: &ConflictItem) -> Self {
@@ -1068,6 +1101,23 @@ mod tests {
         marker.imbibe(ConflictMarker::TRUE);
 
         assert_eq!(marker, expected);
+    }
+
+    #[test]
+    fn relevant_conflicts() {
+        let conflicts = create_conflicts([create_set(["foo", "bar"]), create_set(["fox", "ant"])]);
+        let pep508 =
+            MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression");
+        let foo = create_extra_marker("foo");
+        let fox = create_extra_marker("fox");
+        let ant = create_extra_marker("ant");
+        let generated = UniversalMarker::new(pep508, foo);
+        let actual = UniversalMarker::new(pep508, foo.or(fox.and(ant)));
+
+        assert_eq!(
+            ConflictMarker::from_relevant_conflicts(&conflicts, [generated, actual]),
+            fox.negate().or(ant.negate()),
+        );
     }
 
     #[test]
