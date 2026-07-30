@@ -791,6 +791,7 @@ impl PubGrubReportFormatter<'_> {
                         Self::index_hints(
                             name,
                             set,
+                            self.included_versions.get(name),
                             selector,
                             index_locations,
                             index_capabilities,
@@ -857,6 +858,7 @@ impl PubGrubReportFormatter<'_> {
                         Self::index_hints(
                             name,
                             set,
+                            self.included_versions.get(name),
                             selector,
                             index_locations,
                             index_capabilities,
@@ -1194,6 +1196,7 @@ impl PubGrubReportFormatter<'_> {
     fn index_hints(
         name: &PackageName,
         set: &Range<Version>,
+        listed: Option<&BTreeSet<Version>>,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
         index_capabilities: &IndexCapabilities,
@@ -1288,13 +1291,11 @@ impl PubGrubReportFormatter<'_> {
         // Add hints due to the package being available on an index, but not at the correct version,
         // with subsequent indexes that were _not_ queried.
         if matches!(selector.index_strategy(), IndexStrategy::FirstIndex) {
-            // Do not include the hint if the set is "all versions". This is an unusual but valid
-            // case in which a package returns a 200 response, but without any versions or
-            // distributions for the package.
-            if !set
-                .iter()
-                .all(|range| matches!(range, (Bound::Unbounded, Bound::Unbounded)))
-            {
+            // Do not include the hint when the index listed no version at all. This is an
+            // unusual but valid case in which a package returns a 200 response, but without any
+            // versions or distributions for the package. A package that listed versions and had
+            // none of them work is the case the hint exists for, and its set covers them all.
+            if listed.is_some_and(|listed| !listed.is_empty()) {
                 if let Some(found_index) = available_indexes.get(name).and_then(BTreeSet::first) {
                     // Determine whether the index is the last-available index. If not, then some
                     // indexes were not queried, and could contain a compatible version.

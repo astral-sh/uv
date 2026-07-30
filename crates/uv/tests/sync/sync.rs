@@ -14981,6 +14981,8 @@ async fn sync_non_pep625_sdist() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of basic-package have a non-PEP 625-compliant source distribution filename and your project depends on basic-package, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: `basic-package` was found on http://[LOCALHOST]/simple, but not at the requested version (all versions of basic-package). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     ");
 
     Ok(())
