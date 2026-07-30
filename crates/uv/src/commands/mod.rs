@@ -98,6 +98,7 @@ pub(crate) mod reporters;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod tool;
+mod update_shell;
 mod venv;
 mod workspace;
 
