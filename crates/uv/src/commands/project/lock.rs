@@ -1500,31 +1500,30 @@ impl ValidatedLock {
         };
 
         // Determine whether the lockfile satisfies the workspace requirements.
-        match lock
-            .satisfies(
-                install_path,
-                packages,
-                members,
-                required_members,
-                requirements,
-                constraints,
-                overrides,
-                excludes,
-                build_constraints,
-                dependency_groups,
-                workspace_group_metadata,
-                workspace_default_groups,
-                dependency_metadata,
-                indexes,
-                interpreter.tags()?,
-                interpreter.markers(),
-                &options.build_options,
-                hasher,
-                index.distributions(),
-                database,
-                preview.is_enabled(PreviewFeature::LockWithoutMetadata),
-            )
-            .await?
+        match Box::pin(lock.satisfies(
+            install_path,
+            packages,
+            members,
+            required_members,
+            requirements,
+            constraints,
+            overrides,
+            excludes,
+            build_constraints,
+            dependency_groups,
+            workspace_group_metadata,
+            workspace_default_groups,
+            dependency_metadata,
+            indexes,
+            interpreter.tags()?,
+            interpreter.markers(),
+            &options.build_options,
+            hasher,
+            index.distributions(),
+            database,
+            preview.is_enabled(PreviewFeature::LockWithoutMetadata),
+        ))
+        .await?
         {
             SatisfiesResult::Satisfied => {
                 debug!("Existing `uv.lock` satisfies workspace requirements");

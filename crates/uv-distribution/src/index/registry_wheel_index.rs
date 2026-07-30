@@ -8,9 +8,10 @@ use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement,
-    ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
-    PackageConfigSettings, RegistryBuiltDist, RegistrySourceDist,
+    ArchiveHashPolicy, BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings,
+    ExtraBuildRequirement, ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexFormat,
+    IndexLocations, IndexRoutes, IndexUrl, PackageConfigSettings, RegistryBuiltDist,
+    RegistrySourceDist,
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
@@ -93,6 +94,7 @@ pub struct RegistryWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,
     index_locations: &'a IndexLocations,
+    routes: Option<IndexRoutes>,
     hasher: &'a HashStrategy,
     index: FxHashMap<&'a PackageName, Vec<IndexEntry<'a>>>,
     config_settings: &'a ConfigSettings,
@@ -117,6 +119,7 @@ impl<'a> RegistryWheelIndex<'a> {
             cache,
             tags,
             index_locations,
+            routes: IndexRoutes::try_from(index_locations).ok(),
             hasher,
             config_settings,
             config_settings_package,
@@ -129,11 +132,16 @@ impl<'a> RegistryWheelIndex<'a> {
     /// Return a cached wheel that satisfies a registry wheel requirement.
     pub fn wheel(
         &mut self,
-        wheel: &'a RegistryBuiltDist,
+        distribution: &'a RegistryBuiltDist,
         no_build: bool,
         no_binary: bool,
     ) -> Option<&CachedRegistryDist> {
-        let wheel = wheel.best_wheel();
+        let wheel = distribution.best_wheel();
+        let is_proxy = self
+            .routes
+            .as_ref()
+            .is_some_and(|routes| routes.route_for(&wheel.index).is_proxy());
+
         self.get(&wheel.filename.name).find_map(|entry| {
             if !entry.matches_wheel(&wheel.index, &wheel.filename, no_build, no_binary) {
                 return None;
@@ -148,6 +156,23 @@ impl<'a> RegistryWheelIndex<'a> {
                 );
                 return None;
             }
+
+            if is_proxy {
+                let hashes = if entry.built {
+                    &distribution.sdist.as_ref()?.file.hashes
+                } else {
+                    &wheel.file.hashes
+                };
+
+                if !hashes.is_empty()
+                    && !entry
+                        .dist
+                        .satisfies(ArchiveHashPolicy::Any(hashes.as_slice()))
+                {
+                    return None;
+                }
+            }
+
             Some(&entry.dist)
         })
     }
@@ -159,6 +184,11 @@ impl<'a> RegistryWheelIndex<'a> {
         no_build: bool,
         no_binary: bool,
     ) -> Option<&CachedRegistryDist> {
+        let is_proxy = self
+            .routes
+            .as_ref()
+            .is_some_and(|routes| routes.route_for(&source.index).is_proxy());
+
         self.get(&source.name).find_map(|entry| {
             if !entry.matches_source(
                 &source.index,
@@ -179,6 +209,28 @@ impl<'a> RegistryWheelIndex<'a> {
                 );
                 return None;
             }
+
+            if is_proxy {
+                let hashes = if entry.built {
+                    &source.file.hashes
+                } else {
+                    &source
+                        .wheels
+                        .iter()
+                        .find(|wheel| wheel.filename == entry.dist.filename)?
+                        .file
+                        .hashes
+                };
+
+                if !hashes.is_empty()
+                    && !entry
+                        .dist
+                        .satisfies(ArchiveHashPolicy::Any(hashes.as_slice()))
+                {
+                    return None;
+                }
+            }
+
             Some(&entry.dist)
         })
     }
@@ -199,6 +251,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 self.cache,
                 self.tags,
                 self.index_locations,
+                self.routes.as_ref(),
                 self.hasher,
                 self.config_settings,
                 self.config_settings_package,
@@ -214,12 +267,17 @@ impl<'a> RegistryWheelIndex<'a> {
         cache: &Cache,
         tags: &Tags,
         index_locations: &'index IndexLocations,
+        routes: Option<&IndexRoutes>,
         hasher: &HashStrategy,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
     ) -> Vec<IndexEntry<'index>> {
+        let Some(routes) = routes else {
+            return Vec::new();
+        };
+
         let mut entries = vec![];
 
         let mut seen = FxHashSet::default();
@@ -228,16 +286,22 @@ impl<'a> RegistryWheelIndex<'a> {
                 continue;
             }
 
+            let route = routes.route_for(index.url());
+            let index_url = match index.format {
+                IndexFormat::Simple => route.effective_url(),
+                IndexFormat::Flat => index.url(),
+            };
+
             // Index all the wheels that were downloaded directly from the registry.
             let wheel_dir = cache.shard(
                 CacheBucket::Wheels,
-                WheelCache::Index(index.url()).wheel_dir(package.as_ref()),
+                WheelCache::Index(index_url).wheel_dir(package.as_ref()),
             );
 
             // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.http`
             // or `<index>/<package-name>/<version>/<wheel>.rev`.
             for file in files(&wheel_dir).ok().into_iter().flatten() {
-                match index.url() {
+                match index_url {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         if file
@@ -297,7 +361,7 @@ impl<'a> RegistryWheelIndex<'a> {
             // from the registry.
             let cache_shard = cache.shard(
                 CacheBucket::SourceDistributions,
-                WheelCache::Index(index.url()).wheel_dir(package.as_ref()),
+                WheelCache::Index(index_url).wheel_dir(package.as_ref()),
             );
 
             // For registry source distributions, the cache structure is: `<index>/<package-name>/<version>/`.
@@ -305,7 +369,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 let cache_shard = cache_shard.shard(shard);
 
                 // Read the revision from the cache.
-                let revision = match index.url() {
+                let revision = match index_url {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         let revision_entry = cache_shard.entry(HTTP_REVISION);

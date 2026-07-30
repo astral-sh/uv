@@ -7,19 +7,20 @@ use tracing::warn;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_distribution_filename::SourceDistExtension;
-use uv_distribution_types::{ArchiveHashPolicy, BuildableSource, SourceDist};
+use uv_distribution_types::{BuildableSource, SourceDist};
 use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::rename_with_retry;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 
 use crate::error::Error;
+use crate::hash::ArtifactHashPolicy;
 
 /// The checks required before an extracted source archive can be persisted to the cache.
 pub(super) struct ArchiveValidation<'a> {
     /// Additional hashes to generate beyond those required for validation.
     pub(super) extra_algorithms: &'a [HashAlgorithm],
-    /// The caller's trusted hash policy.
-    pub(super) hash_policy: ArchiveHashPolicy<'a>,
+    /// Hash requirements for the caller and cache.
+    pub(super) hash_policy: ArtifactHashPolicy<'a>,
     /// Every digest from a cache revision being repaired must remain unchanged.
     pub(super) existing_hashes: &'a [HashDigest],
     pub(super) expected_size: Option<u64>,
@@ -97,13 +98,7 @@ impl ValidatedSourceArchive {
             .into_iter()
             .map(HashDigest::from)
             .collect::<Vec<_>>();
-        if hash_policy.requires_validation() && !hash_policy.matches(&hashes) {
-            return Err(Error::hash_mismatch(
-                source.to_string(),
-                hash_policy.digests(),
-                &hashes,
-            ));
-        }
+        hash_policy.validate_artifact(source, &hashes)?;
         for existing in validation.existing_hashes {
             if !hashes.contains(existing) {
                 return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
@@ -160,14 +155,14 @@ mod tests {
     use futures::TryStreamExt;
     use tokio_util::compat::FuturesAsyncReadCompatExt;
 
-    use uv_distribution_types::{DirectSourceUrl, SourceUrl};
+    use uv_distribution_types::{ArchiveHashPolicy, DirectSourceUrl, SourceUrl};
     use uv_redacted::DisplaySafeUrl;
 
     use super::*;
 
     const NO_VALIDATION: ArchiveValidation<'static> = ArchiveValidation {
         extra_algorithms: &[],
-        hash_policy: ArchiveHashPolicy::None,
+        hash_policy: ArtifactHashPolicy::new(ArchiveHashPolicy::None, ArchiveHashPolicy::None),
         existing_hashes: &[],
         expected_size: None,
     };
@@ -229,7 +224,7 @@ mod tests {
                 ..NO_VALIDATION
             },
             ArchiveValidation {
-                hash_policy: ArchiveHashPolicy::Generate,
+                hash_policy: ArchiveHashPolicy::Generate.into(),
                 ..NO_VALIDATION
             },
             ArchiveValidation {
@@ -285,7 +280,7 @@ mod tests {
             &cache,
             &bytes[..],
             ArchiveValidation {
-                hash_policy: ArchiveHashPolicy::All(&[wrong_hash]),
+                hash_policy: ArchiveHashPolicy::All(&[wrong_hash]).into(),
                 ..NO_VALIDATION
             },
         )

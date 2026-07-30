@@ -773,6 +773,7 @@ pub(crate) async fn pip_compile(
                 install_path,
                 tags.as_deref(),
                 &build_options,
+                &index_locations,
             )?;
 
             // Registries don't always provide hashes, but `packages.*.hashes` is a required
