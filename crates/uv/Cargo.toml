@@ -140,6 +140,7 @@ byteorder = { workspace = true }
 bytes = { workspace = true }
 filetime = { workspace = true }
 flate2 = { workspace = true, default-features = false }
+hex = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }

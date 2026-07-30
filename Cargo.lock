@@ -4649,7 +4649,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
  "digest 0.10.7",
- "sha2-asm",
 ]
 
 [[package]]
@@ -4661,15 +4660,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
  "digest 0.11.3",
-]
-
-[[package]]
-name = "sha2-asm"
-version = "0.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b845214d6175804686b2bd482bcffe96651bb2d1200742b712003504a2dac1ab"
-dependencies = [
- "cc",
 ]
 
 [[package]]
@@ -5796,6 +5786,7 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
+ "hex",
  "http",
  "http-body-util",
  "hyper",
@@ -5820,7 +5811,7 @@ dependencies = [
  "self-replace",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "tempfile",
  "textwrap",
  "thiserror",
@@ -5982,7 +5973,7 @@ dependencies = [
  "fs-err",
  "futures",
  "jiff",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "tempfile",
  "tokio",
  "tokio-util",
@@ -6067,6 +6058,7 @@ dependencies = [
  "fs-err",
  "futures-lite",
  "globset",
+ "hex",
  "indexmap",
  "indoc",
  "insta",
@@ -6076,7 +6068,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "spdx",
  "tempfile",
  "thiserror",
@@ -6578,12 +6570,13 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
+ "hex",
  "md-5",
  "rayon",
  "regex",
  "reqwest",
  "rustc-hash",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -6719,7 +6712,7 @@ dependencies = [
  "self-replace",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "thiserror",
  "tracing",
  "uv-distribution-filename",
@@ -7376,6 +7369,7 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
+ "hex",
  "http",
  "ignore",
  "indoc",
@@ -7386,7 +7380,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "similar 3.1.1",
  "tempfile",
  "tokio",

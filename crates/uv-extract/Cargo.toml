@@ -28,6 +28,7 @@ blake2 = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+hex = { workspace = true }
 md-5 = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
@@ -38,9 +39,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
-
-[target.'cfg(all(target_arch = "aarch64", not(target_os = "windows")))'.dependencies]
-sha2 = { workspace = true, features = ["asm"] }
 
 [features]
 default = []

@@ -787,7 +787,7 @@ mod tests {
         );
         // Check that the source dist is reproducible across platforms.
         assert_snapshot!(
-            format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
+            hex::encode(sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
             @"1d9ce1ce63195fbee07314c0b595ba9e063670da8d10c252c351b21e94e3f508"
         );
         // Check both the files we report and the actual files
@@ -843,7 +843,7 @@ mod tests {
         );
         // Check that the wheel is reproducible across platforms.
         assert_snapshot!(
-            format!("{:x}", sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
+            hex::encode(sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
             @"9e8d80fef76be79a7fe73a2ccac3bdd0132b10fdcff7271ca8b868c99061b8ce"
         );
         assert_snapshot!(build.wheel_contents.join("\n"), @"

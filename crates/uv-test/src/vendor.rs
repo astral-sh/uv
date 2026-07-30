@@ -276,7 +276,7 @@ fn artifact_lock_path(path: &Path) -> Result<PathBuf> {
 }
 
 fn verify_bytes(artifact: &VendorArtifact, bytes: &[u8]) -> Result<()> {
-    let actual = format!("{:x}", Sha256::digest(bytes));
+    let actual = hex::encode(Sha256::digest(bytes));
     if actual == artifact.sha256 {
         Ok(())
     } else {

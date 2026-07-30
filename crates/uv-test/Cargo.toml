@@ -44,6 +44,7 @@ base64 = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+hex = { workspace = true }
 http = { workspace = true }
 ignore = { workspace = true }
 indoc = { workspace = true }
