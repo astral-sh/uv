@@ -27,6 +27,9 @@ mod resource_limits;
 #[cfg(feature = "self-update")]
 mod self_update;
 
+#[cfg(not(windows))]
+mod update_shell;
+
 mod upgrade;
 
 mod version;
