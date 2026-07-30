@@ -222,7 +222,6 @@ pub(crate) async fn tree(
                 keyring_provider,
                 resolution: _,
                 prerelease: _,
-                prerelease_package: _,
                 fork_strategy: _,
                 dependency_metadata: _,
                 config_setting: _,
@@ -258,8 +257,7 @@ pub(crate) async fn tree(
             let client = LatestClient {
                 client: &client,
                 capabilities: &capabilities,
-                prerelease: lock.prerelease_mode(),
-                prerelease_package: lock.prerelease_package(),
+                prerelease: lock.prerelease(),
                 exclude_newer,
                 index_locations,
                 requires_python: Some(lock.requires_python()),

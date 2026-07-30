@@ -162,10 +162,12 @@ fn pip_compile_baseline() {
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
-            prerelease: IfNecessary,
-            prerelease_package: PrereleasePackage(
-                {},
-            ),
+            prerelease: Prerelease {
+                global: IfNecessary,
+                package: PrereleasePackage(
+                    {},
+                ),
+            },
             fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
@@ -529,10 +531,12 @@ fn pip_install_baseline() {
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
-            prerelease: IfNecessary,
-            prerelease_package: PrereleasePackage(
-                {},
-            ),
+            prerelease: Prerelease {
+                global: IfNecessary,
+                package: PrereleasePackage(
+                    {},
+                ),
+            },
             fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
@@ -688,10 +692,12 @@ fn lock_baseline() {
             extra_build_variables: ExtraBuildVariables(
                 {},
             ),
-            prerelease: IfNecessary,
-            prerelease_package: PrereleasePackage(
-                {},
-            ),
+            prerelease: Prerelease {
+                global: IfNecessary,
+                package: PrereleasePackage(
+                    {},
+                ),
+            },
             resolution: Highest,
             sources: None,
             torch_backend: None,
@@ -819,10 +825,12 @@ fn version_baseline() {
                 extra_build_variables: ExtraBuildVariables(
                     {},
                 ),
-                prerelease: IfNecessary,
-                prerelease_package: PrereleasePackage(
-                    {},
-                ),
+                prerelease: Prerelease {
+                    global: IfNecessary,
+                    package: PrereleasePackage(
+                        {},
+                    ),
+                },
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
@@ -991,10 +999,12 @@ fn tool_install_baseline() {
                 extra_build_variables: ExtraBuildVariables(
                     {},
                 ),
-                prerelease: IfNecessary,
-                prerelease_package: PrereleasePackage(
-                    {},
-                ),
+                prerelease: Prerelease {
+                    global: IfNecessary,
+                    package: PrereleasePackage(
+                        {},
+                    ),
+                },
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
@@ -1105,9 +1115,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
              no_annotate: false,
              no_header: false,
@@ -1133,9 +1143,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: LowestDirect,
     +        resolution: Highest,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
     "
     );
@@ -1259,9 +1269,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
              no_annotate: false,
              no_header: false,
@@ -1638,9 +1648,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
     "
     );
@@ -1765,9 +1775,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
     "
     );
@@ -1814,9 +1824,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
     "
     );
@@ -1920,9 +1930,9 @@ fn resolve_system_configuration_can_be_disabled() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
     ");
 
@@ -1990,9 +2000,9 @@ fn resolve_tool() -> anyhow::Result<()> {
              prerelease_package: None,
              fork_strategy: None,
     ...
-                 prerelease_package: PrereleasePackage(
-                     {},
-                 ),
+                         {},
+                     ),
+                 },
     -            resolution: Highest,
     +            resolution: LowestDirect,
                  sources: None,
@@ -2054,9 +2064,9 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
     "
     );
@@ -2168,9 +2178,9 @@ fn resolve_both() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
              no_annotate: false,
              no_header: false,
@@ -2302,9 +2312,9 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
              no_annotate: false,
              no_header: false,
@@ -2646,9 +2656,9 @@ fn resolve_config_file() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
              no_annotate: false,
              no_header: false,
@@ -2775,9 +2785,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
              dependency_mode: Transitive,
     -        resolution: Highest,
     +        resolution: LowestDirect,
-             prerelease: IfNecessary,
-             prerelease_package: PrereleasePackage(
-                 {},
+             prerelease: Prerelease {
+                 global: IfNecessary,
+                 package: PrereleasePackage(
     ...
     "
     );

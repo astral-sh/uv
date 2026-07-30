@@ -415,7 +415,6 @@ impl ToolLock {
             keyring_provider,
             resolution,
             prerelease,
-            prerelease_package,
             fork_strategy,
             dependency_metadata,
             config_setting,
@@ -458,8 +457,7 @@ impl ToolLock {
 
         let options = OptionsBuilder::new()
             .resolution_mode(*resolution)
-            .prerelease_mode(*prerelease)
-            .prerelease_package(prerelease_package.clone())
+            .prerelease(prerelease.clone())
             .fork_strategy(*fork_strategy)
             .exclude_newer(exclude_newer.clone())
             .index_strategy(*index_strategy)

@@ -9801,11 +9801,12 @@ fn lock_prerelease_package_configuration() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--prerelease-package")
-        .arg("foo=if-necessary")
+        .arg("foo=if-necessary-or-explicit")
         .arg("--prerelease-package")
         .arg("baz=allow"), @"
     exit_code: 0 (success)
     ----- stderr -----
+    warning: The `if-necessary-or-explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary` instead.
     Resolved 1 package in [TIME]
     ");
 

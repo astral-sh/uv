@@ -902,8 +902,7 @@ async fn get_or_create_environment(
         let latest_client = LatestClient {
             client: &client,
             capabilities: &capabilities,
-            prerelease: settings.resolver.prerelease,
-            prerelease_package: &settings.resolver.prerelease_package,
+            prerelease: &settings.resolver.prerelease,
             exclude_newer: &settings.resolver.exclude_newer,
             index_locations: &settings.resolver.index_locations,
             tags: None,

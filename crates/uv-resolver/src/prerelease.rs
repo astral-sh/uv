@@ -51,6 +51,8 @@ impl std::fmt::Display for PrereleaseMode {
 impl FromStr for PrereleaseMode {
     type Err = String;
 
+    // Continue accepting the deprecated alias for backwards compatibility; resolved settings
+    // normalize it to `if-necessary` after emitting the existing deprecation warning.
     #[allow(deprecated)]
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
@@ -148,6 +150,23 @@ impl PrereleasePackage {
     }
 }
 
+/// A pre-release selection policy that applies globally and to individual packages.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct Prerelease {
+    /// Global policy that applies to packages without a package-specific override.
+    pub global: PrereleaseMode,
+    /// Package-specific policies that override the global policy.
+    pub package: PrereleasePackage,
+}
+
+impl Prerelease {
+    /// Returns the effective pre-release selection policy for a package.
+    pub fn mode(&self, package: &PackageName) -> PrereleaseMode {
+        self.package.get(package).copied().unwrap_or(self.global)
+    }
+}
+
 /// Like [`PrereleaseMode`], but with any additional information required to select a candidate,
 /// like the set of direct dependencies.
 #[derive(Debug, Clone)]
@@ -175,16 +194,16 @@ enum PrereleasePolicy {
 
 impl PrereleaseStrategy {
     #[allow(deprecated)]
-    pub(crate) fn from_mode(
-        mode: PrereleaseMode,
-        package: &PrereleasePackage,
+    pub(crate) fn from_prerelease(
+        prerelease: &Prerelease,
         manifest: &Manifest,
         env: &ResolverEnvironment,
         dependencies: DependencyMode,
     ) -> Self {
         Self {
-            default: Self::policy(mode, manifest, env, dependencies),
-            package: package
+            default: Self::policy(prerelease.global, manifest, env, dependencies),
+            package: prerelease
+                .package
                 .iter()
                 .map(|(name, mode)| {
                     (

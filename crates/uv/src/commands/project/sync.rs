@@ -34,8 +34,7 @@ use uv_python::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, PrereleasePackage, PythonReport,
-    ResolutionMode,
+    FlatIndex, ForkStrategy, Installable, Lock, Prerelease, PythonReport, ResolutionMode,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -713,8 +712,7 @@ pub(crate) async fn do_sync<'a>(
                 build_isolation: build_isolation.clone(),
                 extra_build_dependencies: extra_build_dependencies.clone(),
                 extra_build_variables: extra_build_variables.clone(),
-                prerelease: PrereleaseMode::default(),
-                prerelease_package: PrereleasePackage::default(),
+                prerelease: Prerelease::default(),
                 resolution: ResolutionMode::default(),
                 sources: sources.clone(),
                 torch_backend: None,

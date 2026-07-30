@@ -8,7 +8,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
-use uv_resolver::{ExcludeNewer, PrereleaseMode, PrereleasePackage};
+use uv_resolver::{ExcludeNewer, Prerelease, PrereleaseMode};
 use uv_warnings::warn_user_once;
 
 /// A client to fetch the latest version of a package from an index.
@@ -19,8 +19,7 @@ use uv_warnings::warn_user_once;
 pub(crate) struct LatestClient<'env> {
     pub(crate) client: &'env RegistryClient,
     pub(crate) capabilities: &'env IndexCapabilities,
-    pub(crate) prerelease: PrereleaseMode,
-    pub(crate) prerelease_package: &'env PrereleasePackage,
+    pub(crate) prerelease: &'env Prerelease,
     pub(crate) exclude_newer: &'env ExcludeNewer,
     pub(crate) index_locations: &'env IndexLocations,
     pub(crate) tags: Option<&'env Tags>,
@@ -62,11 +61,7 @@ impl LatestClient<'_> {
         }
 
         // Unless explicitly allowed, skip pre-release artifacts.
-        let prerelease = self
-            .prerelease_package
-            .get(package)
-            .copied()
-            .unwrap_or(self.prerelease);
+        let prerelease = self.prerelease.mode(package);
         if !filename.version().is_stable() && !matches!(prerelease, PrereleaseMode::Allow) {
             return false;
         }

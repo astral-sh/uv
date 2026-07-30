@@ -25,7 +25,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, Target};
-use uv_resolver::{ExcludeNewer, PrereleaseMode, PrereleasePackage};
+use uv_resolver::{ExcludeNewer, Prerelease};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
@@ -39,8 +39,7 @@ pub(crate) async fn pip_list(
     exclude: &FxHashSet<PackageName>,
     format: &ListFormat,
     outdated: bool,
-    prerelease: PrereleaseMode,
-    prerelease_package: PrereleasePackage,
+    prerelease: Prerelease,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
@@ -128,8 +127,7 @@ pub(crate) async fn pip_list(
         let client = LatestClient {
             client: &client,
             capabilities: &capabilities,
-            prerelease,
-            prerelease_package: &prerelease_package,
+            prerelease: &prerelease,
             exclude_newer: &exclude_newer,
             index_locations: &latest_index_locations,
             tags: Some(tags),

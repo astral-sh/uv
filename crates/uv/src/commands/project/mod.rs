@@ -2285,7 +2285,6 @@ pub(crate) async fn resolve_names(
                 extra_build_dependencies,
                 extra_build_variables,
                 prerelease: _,
-                prerelease_package: _,
                 resolution: _,
                 sources,
                 torch_backend,
@@ -2474,7 +2473,6 @@ pub(crate) async fn resolve_environment(
         keyring_provider,
         resolution,
         prerelease,
-        prerelease_package,
         fork_strategy,
         dependency_metadata,
         config_setting,
@@ -2580,8 +2578,7 @@ pub(crate) async fn resolve_environment(
 
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
-        .prerelease_mode(*prerelease)
-        .prerelease_package(prerelease_package.clone())
+        .prerelease(prerelease.clone())
         .fork_strategy(*fork_strategy)
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
@@ -2897,7 +2894,6 @@ pub(crate) async fn update_environment(
                 extra_build_dependencies: _,
                 extra_build_variables,
                 prerelease,
-                prerelease_package,
                 resolution,
                 sources,
                 torch_backend,
@@ -3020,8 +3016,7 @@ pub(crate) async fn update_environment(
 
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
-        .prerelease_mode(*prerelease)
-        .prerelease_package(prerelease_package.clone())
+        .prerelease(prerelease.clone())
         .fork_strategy(*fork_strategy)
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)

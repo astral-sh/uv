@@ -17,7 +17,7 @@ pub use lock::{
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
-pub use prerelease::{PrereleaseMode, PrereleasePackage, PrereleasePackageEntry};
+pub use prerelease::{Prerelease, PrereleaseMode, PrereleasePackage, PrereleasePackageEntry};
 pub use pubgrub::PubGrubHint;
 pub use python_requirement::PythonRequirement;
 pub use resolution::{

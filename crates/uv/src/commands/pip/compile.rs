@@ -42,8 +42,8 @@ use uv_requirements::{
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
-    InMemoryIndex, OptionsBuilder, PrereleaseMode, PrereleasePackage, PylockToml,
-    PythonRequirement, ResolutionMode, ResolverEnvironment,
+    InMemoryIndex, OptionsBuilder, Prerelease, PylockToml, PythonRequirement, ResolutionMode,
+    ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
@@ -78,8 +78,7 @@ pub(crate) async fn pip_compile(
     output_file: Option<&Path>,
     format: Option<PipCompileFormat>,
     resolution_mode: ResolutionMode,
-    prerelease_mode: PrereleaseMode,
-    prerelease_package: PrereleasePackage,
+    prerelease: Prerelease,
     fork_strategy: ForkStrategy,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
@@ -558,8 +557,7 @@ pub(crate) async fn pip_compile(
 
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
-        .prerelease_mode(prerelease_mode)
-        .prerelease_package(prerelease_package)
+        .prerelease(prerelease)
         .fork_strategy(fork_strategy)
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer.clone())

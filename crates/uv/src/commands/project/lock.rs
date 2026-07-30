@@ -532,7 +532,6 @@ async fn do_lock(
         keyring_provider,
         resolution,
         prerelease,
-        prerelease_package,
         fork_strategy,
         dependency_metadata,
         config_setting,
@@ -828,8 +827,7 @@ async fn do_lock(
 
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
-        .prerelease_mode(*prerelease)
-        .prerelease_package(prerelease_package.clone())
+        .prerelease(prerelease.clone())
         .fork_strategy(*fork_strategy)
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
@@ -1321,20 +1319,19 @@ impl ValidatedLock {
 
         // If the pre-release mode has changed, we have to re-resolve, but can retain the existing
         // versions and forks.
-        if lock.prerelease_mode() != options.prerelease_mode {
-            let _ = writeln!(
-                printer.stderr(),
-                "Resolving despite existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
-                lock.prerelease_mode().cyan(),
-                options.prerelease_mode.cyan()
-            );
-            return Ok(Self::Preferable(lock));
-        }
-
-        if lock.prerelease_package() != &options.prerelease_package {
-            debug!(
-                "Resolving despite existing lockfile due to change in package-specific pre-release modes"
-            );
+        if lock.prerelease() != &options.prerelease {
+            if lock.prerelease_mode() != options.prerelease.global {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Resolving despite existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
+                    lock.prerelease_mode().cyan(),
+                    options.prerelease.global.cyan()
+                );
+            } else {
+                debug!(
+                    "Resolving despite existing lockfile due to change in package-specific pre-release modes"
+                );
+            }
             return Ok(Self::Preferable(lock));
         }
 

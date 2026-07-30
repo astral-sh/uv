@@ -4582,7 +4582,7 @@ fn prerelease_package_disallows_transitive_prerelease() {
       ╰─▶ Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
           And because you require a, we can conclude that your requirements are unsatisfiable.
 
-    hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease-package c=allow`)
     ");
 
     context.assert_not_installed("c");
@@ -4722,6 +4722,31 @@ fn if_necessary_or_explicit_is_deprecated_alias() {
         .arg("--index-url")
         .arg(server.index_url())
         .arg("--prerelease=if-necessary-or-explicit")
+        .arg("a>0.1.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `if-necessary-or-explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary` instead.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0a1
+    ");
+
+    context.assert_installed("a", "1.0.0a1");
+}
+
+/// Deprecated package-specific pre-release modes should warn and behave like `if-necessary`.
+#[test]
+fn prerelease_package_if_necessary_or_explicit_is_deprecated_alias() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/package-only-prereleases-in-range.toml");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=disallow")
+        .arg("--prerelease-package")
+        .arg("a=if-necessary-or-explicit")
         .arg("a>0.1.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
