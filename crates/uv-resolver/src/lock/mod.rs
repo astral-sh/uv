@@ -941,6 +941,42 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         parent_marker
     }
 
+    /// Choose the resolver-node context used to simplify a regenerated dependency edge.
+    fn simplification_parent_marker(
+        &self,
+        context: DependencyContext<'_>,
+        parent_marker: UniversalMarker,
+    ) -> UniversalMarker {
+        if self.lock.conflicts.is_empty() {
+            return parent_marker;
+        }
+
+        let DependencyContext::Extra(extra) = context else {
+            return self.unforked_package_marker;
+        };
+        let Some(activation) = self.activated_extras.get(extra) else {
+            return self.unforked_package_marker;
+        };
+        if !activation.has_conflict_marker() || !self.package.fork_markers.is_empty() {
+            return self.unforked_package_marker;
+        }
+
+        let activation_marker =
+            SimplifiedMarkerTree::new(&self.lock.requires_python, activation.pep508())
+                .as_simplified_marker_tree();
+        let selects_resolution_fork = self.lock.fork_markers.iter().any(|fork_marker| {
+            let fork_marker =
+                SimplifiedMarkerTree::new(&self.lock.requires_python, fork_marker.pep508())
+                    .as_simplified_marker_tree();
+            !fork_marker.is_true() && activation_marker.is_disjoint(fork_marker.negate())
+        });
+        if selects_resolution_fork {
+            self.unforked_package_marker
+        } else {
+            parent_marker
+        }
+    }
+
     /// Return dependency identities and complete markers, including encoded conflict predicates.
     fn comparable_dependencies(
         &self,
@@ -2258,22 +2294,8 @@ impl Lock {
 
             // A false parent marker omits dependencies in unreachable conflict contexts.
             let parent_marker = expected.context_parent_marker(context);
-            // Conflict resolution retains source-fork predicates on child edges, even when the
-            // parent package is reachable only within that fork.
-            let selected_extra = if let DependencyContext::Extra(extra) = context {
-                expected
-                    .activated_extras
-                    .get(extra)
-                    .is_some_and(|marker| marker.has_conflict_marker())
-                    && package.fork_markers.is_empty()
-            } else {
-                false
-            };
-            let simplification_parent_marker = if self.conflicts.is_empty() || selected_extra {
-                parent_marker
-            } else {
-                expected.unforked_package_marker
-            };
+            let simplification_parent_marker =
+                expected.simplification_parent_marker(context, parent_marker);
 
             let mut generated = Vec::new();
             let builder = LockedDependencyBuilder::new(

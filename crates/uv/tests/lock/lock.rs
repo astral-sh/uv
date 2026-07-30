@@ -18920,6 +18920,72 @@ fn lock_regenerates_marker_scoped_dependency_extra_with_selected_conflict() -> R
     Ok(())
 }
 
+/// Resolution-level Python forks remain visible below a selected conflicting extra.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_regenerates_python_forked_dependency_extra_with_selected_conflict() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        selected = ["provider[one] ; python_full_version >= '3.13'"]
+        alternative = []
+
+        [tool.uv]
+        conflicts = [[{ extra = "selected" }, { extra = "alternative" }]]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = ["anyio==4.3.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// A project conflict remains active through a dependency's requested extra.
 #[cfg(feature = "test-universal")]
 #[test]
