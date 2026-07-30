@@ -3478,13 +3478,36 @@ impl Lock {
                                         .and(*generated_forbidden_conflict)
                                         .and(forbidden_environment),
                                 );
-                                forbidden.and(UniversalMarker::new(
-                                    MarkerTree::TRUE,
-                                    ConflictMarker::from_relevant_conflicts(
-                                        &self.conflicts,
-                                        [forbidden],
-                                    ),
-                                ));
+                                // Production edges must retain the selected project marker.
+                                // In other contexts, compare only worlds the actual edge adds;
+                                // canonical edges may also contain impossible conflict products.
+                                if matches!(context, DependencyContext::Production)
+                                    && actual_conflict.is_true()
+                                {
+                                    forbidden.and(UniversalMarker::new(
+                                        MarkerTree::TRUE,
+                                        ConflictMarker::from_relevant_conflicts(
+                                            &self.conflicts,
+                                            [forbidden],
+                                        ),
+                                    ));
+                                } else {
+                                    forbidden.and(UniversalMarker::from_combined(
+                                        actual_marker.and(generated_marker.negate()),
+                                    ));
+                                    forbidden.and(UniversalMarker::new(
+                                        MarkerTree::TRUE,
+                                        ConflictMarker::from_relevant_conflicts(
+                                            &self.conflicts,
+                                            [
+                                                forbidden,
+                                                activation.marker,
+                                                UniversalMarker::from_combined(*generated_marker),
+                                                UniversalMarker::from_combined(*actual_marker),
+                                            ],
+                                        ),
+                                    ));
+                                }
                                 marker_is_unreachable(&self.requires_python, forbidden.combined())
                             })
                     },

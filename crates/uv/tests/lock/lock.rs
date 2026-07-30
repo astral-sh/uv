@@ -18274,6 +18274,132 @@ fn lock_metadata_free_group_project_conflicting_extras() -> Result<()> {
     Ok(())
 }
 
+/// Conflicting extras and groups retain their platform and Python activation contexts.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_root_extra_and_group_project_conflict() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["provider[one] ; sys_platform == 'win32'"]
+
+        [dependency-groups]
+        dev = ["provider[two] ; sys_platform == 'win32'"]
+
+        [tool.uv]
+        conflicts = [
+            [{ extra = "feature" }, { group = "dev" }],
+            [{ package = "provider" }, { package = "provider", extra = "one" }],
+        ]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf-two ; sys_platform == 'win32'"]
+
+        [project.optional-dependencies]
+        one = ["provider[bridge] ; sys_platform == 'win32'"]
+        two = ["leaf-two ; sys_platform == 'win32'"]
+        bridge = ["leaf-one ; sys_platform == 'win32'"]
+
+        [tool.uv.sources]
+        leaf-one = { path = "../leaf-one" }
+        leaf-two = { path = "../leaf-two" }
+        "#})?;
+    for name in ["leaf-one", "leaf-two"] {
+        context
+            .temp_dir
+            .child(format!("{name}/pyproject.toml"))
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "{name}"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            "#})?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("dev")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + leaf-two @ file://[TEMP_DIR]/leaf-two
+     + provider @ file://[TEMP_DIR]/provider
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--no-default-groups")
+        .arg("--extra")
+        .arg("feature")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 3 packages
+    Would install 3 packages
+     + leaf-one @ file://[TEMP_DIR]/leaf-one
+     + leaf-two @ file://[TEMP_DIR]/leaf-two
+     + provider @ file://[TEMP_DIR]/provider
+    ");
+
+    Ok(())
+}
+
 /// A source scoped to the active root extra does not need to repeat that extra on its edge.
 #[cfg(feature = "test-universal")]
 #[test]
