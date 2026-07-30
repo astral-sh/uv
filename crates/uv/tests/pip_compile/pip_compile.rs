@@ -8877,7 +8877,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.4.2
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; implementation_name != 'cpython'
         # via torch
     sympy==1.13.3
         # via torch
@@ -8888,9 +8888,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (python_full_version < '3.13' and implementation_name != 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin') or (implementation_name != 'cpython' and sys_platform == 'win32')
-        # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; implementation_name != 'cpython'
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8898,7 +8896,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via torch
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
+    Resolved 18 packages in [TIME]
     "
     );
 

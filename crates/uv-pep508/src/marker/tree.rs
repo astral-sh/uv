@@ -3256,6 +3256,46 @@ mod test {
     }
 
     #[test]
+    fn test_unix_operating_system_disjointness() {
+        for sys_platform in [
+            "aix",
+            "android",
+            "cygwin",
+            "darwin",
+            "emscripten",
+            "ios",
+            "linux",
+            "wasi",
+        ] {
+            let marker = format!("sys_platform == '{sys_platform}'");
+            assert!(is_disjoint("os_name == 'nt'", &marker));
+            assert!(is_disjoint("os_name != 'posix'", &marker));
+            assert!(!is_disjoint("os_name == 'posix'", marker));
+        }
+
+        for platform_system in ["FreeBSD", "NetBSD", "OpenBSD", "SunOS", "iOS", "iPadOS"] {
+            let marker = format!("platform_system == '{platform_system}'");
+            assert!(is_disjoint("os_name == 'nt'", &marker));
+            assert!(is_disjoint("os_name != 'posix'", &marker));
+            assert!(!is_disjoint("os_name == 'posix'", marker));
+        }
+
+        assert!(!is_disjoint("os_name == 'nt'", "sys_platform == 'win32'"));
+        assert!(!is_disjoint(
+            "os_name != 'posix'",
+            "sys_platform == 'win32'"
+        ));
+        assert!(!is_disjoint(
+            "os_name == 'java'",
+            "sys_platform == 'unidentified'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name == 'cpython' and os_name == 'nt'",
+            "platform_python_implementation == 'CPython' and sys_platform == 'aix'"
+        ));
+    }
+
+    #[test]
     fn is_disjoint_commutative() {
         let m1 = m("extra == 'Linux' and extra != 'OSX'");
         let m2 = m("extra == 'Linux'");

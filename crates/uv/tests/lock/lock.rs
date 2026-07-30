@@ -16129,6 +16129,53 @@ fn lock_python_implementation_markers() -> Result<()> {
     Ok(())
 }
 
+/// Recognize incompatible Windows and Unix-like operating-system markers across both platform
+/// marker names.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_unix_operating_system_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; os_name == 'nt'",
+            "ok==1.0.0 ; os_name != 'posix'",
+            "ok==2.0.0 ; sys_platform == 'aix'",
+            "ok==2.0.0 ; sys_platform == 'android'",
+            "ok==2.0.0 ; sys_platform == 'cygwin'",
+            "ok==2.0.0 ; sys_platform == 'emscripten'",
+            "ok==2.0.0 ; sys_platform == 'wasi'",
+            "ok==2.0.0 ; platform_system == 'FreeBSD'",
+            "ok==2.0.0 ; platform_system == 'NetBSD'",
+            "ok==2.0.0 ; platform_system == 'OpenBSD'",
+            "ok==2.0.0 ; platform_system == 'SunOS'",
+            "ok==2.0.0 ; platform_system == 'iOS'",
+            "ok==2.0.0 ; platform_system == 'iPadOS'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Change indexes between locking operations.
 #[cfg(feature = "test-universal")]
 #[tokio::test]

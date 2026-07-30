@@ -1117,15 +1117,35 @@ impl InternerGuard<'_> {
             value: arcstr::literal!("PyPy"),
         });
 
-        // Pairs of `os_name` and `sys_platform` that are known to be incompatible.
+        // Unix-like Python platforms always use the `posix` operating system module.
         //
-        // For example: `os_name == 'nt' and sys_platform == 'darwin'`
-        let mut pairs = vec![
-            (os_name_nt, sys_platform_linux),
-            (os_name_nt, sys_platform_darwin),
-            (os_name_nt, sys_platform_ios),
-            (os_name_posix, sys_platform_win32),
-        ];
+        // For example: `os_name == 'nt' and sys_platform == 'aix'` and
+        // `os_name != 'posix' and platform_system == 'FreeBSD'` are impossible.
+        let mut pairs = vec![(os_name_posix, sys_platform_win32)];
+        for sys_platform in [
+            sys_platform_aix,
+            sys_platform_android,
+            sys_platform_cygwin,
+            sys_platform_darwin,
+            sys_platform_emscripten,
+            sys_platform_ios,
+            sys_platform_linux,
+            sys_platform_wasi,
+        ] {
+            pairs.push((os_name_nt, sys_platform));
+            pairs.push((os_name_posix.not(), sys_platform));
+        }
+        for platform_system in [
+            platform_system_freebsd,
+            platform_system_netbsd,
+            platform_system_openbsd,
+            platform_system_sunos,
+            platform_system_ios,
+            platform_system_ipados,
+        ] {
+            pairs.push((os_name_nt, platform_system));
+            pairs.push((os_name_posix.not(), platform_system));
+        }
 
         // CPython and PyPy expose the same interpreter identity through both marker names,
         // using different spellings. Other implementations do not have a guaranteed mapping.
