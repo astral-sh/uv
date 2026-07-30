@@ -1664,6 +1664,7 @@ fn verify_pyvenv_cfg() {
 #[test]
 fn verify_pyvenv_cfg_relocatable() {
     let context = uv_test::test_context!("3.12");
+    let prompt = "résumé \"quoted\"\\path\n";
 
     // Create a virtual environment at `.venv`.
     context
@@ -1672,6 +1673,8 @@ fn verify_pyvenv_cfg_relocatable() {
         .arg("--clear")
         .arg("--python")
         .arg("3.12")
+        .arg("--prompt")
+        .arg(prompt)
         .arg("--relocatable")
         .assert()
         .success();
@@ -1727,6 +1730,15 @@ fn verify_pyvenv_cfg_relocatable() {
     // be generated when --relocatable is used.
     let activate_csh = scripts.child("activate.csh");
     activate_csh.assert(predicates::path::missing());
+
+    let activate_xsh = scripts.child("activate.xsh");
+    activate_xsh.assert(predicates::path::is_file());
+    activate_xsh.assert(predicates::str::contains(
+        r"dirname(dirname(realpath(__file__)))",
+    ));
+    activate_xsh.assert(predicates::str::contains(
+        r#"self.embedded_virtual_prompt = b"r\xc3\xa9sum\xc3\xa9 \"quoted\"\\path\n".decode("utf-8")"#,
+    ));
 }
 
 /// With `UV_VENV_RELOCATABLE=1`, the virtual environment is relocatable.
