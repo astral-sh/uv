@@ -110,6 +110,7 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
                 workspace,
             } => lock
                 .root()
+                .filter(|root| root.name() != *name)
                 .filter(|root| {
                     let root_member = workspace.packages().get(root.name());
                     let declared_groups = root_member
@@ -123,10 +124,9 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
                         .is_some()
                         .then_some(&*DEV_DEPENDENCIES);
 
-                    root.name() != *name
-                        && declared_groups
-                            .chain(legacy_dev)
-                            .any(|group| self.includes_group(Some(root.name()), group, groups))
+                    declared_groups
+                        .chain(legacy_dev)
+                        .any(|group| self.includes_group(Some(root.name()), group, groups))
                 })
                 .map(Package::name),
             Self::Projects { .. }
