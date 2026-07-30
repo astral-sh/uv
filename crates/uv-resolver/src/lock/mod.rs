@@ -24,7 +24,7 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallTarget, Override, Overrides, PackageOverride,
     ScopedOverrideSourceError,
 };
-use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
+use uv_distribution::{ArchiveMetadata, DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
@@ -74,6 +74,7 @@ use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
     InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
+    UpgradePackages,
 };
 
 pub(crate) mod export;
@@ -2738,37 +2739,9 @@ impl Lock {
                     };
 
                     let metadata = {
-                        let id = dist.distribution_id();
-                        let archive = if let Some(archive) = index
-                            .distributions()
-                            .get(&id)
-                            .as_deref()
-                            .and_then(|response| {
-                                if let MetadataResponse::Found(archive, ..) = response {
-                                    Some(archive)
-                                } else {
-                                    None
-                                }
-                            }) {
-                            // If the metadata is already in the index, return it.
-                            archive.clone()
-                        } else {
-                            // Run the PEP 517 build process to extract metadata from the source distribution.
-                            let archive = database
-                                .get_or_build_wheel_metadata(&dist, hash_policy)
-                                .await
-                                .map_err(|err| LockErrorKind::Resolution {
-                                    id: package.id.clone(),
-                                    err,
-                                })?;
-
-                            // Insert the metadata into the index.
-                            index
-                                .distributions()
-                                .done(id, Arc::new(MetadataResponse::Found(archive.clone())));
-
-                            archive
-                        };
+                        let archive =
+                            Self::archive_metadata(package, &dist, hash_policy, index, database)
+                                .await?;
 
                         if validate_archive_hash
                             && !HashPolicy::All(hashes.as_slice())
@@ -3007,6 +2980,93 @@ impl Lock {
         }
 
         Ok(SatisfiesResult::Satisfied)
+    }
+
+    /// Validate every mutable archive except packages explicitly selected for upgrade.
+    ///
+    /// An authorized hash change must not short-circuit validation of unrelated locked archives.
+    pub async fn satisfies_unmodified_archive_hashes<Context: BuildContext>(
+        &self,
+        root: &Path,
+        tags: &Tags,
+        markers: &MarkerEnvironment,
+        build_options: &BuildOptions,
+        upgrades: &UpgradePackages,
+        index: &InMemoryIndex,
+        database: &DistributionDatabase<'_, Context>,
+    ) -> Result<SatisfiesResult<'_>, LockError> {
+        for package in &self.packages {
+            if !matches!(&package.id.source, Source::Path(..) | Source::Direct(..))
+                || upgrades.contains(&package.id.name)
+                || matches!(&package.id.source, Source::Direct(..))
+                    && database.client().unmanaged.connectivity().is_offline()
+            {
+                continue;
+            }
+
+            let HashedDist { dist, hashes } =
+                package.to_dist(root, TagPolicy::Preferred(tags), build_options, markers)?;
+            if hashes.is_empty() {
+                continue;
+            }
+
+            let archive = Self::archive_metadata(
+                package,
+                &dist,
+                HashPolicy::Generate(HashGeneration::Url),
+                index,
+                database,
+            )
+            .await?;
+            if !HashPolicy::All(hashes.as_slice()).matches(archive.hashes.as_slice()) {
+                return Ok(SatisfiesResult::MismatchedPackageHashes(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    hashes,
+                    archive.hashes,
+                ));
+            }
+        }
+
+        Ok(SatisfiesResult::Satisfied)
+    }
+
+    /// Fetch archive metadata once and share it with later lock validation.
+    async fn archive_metadata<Context: BuildContext>(
+        package: &Package,
+        dist: &Dist,
+        hash_policy: HashPolicy<'_>,
+        index: &InMemoryIndex,
+        database: &DistributionDatabase<'_, Context>,
+    ) -> Result<ArchiveMetadata, LockError> {
+        let id = dist.distribution_id();
+        if let Some(archive) = index
+            .distributions()
+            .get(&id)
+            .as_deref()
+            .and_then(|response| {
+                if let MetadataResponse::Found(archive, ..) = response {
+                    Some(archive)
+                } else {
+                    None
+                }
+            })
+        {
+            return Ok(archive.clone());
+        }
+
+        let archive = database
+            .get_or_build_wheel_metadata(dist, hash_policy)
+            .await
+            .map_err(|err| LockErrorKind::Resolution {
+                id: package.id.clone(),
+                err,
+            })?;
+        index
+            .distributions()
+            .done(id, Arc::new(MetadataResponse::Found(archive.clone())));
+
+        Ok(archive)
     }
 
     async fn source_tree_requires_dist<Context: BuildContext>(

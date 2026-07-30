@@ -11071,6 +11071,8 @@ fn scoped_upgrade_preserves_unrelated_archive_hash() -> Result<()> {
         .temp_dir
         .child("simple_launcher-0.1.0-py3-none-any.whl");
     fs_err::copy(links.join("simple_launcher-0.1.0-py3-none-any.whl"), &wheel)?;
+    let ok_wheel = context.temp_dir.child("ok-1.0.0-py3-none-any.whl");
+    fs_err::copy(links.join("ok-1.0.0-py3-none-any.whl"), &ok_wheel)?;
 
     context
         .temp_dir
@@ -11084,8 +11086,10 @@ fn scoped_upgrade_preserves_unrelated_archive_hash() -> Result<()> {
 
         [tool.uv.sources]
         simple-launcher = {{ path = "{}" }}
+        ok = {{ path = "{}" }}
         "#,
-        wheel.path().portable_display()
+        wheel.path().portable_display(),
+        ok_wheel.path().portable_display(),
         })?;
 
     context
@@ -11097,11 +11101,14 @@ fn scoped_upgrade_preserves_unrelated_archive_hash() -> Result<()> {
         .assert()
         .success();
 
-    let mut archive = fs_err::read(&wheel)?;
-    let comment_length_offset = archive.len() - 2;
-    archive[comment_length_offset..].copy_from_slice(&8u16.to_le_bytes());
-    archive.extend_from_slice(b"tampered");
-    fs_err::write(&wheel, archive)?;
+    let original_ok = fs_err::read(&ok_wheel)?;
+    for archive_path in [&wheel, &ok_wheel] {
+        let mut archive = fs_err::read(archive_path)?;
+        let comment_length_offset = archive.len() - 2;
+        archive[comment_length_offset..].copy_from_slice(&8u16.to_le_bytes());
+        archive.extend_from_slice(b"tampered");
+        fs_err::write(archive_path, archive)?;
+    }
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--upgrade-package")
@@ -11127,6 +11134,7 @@ fn scoped_upgrade_preserves_unrelated_archive_hash() -> Result<()> {
     ");
 
     // Explicitly selecting the changed package permits refreshing its archive hash.
+    fs_err::write(&ok_wheel, original_ok)?;
     context
         .sync()
         .arg("--upgrade-package")

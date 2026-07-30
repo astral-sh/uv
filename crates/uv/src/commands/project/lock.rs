@@ -1371,6 +1371,28 @@ impl ValidatedLock {
             Some(index_locations)
         };
 
+        if hash_mismatch_policy == HashMismatchPolicy::Preserve
+            && !(upgrade.is_none() || upgrade.is_all())
+        {
+            let upgrades = UpgradePackages::for_workspace(&lock, upgrade);
+            if !matches!(
+                lock.satisfies_unmodified_archive_hashes(
+                    install_path,
+                    interpreter.tags()?,
+                    interpreter.markers(),
+                    &options.build_options,
+                    &upgrades,
+                    index,
+                    database,
+                )
+                .await?,
+                SatisfiesResult::Satisfied
+            ) {
+                debug!("Preserving unrelated locked archive hashes during a scoped upgrade");
+                return Ok(Self::Satisfies(lock));
+            }
+        }
+
         // Determine whether the lockfile satisfies the workspace requirements.
         match lock
             .satisfies(
