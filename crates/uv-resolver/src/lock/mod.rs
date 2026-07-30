@@ -871,6 +871,16 @@ impl<'a> LockedDependencyBuilder<'a> {
                             selected.or(existing.complexified_marker);
                             selected
                         });
+                    for extra in requirement
+                        .extras
+                        .iter()
+                        .filter(|extra| !dependency.has_extra_payload(extra))
+                    {
+                        selected.assume_not_conflict_item(&ConflictItem::from((
+                            dependency.id.name.clone(),
+                            extra.clone(),
+                        )));
+                    }
                     if selected.is_false() {
                         continue;
                     }

@@ -18697,6 +18697,7 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
 
         [dependency-groups]
         dev = ["ok[first]>=1,<3 ; python_full_version < '3.13' or sys_platform != 'win32'"]
+        other = ["ok[second]>=1,<3 ; sys_platform == 'win32'"]
         nested = [
             { include-group = "dev" },
             "ok[third]>=1,<3 ; python_full_version < '3.13' or sys_platform != 'win32'",
@@ -18770,6 +18771,94 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
     Would install 1 package
      + ok==2.0.0
     ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("other")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + ok==1.0.0
+    ");
+
+    let original_lock = context.read("uv.lock");
+    let mut lock = original_lock.parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    let Some(project) = packages
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("project"))
+    else {
+        anyhow::bail!("lockfile did not contain the project");
+    };
+    let Some(dependencies) = project["dev-dependencies"]["other"].as_array_mut() else {
+        anyhow::bail!("project did not contain its other dependency group");
+    };
+    let Some(dependency) = dependencies.iter_mut().find(|dependency| {
+        dependency
+            .as_inline_table()
+            .and_then(|dependency| dependency.get("marker"))
+            .and_then(toml_edit::Value::as_str)
+            .is_some_and(|marker| marker.starts_with("sys_platform == 'win32' or"))
+    }) else {
+        anyhow::bail!("other dependency group did not contain its base edge");
+    };
+    let Some(dependency) = dependency.as_inline_table_mut() else {
+        anyhow::bail!("other dependency group did not contain an inline edge");
+    };
+    let Some(marker) = dependency.get("marker").and_then(toml_edit::Value::as_str) else {
+        anyhow::bail!("other dependency edge did not contain a marker");
+    };
+    let marker = format!("python_full_version < '3.13' and ({marker})");
+    dependency.insert("marker", toml_edit::Value::from(marker));
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("other")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&original_lock)?;
 
     let pyproject = context
         .read("pyproject.toml")
