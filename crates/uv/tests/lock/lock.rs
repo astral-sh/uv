@@ -9830,6 +9830,33 @@ fn lock_prerelease_package_configuration() -> Result<()> {
         "#);
     });
 
+    uv_snapshot!(context.filters(), context.lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--locked")
+        .arg("--prerelease-package")
+        .arg("foo=if-necessary")
+        .arg("--prerelease-package")
+        .arg("baz=allow"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--locked")
+        .arg("--prerelease-package")
+        .arg("foo=allow")
+        .arg("--prerelease-package")
+        .arg("baz=allow"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
     Ok(())
 }
 
