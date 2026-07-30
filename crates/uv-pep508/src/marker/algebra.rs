@@ -1106,6 +1106,11 @@ impl InternerGuard<'_> {
             operator: MarkerOperator::Equal,
             value: arcstr::literal!("pypy"),
         });
+        let implementation_name_pyston = self.expression(MarkerExpression::String {
+            key: MarkerValueString::ImplementationName,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("pyston"),
+        });
         let platform_python_implementation_cpython = self.expression(MarkerExpression::String {
             key: MarkerValueString::PlatformPythonImplementation,
             operator: MarkerOperator::Equal,
@@ -1154,12 +1159,15 @@ impl InternerGuard<'_> {
             (platform_system_ipados, sys_platform_ios.not()),
         ]);
 
-        // CPython and PyPy expose the same interpreter identity through both marker names,
-        // using different spellings. However, Pyston also reports `CPython` through the platform
-        // API, so only PyPy has a bidirectional mapping.
+        // CPython and Pyston both report `CPython` through the platform API, while PyPy exposes
+        // its own identity through both marker names. Only PyPy has a bidirectional mapping.
         pairs.extend([
             (
                 implementation_name_cpython,
+                platform_python_implementation_cpython.not(),
+            ),
+            (
+                implementation_name_pyston,
                 platform_python_implementation_cpython.not(),
             ),
             (

@@ -3198,10 +3198,12 @@ mod test {
 
     #[test]
     fn test_python_implementation_disjointness() {
-        for (implementation_name, platform_python_implementation) in
-            [("cpython", "CPython"), ("pypy", "PyPy")]
-        {
-            let is_cpython = implementation_name == "cpython";
+        for (implementation_name, platform_python_implementation) in [
+            ("cpython", "CPython"),
+            ("pyston", "CPython"),
+            ("pypy", "PyPy"),
+        ] {
+            let is_bidirectional = implementation_name == "pypy";
             let implementation_name = format!("implementation_name == '{implementation_name}'");
             let platform_python_implementation =
                 format!("platform_python_implementation == '{platform_python_implementation}'");
@@ -3214,7 +3216,7 @@ mod test {
                 &implementation_name,
                 platform_python_implementation.replace("==", "!=")
             ));
-            if !is_cpython {
+            if is_bidirectional {
                 assert!(is_disjoint(
                     implementation_name.replace("==", "!="),
                     &platform_python_implementation
@@ -3247,6 +3249,10 @@ mod test {
 
         assert!(!is_disjoint(
             "implementation_name == 'pyston'",
+            "platform_python_implementation == 'CPython'"
+        ));
+        assert!(!is_disjoint(
+            "implementation_name != 'pyston'",
             "platform_python_implementation == 'CPython'"
         ));
         assert!(!is_disjoint(
