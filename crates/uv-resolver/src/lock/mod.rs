@@ -457,6 +457,7 @@ struct LockedDependencyBuilder<'a> {
     requires_python: &'a RequiresPython,
     environment: SimplifiedMarkerTree,
     parent_marker: UniversalMarker,
+    simplification_parent_marker: UniversalMarker,
 }
 
 impl<'a> LockedDependencyBuilder<'a> {
@@ -464,11 +465,13 @@ impl<'a> LockedDependencyBuilder<'a> {
         requires_python: &'a RequiresPython,
         environment: SimplifiedMarkerTree,
         parent_marker: UniversalMarker,
+        simplification_parent_marker: UniversalMarker,
     ) -> Self {
         Self {
             requires_python,
             environment,
             parent_marker,
+            simplification_parent_marker,
         }
     }
 
@@ -609,7 +612,7 @@ impl<'a> LockedDependencyBuilder<'a> {
         let simplified_marker = simplify_dependency_marker(
             self.requires_python,
             self.environment,
-            self.parent_marker,
+            self.simplification_parent_marker,
             marker,
         );
         let dependency =
@@ -659,6 +662,8 @@ struct ExpectedPackageDependencies<'lock> {
     activated_extras: BTreeSet<ExtraName>,
     /// The environment under which this package can be selected.
     package_marker: UniversalMarker,
+    /// The package environment before platform-specific source forks are applied.
+    unforked_package_marker: UniversalMarker,
     /// The environment of the resolution.
     lock_marker: SimplifiedMarkerTree,
     workspace_root: &'lock Path,
@@ -702,7 +707,13 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
 
         // The locked edges already encode conflicts. Expanding independent conflict sets here
         // would create an exponential marker product for ordinary production requirements.
-        let mut package_marker = UniversalMarker::from_combined(lock.fork_markers_union());
+        let mut unforked_package_marker = UniversalMarker::from_combined(lock.fork_markers_union());
+        if let Some(requires_python) = package_requires_python {
+            unforked_package_marker.and(UniversalMarker::from_combined(
+                RequiresPython::from_specifiers(requires_python.clone()).to_marker_tree(),
+            ));
+        }
+        let mut package_marker = unforked_package_marker;
         if !package.fork_markers.is_empty() {
             let fork_marker = package
                 .fork_markers
@@ -711,11 +722,6 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                     fork_marker.or(marker.combined())
                 });
             package_marker.and(UniversalMarker::from_combined(fork_marker));
-        }
-        if let Some(requires_python) = package_requires_python {
-            package_marker.and(UniversalMarker::from_combined(
-                RequiresPython::from_specifiers(requires_python.clone()).to_marker_tree(),
-            ));
         }
         let lock_marker =
             SimplifiedMarkerTree::new(&lock.requires_python, lock.fork_markers_union());
@@ -728,6 +734,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             dependency_groups,
             activated_extras,
             package_marker,
+            unforked_package_marker,
             lock_marker,
             workspace_root,
         }
@@ -827,9 +834,17 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             .chain(requested_conflicts)
             .chain(requested_project)
             .peekable();
-        // A selected parent conflict is retained on requested-extra edges, but ordinary
-        // dependencies omit the redundant parent marker.
-        if conflicts.peek().is_none() && (selected.is_none() || requirement.extras.is_empty()) {
+        // A selected parent conflict is retained on requested-extra and source-forked edges,
+        // but ordinary dependencies omit the redundant parent marker.
+        let source_variants = self.packages_for_name(&requirement.name);
+        let has_source_forks = source_variants.first().is_some_and(|first| {
+            source_variants
+                .iter()
+                .any(|package| package.id.source != first.id.source)
+        });
+        if conflicts.peek().is_none()
+            && (selected.is_none() || requirement.extras.is_empty() && !has_source_forks)
+        {
             return None;
         }
         let mut marker = UniversalMarker::TRUE;
@@ -2209,12 +2224,20 @@ impl Lock {
 
             // A false parent marker omits dependencies in unreachable conflict contexts.
             let parent_marker = expected.context_parent_marker(context);
+            // Conflict resolution retains source-fork predicates on child edges, even when the
+            // parent package is reachable only within that fork.
+            let simplification_parent_marker = if self.conflicts.is_empty() {
+                parent_marker
+            } else {
+                expected.unforked_package_marker
+            };
 
             let mut generated = Vec::new();
             let builder = LockedDependencyBuilder::new(
                 &self.requires_python,
                 expected.lock_marker,
                 parent_marker,
+                simplification_parent_marker,
             );
             let complete =
                 builder.add_requirements(&mut generated, expected, context, activated_extras)?;
@@ -3646,7 +3669,12 @@ impl Package {
         root: &Path,
     ) -> Result<(), LockError> {
         let parent_marker = *resolution.graph[node_index].marker();
-        let builder = LockedDependencyBuilder::new(requires_python, environment, parent_marker);
+        let builder = LockedDependencyBuilder::new(
+            requires_python,
+            environment,
+            parent_marker,
+            parent_marker,
+        );
         for edge in resolution.graph.edges(node_index) {
             let ResolutionGraphNode::Dist(distribution) = &resolution.graph[edge.target()] else {
                 continue;

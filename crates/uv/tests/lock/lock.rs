@@ -17947,6 +17947,114 @@ fn lock_metadata_free_conflicting_direct_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Conflicting extras must retain the platform forks of their requested source variants.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_conflicting_forked_source_extras() -> Result<()> {
+    lock_metadata_free_conflicting_forked_sources(true)
+}
+
+/// Platform-specific source edges retain their selected conflict without requested extras.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_conflicting_forked_source_dependencies() -> Result<()> {
+    lock_metadata_free_conflicting_forked_sources(false)
+}
+
+/// Validate source forks in conflicting contexts, both with and without target extras.
+#[cfg(feature = "test-universal")]
+fn lock_metadata_free_conflicting_forked_sources(requested_extra: bool) -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    let first = if requested_extra {
+        "provider[one]"
+    } else {
+        "provider"
+    };
+    let second = if requested_extra {
+        "provider[two]"
+    } else {
+        "provider"
+    };
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        a = ["{first}"]
+        b = ["{second}"]
+
+        [tool.uv]
+        conflicts = [[{{ extra = "a" }}, {{ extra = "b" }}]]
+
+        [tool.uv.sources]
+        provider = [
+            {{ path = "provider-win", marker = "sys_platform == 'win32'" }},
+            {{ path = "provider-other", marker = "sys_platform != 'win32'" }},
+        ]
+        "#})?;
+
+    for (directory, version, dependency_version) in [
+        ("provider-win", "1.0.0", "4.3.0"),
+        ("provider-other", "2.0.0", "4.4.0"),
+    ] {
+        let dependencies = if requested_extra {
+            indoc! {r#"
+
+                [project.optional-dependencies]
+                one = ["anyio==4.3.0"]
+                two = ["anyio==4.4.0"]
+                "#}
+            .to_string()
+        } else {
+            format!("dependencies = [\"anyio=={dependency_version}\"]")
+        };
+        context
+            .temp_dir
+            .child(directory)
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "provider"
+            version = "{version}"
+            requires-python = ">=3.12"
+            {dependencies}
+            "#})?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// An empty extra remains selectable when its lockfile omits package metadata.
 #[cfg(feature = "test-universal")]
 #[test]
