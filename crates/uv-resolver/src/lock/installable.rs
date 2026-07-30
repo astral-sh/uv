@@ -399,7 +399,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         // referenced as a development dependency, then we need to re-enable it.
                         let index = *entry.get();
                         let node = &mut petgraph[index];
-                        if !groups.prod() {
+                        if !groups.prod() || matches!(node, Node::Dist { install: false, .. }) {
                             *node = self.package_to_node(
                                 dep_dist,
                                 tags,
@@ -766,7 +766,19 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         entry.insert(index);
                         index
                     }
-                    Entry::Occupied(entry) => *entry.get(),
+                    Entry::Occupied(entry) => {
+                        let index = *entry.get();
+                        if matches!(&petgraph[index], Node::Dist { install: false, .. }) {
+                            petgraph[index] = self.package_to_node(
+                                dep_dist,
+                                tags,
+                                build_options,
+                                install_options,
+                                marker_env,
+                            )?;
+                        }
+                        index
+                    }
                 };
 
                 // Add the edge.
@@ -1471,6 +1483,40 @@ provides-extras = ["cli"]
         )
             "#);
         });
+    }
+
+    #[test]
+    fn materializes_group_root_referenced_by_production_dependency() {
+        let lock = lock();
+        let project = package(&lock, "root-a", "1.0.0");
+        let group_root = package(&lock, "shared", "1.0.0");
+        let extras = ExtrasSpecification::default().with_defaults(DefaultExtras::default());
+        let groups = DependencyGroupsWithDefaults::none();
+
+        let resolution = LockedPackages {
+            lock: &lock,
+            install_path: Path::new("."),
+            project_name: Some(project.name()),
+        }
+        .to_resolution_from_packages(
+            &[project],
+            Some(group_root),
+            false,
+            DependencySelectionContext::None,
+            &DARWIN_MARKERS,
+            &TAGS,
+            &extras,
+            &groups,
+            &BuildOptions::default(),
+            &InstallOptions::default(),
+        )
+        .expect("valid resolution");
+
+        assert!(
+            resolution
+                .distributions()
+                .any(|distribution| distribution.name() == group_root.name())
+        );
     }
 
     #[test]
