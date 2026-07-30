@@ -551,14 +551,8 @@ impl<'lock> InstallTarget<'lock> {
                     });
 
                 // Groups defined directly on a non-project workspace root are not members.
-                let include_workspace_groups = match self {
-                    Self::Project { workspace, .. } | Self::Projects { workspace, .. } => {
-                        workspace.is_non_project()
-                    }
-                    Self::Workspace { .. } | Self::NonProjectWorkspace { .. } => true,
-                    Self::Script { .. } => false,
-                };
-                let workspace_groups = include_workspace_groups
+                let workspace_groups = workspace
+                    .is_non_project()
                     .then(|| workspace.workspace_dependency_groups().ok())
                     .flatten()
                     .into_iter()
