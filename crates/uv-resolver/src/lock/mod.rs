@@ -1027,6 +1027,19 @@ impl<'a> LockedDependencyBuilder<'a> {
                         }
                     }
                 }
+                if has_source_forks
+                    && !self.source_is_covered(
+                        expected,
+                        context,
+                        requirement,
+                        requirements,
+                        &dependency.id,
+                        standalone_base_edge_marker,
+                    )
+                {
+                    complete = false;
+                }
+
                 if !extras.is_empty()
                     && !self.base_covered_by_requested_extras(
                         expected,
@@ -1121,6 +1134,83 @@ impl<'a> LockedDependencyBuilder<'a> {
             self.add(dependencies, package_id, extras, marker);
         }
         Ok(complete)
+    }
+
+    /// Return whether the locked edges cover every source-specific declaration world.
+    fn source_is_covered(
+        &self,
+        expected: &ExpectedPackageDependencies<'_>,
+        context: DependencyContext<'_>,
+        requirement: &Requirement,
+        requirements: &BTreeSet<Requirement>,
+        package_id: &PackageId,
+        base_marker: UniversalMarker,
+    ) -> bool {
+        let actual_marker = context
+            .dependencies(expected.package)
+            .iter()
+            .filter(|edge| edge.package_id == *package_id)
+            .fold(UniversalMarker::FALSE, |mut marker, edge| {
+                marker.or(edge.complexified_marker);
+                marker
+            });
+        let mut required_marker = base_marker;
+        for extra in &requirement.extras {
+            let selected = ConflictItem::from((package_id.name.clone(), extra.clone()));
+            let mut competing_marker = MarkerTree::FALSE;
+            for conflicts in expected
+                .lock
+                .conflicts
+                .iter()
+                .filter(|conflicts| conflicts.iter().any(|conflict| conflict == &selected))
+            {
+                for alternative in conflicts.iter().filter(|item| *item != &selected) {
+                    if alternative.package() == &expected.package.id.name {
+                        competing_marker = MarkerTree::TRUE;
+                        continue;
+                    }
+                    let ConflictKindRef::Extra(alternative_extra) = alternative.kind().as_ref()
+                    else {
+                        continue;
+                    };
+                    if alternative.package() != &package_id.name {
+                        continue;
+                    }
+                    for parent_extra in expected.provides_extra {
+                        for candidate in requirements.iter().filter(|candidate| {
+                            candidate.name == package_id.name
+                                && candidate.extras.contains(alternative_extra)
+                        }) {
+                            competing_marker = competing_marker
+                                .or(DependencyContext::Extra(parent_extra)
+                                    .requirement_marker(candidate));
+                        }
+                    }
+                }
+            }
+            if !competing_marker.is_false() {
+                let mut compatible = UniversalMarker::from_combined(competing_marker.negate());
+                compatible.or(UniversalMarker::new(
+                    MarkerTree::TRUE,
+                    ConflictMarker::from_conflict_item(&selected),
+                ));
+                required_marker.and(compatible);
+            }
+        }
+        required_marker.and(self.activation.marker);
+        required_marker.and(UniversalMarker::from_combined(
+            actual_marker.combined().negate(),
+        ));
+        if !expected.lock.conflicts.is_empty() {
+            required_marker.and(UniversalMarker::new(
+                MarkerTree::TRUE,
+                ConflictMarker::from_relevant_conflicts(
+                    &expected.lock.conflicts,
+                    [required_marker],
+                ),
+            ));
+        }
+        marker_is_unreachable(self.requires_python, required_marker.combined())
     }
 
     /// Return whether locked extra edges already activate their dependency's entire base marker.
@@ -3348,6 +3438,12 @@ impl Lock {
                             return false;
                         }
 
+                        let candidates = expected.packages_for_name(&generated_package.name);
+                        let has_source_forks = candidates.first().is_some_and(|first| {
+                            candidates
+                                .iter()
+                                .any(|candidate| candidate.id.source != first.id.source)
+                        });
                         let payload_marker = expected.selected_extra_payload_marker(
                             generated_package,
                             generated_extras,
@@ -3364,31 +3460,33 @@ impl Lock {
                             actual_marker
                                 .without_extras()
                                 .and(generated_marker.without_extras().negate()),
-                        ) && marker_is_unreachable(
-                            &self.requires_python,
-                            generated_marker
-                                .and(actual_marker.negate())
-                                .and(payload_marker),
-                        ) && marker_is_unreachable(
-                            &self.requires_python,
-                            actual_marker
-                                .and(generated_marker.negate())
-                                .and(payload_marker),
-                        ) && (generated_forbidden_conflict.is_false() || {
-                            let mut forbidden = UniversalMarker::from_combined(
-                                actual_conflict
-                                    .and(*generated_forbidden_conflict)
-                                    .and(forbidden_environment),
-                            );
-                            forbidden.and(UniversalMarker::new(
-                                MarkerTree::TRUE,
-                                ConflictMarker::from_relevant_conflicts(
-                                    &self.conflicts,
-                                    [forbidden],
-                                ),
-                            ));
-                            marker_is_unreachable(&self.requires_python, forbidden.combined())
-                        })
+                        ) && (has_source_forks
+                            || marker_is_unreachable(
+                                &self.requires_python,
+                                generated_marker
+                                    .and(actual_marker.negate())
+                                    .and(payload_marker),
+                            ) && marker_is_unreachable(
+                                &self.requires_python,
+                                actual_marker
+                                    .and(generated_marker.negate())
+                                    .and(payload_marker),
+                            ))
+                            && (generated_forbidden_conflict.is_false() || {
+                                let mut forbidden = UniversalMarker::from_combined(
+                                    actual_conflict
+                                        .and(*generated_forbidden_conflict)
+                                        .and(forbidden_environment),
+                                );
+                                forbidden.and(UniversalMarker::new(
+                                    MarkerTree::TRUE,
+                                    ConflictMarker::from_relevant_conflicts(
+                                        &self.conflicts,
+                                        [forbidden],
+                                    ),
+                                ));
+                                marker_is_unreachable(&self.requires_python, forbidden.combined())
+                            })
                     },
                 );
             if !complete || !equivalent {

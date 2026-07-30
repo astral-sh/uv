@@ -18614,6 +18614,114 @@ fn lock_metadata_free_nested_conflicting_forked_sources() -> Result<()> {
     Ok(())
 }
 
+/// Externally selected parent extras can narrow a requested source's competing conflict worlds.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_forked_source_with_parent_extra_conflict() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicts = [
+            [
+                { package = "child", extra = "one" },
+                { package = "child", extra = "two" },
+            ],
+            [
+                { package = "provider", extra = "one" },
+                { package = "child", extra = "two" },
+            ],
+        ]
+
+        [tool.uv.workspace]
+        members = ["provider"]
+
+        [tool.uv.sources]
+        provider = { workspace = true }
+        child = [
+            { path = "child-win", marker = "sys_platform == 'win32'" },
+            { path = "child-other", marker = "sys_platform != 'win32'" },
+        ]
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = ["child[one] ; sys_platform != 'win32'"]
+        two = ["child[two] ; python_full_version >= '3.13'"]
+        "#})?;
+    for (directory, version, first_marker) in [
+        ("child-win", "1.0.0", ""),
+        ("child-other", "2.0.0", " ; sys_platform == 'win32'"),
+    ] {
+        context
+            .temp_dir
+            .child(format!("{directory}/pyproject.toml"))
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "child"
+            version = "{version}"
+            requires-python = ">=3.12"
+
+            [project.optional-dependencies]
+            one = ["leaf-one{first_marker}"]
+            two = ["leaf-two ; sys_platform != 'win32'"]
+
+            [tool.uv.sources]
+            leaf-one = {{ path = "../leaf-one" }}
+            leaf-two = {{ path = "../leaf-two" }}
+            "#})?;
+    }
+    for name in ["leaf-one", "leaf-two"] {
+        context
+            .temp_dir
+            .child(format!("{name}/pyproject.toml"))
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "{name}"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            "#})?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Empty declared target extras still participate in source-specific conflict selections.
 #[cfg(feature = "test-universal")]
 #[test]
