@@ -52,7 +52,7 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
 use itertools::{Either, Itertools};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
 use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
@@ -385,7 +385,10 @@ impl InternerGuard<'_> {
         // Known-incompatible platform markers have the highest priority in the tree. Python
         // implementation markers can occur lower in the ordering, where recursive conjunctions
         // will apply the same check when both implementation variables are present.
-        let conflicts = x.var.is_conflicting_variable() && y.var.is_conflicting_variable();
+        let conflicts = (x.var.is_conflicting_variable() && y.var.is_conflicting_variable())
+            || (x.var.is_conflicting_variable() && y.var.is_version_variable())
+            || (y.var.is_conflicting_variable() && x.var.is_version_variable())
+            || (x.var.is_version_variable() && y.var.is_version_variable() && x.var != y.var);
 
         // Perform Shannon Expansion of the higher order variable.
         let (func, children) = match x.var.cmp(&y.var) {
@@ -411,8 +414,7 @@ impl InternerGuard<'_> {
 
         // If the node includes known incompatibilities, map it to `false`.
         let node = if conflicts {
-            let exclusions = self.exclusions();
-            if self.disjointness(node, exclusions.not()) {
+            if self.is_world_unsatisfiable(node) {
                 NodeId::FALSE
             } else {
                 node
@@ -457,7 +459,11 @@ impl InternerGuard<'_> {
         // Known-incompatible platform markers have the highest priority in the tree. Python
         // implementation markers can occur lower in the ordering, where recursive conjunctions
         // will apply the same check when both implementation variables are present.
-        if x.var.is_conflicting_variable() && y.var.is_conflicting_variable() {
+        if (x.var.is_conflicting_variable() && y.var.is_conflicting_variable())
+            || (x.var.is_conflicting_variable() && y.var.is_version_variable())
+            || (y.var.is_conflicting_variable() && x.var.is_version_variable())
+            || (x.var.is_version_variable() && y.var.is_version_variable() && x.var != y.var)
+        {
             return self.and(xi, yi).is_false();
         }
 
@@ -520,6 +526,128 @@ impl InternerGuard<'_> {
             // X and Y represent the same variable, their merged edges must be unsatisfiable.
             Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self, false),
         }
+    }
+
+    /// Returns whether a marker has no realizable Python interpreter environment.
+    ///
+    /// Besides finite platform exclusions, CPython conditionally identifies
+    /// `implementation_version` with `python_full_version`. Keep other implementations on
+    /// independent version axes by cofactoring the marker into CPython and non-CPython worlds.
+    fn is_world_unsatisfiable(&mut self, marker: NodeId) -> bool {
+        if marker.is_false() {
+            return true;
+        }
+
+        let exclusions = self.exclusions();
+        let valid_worlds = exclusions.not();
+        if self.disjointness(marker, valid_worlds) {
+            return true;
+        }
+
+        if !self.has_conditional_version_axes(marker) {
+            return false;
+        }
+
+        let cpython = self.expression(MarkerExpression::String {
+            key: MarkerValueString::ImplementationName,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("cpython"),
+        });
+
+        let non_cpython_marker = self.restrict(marker, cpython.not());
+        let non_cpython_worlds = self.restrict(valid_worlds, cpython.not());
+        if !self.disjointness(non_cpython_marker, non_cpython_worlds) {
+            return false;
+        }
+
+        let cpython_marker = self.restrict(marker, cpython);
+        let cpython_worlds = self.restrict(valid_worlds, cpython);
+        if self.disjointness(cpython_marker, cpython_worlds) {
+            return true;
+        }
+
+        let mut cache = FxHashMap::default();
+        let projected = self.project_cpython_versions(cpython_marker, &mut cache);
+        self.disjointness(projected, cpython_worlds)
+    }
+
+    /// Returns whether a marker tree compares both conditionally related version axes.
+    fn has_conditional_version_axes(&self, marker: NodeId) -> bool {
+        let mut pending = vec![marker];
+        let mut visited = FxHashSet::default();
+        let mut has_implementation_version = false;
+        let mut has_python_full_version = false;
+
+        while let Some(marker) = pending.pop() {
+            if matches!(marker, NodeId::TRUE | NodeId::FALSE) || !visited.insert(marker) {
+                continue;
+            }
+
+            let node = self.shared.node(marker);
+            match node.var {
+                Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion) => {
+                    has_implementation_version = true;
+                }
+                Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion) => {
+                    has_python_full_version = true;
+                }
+                _ => {}
+            }
+
+            if has_implementation_version && has_python_full_version {
+                return true;
+            }
+
+            pending.extend(node.children.nodes());
+        }
+
+        false
+    }
+
+    /// Substitutes CPython's implementation-version axis with its Python full-version axis.
+    fn project_cpython_versions(
+        &mut self,
+        marker: NodeId,
+        cache: &mut FxHashMap<NodeId, NodeId>,
+    ) -> NodeId {
+        if matches!(marker, NodeId::TRUE | NodeId::FALSE) {
+            return marker;
+        }
+        if let Some(&projected) = cache.get(&marker) {
+            return projected;
+        }
+
+        let node = self.shared.node(marker);
+        let variable = node.var.clone();
+        let children = node.children.clone();
+        let projected = match (variable, children) {
+            (
+                Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
+                Edges::Version { edges },
+            ) => {
+                let mut projected = NodeId::FALSE;
+                for (range, child) in edges {
+                    let range = self.create_node(
+                        Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+                        Edges::Version {
+                            edges: Edges::from_range(&range),
+                        },
+                    );
+                    let child = self.project_cpython_versions(child.negate(marker), cache);
+                    let branch = self.and(range, child);
+                    projected = self.or(projected, branch);
+                }
+                projected
+            }
+            (variable, children) => {
+                let children =
+                    children.map(marker, |child| self.project_cpython_versions(child, cache));
+                self.create_node(variable, children)
+            }
+        };
+
+        cache.insert(marker, projected);
+        projected
     }
 
     // Restrict the output of selected boolean variables in the tree.
@@ -1111,6 +1239,11 @@ impl InternerGuard<'_> {
             operator: MarkerOperator::Equal,
             value: arcstr::literal!("pyston"),
         });
+        let implementation_name_graalpy = self.expression(MarkerExpression::String {
+            key: MarkerValueString::ImplementationName,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("graalpy"),
+        });
         let platform_python_implementation_cpython = self.expression(MarkerExpression::String {
             key: MarkerValueString::PlatformPythonImplementation,
             operator: MarkerOperator::Equal,
@@ -1120,6 +1253,11 @@ impl InternerGuard<'_> {
             key: MarkerValueString::PlatformPythonImplementation,
             operator: MarkerOperator::Equal,
             value: arcstr::literal!("PyPy"),
+        });
+        let platform_python_implementation_graalvm = self.expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformPythonImplementation,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("GraalVM"),
         });
 
         // Unix-like Python platforms always use the `posix` operating system module.
@@ -1154,13 +1292,21 @@ impl InternerGuard<'_> {
 
         // iOS and iPadOS expose distinct user-facing platform names, but both use `ios` as
         // their `sys.platform` value.
+        let ios_platform_system = disjunction(
+            self,
+            &mut cache,
+            platform_system_ios,
+            platform_system_ipados,
+        );
         pairs.extend([
             (platform_system_ios, sys_platform_ios.not()),
             (platform_system_ipados, sys_platform_ios.not()),
+            (sys_platform_ios, ios_platform_system.not()),
         ]);
 
-        // CPython and Pyston both report `CPython` through the platform API, while PyPy exposes
-        // its own identity through both marker names. Only PyPy has a bidirectional mapping.
+        // CPython, PyPy, and GraalPy expose their interpreter identity through both marker
+        // names, using different spellings. However, Pyston also reports `CPython` through the
+        // platform API, so only PyPy and GraalPy have bidirectional mappings.
         pairs.extend([
             (
                 implementation_name_cpython,
@@ -1177,6 +1323,14 @@ impl InternerGuard<'_> {
             (
                 implementation_name_pypy.not(),
                 platform_python_implementation_pypy,
+            ),
+            (
+                implementation_name_graalpy,
+                platform_python_implementation_graalvm.not(),
+            ),
+            (
+                implementation_name_graalpy.not(),
+                platform_python_implementation_graalvm,
             ),
         ]);
 
@@ -1278,6 +1432,11 @@ impl Variable {
             return false;
         };
         marker.is_conflicting()
+    }
+
+    /// Returns whether this decision represents an interpreter-version axis.
+    fn is_version_variable(&self) -> bool {
+        matches!(self, Self::Version(_))
     }
 }
 
