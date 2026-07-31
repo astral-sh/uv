@@ -5,8 +5,8 @@
 This crate is an internal component of [uv](https://crates.io/crates/uv). The Rust API exposed here
 is unstable and will have frequent breaking changes.
 
-This version (0.0.67) is a component of [uv 0.12.0](https://crates.io/crates/uv/0.12.0). The source
-can be found [here](https://github.com/astral-sh/uv/blob/0.12.0/crates/uv-distribution).
+This version (0.0.68) is a component of [uv 0.12.1](https://crates.io/crates/uv/0.12.1). The source
+can be found [here](https://github.com/astral-sh/uv/blob/0.12.1/crates/uv-distribution).
 
 See uv's
 [crate versioning policy](https://docs.astral.sh/uv/reference/policies/versioning/#crate-versioning)
