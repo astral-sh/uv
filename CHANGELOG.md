@@ -9,47 +9,36 @@ Released on 2026-07-31.
 
 ### Enhancements
 
-- Ignore malformed PEP 723 scripts during project checks ([#20784](https://github.com/astral-sh/uv/pull/20784))
-- Keep paths passed via `--index` to `uv add` as paths when modifying `pyproject.toml` ([#20817](https://github.com/astral-sh/uv/pull/20817))
-- Support local HTML files in flat indexes ([#20802](https://github.com/astral-sh/uv/pull/20802))
+- Add package-specific pre-release policies with `--prerelease-package` ([#20837](https://github.com/astral-sh/uv/pull/20837))
+- Support local HTML files as flat indexes ([#20802](https://github.com/astral-sh/uv/pull/20802))
+- Add Xonsh virtual environment activation scripts (`activate.xsh`) ([#19740](https://github.com/astral-sh/uv/pull/19740))
+- Preserve filesystem paths passed to `uv add --index` when updating `pyproject.toml` ([#20817](https://github.com/astral-sh/uv/pull/20817))
+- Ignore malformed PEP 723 scripts discovered during project checks ([#20784](https://github.com/astral-sh/uv/pull/20784))
 
 ### Preview features
 
-- Add `--fix` to `uv check` ([#20793](https://github.com/astral-sh/uv/pull/20793))
-- Honor direct sources shared across workspace dependencies ([#20847](https://github.com/astral-sh/uv/pull/20847))
-- Use ty's `--exclude-scripts` flag in `uv check` ([#20742](https://github.com/astral-sh/uv/pull/20742))
+- Add automatic fixes to `uv check` with `--fix` ([#20793](https://github.com/astral-sh/uv/pull/20793))
+- Avoid rejecting unchanged metadata-free lockfiles when workspace dependencies share direct sources ([#20847](https://github.com/astral-sh/uv/pull/20847))
+- Honor direct URL constraints when validating metadata-free lockfiles ([#20796](https://github.com/astral-sh/uv/pull/20796))
+- Use ty's native script exclusion in `uv check` ([#20742](https://github.com/astral-sh/uv/pull/20742))
 
 ### Performance
 
-- Accelerate SHA-256 hashing on aarch64 ([#20805](https://github.com/astral-sh/uv/pull/20805))
-- Parse uv lockfiles directly ([#20648](https://github.com/astral-sh/uv/pull/20648))
+- Parse canonical uv lockfiles directly, with a fallback for other valid TOML syntax ([#20648](https://github.com/astral-sh/uv/pull/20648))
+- Accelerate SHA-256 hashing on non-Windows ARM64 platforms ([#20805](https://github.com/astral-sh/uv/pull/20805))
 
 ### Bug fixes
 
-- Avoid update-shell file update race between uv shutdown and file IO ([#20842](https://github.com/astral-sh/uv/pull/20842))
-- Resolve requirements-file find-links relative to the file ([#20832](https://github.com/astral-sh/uv/pull/20832))
+- Flush shell startup file updates before `uv tool update-shell` and `uv python update-shell` exit ([#20842](https://github.com/astral-sh/uv/pull/20842))
+- Make workspace-root dependency groups available to commands run from workspace members ([#20840](https://github.com/astral-sh/uv/pull/20840))
+- Resolve `--find-links` paths in requirements files relative to the containing file ([#20832](https://github.com/astral-sh/uv/pull/20832))
 - Respect configured indexes in `uv tool list --outdated` ([#20770](https://github.com/astral-sh/uv/pull/20770))
 
 ### Documentation
 
-- Add documentation links to uv 0.12 release notes ([#20779](https://github.com/astral-sh/uv/pull/20779))
 - Document Astral GPU indexes in the PyTorch guide ([#20785](https://github.com/astral-sh/uv/pull/20785))
-- Make dependency group argument CLI documentation uniform ([#20823](https://github.com/astral-sh/uv/pull/20823))
-
-### Other changes
-
-- Add package-specific pre-release selection ([#20837](https://github.com/astral-sh/uv/pull/20837))
-- Add regression test for workspace script project discovery ([#20801](https://github.com/astral-sh/uv/pull/20801))
-- Add support for Xonsh virtual environment activation script (`activate.xsh`) ([#19740](https://github.com/astral-sh/uv/pull/19740))
-- Add test coverage for workspace script project and dependency group selection ([#20836](https://github.com/astral-sh/uv/pull/20836))
-- Allow commands run in workspace members to use root dependency groups ([#20840](https://github.com/astral-sh/uv/pull/20840))
-- Honor direct URL constraints when validating metadata-free locks ([#20796](https://github.com/astral-sh/uv/pull/20796))
-- Inline the changelog example for `uv_build` bounds ([#20780](https://github.com/astral-sh/uv/pull/20780))
-- Prune superseded workspace artifacts on macOS and Windows ([#20781](https://github.com/astral-sh/uv/pull/20781))
-- Remove stale Node 20 action TODOs ([#20843](https://github.com/astral-sh/uv/pull/20843))
-- Upgrade BLAKE2 to unify hashing digest versions ([#20834](https://github.com/astral-sh/uv/pull/20834))
-- Upgrade MD5 to align with the SHA-2 digest API ([#20833](https://github.com/astral-sh/uv/pull/20833))
-- Upgrade sha2 to enable ARM hardware acceleration by default ([#20831](https://github.com/astral-sh/uv/pull/20831))
+- Use consistent dependency-group argument descriptions throughout the CLI documentation ([#20823](https://github.com/astral-sh/uv/pull/20823))
+- Link to the uv 0.12 release notes from the documentation ([#20779](https://github.com/astral-sh/uv/pull/20779))
 
 ## 0.12.0
 
