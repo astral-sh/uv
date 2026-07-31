@@ -15,6 +15,9 @@ on:
       head-sha:
         required: true
         type: string
+      head-repository:
+        required: true
+        type: string
 
 permissions: {}
 
@@ -55,12 +58,13 @@ jobs:
           BASE_REF: ${{ inputs.base-ref }}
           HEAD_REF: ${{ inputs.head-ref }}
           HEAD_SHA: ${{ inputs.head-sha }}
+          HEAD_REPOSITORY: ${{ inputs.head-repository }}
         run: |
           mkdir -p "$RUNNER_TEMP/codex-home"
           cp agents/codex/config.toml "$RUNNER_TEMP/codex-home/config.toml"
           cp agents/prompts/rebase-pull-request.md "$RUNNER_TEMP/rebase-pull-request.md"
 
-          git fetch --no-tags https://github.com/astral-sh/uv-dev.git "refs/heads/$HEAD_REF"
+          git fetch --no-tags "https://github.com/$HEAD_REPOSITORY.git" "refs/heads/$HEAD_REF"
           current_head=$(git rev-parse 'FETCH_HEAD^{commit}')
           if [ "$current_head" != "$HEAD_SHA" ]; then
             echo "The pull request head changed; refusing to rebase a stale revision." >&2
@@ -164,13 +168,13 @@ jobs:
 
           echo "head_sha=$rebased_head" >> "$GITHUB_OUTPUT"
 
-      - name: Get uv-dev token
+      - name: Get pull request head token
         id: token
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
-          repository: astral-sh/uv-dev
+          repository: ${{ inputs.head-repository }}
           # `workflows: write` is required when a rebased pull request modifies workflow files.
           permissions: |
             contents: write
@@ -182,10 +186,11 @@ jobs:
           GIT_CONFIG_NOSYSTEM: "1"
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_REF: ${{ inputs.head-ref }}
+          HEAD_REPOSITORY: ${{ inputs.head-repository }}
           HEAD_SHA: ${{ inputs.head-sha }}
           REBASED_HEAD: ${{ steps.import.outputs.head_sha }}
         run: |
           git -c core.hooksPath=/dev/null push \
             --force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA" \
-            "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
+            "https://x-access-token:${GH_TOKEN}@github.com/${HEAD_REPOSITORY}.git" \
             "${REBASED_HEAD}:refs/heads/$HEAD_REF"

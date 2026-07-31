@@ -114,7 +114,7 @@
       "reusable_workflow": "rebase-conflicted-pull-request.yml",
       "on": ["push", "workflow_dispatch"],
       "permissions": { "contents": "write", "workflows": "write" },
-      "target": "uv-dev"
+      "targets": ["uv", "uv-dev"]
     },
     {
       "caller": "uv-dev",

@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       pull_request:
-        description: "The uv-dev pull request number to rebase"
+        description: "The pull request number to rebase"
         required: false
         type: string
       head_sha:
-        description: "The expected uv-dev pull request head SHA"
+        description: "The expected pull request head SHA"
         required: false
         type: string
 
@@ -59,7 +59,7 @@ jobs:
               --arg head_sha "$EXPECTED_HEAD_SHA" \
               '.state == "open" and .base.repo.full_name == $repository and .base.repo.id == $repository_id and .head.repo.full_name == $repository and .head.repo.id == $repository_id and .head.sha == $head_sha' \
               <<< "$pull_request" > /dev/null; then
-              echo "The uv-dev pull request is no longer open at the expected head; refusing to rebase it." >&2
+              echo "The pull request is no longer open at the expected head; refusing to rebase it." >&2
               exit 1
             fi
 
@@ -71,7 +71,13 @@ jobs:
           fi
 
           pull_request_count=$(jq 'length' <<< "$pull_requests")
-          rebasable=$(jq '[.[] | select(.head_repository == "astral-sh/uv-dev")] | length' <<< "$pull_requests")
+          rebasable_pull_requests=$(
+            jq --compact-output \
+              --arg repository "$GH_REPO" \
+              '[.[] | select(.head_repository == $repository or .head_repository == "astral-sh/uv-dev")]' \
+              <<< "$pull_requests"
+          )
+          rebasable=$(jq 'length' <<< "$rebasable_pull_requests")
           unavailable=$(( pull_request_count - rebasable ))
 
           if (( rebasable > 256 )); then
@@ -79,7 +85,7 @@ jobs:
             exit 1
           fi
 
-          matrix=$(jq --compact-output '{include: [.[] | select(.head_repository == "astral-sh/uv-dev") | {number, base_ref, head_ref, head_sha}]}' <<< "$pull_requests")
+          matrix=$(jq --compact-output '{include: [.[] | {number, base_ref, head_ref, head_sha, head_repository}]}' <<< "$rebasable_pull_requests")
           {
             echo "matrix=$matrix"
             echo "rebasable=$rebasable"
@@ -92,7 +98,7 @@ jobs:
 
             if (( unavailable > 0 )); then
               echo
-              echo "Skipping $unavailable pull requests whose heads cannot be updated by the uv-dev app token."
+              echo "Skipping $unavailable pull requests whose heads cannot be updated by the rebase app token."
             fi
 
             if (( pull_request_count > 0 )); then
@@ -119,3 +125,4 @@ jobs:
       base-ref: ${{ matrix.base_ref }}
       head-ref: ${{ matrix.head_ref }}
       head-sha: ${{ matrix.head_sha }}
+      head-repository: ${{ matrix.head_repository }}
