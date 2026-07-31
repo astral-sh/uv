@@ -48,7 +48,7 @@ no thread artifact to load.
 Run the repository utility with the GitHub Actions run URL:
 
 ```bash
-./agent/scripts/load-github-action-thread.sh https://github.com/astral-sh/uv/actions/runs/123456789
+./agents/scripts/load-github-action-thread.sh https://github.com/astral-sh/uv/actions/runs/123456789
 ```
 
 The utility downloads every matching `codex-thread-*` artifact, finds the root `codex exec` rollout
@@ -61,14 +61,14 @@ rollout into `~/.codex/sessions` alone does not make it visible in the Codex app
 For a numeric run ID, pass the repository when it cannot be inferred from the current checkout:
 
 ```bash
-./agent/scripts/load-github-action-thread.sh 123456789 --repo astral-sh/uv
+./agents/scripts/load-github-action-thread.sh 123456789 --repo astral-sh/uv
 ```
 
 Use `--artifact PATTERN` to select a particular retained thread and `--cwd PATH` to attach the
 imported history to a different local checkout:
 
 ```bash
-./agent/scripts/load-github-action-thread.sh 123456789 \
+./agents/scripts/load-github-action-thread.sh 123456789 \
   --repo astral-sh/uv \
   --artifact 'codex-thread-reproduce-bug-*' \
   --cwd /path/to/uv
