@@ -652,6 +652,9 @@ async fn build_package(
             .map(|constraint| constraint.requirement)
             .chain(build_constraints_from_workspace.iter().cloned()),
     );
+    let has_backend_build_constraints = build_constraints
+        .requirements()
+        .any(|requirement| requirement.name.as_str() == "uv-build");
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -740,6 +743,18 @@ async fn build_package(
 
         BuildAction::List
     } else if force_pep517 {
+        BuildAction::Pep517
+    } else if hash_checking.is_some_and(|mode| mode.is_require()) {
+        debug!(
+            "Not using `uv_build` direct build for `{}` because hashes are required",
+            source.path().user_display()
+        );
+        BuildAction::Pep517
+    } else if has_backend_build_constraints {
+        debug!(
+            "Not using `uv_build` direct build for `{}` because `uv_build` has build constraints",
+            source.path().user_display()
+        );
         BuildAction::Pep517
     } else {
         match check_direct_build(source.path(), uv_version::version()) {

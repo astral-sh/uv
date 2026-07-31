@@ -2190,6 +2190,101 @@ fn build_fast_path_verbose() -> Result<()> {
     Ok(())
 }
 
+/// Backend constraints must be enforced even when the bundled backend version is compatible.
+#[test]
+fn build_fast_path_backend_build_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-08-01T00:00:00Z");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"uv-build==\d+\.\d+\.\d+", "uv-build==[VERSION]"),
+            (r"sha256:[a-f0-9]{64}", "sha256:[HASH]"),
+        ])
+        .collect::<Vec<_>>();
+    let project = context.temp_dir.child("project");
+    let uv_version = uv_version::version();
+
+    project.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build=={uv_version}"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+    project.child("constraints.txt").write_str(&formatdoc! {r"
+        uv_build=={uv_version} \
+            --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    "})?;
+
+    uv_snapshot!(&filters, context.build().arg("--wheel").arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `uv-build==[VERSION]`
+      Caused by: Hash mismatch for `uv-build==[VERSION]`
+
+        Expected:
+          sha256:[HASH]
+
+        Computed:
+          sha256:[HASH]
+    ");
+
+    project
+        .child("dist/project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// Required hashes cannot be checked against the bundled backend.
+#[test]
+fn build_fast_path_require_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-08-01T00:00:00Z");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"uv-build==\d+\.\d+\.\d+", "uv-build==[VERSION]")])
+        .collect::<Vec<_>>();
+    let project = context.temp_dir.child("project");
+    let uv_version = uv_version::version();
+
+    project.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build=={uv_version}"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+
+    uv_snapshot!(&filters, context.build().arg("--wheel").arg("--require-hashes").current_dir(&project), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: Failed to resolve requirements from `build-system.requires`
+      Caused by: No solution found when resolving: `uv-build==[VERSION]`
+      Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `uv-build`
+    ");
+
+    project
+        .child("dist/project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
 /// Reject path-shaped script entry point names before writing wheel metadata.
 #[test]
 fn build_unsafe_script_entry_point_name() -> Result<()> {
