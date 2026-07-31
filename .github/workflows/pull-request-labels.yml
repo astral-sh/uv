@@ -77,3 +77,40 @@ jobs:
         run: printf '%s\n' "$LABEL_RESULT" >> "$GITHUB_STEP_SUMMARY"
         env:
           LABEL_RESULT: ${{ needs.labels.outputs.result }}
+
+  apply:
+    needs: labels
+    if: >-
+      github.repository == 'astral-sh/uv-dev' &&
+      needs.labels.outputs.result != '' &&
+      fromJSON(needs.labels.outputs.result).labels[0] != null
+    runs-on: ubuntu-slim
+    environment: automations
+    timeout-minutes: 5
+    permissions:
+      id-token: write # for the repository label credential broker
+    steps:
+      - name: "Get repository label token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: ${{ github.repository }}
+          permissions: |
+            issues: write
+
+      - name: "Apply recommended labels"
+        run: |
+          # POST adds labels without removing any labels already on the pull request.
+          printf '%s\n' "$LABEL_RESULT" \
+            | jq '{labels}' \
+            | gh api \
+                --method POST \
+                "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels" \
+                --input - \
+                --silent
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          LABEL_RESULT: ${{ needs.labels.outputs.result }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request || github.event.pull_request.number }}
