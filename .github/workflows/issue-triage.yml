@@ -117,7 +117,7 @@ jobs:
                 "",
                 $triage.type_reason,
                 "",
-                "## Related issues and pull requests",
+                "## Related",
                 "",
                 (
                   if $triage.related.items | length > 0 then
@@ -126,15 +126,7 @@ jobs:
                   else
                     "No related issues or pull requests found."
                   end
-                ),
-                "",
-                "## Search scope",
-                "",
-                $triage.related.search_scope,
-                "",
-                "## Original issue",
-                "",
-                $issue.body
+                )
               ] | join("\n")
             ' > "$RUNNER_TEMP/README.md"
           printf '%s\n%s\n%s\n' '```json' "$TRIAGE_RESULT" '```' >> "$GITHUB_STEP_SUMMARY"
