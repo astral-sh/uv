@@ -2,12 +2,18 @@
 use std::{path::Path, process::Command};
 
 use anyhow::Result;
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
-use anyhow::anyhow;
+#[cfg(feature = "test-universal")]
+use anyhow::{Error, anyhow};
 #[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+#[cfg(feature = "test-universal")]
+use async_zip::base::write::ZipFileWriter;
+#[cfg(feature = "test-universal")]
+use async_zip::{Compression, ZipEntryBuilder};
 use indoc::{formatdoc, indoc};
+#[cfg(feature = "test-universal")]
+use insta::allow_duplicates;
 use insta::assert_snapshot;
 #[cfg(feature = "test-universal")]
 use serde_json::json;
@@ -19644,6 +19650,108 @@ fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Remote and local wheel archives can select a direct source for an unqualified dependency.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_metadata_free_shared_archive_direct_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let index = PackseServer::new("extras/lock-without-metadata.toml");
+    let provider = MockServer::start().await;
+
+    let metadata = formatdoc! {"
+        Metadata-Version: 2.1
+        Name: provider
+        Version: 1.0.0
+        Requires-Python: >=3.12
+        Requires-Dist: httpx @ {}
+    ", index.file_url("httpx-1.0.0-py3-none-any.whl")};
+    let mut wheel = ZipFileWriter::new(Vec::new());
+    for (path, contents) in [
+        ("provider-1.0.0.dist-info/METADATA", metadata.as_str()),
+        (
+            "provider-1.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ),
+        ("provider-1.0.0.dist-info/RECORD", ""),
+    ] {
+        let entry = ZipEntryBuilder::new(path.into(), Compression::Stored);
+        wheel.write_entry_whole(entry, contents.as_bytes()).await?;
+    }
+    let wheel = wheel.close().await?;
+    let local_wheel = context.temp_dir.child("provider-1.0.0-py3-none-any.whl");
+    local_wheel.write_binary(&wheel)?;
+
+    Mock::given(method("GET"))
+        .and(path("/provider-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&provider)
+        .await;
+
+    let local_wheel_url = Url::from_file_path(local_wheel.path())
+        .map_err(|()| anyhow!("failed to convert provider wheel path to file URL"))?;
+    allow_duplicates! {
+        for provider_url in [
+            format!("{}/provider-1.0.0-py3-none-any.whl", provider.uri()),
+            local_wheel_url.to_string(),
+        ] {
+            context
+                .temp_dir
+                .child("pyproject.toml")
+                .write_str(&formatdoc! {r#"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = [
+                    "httpx[http2]",
+                    "provider @ {provider_url}",
+                ]
+                "#})?;
+
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--preview-features")
+                .arg("lock-without-metadata")
+                .arg("--index-url")
+                .arg(index.index_url()), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 4 packages in [TIME]
+            ");
+
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--preview-features")
+                .arg("lock-without-metadata")
+                .arg("--locked")
+                .arg("--no-cache")
+                .arg("--index-url")
+                .arg(index.index_url())
+                .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            DEBUG Existing `uv.lock` satisfies workspace requirements
+            Resolved 4 packages in [TIME]
+            ");
+
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--preview-features")
+                .arg("lock-without-metadata")
+                .arg("--locked")
+                .arg("--offline")
+                .arg("--no-cache")
+                .arg("--index-url")
+                .arg(index.index_url()), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 4 packages in [TIME]
+            ");
+        }
+
+        Ok::<(), Error>(())
+    }?;
 
     Ok(())
 }
