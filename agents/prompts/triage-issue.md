@@ -70,13 +70,21 @@ Reproduction is a separate downstream step and is not required for bug classific
 
 Set `summary` to a concise overview of the closest items, or state that none were found.
 
-Clearly distinguish source-backed findings from hypotheses. Do not draft a public reply or claim a
-root cause that you have not confirmed from the repository.
+Set `draft_response` to a concise proposed reply written in the voice of an open-source maintainer.
+Address the reporter directly using a clear, respectful, matter-of-fact tone. Explain what the
+repository evidence establishes and provide a concrete next step: link the canonical discussion for
+duplicates, describe the known status or request genuinely needed information for bugs, answer
+questions directly, and set realistic expectations for enhancements.
+
+Do not mention automated triage, internal reasoning, or the search process. Avoid speculation,
+marketing, generic apologies, unnecessary praise, and promises you cannot support. Clearly
+distinguish source-backed findings from hypotheses, and do not claim an unconfirmed root cause. The
+response is a draft for maintainer review only; do not post it or make any other changes on GitHub.
 
 Author the complete `$RUNNER_TEMP/issue-context/README.md` as a coherent, self-contained maintainer
 handoff, using the existing template as its starting structure. Replace the template heading with
 the issue title, identify the issue using its canonical owner/repository#number reference, and
 include its classification. Replace every instructional placeholder with issue-specific content
-explaining the report, classification reasoning, related issues or pull requests, and supporting
-evidence. Add or adjust sections when that makes the document clearer, and keep the README
-consistent with the structured JSON result.
+explaining the report, draft response, classification reasoning, related issues or pull requests,
+and supporting evidence. Add or adjust sections when that makes the document clearer, and keep the
+README consistent with the structured JSON result.
