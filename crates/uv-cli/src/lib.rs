@@ -1439,12 +1439,16 @@ impl IndexArg {
 
     /// Resolve the argument against indexes from the effective configuration.
     fn resolve(self, indexes: &[Index]) -> Result<Index> {
-        match self {
-            Self::Resolved(index) => Ok(index),
+        let index = match self {
+            Self::Resolved(index) => index,
             Self::Unresolved(index) => {
-                index.resolve(indexes, uv_preview::is_enabled(PreviewFeature::IndexByName))
+                index.resolve(indexes, uv_preview::is_enabled(PreviewFeature::IndexByName))?
             }
-        }
+        };
+
+        index.url().warn_on_disambiguated_relative_path();
+
+        Ok(index)
     }
 }
 

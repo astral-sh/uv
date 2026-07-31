@@ -2455,12 +2455,6 @@ impl AddSettings {
             resolver_installer_options(installer, build, configured_indexes(filesystem.as_ref()))?;
         let indexes = options.indexes.index.clone().unwrap_or_default();
 
-        // Warn user if an ambiguous relative path was passed as a value for
-        // `--index` or `--default-index`.
-        for index in &indexes {
-            index.url().warn_on_disambiguated_relative_path();
-        }
-
         Ok(Self {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
