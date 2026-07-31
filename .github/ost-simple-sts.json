@@ -130,7 +130,7 @@
       "environment": "automations",
       "caller_workflow": "pull-request-labels.yml",
       "on": ["pull_request", "workflow_dispatch"],
-      "permissions": { "issues": "write" },
+      "permissions": { "pull_requests": "write" },
       "target": "uv-dev"
     },
     {
@@ -138,7 +138,7 @@
       "environment": "automations",
       "caller_workflow": "pull-request-labels.yml",
       "on": ["pull_request", "workflow_dispatch"],
-      "permissions": { "issues": "write" },
+      "permissions": { "pull_requests": "write" },
       "target": "uv"
     },
     {

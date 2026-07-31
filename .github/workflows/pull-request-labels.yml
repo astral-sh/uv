@@ -98,7 +98,7 @@ jobs:
           audience: ${{ secrets.STS_API_URL }}
           repository: ${{ github.repository }}
           permissions: |
-            issues: write
+            pull_requests: write
 
       - name: "Apply recommended labels"
         run: |
