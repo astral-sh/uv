@@ -2644,51 +2644,39 @@ impl Lock {
                     continue;
                 }
 
-                if let Some(source_tree) = package.id.source.as_source_tree()
+                let (requires_dist, dependency_groups) = if let Some(source_tree) =
+                    package.id.source.as_source_tree()
                     && let Some(SourceTreeRequiresDist { metadata, .. }) =
                         Self::source_tree_requires_dist(source_tree, root, package, database)
                             .await?
                 {
-                    let direct_requirements = metadata
-                        .requires_dist
-                        .into_vec()
-                        .into_iter()
-                        .chain(
-                            metadata
-                                .dependency_groups
-                                .into_values()
-                                .flat_map(<[Requirement]>::into_vec),
-                        )
-                        .collect();
-                    add_source_requirements(package, direct_requirements)?;
-                    continue;
-                }
+                    (metadata.requires_dist, metadata.dependency_groups)
+                } else {
+                    if package.id.source.is_immutable()
+                        || matches!(package.id.source, Source::Direct(..))
+                            && database.client().unmanaged.connectivity().is_offline()
+                    {
+                        continue;
+                    }
 
-                if package.id.source.is_immutable()
-                    || matches!(package.id.source, Source::Direct(..))
-                        && database.client().unmanaged.connectivity().is_offline()
-                {
-                    continue;
-                }
-
-                let metadata = Self::package_metadata(
-                    package,
-                    root,
-                    tags,
-                    markers,
-                    build_options,
-                    hasher,
-                    index,
-                    database,
-                )
-                .await?;
-                let direct_requirements = metadata
-                    .requires_dist
+                    let metadata = Self::package_metadata(
+                        package,
+                        root,
+                        tags,
+                        markers,
+                        build_options,
+                        hasher,
+                        index,
+                        database,
+                    )
+                    .await?;
+                    (metadata.requires_dist, metadata.dependency_groups)
+                };
+                let direct_requirements = requires_dist
                     .into_vec()
                     .into_iter()
                     .chain(
-                        metadata
-                            .dependency_groups
+                        dependency_groups
                             .into_values()
                             .flat_map(<[Requirement]>::into_vec),
                     )
