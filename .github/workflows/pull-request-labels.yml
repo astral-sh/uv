@@ -1,9 +1,9 @@
-# Recommend labels for pull requests without modifying them.
+# Recommend and apply labels for new pull requests.
 name: "Pull request labels"
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, reopened]
     branches: [main]
   workflow_dispatch:
     inputs:
