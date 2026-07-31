@@ -3337,7 +3337,7 @@ fn index_by_name_with_matching_path() -> anyhow::Result<()> {
         show_settings().arg("--index").arg("./internal")
     );
 
-    // Without preview, an existing path takes precedence over the configured name.
+    // Without preview, an existing path takes precedence and produces a disambiguation warning.
     diff_uv_snapshot!(context.filters(), &path, show_settings()
         .arg("--index")
         .arg("internal"), @"
@@ -3350,6 +3350,13 @@ fn index_by_name_with_matching_path() -> anyhow::Result<()> {
                                  ),
                                  expanded: false,
                              },
+    ...
+             reinstall: None,
+         },
+     }
+    +
+    +----- stderr -----
+    +warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./internal`). Support for ambiguous values will be removed in the future
     ...
     ");
 
