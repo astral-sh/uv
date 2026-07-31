@@ -235,6 +235,15 @@ jobs:
 
           upstream_number=$(jq --exit-status --raw-output '.number | select(type == "number")' <<< "$upstream_pull_request")
 
+          if jq --exit-status '.labels | length > 0' <<< "$source_pull_request" > /dev/null; then
+            jq '{labels: [.labels[].name]}' <<< "$source_pull_request" |
+              gh api \
+                --method POST \
+                "repos/astral-sh/uv/issues/$upstream_number/labels" \
+                --input - \
+                --silent
+          fi
+
           gh api \
             --method POST \
             "repos/astral-sh/uv/issues/$upstream_number/assignees" \
