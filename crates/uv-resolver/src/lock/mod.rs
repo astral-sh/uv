@@ -2467,115 +2467,25 @@ impl Lock {
         } else {
             Excludes::default()
         };
+        let mut source_tree_metadata = FxHashMap::default();
         let dependency_sources = if allow_missing_package_metadata {
-            let mut source_requirements = normalized_constraints;
-            for requirement in dependency_overrides
-                .apply_for_package(
-                    None,
-                    requirements
-                        .iter()
-                        .chain(dependency_groups.values().flatten()),
-                )
-                .filter(|requirement| {
-                    !dependency_excludes.contains_for_package(None, &requirement.name)
-                })
-            {
-                if matches!(requirement.source, RequirementSource::Registry { .. }) {
-                    continue;
-                }
-
-                source_requirements.insert(normalize_requirement(
-                    requirement.into_owned(),
-                    root,
-                    &self.requires_python,
-                )?);
-            }
-
-            let mut add_source_requirements =
-                |package: &Package, requirements: Vec<Requirement>| -> Result<(), LockError> {
-                    let package_context = package
-                        .id
-                        .version
-                        .as_ref()
-                        .map(|version| (&package.id.name, version));
-
-                    for requirement in dependency_overrides
-                        .apply_for_package(package_context, &requirements)
-                        .filter(|requirement| {
-                            !dependency_excludes
-                                .contains_for_package(package_context, &requirement.name)
-                        })
-                    {
-                        if matches!(requirement.source, RequirementSource::Registry { .. }) {
-                            continue;
-                        }
-
-                        source_requirements.insert(normalize_requirement(
-                            requirement.into_owned(),
-                            root,
-                            &self.requires_python,
-                        )?);
-                    }
-
-                    Ok(())
-                };
-
-            for package in &self.packages {
-                if let Some(metadata) =
-                    dependency_metadata.get(&package.id.name, package.id.version.as_ref())
-                {
-                    add_source_requirements(
-                        package,
-                        Box::into_iter(metadata.requires_dist)
-                            .map(Requirement::from)
-                            .collect(),
-                    )?;
-                    continue;
-                }
-
-                if !package
-                    .all_dependencies()
-                    .any(|dependency| !matches!(dependency.package_id.source, Source::Registry(..)))
-                {
-                    continue;
-                }
-
-                let Some(source_tree) = package.id.source.as_source_tree() else {
-                    continue;
-                };
-                let (requires_dist, dependency_groups) =
-                    if let Some(SourceTreeRequiresDist { metadata, .. }) =
-                        Self::source_tree_requires_dist(source_tree, root, package, database)
-                            .await?
-                    {
-                        (metadata.requires_dist, metadata.dependency_groups)
-                    } else {
-                        let metadata = Self::package_metadata(
-                            package,
-                            root,
-                            tags,
-                            markers,
-                            build_options,
-                            hasher,
-                            index,
-                            database,
-                        )
-                        .await?;
-                        (metadata.requires_dist, metadata.dependency_groups)
-                    };
-                let direct_requirements = requires_dist
-                    .into_vec()
-                    .into_iter()
-                    .chain(
-                        dependency_groups
-                            .into_values()
-                            .flat_map(<[Requirement]>::into_vec),
-                    )
-                    .collect();
-                add_source_requirements(package, direct_requirements)?;
-            }
-
-            Constraints::from_requirements(source_requirements.into_iter())
+            self.collect_dependency_sources(
+                normalized_constraints,
+                requirements,
+                dependency_groups,
+                dependency_metadata,
+                &dependency_overrides,
+                &dependency_excludes,
+                root,
+                tags,
+                markers,
+                build_options,
+                hasher,
+                index,
+                database,
+                &mut source_tree_metadata,
+            )
+            .await?
         } else {
             Constraints::default()
         };
@@ -2827,8 +2737,14 @@ impl Lock {
                         version: static_version,
                         requires_python,
                         metadata,
-                    }) = Self::source_tree_requires_dist(source_tree, root, package, database)
-                        .await?
+                    }) = Self::source_tree_requires_dist_cached(
+                        source_tree,
+                        root,
+                        package,
+                        database,
+                        &mut source_tree_metadata,
+                    )
+                    .await?
                 {
                     // If this local package has become dynamic, the locked package should
                     // no longer contain a version.
@@ -2952,8 +2868,14 @@ impl Lock {
                 // even if the version is dynamic, we can still extract the requirements without
                 // performing a build, unlike in the database where we typically construct a "complete"
                 // metadata object.
-                let metadata =
-                    Self::source_tree_requires_dist(source_tree, root, package, database).await?;
+                let metadata = Self::source_tree_requires_dist_cached(
+                    source_tree,
+                    root,
+                    package,
+                    database,
+                    &mut source_tree_metadata,
+                )
+                .await?;
 
                 let satisfied = metadata.is_some_and(|SourceTreeRequiresDist {
                     requires_python,
@@ -3091,6 +3013,141 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
+    /// Collect direct-source requirements that apply across packages in the lock.
+    async fn collect_dependency_sources<Context: BuildContext>(
+        &self,
+        mut source_requirements: BTreeSet<Requirement>,
+        requirements: &[Requirement],
+        dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
+        dependency_metadata: &DependencyMetadata,
+        dependency_overrides: &Overrides,
+        dependency_excludes: &Excludes,
+        root: &Path,
+        tags: &Tags,
+        markers: &MarkerEnvironment,
+        build_options: &BuildOptions,
+        hasher: &HashStrategy,
+        index: &InMemoryIndex,
+        database: &DistributionDatabase<'_, Context>,
+        source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
+    ) -> Result<Constraints, LockError> {
+        for requirement in dependency_overrides
+            .apply_for_package(
+                None,
+                requirements
+                    .iter()
+                    .chain(dependency_groups.values().flatten()),
+            )
+            .filter(|requirement| {
+                !dependency_excludes.contains_for_package(None, &requirement.name)
+            })
+        {
+            if matches!(requirement.source, RequirementSource::Registry { .. }) {
+                continue;
+            }
+
+            source_requirements.insert(normalize_requirement(
+                requirement.into_owned(),
+                root,
+                &self.requires_python,
+            )?);
+        }
+
+        let mut add_source_requirements = |package: &Package,
+                                           requirements: Vec<Requirement>|
+         -> Result<(), LockError> {
+            let package_context = package
+                .id
+                .version
+                .as_ref()
+                .map(|version| (&package.id.name, version));
+
+            for requirement in dependency_overrides
+                .apply_for_package(package_context, &requirements)
+                .filter(|requirement| {
+                    !dependency_excludes.contains_for_package(package_context, &requirement.name)
+                })
+            {
+                if matches!(requirement.source, RequirementSource::Registry { .. }) {
+                    continue;
+                }
+
+                source_requirements.insert(normalize_requirement(
+                    requirement.into_owned(),
+                    root,
+                    &self.requires_python,
+                )?);
+            }
+
+            Ok(())
+        };
+
+        for package in &self.packages {
+            if let Some(metadata) =
+                dependency_metadata.get(&package.id.name, package.id.version.as_ref())
+            {
+                add_source_requirements(
+                    package,
+                    Box::into_iter(metadata.requires_dist)
+                        .map(Requirement::from)
+                        .collect(),
+                )?;
+                continue;
+            }
+
+            if package
+                .all_dependencies()
+                .all(|dependency| matches!(dependency.package_id.source, Source::Registry(..)))
+            {
+                continue;
+            }
+
+            let Some(source_tree) = package.id.source.as_source_tree() else {
+                continue;
+            };
+            let (requires_dist, dependency_groups) =
+                if let Some(SourceTreeRequiresDist { metadata, .. }) =
+                    Self::source_tree_requires_dist_cached(
+                        source_tree,
+                        root,
+                        package,
+                        database,
+                        source_tree_metadata,
+                    )
+                    .await?
+                {
+                    (metadata.requires_dist, metadata.dependency_groups)
+                } else {
+                    let metadata = Self::package_metadata(
+                        package,
+                        root,
+                        tags,
+                        markers,
+                        build_options,
+                        hasher,
+                        index,
+                        database,
+                    )
+                    .await?;
+                    (metadata.requires_dist, metadata.dependency_groups)
+                };
+            let direct_requirements = requires_dist
+                .into_vec()
+                .into_iter()
+                .chain(
+                    dependency_groups
+                        .into_values()
+                        .flat_map(<[Requirement]>::into_vec),
+                )
+                .collect();
+            add_source_requirements(package, direct_requirements)?;
+        }
+
+        Ok(Constraints::from_requirements(
+            source_requirements.into_iter(),
+        ))
+    }
+
     /// Read the current metadata for a locked package, reusing the resolver's in-memory cache.
     async fn package_metadata<Context: BuildContext>(
         package: &Package,
@@ -3184,6 +3241,24 @@ impl Lock {
             Err(err) => Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into()),
         }
     }
+
+    /// Read source-tree metadata once for each package during lock validation.
+    async fn source_tree_requires_dist_cached<Context: BuildContext>(
+        source_tree: &Path,
+        root: &Path,
+        package: &Package,
+        database: &DistributionDatabase<'_, Context>,
+        cache: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
+    ) -> Result<Option<SourceTreeRequiresDist>, LockError> {
+        if let Some(metadata) = cache.get(&package.id) {
+            return Ok(metadata.clone());
+        }
+
+        let metadata =
+            Self::source_tree_requires_dist(source_tree, root, package, database).await?;
+        cache.insert(package.id.clone(), metadata.clone());
+        Ok(metadata)
+    }
 }
 
 /// The set of lockfile packages that should be audited, materialized from a
@@ -3199,6 +3274,7 @@ pub struct Auditable<'lock> {
     packages: Vec<(&'lock Package, &'lock Version)>,
 }
 
+#[derive(Clone)]
 struct SourceTreeRequiresDist {
     version: Option<Version>,
     requires_python: Option<VersionSpecifiers>,
