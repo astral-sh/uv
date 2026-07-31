@@ -13,13 +13,13 @@ Released on 2026-07-31.
 - Support local HTML files as flat indexes ([#20802](https://github.com/astral-sh/uv/pull/20802))
 - Add Xonsh virtual environment activation scripts (`activate.xsh`) ([#19740](https://github.com/astral-sh/uv/pull/19740))
 - Preserve filesystem paths passed to `uv add --index` when updating `pyproject.toml` ([#20817](https://github.com/astral-sh/uv/pull/20817))
-- Ignore malformed PEP 723 scripts discovered during project checks ([#20784](https://github.com/astral-sh/uv/pull/20784))
 
 ### Preview features
 
 - Add automatic fixes to `uv check` with `--fix` ([#20793](https://github.com/astral-sh/uv/pull/20793))
 - Avoid rejecting unchanged metadata-free lockfiles when workspace dependencies share direct sources ([#20847](https://github.com/astral-sh/uv/pull/20847))
 - Honor direct URL constraints when validating metadata-free lockfiles ([#20796](https://github.com/astral-sh/uv/pull/20796))
+- Ignore malformed PEP 723 scripts discovered during project checks ([#20784](https://github.com/astral-sh/uv/pull/20784))
 - Use ty's native script exclusion in `uv check` ([#20742](https://github.com/astral-sh/uv/pull/20742))
 
 ### Performance
@@ -38,7 +38,6 @@ Released on 2026-07-31.
 
 - Document Astral GPU indexes in the PyTorch guide ([#20785](https://github.com/astral-sh/uv/pull/20785))
 - Use consistent dependency-group argument descriptions throughout the CLI documentation ([#20823](https://github.com/astral-sh/uv/pull/20823))
-- Link to the uv 0.12 release notes from the documentation ([#20779](https://github.com/astral-sh/uv/pull/20779))
 
 ## 0.12.0
 
