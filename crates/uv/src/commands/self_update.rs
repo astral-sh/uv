@@ -345,16 +345,33 @@ async fn run_official_updater(
     client_builder: BaseClientBuilder<'_>,
     github_token: Option<&str>,
 ) -> Result<ExitStatus> {
+    #[cfg(windows)]
+    let _ = updater;
+
     let custom_astral_mirror = astral_mirror_url_from_env();
     let installer_urls =
         official_installer_urls_with_mirror(target_version, custom_astral_mirror.as_deref())?;
     let temp_dir = TempDir::new()?;
     let installer_path = temp_dir.path().join(installer_filename());
+    #[cfg(not(windows))]
     let install_prefix = PathBuf::from(updater.install_prefix_root()?.as_str());
     // If we can't determine the previous PATH behavior, abort rather than potentially changing the
     // user's shell configuration unexpectedly.
     let modify_path = load_receipt_modify_path("uv")
         .context("Failed to determine whether the existing standalone install modified PATH")?;
+
+    #[cfg(windows)]
+    let temporary_install_dir = TempDir::new()?;
+    #[cfg(windows)]
+    let temporary_config_dir = TempDir::new()?;
+    #[cfg(windows)]
+    let installer_install_prefix = temporary_install_dir.path();
+    #[cfg(not(windows))]
+    let installer_install_prefix = install_prefix.as_path();
+    #[cfg(windows)]
+    let installer_config_path = Some(temporary_config_dir.path());
+    #[cfg(not(windows))]
+    let installer_config_path = None;
 
     download_installer_from_urls(
         &installer_urls,
@@ -366,12 +383,16 @@ async fn run_official_updater(
 
     execute_official_installer(
         &installer_path,
-        &install_prefix,
-        modify_path,
+        installer_install_prefix,
+        if cfg!(windows) { false } else { modify_path },
         target_version,
         custom_astral_mirror.as_deref(),
+        installer_config_path,
     )
     .await?;
+
+    #[cfg(windows)]
+    replace_from_temporary_install(temporary_install_dir.path())?;
 
     let direction = if current_version > target_version {
         "Downgraded"
@@ -505,6 +526,35 @@ fn installer_download_github_token<'a>(
     }
 }
 
+#[cfg(windows)]
+fn replace_from_temporary_install(temporary_install_dir: &Path) -> Result<()> {
+    let current_executable = std::env::current_exe()?;
+    let current_file_name = current_executable.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Current executable has no file name",
+        )
+    })?;
+    let install_dir = current_executable.parent().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Current executable has no parent directory",
+        )
+    })?;
+
+    for entry in fs_err::read_dir(temporary_install_dir)? {
+        let entry = entry?;
+        if entry.file_name() == current_file_name {
+            continue;
+        }
+        fs_err::copy(entry.path(), install_dir.join(entry.file_name()))?;
+    }
+
+    self_replace::self_replace(temporary_install_dir.join(current_file_name))
+        .context("Failed to replace the current executable")?;
+    Ok(())
+}
+
 /// Execute the standalone installer while preserving the existing install location and PATH
 /// behavior.
 ///
@@ -517,6 +567,7 @@ async fn execute_official_installer(
     modify_path: bool,
     target_version: &Pep440Version,
     astral_mirror_url: Option<&str>,
+    installer_config_path: Option<&Path>,
 ) -> Result<(), AxoupdateError> {
     let mut command = if cfg!(windows) {
         let mut command = Command::new("powershell");
@@ -526,21 +577,14 @@ async fn execute_official_installer(
     } else {
         Command::new(installer_path)
     };
-
-    let to_restore = if cfg!(windows) {
-        let old_path = std::env::current_exe()?;
-        let mut previous_path = old_path.as_os_str().to_os_string();
-        previous_path.push(".previous.exe");
-        let previous_path = PathBuf::from(previous_path);
-        fs_err::rename(&old_path, &previous_path)?;
-        Some((previous_path, old_path))
-    } else {
-        None
-    };
+    command.kill_on_drop(true);
 
     command.env_remove(EnvVars::PS_MODULE_PATH);
     command.env("CARGO_DIST_FORCE_INSTALL_DIR", install_prefix);
     command.env(EnvVars::UV_INSTALL_DIR, install_prefix);
+    if let Some(installer_config_path) = installer_config_path {
+        command.env("XDG_CONFIG_HOME", installer_config_path);
+    }
     // When a custom Astral mirror is configured, point the installer at the mirrored
     // uv release directory so it downloads the archive from the mirror too.
     if let Some(download_url) = installer_download_url(target_version, astral_mirror_url) {
@@ -551,20 +595,7 @@ async fn execute_official_installer(
         command.env(format!("{app_name_env_var}_NO_MODIFY_PATH"), "1");
     }
 
-    let result = command.output().await;
-    let failed = !result.as_ref().is_ok_and(|output| output.status.success());
-
-    if let Some((previous_path, old_path)) = to_restore.as_ref() {
-        if failed {
-            fs_err::rename(previous_path, old_path)?;
-        } else {
-            #[cfg(windows)]
-            self_replace::self_delete_at(previous_path)
-                .map_err(|_| AxoupdateError::CleanupFailed {})?;
-        }
-    }
-
-    let output = result?;
+    let output = command.output().await?;
     if output.status.success() {
         return Ok(());
     }
@@ -1165,6 +1196,7 @@ mod tests {
             true,
             &Pep440Version::new([1, 2, 3]),
             None,
+            None,
         )
         .await
         .expect_err("failing installer should return an error");
@@ -1208,6 +1240,7 @@ mod tests {
             false,
             &Pep440Version::new([1, 2, 3]),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -1248,6 +1281,7 @@ mod tests {
             true,
             &Pep440Version::new([1, 2, 3]),
             Some("https://nexus.example.com/repository/releases.astral.sh/"),
+            None,
         )
         .await
         .unwrap();
@@ -1284,6 +1318,7 @@ mod tests {
             true,
             &Pep440Version::new([1, 2, 3]),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -1291,6 +1326,59 @@ mod tests {
         assert_eq!(
             fs_err::read_to_string(&output_path).unwrap(),
             "UV_NO_MODIFY_PATH=\n"
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn test_interrupted_official_installer_preserves_original_executable() {
+        let temp_dir = TempDir::new().unwrap();
+        let installer_path = temp_dir.path().join("installer.ps1");
+        let install_prefix = temp_dir.path().join("install-prefix");
+        let original_path = temp_dir.path().join("uv.exe");
+        let started_path = temp_dir.path().join("installer-started");
+        let finish_path = temp_dir.path().join("finish-installer");
+
+        fs_err::write(&original_path, "old uv").unwrap();
+        fs_err::write(
+            &installer_path,
+            format!(
+                "New-Item -ItemType File -Force -Path '{}' | Out-Null\nwhile (-not (Test-Path -LiteralPath '{}')) {{ Start-Sleep -Milliseconds 10 }}\n",
+                started_path.display(),
+                finish_path.display(),
+            ),
+        )
+        .unwrap();
+
+        let task_installer_path = installer_path.clone();
+        let task_install_prefix = install_prefix.clone();
+        let task = tokio::spawn(async move {
+            execute_official_installer(
+                &task_installer_path,
+                &task_install_prefix,
+                true,
+                &Pep440Version::new([1, 2, 3]),
+                None,
+                None,
+            )
+            .await
+        });
+
+        for _ in 0..100 {
+            if started_path.exists() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(started_path.exists(), "installer should have started");
+
+        task.abort();
+        drop(task);
+        fs_err::write(&finish_path, "finish").unwrap();
+
+        assert!(
+            original_path.exists(),
+            "the original executable should remain available after interruption"
         );
     }
 }
