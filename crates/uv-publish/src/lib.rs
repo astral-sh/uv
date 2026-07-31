@@ -1144,6 +1144,10 @@ async fn source_dist_pkg_info_tokio_tar(file: &Path) -> Result<Vec<u8>, PublishP
 async fn source_dist_pkg_info_tar_codec(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
     let reader = BufReader::new(File::open(&file).await?);
     let decoded = async_compression::tokio::bufread::GzipDecoder::new(reader);
+    // TODO(ww): Consider allowing vendor pax extensions while parsing here?
+    // We shouldn't encounter those with any normal Python build backend, but users
+    // can supply arbitrary dists so we may have to loosen here until PyPI itself
+    // restricts further.
     let mut members = TarArchive::new(decoded).members();
     let mut pkg_infos = Vec::new();
 
