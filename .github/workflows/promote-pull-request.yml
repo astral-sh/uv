@@ -244,6 +244,21 @@ jobs:
                 --silent
           fi
 
+          if [[ "$PROMOTER" == *"[bot]" ]]; then
+            PROMOTER=$(
+              gh api \
+                --method GET \
+                "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" \
+                --paginate \
+                --slurp |
+                jq --raw-output '[.[][] | select(.event == "ready_for_review" and .actor.type == "User") | .actor.login] | last // empty'
+            )
+            if [ -z "$PROMOTER" ]; then
+              echo "The pull request does not have a human promoter; refusing to assign it." >&2
+              exit 1
+            fi
+          fi
+
           gh api \
             --method POST \
             "repos/astral-sh/uv/issues/$upstream_number/assignees" \
