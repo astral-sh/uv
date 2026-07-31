@@ -97,6 +97,38 @@ jobs:
         run: |
           printf '%s\n' "$ISSUE_CONTEXT" > "$RUNNER_TEMP/issue.json"
           printf '%s\n' "$TRIAGE_RESULT" | jq '.' > "$RUNNER_TEMP/triage.json"
+          jq --null-input --raw-output \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --slurpfile issue "$RUNNER_TEMP/issue.json" \
+            --slurpfile triage "$RUNNER_TEMP/triage.json" '
+              $issue[0] as $issue |
+              $triage[0] as $triage |
+              [
+                "# \($issue.title)",
+                "",
+                "Issue: \($repository)#\($issue.number)",
+                "Classification: \($triage.type)",
+                "",
+                "## Summary",
+                "",
+                $triage.summary,
+                "",
+                "## Classification",
+                "",
+                $triage.type_reason,
+                "",
+                "## Related",
+                "",
+                (
+                  if $triage.related.items | length > 0 then
+                    $triage.related.items[] |
+                    "- \(.url) (\(.state) \(.kind | gsub("_"; " "))): \(.title)\n  \(.reason)"
+                  else
+                    "No related issues or pull requests found."
+                  end
+                )
+              ] | join("\n")
+            ' > "$RUNNER_TEMP/README.md"
           printf '%s\n%s\n%s\n' '```json' "$TRIAGE_RESULT" '```' >> "$GITHUB_STEP_SUMMARY"
         env:
           ISSUE_CONTEXT: ${{ needs.triage.outputs.issue-context }}
@@ -133,8 +165,8 @@ jobs:
             --name "$branch" \
             --checkout
 
-          cp "$RUNNER_TEMP/issue.json" "$RUNNER_TEMP/triage.json" .
-          git add issue.json triage.json
+          cp "$RUNNER_TEMP/issue.json" "$RUNNER_TEMP/triage.json" "$RUNNER_TEMP/README.md" .
+          git add issue.json triage.json README.md
 
           if git diff --cached --quiet; then
             echo "The existing issue context is unchanged."
