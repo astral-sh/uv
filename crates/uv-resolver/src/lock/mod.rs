@@ -2609,42 +2609,31 @@ impl Lock {
                 let Some(source_tree) = package.id.source.as_source_tree() else {
                     continue;
                 };
-                if let Some(SourceTreeRequiresDist { metadata, .. }) =
-                    Self::source_tree_requires_dist(source_tree, root, package, database).await?
-                {
-                    let direct_requirements = metadata
-                        .requires_dist
-                        .into_vec()
-                        .into_iter()
-                        .chain(
-                            metadata
-                                .dependency_groups
-                                .into_values()
-                                .flat_map(<[Requirement]>::into_vec),
+                let (requires_dist, dependency_groups) =
+                    if let Some(SourceTreeRequiresDist { metadata, .. }) =
+                        Self::source_tree_requires_dist(source_tree, root, package, database)
+                            .await?
+                    {
+                        (metadata.requires_dist, metadata.dependency_groups)
+                    } else {
+                        let metadata = Self::package_metadata(
+                            package,
+                            root,
+                            tags,
+                            markers,
+                            build_options,
+                            hasher,
+                            index,
+                            database,
                         )
-                        .collect();
-                    add_source_requirements(package, direct_requirements)?;
-                    continue;
-                }
-
-                let metadata = Self::package_metadata(
-                    package,
-                    root,
-                    tags,
-                    markers,
-                    build_options,
-                    hasher,
-                    index,
-                    database,
-                )
-                .await?;
-                let direct_requirements = metadata
-                    .requires_dist
+                        .await?;
+                        (metadata.requires_dist, metadata.dependency_groups)
+                    };
+                let direct_requirements = requires_dist
                     .into_vec()
                     .into_iter()
                     .chain(
-                        metadata
-                            .dependency_groups
+                        dependency_groups
                             .into_values()
                             .flat_map(<[Requirement]>::into_vec),
                     )
