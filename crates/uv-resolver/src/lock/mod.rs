@@ -796,6 +796,27 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             }
         }
 
+        // Git packages can select any non-registry source, including external URLs, local files,
+        // source trees, and other directories or archives in the same repository. Since their
+        // metadata is immutable and isn't refreshed, the locked edge is the only available
+        // declaration of that source when another package requests it without qualification.
+        if source_marker.is_false()
+            && matches!(
+                requirement.source,
+                RequirementSource::Registry { index: None, .. }
+            )
+        {
+            // The locked package identity includes the complete source, including a Git
+            // repository, precise commit, and LFS configuration.
+            if self.lock.packages.iter().any(|provider| {
+                matches!(provider.id.source, Source::Git(..))
+                    && provider
+                        .all_dependencies()
+                        .any(|dependency| dependency.package_id == package.id)
+            }) {
+                source_marker = MarkerTree::TRUE;
+            }
+        }
         let version_matches = requirement
             .source
             .version_specifiers()

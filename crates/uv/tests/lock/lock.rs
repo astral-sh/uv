@@ -1,4 +1,9 @@
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+use std::{path::Path, process::Command};
+
 use anyhow::Result;
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+use anyhow::anyhow;
 #[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -19401,6 +19406,243 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Immutable Git packages can select repository-internal archives for first-party dependencies.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    let repository = context.temp_dir.child("repository");
+    repository.child("archives").create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        repository
+            .child("archives/basic_package-0.1.0-py3-none-any.whl")
+            .path(),
+    )?;
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package ; sys_platform == 'darwin'"]
+
+        [tool.uv.sources]
+        basic-package = { path = "archives/basic_package-0.1.0-py3-none-any.whl" }
+        "#})?;
+
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("add")
+        .arg(".")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("-c")
+        .arg("user.name=Example")
+        .arg("-c")
+        .arg("user.email=example@example.com")
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package ; sys_platform == 'win32'", "provider"]
+
+        [tool.uv.sources]
+        provider = {{ git = "{repository_url}" }}
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Immutable Git packages can select external URLs, local sources, and other Git repositories.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn lock_metadata_free_shared_git_external_direct_source() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    let initialize_repository = |repository: &Path| {
+        Command::new("git")
+            .arg("init")
+            .arg(repository)
+            .assert()
+            .success();
+        Command::new("git")
+            .arg("-C")
+            .arg(repository)
+            .arg("add")
+            .arg(".")
+            .assert()
+            .success();
+        Command::new("git")
+            .arg("-C")
+            .arg(repository)
+            .arg("-c")
+            .arg("user.name=Example")
+            .arg("-c")
+            .arg("user.email=example@example.com")
+            .arg("commit")
+            .arg("-m")
+            .arg("Initial commit")
+            .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+            .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+            .assert()
+            .success();
+    };
+
+    let archive = context
+        .temp_dir
+        .child("basic_package-0.1.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        archive.path(),
+    )?;
+    let archive_url = Url::from_file_path(archive.path())
+        .map_err(|()| anyhow!("failed to convert archive path to file URL"))?;
+
+    let directory = context.temp_dir.child("directory-package");
+    directory.create_dir_all()?;
+    directory.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "directory-package"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        "#})?;
+    let directory_url = Url::from_directory_path(directory.path())
+        .map_err(|()| anyhow!("failed to convert source-tree path to file URL"))?;
+
+    let git_repository = context.temp_dir.child("git-repository");
+    git_repository.create_dir_all()?;
+    git_repository
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "git-package"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        "#})?;
+    initialize_repository(git_repository.path());
+    let git_repository_url = Url::from_directory_path(git_repository.path())
+        .map_err(|()| anyhow!("failed to convert Git repository path to file URL"))?;
+
+    let repository = context.temp_dir.child("repository");
+    repository.create_dir_all()?;
+    repository
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = [
+            "httpx @ {httpx_url} ; sys_platform == 'darwin'",
+            "basic-package @ {archive_url} ; sys_platform == 'darwin'",
+            "directory-package @ {directory_url} ; sys_platform == 'darwin'",
+            "git-package @ git+{git_repository_url} ; sys_platform == 'darwin'",
+        ]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+
+    initialize_repository(repository.path());
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = [
+            "httpx ; sys_platform == 'win32'",
+            "basic-package ; sys_platform == 'win32'",
+            "directory-package ; sys_platform == 'win32'",
+            "git-package ; sys_platform == 'win32'",
+            "provider",
+        ]
+
+        [tool.uv.sources]
+        provider = {{ git = "{repository_url}" }}
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    fs_err::remove_dir_all(repository.path())?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
     ");
 
     Ok(())
