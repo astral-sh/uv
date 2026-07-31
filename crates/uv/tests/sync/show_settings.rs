@@ -3286,6 +3286,38 @@ fn index_by_name() -> anyhow::Result<()> {
         assert_eq!(named, explicit, "{argument}");
     }
 
+    let commands: [fn(&TestContext) -> Command; 4] = [
+        TestContext::lock,
+        TestContext::sync,
+        TestContext::venv,
+        TestContext::pip_list,
+    ];
+
+    for command in commands {
+        for argument in ["--index", "--default-index"] {
+            let named = capture_uv_snapshot!(
+                context.filters(),
+                add_shared_args(command(&context))
+                    .arg("--show-settings")
+                    .arg(argument)
+                    .arg("internal")
+                    .arg("--preview-features")
+                    .arg("index-by-name")
+            );
+            let explicit = capture_uv_snapshot!(
+                context.filters(),
+                add_shared_args(command(&context))
+                    .arg("--show-settings")
+                    .arg(argument)
+                    .arg("internal=https://test.pypi.org/simple")
+                    .arg("--preview-features")
+                    .arg("index-by-name")
+            );
+
+            assert_eq!(named, explicit, "{argument}");
+        }
+    }
+
     let explicit = capture_uv_snapshot!(
         context.filters(),
         show_settings()
