@@ -126,6 +126,22 @@
       "target": "uv-dev"
     },
     {
+      "caller": "uv-dev",
+      "environment": "automations",
+      "caller_workflow": "pull-request-labels.yml",
+      "on": ["pull_request", "workflow_dispatch"],
+      "permissions": { "issues": "write" },
+      "target": "uv-dev"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "pull-request-labels.yml",
+      "on": ["pull_request", "workflow_dispatch"],
+      "permissions": { "issues": "write" },
+      "target": "uv"
+    },
+    {
       "caller": "uv",
       "environment": "automations",
       "caller_workflow": "diagnose-workflow-failure.yml",
