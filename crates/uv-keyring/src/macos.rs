@@ -166,7 +166,7 @@ impl MacCredential {
     /// On Mac, this is basically a no-op, because we represent any attributes
     /// other than the ones we use to find the generic credential.
     /// But at least this checks whether the underlying credential exists.
-    #[cfg(test)]
+    #[cfg(all(test, feature = "native-auth"))]
     async fn get_credential(&self) -> Result<Self> {
         let service = self.service.clone();
         let account = self.account.clone();
