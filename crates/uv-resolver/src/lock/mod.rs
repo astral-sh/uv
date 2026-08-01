@@ -6196,8 +6196,9 @@ impl Wheel {
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct WheelWire {
-    #[serde(flatten)]
-    url: WheelWireSource,
+    url: Option<UrlString>,
+    path: Option<Box<Path>>,
+    filename: Option<WheelFilename>,
     /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
@@ -6248,7 +6249,17 @@ impl TryFrom<WheelWire> for Wheel {
     type Error = String;
 
     fn try_from(wire: WheelWire) -> Result<Self, String> {
-        let filename = match &wire.url {
+        let source = if let Some(url) = wire.url {
+            WheelWireSource::Url { url }
+        } else if let Some(path) = wire.path {
+            WheelWireSource::Path { path }
+        } else if let Some(filename) = wire.filename {
+            WheelWireSource::Filename { filename }
+        } else {
+            return Err("wheel has no URL, path, or filename".to_string());
+        };
+
+        let filename = match &source {
             WheelWireSource::Url { url } => {
                 let filename = url.filename().map_err(|err| err.to_string())?;
                 filename.parse::<WheelFilename>().map_err(|err| {
@@ -6270,7 +6281,7 @@ impl TryFrom<WheelWire> for Wheel {
         };
 
         Ok(Self {
-            url: wire.url,
+            url: source,
             hash: wire.hash,
             size: wire.size,
             upload_time: wire.upload_time,
@@ -8312,6 +8323,21 @@ source = { editable = "path/to/a" }
 "#;
         let result = toml::from_str::<Lock>(data);
         insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn wheel_sources_deserialize() {
+        for source in [
+            r#"url = "https://example.com/dependency-1.0.0-py3-none-any.whl""#,
+            r#"path = "dependency-1.0.0-py3-none-any.whl""#,
+            r#"filename = "dependency-1.0.0-py3-none-any.whl""#,
+        ] {
+            let wheel: Wheel = toml::from_str(source).expect("valid wheel source");
+            assert_eq!(
+                wheel.filename.to_string(),
+                "dependency-1.0.0-py3-none-any.whl"
+            );
+        }
     }
 
     #[test]
