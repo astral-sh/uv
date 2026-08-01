@@ -1,0 +1,13 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ x86_64-macos, arm64-macos ]
+install-name:    '/usr/lib/system/libunwind.dylib'
+exports:
+  - targets:     [ x86_64-macos, arm64-macos ]
+    symbols:     [ __Unwind_Resume, __Unwind_GetIP, __Unwind_GetLanguageSpecificData,
+                   __Unwind_GetRegionStart, __Unwind_SetGR, __Unwind_SetIP,
+                   __Unwind_RaiseException, __Unwind_DeleteException,
+                   __Unwind_GetDataRelBase, __Unwind_GetTextRelBase,
+                   __Unwind_Backtrace, __Unwind_GetCFA,
+                   __Unwind_FindEnclosingFunction, __Unwind_GetIPInfo ]
+...
