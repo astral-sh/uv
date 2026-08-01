@@ -144,6 +144,20 @@ impl<'de> Cursor<'de> {
     }
 
     fn assignment_key(&mut self) -> Result<&'de str, Error> {
+        let remaining = &self.input[self.offset..];
+        let common_length = match remaining.as_bytes().first() {
+            Some(b'u') if remaining.starts_with("url = ") => 3,
+            Some(b'u') if remaining.starts_with("upload-time = ") => 11,
+            Some(b'h') if remaining.starts_with("hash = ") => 4,
+            Some(b's') if remaining.starts_with("size = ") => 4,
+            _ => 0,
+        };
+        if common_length != 0 {
+            let key = &self.input[self.offset..self.offset + common_length];
+            self.offset += common_length + 3;
+            return Ok(key);
+        }
+
         let start = self.offset;
         while matches!(
             self.peek(),
@@ -268,6 +282,12 @@ impl<'de> Cursor<'de> {
         }
 
         let encoded = &self.input[start..self.offset];
+        if encoded.as_bytes().iter().all(u8::is_ascii_digit)
+            && (encoded.len() == 1 || !encoded.starts_with('0'))
+        {
+            return Ok(Cow::Borrowed(encoded));
+        }
+
         let raw = Raw::new_unchecked(encoded, None, Span::new_unchecked(start, self.offset));
         let mut decoded = Cow::Borrowed("");
         let mut error = None;
