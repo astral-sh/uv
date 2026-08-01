@@ -28,7 +28,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
-use uv_tool::{InstalledTools, Tool};
+use uv_tool::{InstalledTools, Tool, ToolName};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
@@ -69,6 +69,7 @@ pub(crate) async fn install(
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     force: bool,
+    suffix: Option<String>,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
@@ -332,6 +333,7 @@ pub(crate) async fn install(
     };
 
     let package_name = &requirement.name;
+    let tool_name = ToolName::from_package_name(package_name, suffix.as_deref())?;
 
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if request.is_latest() {
@@ -467,7 +469,10 @@ pub(crate) async fn install(
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
-    let tool_dir = installed_tools.tool_dir(package_name);
+    if let Some(existing_name) = installed_tools.find_case_insensitive_name(&tool_name)? {
+        bail!("Tool name `{tool_name}` conflicts with existing tool `{existing_name}`");
+    }
+    let tool_dir = installed_tools.tool_dir(&tool_name);
 
     // Find the existing receipt, if it exists. If the receipt is present but malformed, we'll
     // remove the environment and continue with the install.
@@ -478,16 +483,16 @@ pub(crate) async fn install(
     // (If we find existing entrypoints later on, and the tool _doesn't_ exist, we'll avoid removing
     // the external tool's entrypoints (without `--force`).)
     let (existing_tool_receipt, invalid_tool_receipt) =
-        match installed_tools.get_tool_receipt(package_name) {
+        match installed_tools.get_tool_receipt(&tool_name) {
             Ok(None) => (None, false),
             Ok(Some(receipt)) => (Some(receipt), false),
             Err(_) => {
                 // If the tool is not installed properly, remove the environment and continue.
-                match installed_tools.remove_environment(package_name) {
+                match installed_tools.remove_environment(&tool_name) {
                     Ok(()) => {
                         warn_user!(
                             "Removed existing `{}` with invalid receipt",
-                            package_name.cyan()
+                            tool_name.cyan()
                         );
                     }
                     Err(err)
@@ -502,11 +507,29 @@ pub(crate) async fn install(
             }
         };
 
+    if let Some(existing_tool_receipt) = &existing_tool_receipt
+        && existing_tool_receipt.package() != package_name
+    {
+        bail!(
+            "Tool name `{tool_name}` is already used by package `{}`",
+            existing_tool_receipt.package().cyan()
+        );
+    }
+    if let Some(existing_tool_receipt) = &existing_tool_receipt
+        && existing_tool_receipt.suffix() != suffix.as_deref()
+    {
+        let existing_name = ToolName::from_package_name(
+            existing_tool_receipt.package(),
+            existing_tool_receipt.suffix(),
+        )?;
+        bail!("Tool name `{tool_name}` conflicts with existing tool `{existing_name}`");
+    }
+
     let existing_environment = if force {
         None
     } else {
         installed_tools
-            .get_environment(package_name, &cache)?
+            .get_environment(&tool_name, package_name, &cache)?
             .filter(|environment| {
                 existing_environment_usable(
                     environment.environment(),
@@ -631,15 +654,20 @@ pub(crate) async fn install(
                     // Then we're done! Though we might need to update the receipt.
                     if *tool_receipt.options() != options {
                         installed_tools.add_tool_receipt(
-                            package_name,
+                            &tool_name,
                             tool_receipt.clone().with_options(options),
                         )?;
                     }
 
+                    let installed = if suffix.is_some() {
+                        tool_name.to_string()
+                    } else {
+                        requirement.to_string()
+                    };
                     writeln!(
                         printer.stderr(),
                         "`{}` is already installed",
-                        requirement.cyan()
+                        installed.cyan()
                     )?;
 
                     return Ok(ExitStatus::Success);
@@ -796,8 +824,10 @@ pub(crate) async fn install(
                 };
                 ToolLock::write(&tool_dir, Some(&tool_lock))?;
                 installed_tools.add_tool_receipt(
-                    package_name,
+                    &tool_name,
                     Tool::new(
+                        package_name.clone(),
+                        suffix.clone(),
                         requirements.clone(),
                         receipt_constraints.clone(),
                         receipt_overrides.clone(),
@@ -808,10 +838,15 @@ pub(crate) async fn install(
                         options.clone(),
                     ),
                 )?;
+                let installed = if suffix.is_some() {
+                    tool_name.to_string()
+                } else {
+                    requirement.to_string()
+                };
                 writeln!(
                     printer.stderr(),
                     "`{}` is already installed",
-                    requirement.cyan()
+                    installed.cyan()
                 )?;
                 return Ok(ExitStatus::Success);
             }
@@ -1022,7 +1057,7 @@ pub(crate) async fn install(
         } else {
             HashStrategy::default()
         };
-        let environment = installed_tools.create_environment(package_name, interpreter)?;
+        let environment = installed_tools.create_environment(&tool_name, interpreter)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
         // executables.
@@ -1051,7 +1086,7 @@ pub(crate) async fn install(
         .inspect_err(|_| {
             // If we failed to sync, remove the newly created environment.
             debug!("Failed to sync environment; removing `{}`", package_name);
-            let _ = installed_tools.remove_environment(package_name);
+            let _ = installed_tools.remove_environment(&tool_name);
         }) {
             Ok(environment) => (environment, tool_lock),
             Err(ProjectError::Operation(err)) => {
@@ -1066,6 +1101,8 @@ pub(crate) async fn install(
     finalize_tool_install(
         &environment,
         package_name,
+        &tool_name,
+        suffix.as_deref(),
         entrypoints,
         &installed_tools,
         &options,
