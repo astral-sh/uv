@@ -3681,6 +3681,7 @@ impl TryFrom<LockWire> for Lock {
         // default marker with the lock's environment.
         let default =
             UniversalMarker::from_combined(environment.into_marker(&wire.requires_python));
+        let mut dependency_markers = FxHashMap::default();
         let packages = wire
             .packages
             .into_iter()
@@ -3690,6 +3691,7 @@ impl TryFrom<LockWire> for Lock {
                     environment,
                     default,
                     &unambiguous_package_ids,
+                    &mut dependency_markers,
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -4610,6 +4612,7 @@ impl PackageWire {
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        dependency_markers: &mut FxHashMap<MarkerTree, (SimplifiedMarkerTree, UniversalMarker)>,
     ) -> Result<Package, LockError> {
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
@@ -4639,7 +4642,7 @@ impl PackageWire {
             .into());
         }
 
-        let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
+        let mut unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
                 .map(|dep| {
                     dep.unwire(
@@ -4647,6 +4650,7 @@ impl PackageWire {
                         environment,
                         default,
                         unambiguous_package_ids,
+                        dependency_markers,
                     )
                 })
                 .collect()
@@ -6380,15 +6384,22 @@ impl DependencyWire {
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        dependency_markers: &mut FxHashMap<MarkerTree, (SimplifiedMarkerTree, UniversalMarker)>,
     ) -> Result<Dependency, LockError> {
         let (simplified_marker, complexified_marker) =
             if self.marker.as_simplified_marker_tree().is_true() {
                 (environment, default)
+            } else if let Some(markers) =
+                dependency_markers.get(&self.marker.as_simplified_marker_tree())
+            {
+                *markers
             } else {
+                let marker = self.marker.as_simplified_marker_tree();
                 let mut simplified_marker = self.marker;
                 simplified_marker.and(environment);
                 let complexified_marker =
                     UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
+                dependency_markers.insert(marker, (simplified_marker, complexified_marker));
                 (simplified_marker, complexified_marker)
             };
         Ok(Dependency {
