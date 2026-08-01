@@ -6197,9 +6197,8 @@ impl Wheel {
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct WheelWire {
-    url: Option<UrlString>,
-    path: Option<Box<Path>>,
-    filename: Option<WheelFilename>,
+    #[serde(flatten)]
+    url: WheelWireSource,
     /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
@@ -6250,17 +6249,7 @@ impl TryFrom<WheelWire> for Wheel {
     type Error = String;
 
     fn try_from(wire: WheelWire) -> Result<Self, String> {
-        let source = if let Some(url) = wire.url {
-            WheelWireSource::Url { url }
-        } else if let Some(path) = wire.path {
-            WheelWireSource::Path { path }
-        } else if let Some(filename) = wire.filename {
-            WheelWireSource::Filename { filename }
-        } else {
-            return Err("wheel has no URL, path, or filename".to_string());
-        };
-
-        let filename = match &source {
+        let filename = match &wire.url {
             WheelWireSource::Url { url } => {
                 let filename = if memchr3(b'?', b'#', b'%', url.as_ref().as_bytes()).is_none()
                     && let Some((_, filename)) = url.as_ref().rsplit_once('/')
@@ -6288,7 +6277,7 @@ impl TryFrom<WheelWire> for Wheel {
         };
 
         Ok(Self {
-            url: source,
+            url: wire.url,
             hash: wire.hash,
             size: wire.size,
             upload_time: wire.upload_time,
