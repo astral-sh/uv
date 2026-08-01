@@ -68,6 +68,13 @@ If an issue could fit multiple non-duplicate types, prioritize correctness: clas
 incorrect behavior as a bug, even when the primary maintainer action requested is clarification.
 Reproduction is a separate downstream step and is not required for bug classification.
 
+Set `reproduction_applicable` to `true` when the issue describes concrete, observable behavior that
+can be investigated by recreating the reported command, configuration, input, or environment. A
+question about observed behavior can be applicable even when that behavior is expected or has not
+been established as incorrect. Set it to `false` for purely conceptual questions, documentation or
+support requests without an observable behavior to investigate, and reports that lack enough details
+to construct a meaningful reproduction.
+
 Set `summary` to a concise overview of the closest items, or state that none were found.
 
 Clearly distinguish source-backed findings from hypotheses. Do not draft a public reply or claim a
