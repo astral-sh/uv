@@ -37,14 +37,7 @@
       "enum": ["bug", "enhancement", "duplicate", "question"]
     },
     "type_reason": { "type": "string" },
-    "reproduction_applicable": { "type": "boolean" },
     "summary": { "type": "string" }
   },
-  "required": [
-    "related",
-    "type",
-    "type_reason",
-    "reproduction_applicable",
-    "summary"
-  ]
+  "required": ["related", "type", "type_reason", "summary"]
 }

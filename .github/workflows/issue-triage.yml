@@ -191,10 +191,7 @@ jobs:
       needs.triage.outputs.result != '' &&
       (
         fromJSON(needs.triage.outputs.result).type == 'bug' ||
-        (
-          fromJSON(needs.triage.outputs.result).type == 'question' &&
-          fromJSON(needs.triage.outputs.result).reproduction_applicable
-        )
+        fromJSON(needs.triage.outputs.result).type == 'question'
       )
     permissions:
       contents: read
