@@ -5742,33 +5742,32 @@ impl SourceDist {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
-#[serde(untagged, rename_all = "kebab-case")]
-enum SourceDistWire {
-    Url {
-        url: UrlString,
-        #[serde(flatten)]
-        metadata: SourceDistMetadata,
-    },
-    Path {
-        path: PortablePathBuf,
-        #[serde(flatten)]
-        metadata: SourceDistMetadata,
-    },
-    Metadata {
-        #[serde(flatten)]
-        metadata: SourceDistMetadata,
-    },
+#[serde(rename_all = "kebab-case")]
+struct SourceDistWire {
+    url: Option<UrlString>,
+    path: Option<PortablePathBuf>,
+    hash: Option<Hash>,
+    size: Option<u64>,
+    #[serde(alias = "upload_time")]
+    upload_time: Option<Timestamp>,
 }
 
 impl From<SourceDistWire> for SourceDist {
     fn from(wire: SourceDistWire) -> Self {
-        match wire {
-            SourceDistWire::Url { url, metadata } => Self::Url { url, metadata },
-            SourceDistWire::Path { path, metadata } => Self::Path {
+        let metadata = SourceDistMetadata {
+            hash: wire.hash,
+            size: wire.size,
+            upload_time: wire.upload_time,
+        };
+        if let Some(url) = wire.url {
+            Self::Url { url, metadata }
+        } else if let Some(path) = wire.path {
+            Self::Path {
                 path: path.into(),
                 metadata,
-            },
-            SourceDistWire::Metadata { metadata } => Self::Metadata { metadata },
+            }
+        } else {
+            Self::Metadata { metadata }
         }
     }
 }
