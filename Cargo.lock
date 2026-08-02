@@ -6514,6 +6514,7 @@ dependencies = [
  "http",
  "itertools 0.14.0",
  "jiff",
+ "memchr",
  "owo-colors",
  "percent-encoding",
  "petgraph",

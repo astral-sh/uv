@@ -39,6 +39,7 @@ fs-err = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
+memchr = { workspace = true }
 owo-colors = { workspace = true }
 percent-encoding = { workspace = true }
 petgraph = { workspace = true }

@@ -11,7 +11,6 @@ use std::sync::{Arc, LazyLock};
 
 use itertools::Itertools;
 use jiff::Timestamp;
-use memchr::memchr3;
 use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
@@ -6251,13 +6250,7 @@ impl TryFrom<WheelWire> for Wheel {
     fn try_from(wire: WheelWire) -> Result<Self, String> {
         let filename = match &wire.url {
             WheelWireSource::Url { url } => {
-                let filename = if memchr3(b'?', b'#', b'%', url.as_ref().as_bytes()).is_none()
-                    && let Some((_, filename)) = url.as_ref().rsplit_once('/')
-                {
-                    Cow::Borrowed(filename)
-                } else {
-                    url.filename().map_err(|err| err.to_string())?
-                };
+                let filename = url.filename().map_err(|err| err.to_string())?;
                 filename.parse::<WheelFilename>().map_err(|err| {
                     format!("failed to parse `{filename}` as wheel filename: {err}")
                 })?
