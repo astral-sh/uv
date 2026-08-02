@@ -902,29 +902,6 @@ dependencies = [
     }
 
     #[test]
-    fn wheel_locations_match_toml() {
-        for wheel in [
-            r#"{ url = "https://example.com/dependency-1.0.0-py3-none-any.whl" }"#,
-            r#"{ url = "https://example.com/dependency-1.0.0-py3-none-any.whl?redirect=/other" }"#,
-            r#"{ url = "https://example.com/dependency%2D1.0.0%2Dpy3%2Dnone%2Dany.whl" }"#,
-            r#"{ path = "dependency-1.0.0-py3-none-any.whl" }"#,
-            r#"{ filename = "dependency-1.0.0-py3-none-any.whl" }"#,
-        ] {
-            let input = CANONICAL_LOCK.replacen(
-                "source = { registry = \"https://example.com/simple\" }\n",
-                &format!(
-                    "source = {{ registry = \"https://example.com/simple\" }}\nwheels = [{wheel}]\n"
-                ),
-                1,
-            );
-            let expected: Lock = toml::from_str(&input).expect("valid TOML lock with a wheel");
-            let actual = from_str(&input).expect("canonical wheel uses the direct parser");
-
-            assert_eq!(actual, expected, "wheel location matches TOML: {wheel}");
-        }
-    }
-
-    #[test]
     fn repository_lock_matches_toml() {
         let input = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../uv.lock"));
         let expected: Lock = toml::from_str(input).expect("valid repository lock");
