@@ -48,7 +48,7 @@ Install uv with our standalone installers:
 ```bash
 # On macOS and Linux.
 curl -LsSf https://astral.sh/uv/install.sh | sh
-source ./bashrc 
+source ./bashrc
 ```
 
 ```bash
