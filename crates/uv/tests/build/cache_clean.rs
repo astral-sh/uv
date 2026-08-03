@@ -29,7 +29,7 @@ fn clean_all() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    Removed [N] files ([SIZE])
     ");
 
     Ok(())
@@ -49,7 +49,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    Removed [N] files ([SIZE])
     ");
 
     assert!(retained.is_file());
@@ -76,7 +76,7 @@ fn clean_all_cloned_file() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    Removed [N] files ([SIZE])
     ");
 
     assert!(original.is_file());
@@ -109,7 +109,7 @@ fn clear_all_alias() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    Removed [N] files ([SIZE])
     ");
 
     Ok(())
@@ -136,7 +136,7 @@ async fn clean_force() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    Removed [N] files ([SIZE])
     ");
 
     // Install a requirement, to re-populate the cache.
@@ -158,7 +158,7 @@ async fn clean_force() -> Result<()> {
     DEBUG Lock is busy for `[CACHE_DIR]/`
     DEBUG Cache is currently in use, proceeding due to `--force`
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    Removed [N] files ([SIZE])
     ");
 
     Ok(())
@@ -210,7 +210,7 @@ fn clean_package_pypi() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    Removed [N] files ([SIZE])
     ");
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.
@@ -281,7 +281,7 @@ fn clean_package_index() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    Removed [N] files ([SIZE])
     ");
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.
@@ -318,7 +318,7 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
     uv_snapshot!(context.filters(), context.clean().arg("demo"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed 3 files ([SIZE], [SIZE] reclaimed)
+    Removed 3 files ([SIZE])
     ");
 
     assert!(victim_dir.is_dir());

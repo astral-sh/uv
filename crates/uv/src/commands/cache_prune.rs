@@ -84,29 +84,16 @@ pub(crate) async fn cache_prune(
         }
     }
 
-    // If any, write a summary of the total byte count removed.
+    // If any, report the reclaimed space, falling back to the apparent removed size.
     if summary.total_bytes > 0 {
-        let format_bytes = |bytes| {
-            if bytes < 1024 {
-                format!("{bytes}B")
-            } else {
-                let (bytes, unit) = human_readable_bytes(bytes);
-                format!("{bytes:.1}{unit}")
-            }
-        };
-        let bytes = format_bytes(summary.total_bytes);
-
-        if let Some(reclaimed_bytes) = reclaimed_bytes {
-            let reclaimed = format_bytes(reclaimed_bytes);
-            write!(
-                printer.stderr(),
-                " ({}, {} reclaimed)",
-                bytes.green(),
-                reclaimed.green()
-            )?;
+        let total_bytes = reclaimed_bytes.unwrap_or(summary.total_bytes);
+        let bytes = if total_bytes < 1024 {
+            format!("{total_bytes}B")
         } else {
-            write!(printer.stderr(), " ({})", bytes.green())?;
-        }
+            let (bytes, unit) = human_readable_bytes(total_bytes);
+            format!("{bytes:.1}{unit}")
+        };
+        write!(printer.stderr(), " ({})", bytes.green())?;
     }
 
     writeln!(printer.stderr())?;

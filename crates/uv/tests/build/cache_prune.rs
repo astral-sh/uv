@@ -55,7 +55,7 @@ fn prune_hardlinked_file() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    Removed 1 file ([SIZE], [SIZE] reclaimed)
+    Removed 1 file ([SIZE])
     ");
 
     assert!(retained.is_file());
@@ -176,7 +176,7 @@ fn prune_cached_env() {
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing cached environment: [CACHE_DIR]/environments-v2/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    Removed [N] files ([SIZE])
     ");
 }
 
@@ -218,7 +218,7 @@ fn prune_stale_symlink() -> Result<()> {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed 44 files ([SIZE], [SIZE] reclaimed)
+    Removed 44 files ([SIZE])
     ");
 
     Ok(())
@@ -318,7 +318,7 @@ fn prune_unzipped() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    Removed [N] files ([SIZE])
     ");
 
     context.venv().arg("--clear").assert().success();
@@ -436,7 +436,7 @@ fn prune_stale_revision() -> Result<()> {
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    Removed [N] files ([SIZE])
     ");
 
     // Uninstall and reinstall the package. We should use the cached version.
