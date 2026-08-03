@@ -185,7 +185,7 @@ jobs:
           GH_TOKEN: ${{ steps.token.outputs.token }}
 
   reproduce-bug:
-    needs: triage
+    needs: [triage, context]
     if: needs.triage.outputs.result != '' && fromJSON(needs.triage.outputs.result).type == 'bug'
     permissions:
       contents: read

@@ -50,6 +50,7 @@ jobs:
       contents: read
       issues: read
     outputs:
+      issue-number: ${{ steps.issue.outputs.number }}
       result: ${{ steps.reproduce.outputs.final-message }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -62,11 +63,15 @@ jobs:
           enable-cache: false
 
       - name: "Collect issue context"
+        id: issue
         run: |
           gh issue view "$ISSUE" \
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author \
             > .issue-triage-event.json
+
+          jq --raw-output '"number=\(.number)"' \
+            .issue-triage-event.json >> "$GITHUB_OUTPUT"
 
           {
             printf 'Bug reproduction for #%s: %s\n\n' \
@@ -106,11 +111,69 @@ jobs:
     needs: reproduce
     if: needs.reproduce.outputs.result != ''
     runs-on: ubuntu-latest
-    permissions: {}
+    environment: automations
+    timeout-minutes: 10
+    concurrency:
+      group: issue-context-${{ needs.reproduce.outputs.issue-number }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write # for the uv-dev issue-context credential broker
     steps:
       - name: "Write reproduction summary"
-        run: printf '```json\n%s\n```\n' "$REPRODUCTION_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          printf '%s\n%s\n%s\n' '```json' "$REPRODUCTION_RESULT" '```' \
+            >> "$GITHUB_STEP_SUMMARY"
         env:
+          REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
+
+      - name: "Get issue context token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: |
+            contents: write
+
+      - name: "Persist reproduction context"
+        run: |
+          branch="issue/$ISSUE_NUMBER"
+
+          git init --quiet "$RUNNER_TEMP/issue-context"
+          cd "$RUNNER_TEMP/issue-context"
+          git remote add origin \
+            "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git"
+          git fetch --quiet origin "refs/heads/$branch"
+          git checkout --quiet FETCH_HEAD
+
+          printf '%s\n' "$REPRODUCTION_RESULT" | jq '.' > reproduction.json
+          existing_context="$(awk '/^## Reproduction$/ { exit } { print }' README.md)"
+
+          {
+            printf '%s\n\n## Reproduction\n\n' "$existing_context"
+            jq --raw-output '"Status: `\(.reproduction)`\n\n\(.reason)"' reproduction.json
+          } > "$RUNNER_TEMP/README.md"
+          cp "$RUNNER_TEMP/README.md" README.md
+
+          git add reproduction.json README.md
+
+          if git diff --cached --quiet; then
+            echo "The existing reproduction context is unchanged."
+            exit 0
+          fi
+
+          git \
+            -c user.name="github-actions[bot]" \
+            -c user.email="github-actions[bot]@users.noreply.github.com" \
+            commit --message "Update reproduction context for $GITHUB_REPOSITORY#$ISSUE_NUMBER"
+          git push origin "HEAD:refs/heads/$branch"
+
+          printf 'Issue context: https://github.com/astral-sh/uv-dev/tree/%s\n' "$branch" \
+            >> "$GITHUB_STEP_SUMMARY"
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          ISSUE_NUMBER: ${{ needs.reproduce.outputs.issue-number }}
           REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
 
   create-integration-test:
