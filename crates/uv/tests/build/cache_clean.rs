@@ -3,6 +3,7 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 
 use uv_cache::Cache;
+use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_static::EnvVars;
 
 use uv_test::uv_snapshot;
@@ -28,8 +29,58 @@ fn clean_all() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     ");
+
+    Ok(())
+}
+
+/// `cache clean` should report reclaimed space separately for files retained by hardlinks.
+#[test]
+fn clean_all_hardlinked_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let retained = context.temp_dir.child("retained.bin");
+    retained.write_binary(&vec![42; 1024 * 1024])?;
+
+    let cached = context.cache_dir.child("hardlinked.bin");
+    fs_err::hard_link(&retained, &cached)?;
+
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    ");
+
+    assert!(retained.is_file());
+    assert_eq!(fs_err::metadata(retained)?.len(), 1024 * 1024);
+
+    Ok(())
+}
+
+/// `cache clean` should report reclaimed space separately for copy-on-write clones.
+#[test]
+fn clean_all_cloned_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let retained = context.temp_dir.child("retained");
+    retained.create_dir_all()?;
+    let original = retained.child("original.bin");
+    original.write_binary(&vec![42; 1024 * 1024])?;
+
+    let cached = context.cache_dir.child("cloned");
+    if link_dir(&retained, &cached, &LinkOptions::new(LinkMode::Clone))? != LinkMode::Clone {
+        return Ok(());
+    }
+
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
+    ");
+
+    assert!(original.is_file());
+    assert_eq!(fs_err::metadata(original)?.len(), 1024 * 1024);
 
     Ok(())
 }
@@ -58,7 +109,7 @@ fn clear_all_alias() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     ");
 
     Ok(())
@@ -85,7 +136,7 @@ async fn clean_force() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     ");
 
     // Install a requirement, to re-populate the cache.
@@ -107,7 +158,7 @@ async fn clean_force() -> Result<()> {
     DEBUG Lock is busy for `[CACHE_DIR]/`
     DEBUG Cache is currently in use, proceeding due to `--force`
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     ");
 
     Ok(())
@@ -159,7 +210,7 @@ fn clean_package_pypi() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     ");
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.
@@ -230,7 +281,7 @@ fn clean_package_index() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     ");
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.
@@ -267,7 +318,7 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
     uv_snapshot!(context.filters(), context.clean().arg("demo"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed 3 files ([SIZE])
+    Removed 3 files ([SIZE], [SIZE] reclaimed)
     ");
 
     assert!(victim_dir.is_dir());

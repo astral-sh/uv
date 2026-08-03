@@ -43,6 +43,10 @@ pub(crate) async fn cache_clean(
         }
     };
 
+    // The cache root itself is removed when cleaning the entire cache, so measure its parent.
+    let filesystem_path = cache.root().parent().unwrap_or(cache.root()).to_path_buf();
+    let available_before = uv_fs::available_space(&filesystem_path).ok();
+
     let summary = if packages.is_empty() {
         writeln!(
             printer.stderr(),
@@ -71,6 +75,12 @@ pub(crate) async fn cache_clean(
         summary
     };
 
+    let reclaimed_bytes = available_before.and_then(|before| {
+        uv_fs::available_space(&filesystem_path)
+            .ok()
+            .map(|after| after.saturating_sub(before))
+    });
+
     // Write a summary of the number of files and directories removed.
     match (summary.num_files, summary.num_dirs) {
         (0, 0) => {
@@ -92,13 +102,27 @@ pub(crate) async fn cache_clean(
 
     // If any, write a summary of the total byte count removed.
     if summary.total_bytes > 0 {
-        let bytes = if summary.total_bytes < 1024 {
-            format!("{}B", summary.total_bytes)
-        } else {
-            let (bytes, unit) = human_readable_bytes(summary.total_bytes);
-            format!("{bytes:.1}{unit}")
+        let format_bytes = |bytes| {
+            if bytes < 1024 {
+                format!("{bytes}B")
+            } else {
+                let (bytes, unit) = human_readable_bytes(bytes);
+                format!("{bytes:.1}{unit}")
+            }
         };
-        write!(printer.stderr(), " ({})", bytes.green())?;
+        let bytes = format_bytes(summary.total_bytes);
+
+        if let Some(reclaimed_bytes) = reclaimed_bytes {
+            let reclaimed = format_bytes(reclaimed_bytes);
+            write!(
+                printer.stderr(),
+                " ({}, {} reclaimed)",
+                bytes.green(),
+                reclaimed.green()
+            )?;
+        } else {
+            write!(printer.stderr(), " ({})", bytes.green())?;
+        }
     }
 
     writeln!(printer.stderr())?;

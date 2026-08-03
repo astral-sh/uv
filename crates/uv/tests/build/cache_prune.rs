@@ -40,6 +40,30 @@ fn prune_no_op() -> Result<()> {
     Ok(())
 }
 
+/// `cache prune` should report reclaimed space separately for files retained by hardlinks.
+#[test]
+fn prune_hardlinked_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let retained = context.temp_dir.child("retained.bin");
+    retained.write_binary(&vec![42; 1024 * 1024])?;
+
+    let stale = context.cache_dir.child("stale-v0");
+    stale.create_dir_all()?;
+    fs_err::hard_link(&retained, stale.child("hardlinked.bin"))?;
+
+    uv_snapshot!(context.filters(), context.prune(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    Removed 1 file ([SIZE], [SIZE] reclaimed)
+    ");
+
+    assert!(retained.is_file());
+    assert_eq!(fs_err::metadata(retained)?.len(), 1024 * 1024);
+
+    Ok(())
+}
+
 /// `cache prune` should remove any stale top-level directories from the cache.
 #[test]
 fn prune_stale_directory() -> Result<()> {
@@ -152,7 +176,7 @@ fn prune_cached_env() {
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing cached environment: [CACHE_DIR]/environments-v2/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     ");
 }
 
@@ -194,7 +218,7 @@ fn prune_stale_symlink() -> Result<()> {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed 44 files ([SIZE])
+    Removed 44 files ([SIZE], [SIZE] reclaimed)
     ");
 
     Ok(())
@@ -294,7 +318,7 @@ fn prune_unzipped() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     ");
 
     context.venv().arg("--clear").assert().success();
@@ -412,7 +436,7 @@ fn prune_stale_revision() -> Result<()> {
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     ");
 
     // Uninstall and reinstall the package. We should use the cached version.

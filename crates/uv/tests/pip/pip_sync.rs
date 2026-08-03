@@ -1454,7 +1454,7 @@ fn install_url_source_dist_cached() -> Result<()> {
         context.clean().arg("source_distribution"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     "
     );
 
@@ -1613,7 +1613,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
         .arg("source_distribution"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     "
     );
 
@@ -1701,7 +1701,7 @@ fn install_path_source_dist_cached() -> Result<()> {
         context.clean().arg("source-distribution"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     "
     );
 
@@ -1783,7 +1783,7 @@ fn install_path_built_dist_cached() -> Result<()> {
         context.clean().arg("tomli"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     "
     );
 
@@ -1863,7 +1863,7 @@ fn install_url_built_dist_cached() -> Result<()> {
         context.clean().arg("tqdm"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed [N] files ([SIZE])
+    Removed [N] files ([SIZE], [SIZE] reclaimed)
     "
     );
 

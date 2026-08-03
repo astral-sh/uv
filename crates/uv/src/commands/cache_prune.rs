@@ -47,6 +47,7 @@ pub(crate) async fn cache_prune(
         cache.root().user_display().cyan()
     )?;
 
+    let available_before = uv_fs::available_space(cache.root()).ok();
     let mut summary = Removal::default();
 
     // Prune the source distribution cache, which is tightly coupled to the builder crate.
@@ -57,6 +58,12 @@ pub(crate) async fn cache_prune(
     summary += cache
         .prune(ci)
         .with_context(|| format!("Failed to prune cache at: {}", cache.root().user_display()))?;
+
+    let reclaimed_bytes = available_before.and_then(|before| {
+        uv_fs::available_space(cache.root())
+            .ok()
+            .map(|after| after.saturating_sub(before))
+    });
 
     // Write a summary of the number of files and directories removed.
     match (summary.num_files, summary.num_dirs) {
@@ -79,13 +86,27 @@ pub(crate) async fn cache_prune(
 
     // If any, write a summary of the total byte count removed.
     if summary.total_bytes > 0 {
-        let bytes = if summary.total_bytes < 1024 {
-            format!("{}B", summary.total_bytes)
-        } else {
-            let (bytes, unit) = human_readable_bytes(summary.total_bytes);
-            format!("{bytes:.1}{unit}")
+        let format_bytes = |bytes| {
+            if bytes < 1024 {
+                format!("{bytes}B")
+            } else {
+                let (bytes, unit) = human_readable_bytes(bytes);
+                format!("{bytes:.1}{unit}")
+            }
         };
-        write!(printer.stderr(), " ({})", bytes.green())?;
+        let bytes = format_bytes(summary.total_bytes);
+
+        if let Some(reclaimed_bytes) = reclaimed_bytes {
+            let reclaimed = format_bytes(reclaimed_bytes);
+            write!(
+                printer.stderr(),
+                " ({}, {} reclaimed)",
+                bytes.green(),
+                reclaimed.green()
+            )?;
+        } else {
+            write!(printer.stderr(), " ({})", bytes.green())?;
+        }
     }
 
     writeln!(printer.stderr())?;
