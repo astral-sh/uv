@@ -187,7 +187,12 @@ jobs:
 
   reproduce-bug:
     needs: [triage, context]
-    if: needs.triage.outputs.result != '' && fromJSON(needs.triage.outputs.result).type == 'bug'
+    if: >-
+      needs.triage.outputs.result != '' &&
+      (
+        fromJSON(needs.triage.outputs.result).type == 'bug' ||
+        fromJSON(needs.triage.outputs.result).type == 'question'
+      )
     permissions:
       contents: read
       id-token: write
@@ -195,5 +200,6 @@ jobs:
     uses: ./.github/workflows/reproduce-bug.yml
     with:
       issue: ${{ inputs.issue || github.event.issue.number }}
+      issue-type: ${{ fromJSON(needs.triage.outputs.result).type }}
       runner: ubuntu-latest
     secrets: inherit # zizmor: ignore[secrets-inherit] -- protected environment secrets are needed for reproduction
