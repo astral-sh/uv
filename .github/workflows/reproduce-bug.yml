@@ -164,8 +164,8 @@ jobs:
           fi
 
           git \
-            -c user.name="github-actions[bot]" \
-            -c user.email="github-actions[bot]@users.noreply.github.com" \
+            -c user.name="astral-automations-bot[bot]" \
+            -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
             commit --message "Update reproduction context for $GITHUB_REPOSITORY#$ISSUE_NUMBER"
           git push origin "HEAD:refs/heads/$branch"
 
