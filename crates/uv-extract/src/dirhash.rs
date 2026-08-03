@@ -484,6 +484,11 @@ mod tests {
         root_input.extend_from_slice(b"b\xff");
         root_input.extend_from_slice(&b_hash);
         let root_hash = blake3::derive_key("directory", &root_input);
+        // Pin the specific value of the dirhash. TODO: a full set of test vectors
+        assert_eq!(
+            blake3::Hash::from_bytes(root_hash).to_hex().as_str(),
+            "e508467d129e0d19cefa96527f5f6cb3760530be4d931c527f2818a0dff5d517"
+        );
 
         // Now, confirm that `DirhashTree` gives the same answer.
         let mut tree = super::DirhashTree::default();
