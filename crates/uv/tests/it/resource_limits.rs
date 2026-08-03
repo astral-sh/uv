@@ -100,18 +100,16 @@ fn run_open_file_limit_override_exceeds_hard_limit() {
         .arg("--")
         .arg(python)
         .arg("-c")
-        .arg("import resource; print(resource.getrlimit(resource.RLIMIT_NOFILE)[0])")
+        .arg("pass")
         .current_dir(context.temp_dir.path())
         .env(EnvVars::UV_CACHE_DIR, context.cache_dir.path())
         .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
         .env(EnvVars::UV_RUN_ULIMIT, "256");
 
     uv_snapshot!(context.filters(), command, @r"
-    exit_code: 0 (success)
-    ----- stdout -----
-    128
-
+    exit_code: 2 (failure)
     ----- stderr -----
-    warning: Failed to apply `UV_RUN_ULIMIT` value `256`: requested open file limit (256) exceeds the hard limit (128)
+    error: Failed to apply `UV_RUN_ULIMIT` value `256`
+      Caused by: requested open file limit (256) exceeds the hard limit (128)
     ");
 }

@@ -1348,10 +1348,9 @@ impl EnvVars {
 
     /// Sets the soft open-file descriptor limit for commands executed by `uv run`.
     ///
-    /// The limit is applied on a best-effort basis after uv prepares the environment and
-    /// immediately before the command is spawned. The hard open-file descriptor limit remains
-    /// unchanged. If the limit cannot be applied, uv emits a warning and runs the command with the
-    /// existing limit. Only supported on Unix.
+    /// The limit is applied after uv prepares the environment and immediately before the command
+    /// is spawned. The hard open-file descriptor limit remains unchanged. If the limit cannot be
+    /// applied, uv exits with an error without running the command. Only supported on Unix.
     #[attr_added_in("0.12.2")]
     pub const UV_RUN_ULIMIT: &'static str = "UV_RUN_ULIMIT";
 
