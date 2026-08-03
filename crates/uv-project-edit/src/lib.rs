@@ -7,12 +7,13 @@ use std::{fmt, mem};
 use itertools::Itertools;
 use thiserror::Error;
 use toml_edit::{
-    Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
+    Array, ArrayOfTables, DocumentMut, Formatted, InlineTable, Item, RawString, Table, TomlError,
+    Value,
 };
 
 use uv_cache_key::CanonicalUrl;
 use uv_configuration::AddBoundsKind;
-use uv_distribution_types::{Index, IndexFormat, IndexUrl};
+use uv_distribution_types::{ConfigSettings, Index, IndexFormat, IndexUrl};
 use uv_fs::{PortablePath, is_same_file_allow_missing, try_relative_to_if};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError};
@@ -49,6 +50,8 @@ pub enum Error {
     Parse(#[from] Box<TomlError>),
     #[error("Failed to serialize `pyproject.toml`")]
     Serialize(#[from] Box<toml::ser::Error>),
+    #[error("Failed to serialize build configuration settings")]
+    SerializeConfigSettings(#[source] toml_edit::ser::Error),
     #[error("Failed to deserialize `pyproject.toml`")]
     Deserialize(#[from] Box<toml::de::Error>),
     #[error("Dependencies in `pyproject.toml` are malformed")]
@@ -291,6 +294,40 @@ impl PyProjectTomlMut {
         }
 
         Ok(edit)
+    }
+
+    /// Add package-specific build settings to `tool.uv.config-settings-package`.
+    pub fn add_config_settings_package(
+        &mut self,
+        package: &PackageName,
+        config_settings: &ConfigSettings,
+    ) -> Result<(), Error> {
+        let settings = self
+            .doc
+            .entry("tool")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("uv")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("config-settings-package")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_like_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry(package.as_ref())
+            .or_insert(Item::Value(Value::InlineTable(InlineTable::default())))
+            .as_table_like_mut()
+            .ok_or(Error::MalformedSources)?;
+
+        let document =
+            toml_edit::ser::to_document(config_settings).map_err(Error::SerializeConfigSettings)?;
+        for (key, value) in document.iter() {
+            settings.insert(key, value.clone());
+        }
+
+        Ok(())
     }
 
     /// Add an [`Index`] to `tool.uv.index`.
