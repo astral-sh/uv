@@ -4170,15 +4170,16 @@ impl Forks {
                 // "excluded" variant).
                 let non_excluded: Vec<_> = set
                     .iter()
-                    .filter(|item| fork.env.included_by_group(item.as_ref()))
+                    .filter(|item| fork.env.may_include_group(item.as_ref()))
                     .collect();
                 if non_excluded.len() < 2 {
                     // Check if any non-excluded item still has a live conflict in another set —
                     // i.e., another set where this item AND at least one other non-excluded item
                     // both appear. If so, we still need to fork to create the "excluded" variant
-                    // for that item.
-                    let dominated = non_excluded.iter().all(|item| {
-                        !conflicts.iter().any(|other_set| {
+                    // for that item. An extra implicitly excluded by its project also requires
+                    // its own fork so it can be explicitly included.
+                    let has_live_conflict = |item: &ConflictItem| {
+                        conflicts.iter().any(|other_set| {
                             !std::ptr::eq(set, other_set)
                                 && other_set.contains(item.package(), item.kind().as_ref())
                                 && other_set
@@ -4188,9 +4189,34 @@ impl Forks {
                                             || other_item.kind() != item.kind()
                                     })
                                     .any(|other_item| {
-                                        fork.env.included_by_group(other_item.as_ref())
+                                        fork.env.may_include_group(other_item.as_ref())
                                     })
                         })
+                    };
+                    if let [item] = non_excluded.as_slice()
+                        && !fork.env.included_by_group(item.as_ref())
+                        && !has_live_conflict(item)
+                    {
+                        // A project exclusion is overridden only by an explicit extra
+                        // inclusion. Without another live conflict, include that extra in this
+                        // fork directly instead of producing exponentially many subsets.
+                        let selected_extra = fork.conflicts.iter().any(|candidate| {
+                            candidate.package() == item.package()
+                                && matches!(candidate.kind().as_ref(), ConflictKindRef::Extra(_))
+                                && fork.env.included_by_group(candidate.as_ref())
+                        });
+                        if !selected_extra
+                            && let Some(excluded) = fork.clone().filter([Err((**item).clone())])
+                        {
+                            new.push(excluded);
+                        }
+                        if let Some(included) = fork.filter([Ok((**item).clone())]) {
+                            new.push(included);
+                        }
+                        continue;
+                    }
+                    let dominated = non_excluded.iter().all(|item| {
+                        fork.env.included_by_group(item.as_ref()) && !has_live_conflict(item)
                     });
                     if dominated {
                         // When dependencies are added to forks, we check `included_by_marker` but
@@ -4199,7 +4225,7 @@ impl Forks {
                         // the fork to clean up dependencies gated on already-excluded extras.
                         let rules: Vec<_> = set
                             .iter()
-                            .filter(|item| !fork.env.included_by_group(item.as_ref()))
+                            .filter(|item| !fork.env.may_include_group(item.as_ref()))
                             .cloned()
                             .map(Err)
                             .collect();
@@ -4235,6 +4261,11 @@ impl Forks {
                 }
             }
             forks = new;
+        }
+        // Project exclusions temporarily leave their extras available so later conflict sets
+        // can explicitly include them. Apply inherited exclusions once all forks are settled.
+        for fork in &mut forks {
+            fork.prune_excluded_dependencies(false);
         }
         Self {
             forks,
@@ -4337,11 +4368,23 @@ impl Fork {
         rules: impl IntoIterator<Item = Result<ConflictItem, ConflictItem>>,
     ) -> Option<Self> {
         self.env = self.env.filter_by_group(rules)?;
+        self.prune_excluded_dependencies(true);
+        Some(self)
+    }
+
+    /// Remove unavailable dependencies, optionally retaining extras a later fork can select.
+    fn prune_excluded_dependencies(&mut self, preserve_selectable_extras: bool) {
         self.dependencies.retain(|dep| {
             let Some(conflicting_item) = dep.conflicting_item() else {
                 return true;
             };
             if self.env.included_by_group(conflicting_item) {
+                return true;
+            }
+            if preserve_selectable_extras
+                && matches!(conflicting_item.kind(), ConflictKindRef::Extra(_))
+                && self.env.may_include_group(conflicting_item)
+            {
                 return true;
             }
             match conflicting_item.kind() {
@@ -4358,7 +4401,6 @@ impl Fork {
             self.conflicts.remove(&conflicting_item);
             false
         });
-        Some(self)
     }
 
     /// Compare forks, preferring forks with g `requires-python` requirements.
