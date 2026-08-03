@@ -4163,8 +4163,8 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
         show_settings(),
         @"
     ...
-             malware_check_url: None,
          },
+         run_ulimit: None,
      }
     +
     +----- stderr -----
