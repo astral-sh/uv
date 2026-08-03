@@ -95,9 +95,6 @@ impl Report {
     /// Combine tool findings into one SARIF document, retaining a run for each tool.
     pub(crate) fn from_audits(audits: &[(PackageName, AuditResults)]) -> Self {
         let mut report = Self::from_findings(&[], &[], "");
-        if audits.is_empty() {
-            return report;
-        }
         report.runs.clear();
 
         for (name, results) in audits {

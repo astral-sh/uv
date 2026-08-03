@@ -13,7 +13,7 @@ use uv_fs::Simplified;
 use uv_normalize::{DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::Lock;
+use uv_resolver::{Lock, LockParseError};
 use uv_settings::{Combine, ResolverInstallerOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
@@ -154,9 +154,27 @@ pub(crate) async fn audit(
                 continue;
             }
         };
-        let lock: Lock = match toml::from_str(&contents) {
+        let lock = match Lock::from_toml(&contents) {
             Ok(lock) => lock,
-            Err(error) => {
+            Err(
+                LockParseError::UnsupportedVersion { supported, version }
+                | LockParseError::UnparsableVersion {
+                    supported, version, ..
+                },
+            ) => {
+                if explicit_tool {
+                    bail!(
+                        "The lockfile for tool `{name}` at `{}` uses an unsupported schema version (v{version}, but only v{supported} is supported)",
+                        lock_path.user_display()
+                    );
+                }
+                warn_user!(
+                    "Skipping tool `{name}` because its lockfile at `{}` uses an unsupported schema version (v{version}, but only v{supported} is supported)",
+                    lock_path.user_display()
+                );
+                continue;
+            }
+            Err(LockParseError::Toml(error)) => {
                 if explicit_tool {
                     bail!(
                         "Failed to parse the lockfile for tool `{name}` at `{}`: {error}",

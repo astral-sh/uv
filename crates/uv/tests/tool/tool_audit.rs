@@ -227,6 +227,64 @@ fn tool_audit_invalid_lockfile() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn tool_audit_unsupported_lockfile_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    install_tool(&context, "simple-launcher", true);
+
+    let lock_path = tool_dir.join("simple-launcher").join("uv.lock");
+    let contents = fs_err::read_to_string(&lock_path)?;
+    fs_err::write(
+        &lock_path,
+        contents.replacen("version = 1\n", "version = 2\n", 1),
+    )?;
+
+    uv_snapshot!(context.filters(), context.tool_audit()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Skipping tool `simple-launcher` because its lockfile at `tools/simple-launcher/uv.lock` uses an unsupported schema version (v2, but only v1 is supported)
+    No auditable tools installed
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("simple-launcher")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The lockfile for tool `simple-launcher` at `tools/simple-launcher/uv.lock` uses an unsupported schema version (v2, but only v1 is supported)
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_audit_unparsable_unsupported_lockfile_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    install_tool(&context, "simple-launcher", true);
+
+    let lock_path = tool_dir.join("simple-launcher").join("uv.lock");
+    let contents = fs_err::read_to_string(&lock_path)?
+        .replacen("version = 1\n", "version = 2\n", 1)
+        .replacen("version = \"0.1.0\"\n", "version = false\n", 1);
+    fs_err::write(&lock_path, contents)?;
+
+    uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("simple-launcher")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The lockfile for tool `simple-launcher` at `tools/simple-launcher/uv.lock` uses an unsupported schema version (v2, but only v1 is supported)
+    ");
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn tool_audit_one_tool() {
     let context = uv_test::test_context!("3.12");
@@ -605,6 +663,45 @@ async fn tool_audit_sarif() {
       ],
       "version": "2.1.0"
     }
+    "#);
+}
+
+#[test]
+fn tool_audit_sarif_no_auditable_tools() {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+
+    uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--output-format")
+        .arg("sarif")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
+      "runs": [],
+      "version": "2.1.0"
+    }
+    "#);
+
+    install_tool(&context, "simple-launcher", false);
+
+    uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--output-format")
+        .arg("sarif")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
+      "runs": [],
+      "version": "2.1.0"
+    }
+
+    ----- stderr -----
+    warning: Skipping tool `simple-launcher` because it does not have a lockfile; reinstall it with `--preview-features tool-install-locks` to audit it
     "#);
 }
 
