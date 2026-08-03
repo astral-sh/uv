@@ -224,7 +224,7 @@ impl std::ops::AddAssign for Removal {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos", target_os = "ios")))]
 mod tests {
     use super::Removal;
 

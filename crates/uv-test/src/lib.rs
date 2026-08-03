@@ -708,15 +708,6 @@ impl TestContext {
         self.with_cache_on_fs(&dir, "COW_FS").map(Some)
     }
 
-    /// Use a cache directory on the ReFS filesystem configured for Windows accounting tests.
-    #[cfg(windows)]
-    pub fn with_cache_on_refs_fs(self) -> anyhow::Result<Option<Self>> {
-        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_REFS_FS).ok() else {
-            return Ok(None);
-        };
-        self.with_cache_on_fs(&dir, "REFS_FS").map(Some)
-    }
-
     /// Use a cache directory on the filesystem specified by
     /// [`EnvVars::UV_INTERNAL__TEST_ALT_FS`].
     ///
@@ -761,15 +752,6 @@ impl TestContext {
             return Ok(None);
         };
         self.with_working_dir_on_fs(&dir, "COW_FS").map(Some)
-    }
-
-    /// Use a working directory on the ReFS filesystem configured for Windows accounting tests.
-    #[cfg(windows)]
-    pub fn with_working_dir_on_refs_fs(self) -> anyhow::Result<Option<Self>> {
-        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_REFS_FS).ok() else {
-            return Ok(None);
-        };
-        self.with_working_dir_on_fs(&dir, "REFS_FS").map(Some)
     }
 
     /// Use a working directory on the filesystem specified by

@@ -8,40 +8,13 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
-#[cfg(windows)]
-use std::os::windows::io::AsRawHandle;
-
-#[cfg(windows)]
-use windows::Win32::Foundation::{ERROR_HANDLE_EOF, ERROR_MORE_DATA, HANDLE};
-#[cfg(windows)]
-use windows::Win32::Storage::FileSystem::{
-    FILE_STANDARD_INFO, FileStandardInfo, GetFileInformationByHandleEx,
-    GetVolumeInformationByHandleW,
-};
-#[cfg(windows)]
-use windows::Win32::System::IO::DeviceIoControl;
-#[cfg(windows)]
-use windows::Win32::System::Ioctl::{
-    FSCTL_GET_INTEGRITY_INFORMATION, FSCTL_GET_INTEGRITY_INFORMATION_BUFFER,
-    FSCTL_GET_RETRIEVAL_POINTERS_AND_REFCOUNT, RETRIEVAL_POINTERS_AND_REFCOUNT_BUFFER_0,
-    STARTING_VCN_INPUT_BUFFER,
-};
-#[cfg(windows)]
-use windows::core::HRESULT;
-
-/// Return whether the filesystem can identify storage reclaimed by individual files.
-pub fn supports_reclaimable_space(path: &Path) -> io::Result<bool> {
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios", windows))]
-    {
-        let _ = path;
-        Ok(true)
-    }
-
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios", windows)))]
-    {
-        let _ = path;
-        Ok(false)
-    }
+/// Return whether the current platform can identify storage reclaimed by individual files.
+pub const fn supports_reclaimable_space() -> bool {
+    cfg!(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "ios"
+    ))
 }
 
 /// Return the allocated file data that would be reclaimed by deleting `path` immediately.
@@ -76,12 +49,7 @@ pub fn reclaimable_space(path: &Path, metadata: &std::fs::Metadata) -> io::Resul
         linux_reclaimable_space(path)
     }
 
-    #[cfg(windows)]
-    {
-        windows_reclaimable_space(path)
-    }
-
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios", windows)))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
     {
         let _ = path;
         Err(io::Error::new(
@@ -250,180 +218,5 @@ fn linux_reclaimable_space(path: &Path) -> io::Result<u64> {
             ));
         }
         start = next;
-    }
-}
-
-#[cfg(windows)]
-#[expect(unsafe_code)]
-fn windows_reclaimable_space(path: &Path) -> io::Result<u64> {
-    const FILE_SUPPORTS_BLOCK_REFCOUNTING: u32 = 0x0800_0000;
-
-    let file = fs_err::File::open(path)?;
-    let handle = HANDLE(file.as_raw_handle());
-    let mut information = FILE_STANDARD_INFO::default();
-
-    // SAFETY: `file` remains open during the call, and `information` is a valid, writable
-    // `FILE_STANDARD_INFO` buffer whose exact size is passed to Windows.
-    unsafe {
-        GetFileInformationByHandleEx(
-            handle,
-            FileStandardInfo,
-            (&raw mut information).cast(),
-            u32::try_from(std::mem::size_of::<FILE_STANDARD_INFO>()).map_err(io::Error::other)?,
-        )?;
-    }
-
-    if information.NumberOfLinks > 1 {
-        return Ok(0);
-    }
-
-    let allocated = u64::try_from(information.AllocationSize).map_err(io::Error::other)?;
-    if allocated == 0 {
-        return Ok(0);
-    }
-
-    let mut filesystem_flags = 0;
-
-    // SAFETY: `file` remains open during the call, and `filesystem_flags` points to a valid,
-    // writable output value. All other optional output values are omitted.
-    unsafe {
-        GetVolumeInformationByHandleW(
-            handle,
-            None,
-            None,
-            None,
-            Some(&raw mut filesystem_flags),
-            None,
-        )?;
-    }
-
-    if filesystem_flags & FILE_SUPPORTS_BLOCK_REFCOUNTING == 0 {
-        return Ok(allocated);
-    }
-
-    refs_reclaimable_space(handle)
-}
-
-/// Sum the exclusively owned allocated extents of a file on ReFS.
-#[cfg(windows)]
-#[expect(unsafe_code)]
-fn refs_reclaimable_space(handle: HANDLE) -> io::Result<u64> {
-    const MAX_EXTENTS: usize = 32;
-
-    #[derive(Default)]
-    #[repr(C)]
-    struct RefcountBuffer {
-        extent_count: u32,
-        starting_vcn: i64,
-        extents: [RETRIEVAL_POINTERS_AND_REFCOUNT_BUFFER_0; MAX_EXTENTS],
-    }
-
-    let mut integrity = FSCTL_GET_INTEGRITY_INFORMATION_BUFFER::default();
-    let mut bytes_returned = 0;
-
-    // SAFETY: `handle` is valid for the duration of the call, and `integrity` is a writable
-    // `FSCTL_GET_INTEGRITY_INFORMATION_BUFFER` whose exact size is passed to Windows.
-    unsafe {
-        DeviceIoControl(
-            handle,
-            FSCTL_GET_INTEGRITY_INFORMATION,
-            None,
-            0,
-            Some((&raw mut integrity).cast()),
-            u32::try_from(std::mem::size_of::<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER>())
-                .map_err(io::Error::other)?,
-            Some(&raw mut bytes_returned),
-            None,
-        )?;
-    }
-
-    let cluster_size = u64::from(integrity.ClusterSizeInBytes);
-    if cluster_size == 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "ReFS returned a zero-byte cluster size",
-        ));
-    }
-
-    let mut reclaimable = 0_u64;
-    let mut starting_vcn = 0_i64;
-
-    loop {
-        let request = STARTING_VCN_INPUT_BUFFER {
-            StartingVcn: starting_vcn,
-        };
-        let mut response = RefcountBuffer::default();
-        bytes_returned = 0;
-
-        // SAFETY: `handle` remains valid, `request` is an initialized input buffer, and `response`
-        // has the documented header followed by initialized storage for all requested extents.
-        let result = unsafe {
-            DeviceIoControl(
-                handle,
-                FSCTL_GET_RETRIEVAL_POINTERS_AND_REFCOUNT,
-                Some((&raw const request).cast()),
-                u32::try_from(std::mem::size_of::<STARTING_VCN_INPUT_BUFFER>())
-                    .map_err(io::Error::other)?,
-                Some((&raw mut response).cast()),
-                u32::try_from(std::mem::size_of::<RefcountBuffer>()).map_err(io::Error::other)?,
-                Some(&raw mut bytes_returned),
-                None,
-            )
-        };
-
-        let has_more = match result {
-            Ok(()) => false,
-            Err(error) if error.code() == HRESULT::from(ERROR_MORE_DATA) => true,
-            Err(error) if error.code() == HRESULT::from(ERROR_HANDLE_EOF) => {
-                return Ok(reclaimable);
-            }
-            Err(error) => return Err(error.into()),
-        };
-
-        let extent_count = usize::try_from(response.extent_count).map_err(io::Error::other)?;
-        if extent_count > response.extents.len()
-            || usize::try_from(bytes_returned).map_err(io::Error::other)?
-                < std::mem::offset_of!(RefcountBuffer, extents)
-                    + extent_count * std::mem::size_of::<RETRIEVAL_POINTERS_AND_REFCOUNT_BUFFER_0>()
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "ReFS returned an invalid extent list",
-            ));
-        }
-
-        let mut current_vcn = response.starting_vcn;
-        for extent in &response.extents[..extent_count] {
-            let clusters = extent.NextVcn.checked_sub(current_vcn).ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "ReFS returned unordered extents",
-                )
-            })?;
-            if clusters <= 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "ReFS returned a non-advancing extent",
-                ));
-            }
-
-            if extent.Lcn >= 0 && extent.ReferenceCount == 1 {
-                let clusters = u64::try_from(clusters).map_err(io::Error::other)?;
-                reclaimable = reclaimable.saturating_add(clusters.saturating_mul(cluster_size));
-            }
-
-            current_vcn = extent.NextVcn;
-        }
-
-        if !has_more {
-            return Ok(reclaimable);
-        }
-        if current_vcn <= starting_vcn {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "ReFS returned a non-advancing extent list",
-            ));
-        }
-        starting_vcn = current_vcn;
     }
 }

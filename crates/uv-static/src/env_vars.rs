@@ -685,11 +685,6 @@ impl EnvVars {
     #[attr_added_in("0.10.5")]
     pub const UV_INTERNAL__TEST_COW_FS: &'static str = "UV_INTERNAL__TEST_COW_FS";
 
-    /// Path to a directory on a ReFS filesystem for Windows copy-on-write accounting tests.
-    #[attr_hidden]
-    #[attr_added_in("0.12.1")]
-    pub const UV_INTERNAL__TEST_REFS_FS: &'static str = "UV_INTERNAL__TEST_REFS_FS";
-
     /// Path to a directory on a filesystem that does **not** support copy-on-write.
     ///
     /// When populated, uv will run additional tests that verify fallback behavior

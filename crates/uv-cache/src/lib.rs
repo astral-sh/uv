@@ -211,8 +211,7 @@ impl Cache {
     /// Enable per-file reclaimed-space accounting when the filesystem can support it.
     #[must_use]
     pub fn with_reclaimed_space(self, enabled: bool) -> Self {
-        let measure_reclaimed_space =
-            enabled && uv_fs::supports_reclaimable_space(&self.root).unwrap_or(false);
+        let measure_reclaimed_space = enabled && uv_fs::supports_reclaimable_space();
         Self {
             measure_reclaimed_space,
             ..self

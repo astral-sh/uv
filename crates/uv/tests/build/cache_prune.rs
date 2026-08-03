@@ -41,22 +41,12 @@ fn prune_no_op() -> Result<()> {
 }
 
 /// `cache prune` should report reclaimed space for hardlinks only when the preview is enabled.
+#[cfg(unix)]
 #[test]
 fn prune_hardlinked_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    #[cfg(windows)]
-    let context = if std::env::var_os(EnvVars::UV_INTERNAL__TEST_LOWLINKS_FS).is_some() {
-        let Some(context) = context.with_cache_on_lowlinks_fs()? else {
-            return Ok(());
-        };
-        let cache_dir = context.cache_dir.path().to_path_buf();
-        context.with_filtered_path(&cache_dir, "CACHE_DIR")
-    } else {
-        context
-    };
-
-    // Keep both hardlinks on the selected filesystem, including Windows CI's NTFS test volume.
+    // Keep both hardlinks on the selected filesystem.
     let retained = context.cache_dir.path().with_file_name("retained.bin");
     fs_err::write(&retained, vec![42; 1024 * 1024])?;
     fs_err::OpenOptions::new()

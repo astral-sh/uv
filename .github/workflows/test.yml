@@ -291,33 +291,6 @@ jobs:
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
 
-      - name: "Create ReFS test directory (copy-on-write)"
-        run: |
-          $devVolume = Get-Volume -DriveLetter $env:DEV_DRIVE.TrimEnd(':')
-          if ($devVolume.FileSystem -eq "ReFS") {
-            $refsDrive = $env:DEV_DRIVE
-          } else {
-            $vhdPath = Join-Path $env:RUNNER_TEMP "uv-refs-test.vhdx"
-            @"
-          create vdisk file="$vhdPath" maximum=1024 type=expandable
-          attach vdisk
-          create partition primary
-          assign letter=R
-          "@ | diskpart
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to create the ReFS test volume"
-            }
-            format R: /fs:ReFS /q /y
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to format the ReFS test volume"
-            }
-            $refsDrive = "R:"
-          }
-
-          $refsDirectory = "$refsDrive\uv-cow"
-          New-Item -Path $refsDirectory -ItemType Directory -Force
-          "UV_INTERNAL__TEST_REFS_FS=$refsDirectory" >> $env:GITHUB_ENV
-
       - name: "Create SMB test share (alternative filesystem)"
         run: |
           New-Item -Path "C:\uv-smb" -ItemType Directory -Force
