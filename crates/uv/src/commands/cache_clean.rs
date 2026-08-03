@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_cache::{Cache, Removal};
+use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
@@ -45,10 +45,12 @@ pub(crate) async fn cache_clean(
         }
     };
 
+    let measure_reclaimed_space = preview.is_enabled(PreviewFeature::CacheReclaimedSpace);
+    let cache = cache.with_reclaimed_space(measure_reclaimed_space);
+
     // The cache root itself is removed when cleaning the entire cache, so measure its parent.
     let filesystem_path = cache.root().parent().unwrap_or(cache.root()).to_path_buf();
-    let available_before = preview
-        .is_enabled(PreviewFeature::CacheReclaimedSpace)
+    let available_before = measure_reclaimed_space
         .then(|| uv_fs::available_space(&filesystem_path).ok())
         .flatten();
 
@@ -68,7 +70,7 @@ pub(crate) async fn cache_clean(
             .with_context(|| format!("Failed to clear cache at: {}", root.user_display()))?
     } else {
         let reporter = CleaningPackageReporter::new(printer, Some(packages.len()));
-        let mut summary = Removal::default();
+        let mut summary = cache.removal();
 
         for package in packages {
             let removed = cache.remove(package)?;
@@ -80,10 +82,12 @@ pub(crate) async fn cache_clean(
         summary
     };
 
-    let reclaimed_bytes = available_before.and_then(|before| {
-        uv_fs::available_space(&filesystem_path)
-            .ok()
-            .map(|after| after.saturating_sub(before))
+    let reclaimed_bytes = summary.reclaimed_bytes.or_else(|| {
+        available_before.and_then(|before| {
+            uv_fs::available_space(&filesystem_path)
+                .ok()
+                .map(|after| after.saturating_sub(before))
+        })
     });
 
     // Write a summary of the number of files and directories removed.

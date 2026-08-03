@@ -44,8 +44,22 @@ fn prune_no_op() -> Result<()> {
 #[test]
 fn prune_hardlinked_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let retained = context.temp_dir.child("retained.bin");
-    retained.write_binary(&vec![42; 1024 * 1024])?;
+
+    #[cfg(windows)]
+    let context = if std::env::var_os(EnvVars::UV_INTERNAL__TEST_LOWLINKS_FS).is_some() {
+        let Some(context) = context.with_cache_on_lowlinks_fs()? else {
+            return Ok(());
+        };
+        let cache_dir = context.cache_dir.path().to_path_buf();
+        context.with_filtered_path(&cache_dir, "CACHE_DIR")
+    } else {
+        context
+    };
+
+    // Keep both hardlinks on the selected filesystem, including Windows CI's NTFS test volume.
+    let retained = context.cache_dir.path().with_file_name("retained.bin");
+    fs_err::write(&retained, vec![42; 1024 * 1024])?;
+    fs_err::File::open(&retained)?.sync_all()?;
 
     let stale = context.cache_dir.child("stale-v0");
     stale.create_dir_all()?;
@@ -67,11 +81,11 @@ fn prune_hardlinked_file() -> Result<()> {
     stale.create_dir_all()?;
     fs_err::hard_link(&retained, stale.child("hardlinked.bin"))?;
 
-    uv_snapshot!(context.filters(), context.prune().arg("--preview-features").arg("cache-reclaimed-space"), @"
+    uv_snapshot!(&filters, context.prune().arg("--preview-features").arg("cache-reclaimed-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    Removed 1 file ([SIZE])
+    Removed 1 file (0B)
     ");
 
     assert!(retained.is_file());

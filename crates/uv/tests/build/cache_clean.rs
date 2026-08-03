@@ -39,8 +39,23 @@ fn clean_all() -> Result<()> {
 #[test]
 fn clean_all_hardlinked_file() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
-    let retained = context.temp_dir.child("retained.bin");
-    retained.write_binary(&vec![42; 1024 * 1024])?;
+
+    #[cfg(windows)]
+    let context = if std::env::var_os(EnvVars::UV_INTERNAL__TEST_LOWLINKS_FS).is_some() {
+        let Some(context) = context.with_cache_on_lowlinks_fs()? else {
+            return Ok(());
+        };
+        let cache_dir = context.cache_dir.path().to_path_buf();
+        context.with_filtered_path(&cache_dir, "CACHE_DIR")
+    } else {
+        context
+    };
+
+    // Keep the retained hardlink beside the cache so both entries share a filesystem, even when
+    // Windows CI explicitly places the cache on its NTFS test volume.
+    let retained = context.cache_dir.path().with_file_name("retained.bin");
+    fs_err::write(&retained, vec![42; 1024 * 1024])?;
+    fs_err::File::open(&retained)?.sync_all()?;
 
     let cached = context.cache_dir.child("hardlinked.bin");
     fs_err::hard_link(&retained, &cached)?;
@@ -61,15 +76,27 @@ fn clean_all_hardlinked_file() -> Result<()> {
     context.cache_dir.create_dir_all()?;
     fs_err::hard_link(&retained, &cached)?;
 
-    uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-reclaimed-space"), @"
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-reclaimed-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE])
+    Removed [N] files (0B)
     ");
 
     assert!(retained.is_file());
     assert_eq!(fs_err::metadata(retained)?.len(), 1024 * 1024);
+
+    context.cache_dir.create_dir_all()?;
+    cached.write_binary(&vec![42; 1024 * 1024])?;
+    fs_err::File::open(cached.path())?.sync_all()?;
+    fs_err::hard_link(&cached, context.cache_dir.child("second-hardlink.bin"))?;
+
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-reclaimed-space"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files (1.0MiB)
+    ");
 
     Ok(())
 }
@@ -77,28 +104,97 @@ fn clean_all_hardlinked_file() -> Result<()> {
 /// `cache clean` should report reclaimed space for copy-on-write clones in preview mode.
 #[test]
 fn clean_all_cloned_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let context = copy_on_write_test_context()?;
     let retained = context.temp_dir.child("retained");
     retained.create_dir_all()?;
     let original = retained.child("original.bin");
     original.write_binary(&vec![42; 1024 * 1024])?;
 
+    // Remove unrelated cache entries so the cloned file is the only allocated data being cleaned.
+    context.clean().assert().success();
+    context.cache_dir.create_dir_all()?;
+
     let cached = context.cache_dir.child("cloned");
-    if link_dir(&retained, &cached, &LinkOptions::new(LinkMode::Clone))? != LinkMode::Clone {
+    let link_mode = link_dir(&retained, &cached, &LinkOptions::new(LinkMode::Clone))?;
+    if link_mode != LinkMode::Clone {
+        assert!(
+            std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none(),
+            "the configured copy-on-write filesystem did not clone the cached file"
+        );
         return Ok(());
     }
 
-    uv_snapshot!(context.filters(), context.clean().arg("--preview"), @"
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
+        .collect();
+
+    uv_snapshot!(&filters, context.clean().arg("--preview"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE])
+    Removed [N] files (0B)
     ");
 
     assert!(original.is_file());
     assert_eq!(fs_err::metadata(original)?.len(), 1024 * 1024);
 
     Ok(())
+}
+
+/// Clones shared only within the cache should be counted once when their final reference is removed.
+#[test]
+fn clean_all_cached_clones() -> Result<()> {
+    let context = copy_on_write_test_context()?;
+    let original = context.cache_dir.child("original");
+    original.create_dir_all()?;
+    original
+        .child("original.bin")
+        .write_binary(&vec![42; 1024 * 1024])?;
+
+    let cloned = context.cache_dir.child("cloned");
+    let link_mode = link_dir(&original, &cloned, &LinkOptions::new(LinkMode::Clone))?;
+    if link_mode != LinkMode::Clone {
+        assert!(
+            std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none(),
+            "the configured copy-on-write filesystem did not clone the cached file"
+        );
+        return Ok(());
+    }
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
+        .collect();
+
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-reclaimed-space"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files (1.0MiB)
+    ");
+
+    Ok(())
+}
+
+/// Put the cache and retained files on CI's Btrfs or APFS volume, when one is configured.
+fn copy_on_write_test_context() -> Result<uv_test::TestContext> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    if std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none() {
+        return Ok(context);
+    }
+
+    let Some(context) = context.with_cache_on_cow_fs()? else {
+        anyhow::bail!("the configured copy-on-write cache filesystem was unavailable");
+    };
+    let Some(context) = context.with_working_dir_on_cow_fs()? else {
+        anyhow::bail!("the configured copy-on-write working filesystem was unavailable");
+    };
+
+    let cache_dir = context.cache_dir.path().to_path_buf();
+    Ok(context.with_filtered_path(&cache_dir, "CACHE_DIR"))
 }
 
 /// `cache clear` should behave as an alias of `cache clean`.

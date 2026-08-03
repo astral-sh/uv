@@ -6614,6 +6614,7 @@ dependencies = [
  "encoding_rs_io",
  "fs-err",
  "junction",
+ "libc",
  "path-slash",
  "percent-encoding",
  "reflink-copy",

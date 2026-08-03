@@ -17,6 +17,7 @@ pub fn rm_rf(path: impl AsRef<Path>) -> io::Result<Removal> {
 #[derive(Default)]
 pub(crate) struct Remover {
     reporter: Option<Box<dyn CleanReporter>>,
+    measure_reclaimed_space: bool,
 }
 
 impl Remover {
@@ -24,7 +25,14 @@ impl Remover {
     pub(crate) fn new(reporter: Box<dyn CleanReporter>) -> Self {
         Self {
             reporter: Some(reporter),
+            measure_reclaimed_space: false,
         }
+    }
+
+    /// Enable accounting for exclusively owned storage before each file is removed.
+    pub(crate) fn with_reclaimed_space(mut self, enabled: bool) -> Self {
+        self.measure_reclaimed_space = enabled;
+        self
     }
 
     /// Remove a file or directory and all its contents, returning a [`Removal`] with
@@ -34,7 +42,7 @@ impl Remover {
         path: impl AsRef<Path>,
         skip_locked_file: bool,
     ) -> io::Result<Removal> {
-        let mut removal = Removal::default();
+        let mut removal = Removal::new(self.measure_reclaimed_space);
         removal.rm_rf(path.as_ref(), self.reporter.as_deref(), skip_locked_file)?;
         Ok(removal)
     }
@@ -52,9 +60,30 @@ pub struct Removal {
     /// Note: this will both over-count bytes removed for hard-linked files, and under-count
     /// bytes in general since it's a measure of the exact byte size (as opposed to the block size).
     pub total_bytes: u64,
+    /// The exclusively owned allocated file data reclaimed by the removal, when available.
+    pub reclaimed_bytes: Option<u64>,
 }
 
 impl Removal {
+    /// Create an empty removal summary with optional per-file reclaimed-space accounting.
+    pub fn new(measure_reclaimed_space: bool) -> Self {
+        Self {
+            reclaimed_bytes: measure_reclaimed_space.then_some(0),
+            ..Self::default()
+        }
+    }
+
+    /// Account for a file while its current sharing state can still be inspected.
+    fn add_file(&mut self, path: &Path, metadata: &std::fs::Metadata) {
+        self.total_bytes += metadata.len();
+
+        if let Some(reclaimed_bytes) = self.reclaimed_bytes {
+            self.reclaimed_bytes = uv_fs::reclaimable_space(path, metadata)
+                .ok()
+                .map(|reclaimable| reclaimed_bytes.saturating_add(reclaimable));
+        }
+    }
+
     /// Recursively remove a file or directory and all its contents.
     fn rm_rf(
         &mut self,
@@ -74,7 +103,7 @@ impl Removal {
             self.num_files += 1;
 
             // Remove the file.
-            self.total_bytes += metadata.len();
+            self.add_file(&path, &metadata);
             if metadata.is_symlink() {
                 cfg_select! {
                     windows => {
@@ -158,8 +187,10 @@ impl Removal {
                 self.num_files += 1;
 
                 // Remove the file.
-                if let Ok(meta) = entry.metadata() {
-                    self.total_bytes += meta.len();
+                if let Ok(metadata) = entry.metadata() {
+                    self.add_file(entry.path(), &metadata);
+                } else {
+                    self.reclaimed_bytes = None;
                 }
                 remove_file(entry.path())?;
             }
@@ -178,6 +209,10 @@ impl std::ops::AddAssign for Removal {
         self.num_files += other.num_files;
         self.num_dirs += other.num_dirs;
         self.total_bytes += other.total_bytes;
+        self.reclaimed_bytes = self
+            .reclaimed_bytes
+            .zip(other.reclaimed_bytes)
+            .map(|(left, right)| left.saturating_add(right));
     }
 }
 

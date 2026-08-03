@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_cache::{Cache, Removal};
+use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_preview::{Preview, PreviewFeature};
 
@@ -43,17 +43,19 @@ pub(crate) async fn cache_prune(
         }
     };
 
+    let measure_reclaimed_space = preview.is_enabled(PreviewFeature::CacheReclaimedSpace);
+    let cache = cache.with_reclaimed_space(measure_reclaimed_space);
+
     writeln!(
         printer.stderr(),
         "Pruning cache at: {}",
         cache.root().user_display().cyan()
     )?;
 
-    let available_before = preview
-        .is_enabled(PreviewFeature::CacheReclaimedSpace)
+    let available_before = measure_reclaimed_space
         .then(|| uv_fs::available_space(cache.root()).ok())
         .flatten();
-    let mut summary = Removal::default();
+    let mut summary = cache.removal();
 
     // Prune the source distribution cache, which is tightly coupled to the builder crate.
     summary += uv_distribution::prune(&cache)
@@ -64,10 +66,12 @@ pub(crate) async fn cache_prune(
         .prune(ci)
         .with_context(|| format!("Failed to prune cache at: {}", cache.root().user_display()))?;
 
-    let reclaimed_bytes = available_before.and_then(|before| {
-        uv_fs::available_space(cache.root())
-            .ok()
-            .map(|after| after.saturating_sub(before))
+    let reclaimed_bytes = summary.reclaimed_bytes.or_else(|| {
+        available_before.and_then(|before| {
+            uv_fs::available_space(cache.root())
+                .ok()
+                .map(|after| after.saturating_sub(before))
+        })
     });
 
     // Write a summary of the number of files and directories removed.
