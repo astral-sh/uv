@@ -1006,6 +1006,165 @@ fn requirements_txt_non_root() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for <https://github.com/astral-sh/uv/issues/20912>.
+/// Workspace-root groups are available to selected members, but defaults remain member-scoped.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_workspace_member_ignores_root_default_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [dependency-groups]
+            dev = ["iniconfig"]
+
+            [tool.uv.workspace]
+            members = ["child"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+        "#})?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    typing-extensions==4.10.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child")
+        .arg("--group").arg("dev"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    iniconfig==2.0.0
+    typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+/// Frozen exports honor member-defined groups before inherited workspace-root groups.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_frozen_workspace_member_group_precedence() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [dependency-groups]
+            dev = ["sniffio"]
+            root-only = ["idna"]
+
+            [tool.uv.workspace]
+            members = ["child"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+
+            [dependency-groups]
+            dev = ["iniconfig"]
+        "#})?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    iniconfig==2.0.0
+    typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child")
+        .arg("--group").arg("dev"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    iniconfig==2.0.0
+    typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child")
+        .arg("--group").arg("root-only"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    idna==3.6
+    iniconfig==2.0.0
+    typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn allrequirements_txt_() -> Result<()> {
