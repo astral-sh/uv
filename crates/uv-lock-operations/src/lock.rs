@@ -378,6 +378,18 @@ async fn do_lock(
         .collect::<BTreeMap<_, _>>();
     let source_trees = vec![];
 
+    // A workspace member's own `tool.uv.index` entries are otherwise only consulted when
+    // looking up a named index for a `tool.uv.sources` pin, or when extracting credentials;
+    // they're never treated as indexes to actually search during resolution, since the
+    // resolver only sees the indexes defined at the workspace root plus the CLI. Extend the
+    // resolved locations with every member's own indexes so `uv add --index` inside a member
+    // isn't a silent no-op.
+    let index_locations = index_locations
+        .clone()
+        .combine(target.indexes().cloned().collect(), Vec::new(), false)
+        .map_err(anyhow::Error::from)?;
+    let index_locations = &index_locations;
+
     // If necessary, lower the overrides and constraints.
     let requirements = target
         .lower(
