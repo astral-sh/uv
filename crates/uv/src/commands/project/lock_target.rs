@@ -354,34 +354,9 @@ impl<'lock> LockTarget<'lock> {
         let lock_path = self.lock_path();
         match fs_err::tokio::read_to_string(&lock_path).await {
             Ok(encoded) => {
-                let result = info_span!("parse uv lock", path = %lock_path.display())
-                    .in_scope(|| Lock::from_toml(&encoded));
-                match result {
-                    Ok(lock) => {
-                        // If the lockfile uses an unsupported version, raise an error.
-                        if lock.version() != VERSION {
-                            return Err(ProjectError::UnsupportedLockVersion(
-                                VERSION,
-                                lock.version(),
-                            ));
-                        }
-                        Ok(Some((lock, encoded)))
-                    }
-                    Err(err) => {
-                        // If we failed to parse the lockfile, determine whether it's a supported
-                        // version.
-                        if let Ok(lock) = toml::from_str::<LockVersion>(&encoded) {
-                            if lock.version() != VERSION {
-                                return Err(ProjectError::UnparsableLockVersion(
-                                    VERSION,
-                                    lock.version(),
-                                    err,
-                                ));
-                            }
-                        }
-                        Err(ProjectError::UvLockParse(err))
-                    }
-                }
+                let lock = info_span!("parse uv lock", path = %lock_path.display())
+                    .in_scope(|| parse_lock(&encoded))?;
+                Ok(Some((lock, encoded)))
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
@@ -500,6 +475,29 @@ impl<'lock> LockTarget<'lock> {
                 }
                 Ok(lowered)
             }
+        }
+    }
+}
+
+/// Parse a lockfile and reject unsupported schema versions.
+pub(crate) fn parse_lock(contents: &str) -> Result<Lock, ProjectError> {
+    match Lock::from_toml(contents) {
+        Ok(lock) if lock.version() == VERSION => Ok(lock),
+        Ok(lock) => Err(ProjectError::UnsupportedLockVersion(
+            VERSION,
+            lock.version(),
+        )),
+        Err(error) => {
+            if let Ok(lock) = toml::from_str::<LockVersion>(contents)
+                && lock.version() != VERSION
+            {
+                return Err(ProjectError::UnparsableLockVersion(
+                    VERSION,
+                    lock.version(),
+                    error,
+                ));
+            }
+            Err(ProjectError::UvLockParse(error))
         }
     }
 }
