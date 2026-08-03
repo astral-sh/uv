@@ -2,9 +2,6 @@
 name: "Pull request labels"
 
 on:
-  pull_request:
-    types: [opened, reopened]
-    branches: [main]
   workflow_dispatch:
     inputs:
       pull_request:
@@ -15,15 +12,12 @@ on:
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.pull_request || github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ inputs.pull_request }}
   cancel-in-progress: true
 
 jobs:
   labels:
-    if: >-
-      (github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev') &&
-      (github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
     runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 15
@@ -52,7 +46,7 @@ jobs:
             > .pull-request-labels.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PULL_REQUEST_NUMBER: ${{ inputs.pull_request || github.event.pull_request.number }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
 
       - name: "Determine pull request labels"
         id: labels
@@ -64,6 +58,7 @@ jobs:
           codex-home: "agents/codex"
           permission-profile: "pull-request-labels"
           safety-strategy: drop-sudo
+          allow-bot-users: "astral-automations-bot[bot]"
           prompt-file: "agents/prompts/pull-request-labels.md"
           output-schema-file: "agents/schemas/pull-request-labels.json"
 
@@ -113,4 +108,4 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           LABEL_RESULT: ${{ needs.labels.outputs.result }}
-          PULL_REQUEST_NUMBER: ${{ inputs.pull_request || github.event.pull_request.number }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
