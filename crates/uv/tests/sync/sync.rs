@@ -4666,6 +4666,10 @@ fn sync_group_non_project_member() -> Result<()> {
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/issues/20877>
+///
+/// <https://github.com/astral-sh/uv/pull/20840> began reactivating non-installable workspace
+/// members during transitive dependency traversal, causing `--only-group` to install an excluded
+/// project when a selected package depends on it.
 #[test]
 fn sync_group_transitive_self() -> Result<()> {
     let context = uv_test::test_context!("3.12");
