@@ -14730,7 +14730,8 @@ fn universal_required_environment() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
-      ╰─▶ Because all versions of a have no `platform_machine == 'arm64'`-compatible wheels and project depends on a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
+          And because project depends on a, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())

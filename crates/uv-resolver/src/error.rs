@@ -589,8 +589,10 @@ impl NoSolutionError {
     /// unavailable set, and positive terms back: a set containing all known versions of a package
     /// becomes the full range ("all versions of a"); otherwise, bounded ends are narrowed to
     /// inclusive bounds on the known versions they contain while unbounded ends are preserved,
-    /// except on an unavailable set, which never claims a version outside the listing. Dependency
-    /// requests (the depended-on side and negative terms) are shown as requested.
+    /// except on an unavailable set, which never claims a version outside the listing. Where a
+    /// package has one version, a set that rules it out is reported as that version rather than as
+    /// all of them. Dependency requests (the depended-on side and negative terms) are shown as
+    /// requested.
     pub(crate) fn narrow_widened_sets(
         derivation_tree: ErrorTree,
         known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
@@ -618,6 +620,12 @@ impl NoSolutionError {
                 let Some((versions, lowest, highest)) = listed(package) else {
                     return set;
                 };
+                // A rejection of the one version a package has reports that version.
+                if let [version] = versions
+                    && set.contains(version)
+                {
+                    return Range::singleton(version.clone());
+                }
                 let narrowed = narrow_to_known(&set, versions);
                 // A claim about every known version is reported as such, not as its bounds.
                 if narrowed == Range::full() {
@@ -632,6 +640,26 @@ impl NoSolutionError {
                     clamped
                 }
             };
+
+        // A conclusion about a package with one version reports that version where its causes do,
+        // so that the step does not reach past them.
+        let narrow_conclusion = |package: &PubGrubPackage,
+                                 set: Range<Version>,
+                                 cause1: &ErrorTree,
+                                 cause2: &ErrorTree|
+         -> Range<Version> {
+            let Some(([version], _, _)) = listed(package) else {
+                return narrow(package, set);
+            };
+            let single = Range::singleton(version.clone());
+            if set.contains(version)
+                && reported_versions(package, cause1).union(&reported_versions(package, cause2))
+                    == single
+            {
+                return single;
+            }
+            narrow(package, set)
+        };
 
         map_derivation_tree(
             derivation_tree,
@@ -663,7 +691,9 @@ impl NoSolutionError {
                     .into_iter()
                     .map(|(package, term)| {
                         let term = match term {
-                            Term::Positive(versions) => Term::Positive(narrow(&package, versions)),
+                            Term::Positive(versions) => Term::Positive(narrow_conclusion(
+                                &package, versions, &cause1, &cause2,
+                            )),
                             term @ Term::Negative(_) => term,
                         };
                         (package, term)
@@ -2031,6 +2061,57 @@ mod tests {
         assert_eq!(
             narrow_unavailable(&pubgrub_package("scipy"), widened.clone(), &known_versions),
             widened
+        );
+    }
+
+    /// A rejection of the one version a package has reports that version.
+    #[test]
+    fn narrows_widened_unavailable_version_of_one_version() {
+        let package = pubgrub_package("numpy");
+        let known_versions = known_versions("numpy", &["2.0"]);
+
+        assert_eq!(
+            narrow_unavailable(&package, Range::full(), &known_versions),
+            Range::singleton(version("2.0"))
+        );
+    }
+
+    /// A conclusion about a package with one version reports that version where its causes do.
+    #[test]
+    fn narrows_widened_conclusion_of_one_version() {
+        let package = pubgrub_package("numpy");
+        let known_versions = known_versions("numpy", &["2.0"]);
+        let concluded = |cause: ErrorTree| {
+            let tree = ErrorTree::Derived(Derived {
+                terms: pubgrub::Map::from_iter([(package.clone(), Term::Positive(Range::full()))]),
+                shared_id: None,
+                cause1: Arc::new(cause),
+                cause2: Arc::new(ErrorTree::External(External::NotRoot(
+                    PubGrubPackage::from(PubGrubPackageInner::Root(None)),
+                    version("1.0"),
+                ))),
+            });
+            let ErrorTree::Derived(narrowed) =
+                NoSolutionError::narrow_widened_sets(tree, &known_versions)
+            else {
+                panic!("expected a derived incompatibility");
+            };
+            narrowed.terms.get(&package).cloned()
+        };
+
+        // The cause reports the version, so the conclusion stops there too.
+        assert_eq!(
+            concluded(unavailable(&package, Range::full())),
+            Some(Term::Positive(Range::singleton(version("2.0"))))
+        );
+
+        // A cause that reports every version of the package leaves the conclusion as it is.
+        assert_eq!(
+            concluded(ErrorTree::External(External::NoVersions(
+                package.clone(),
+                Range::full(),
+            ))),
+            Some(Term::Positive(Range::full()))
         );
     }
 
