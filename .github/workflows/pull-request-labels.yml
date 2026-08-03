@@ -8,6 +8,10 @@ on:
         description: "A pull request number"
         required: true
         type: number
+      head_sha:
+        description: "The pull request head SHA at dispatch time"
+        required: false
+        type: string
 
 permissions: {}
 
@@ -33,7 +37,14 @@ jobs:
           ref: main
           persist-credentials: false
 
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.head_sha || format('refs/pull/{0}/head', inputs.pull_request) }}
+          path: pull-request
+          persist-credentials: false
+
       - name: "Collect pull request context"
+        working-directory: pull-request
         run: |
           gh pr view "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
@@ -55,12 +66,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-home: "agents/codex"
+          working-directory: "${{ github.workspace }}/pull-request"
+          codex-home: "${{ github.workspace }}/agents/codex"
           permission-profile: "pull-request-labels"
           safety-strategy: drop-sudo
           allow-bot-users: "astral-automations-bot[bot]"
-          prompt-file: "agents/prompts/pull-request-labels.md"
-          output-schema-file: "agents/schemas/pull-request-labels.json"
+          prompt-file: "${{ github.workspace }}/agents/prompts/pull-request-labels.md"
+          output-schema-file: "${{ github.workspace }}/agents/schemas/pull-request-labels.json"
 
   report:
     needs: labels
