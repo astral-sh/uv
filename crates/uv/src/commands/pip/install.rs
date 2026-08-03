@@ -156,6 +156,7 @@ pub(crate) async fn pip_install(
         find_links,
         no_binary,
         no_build,
+        config_settings_package: requirements_config_settings_package,
         extras: _,
     } = operations::read_requirements(
         requirements,
@@ -167,6 +168,11 @@ pub(crate) async fn pip_install(
         &client_builder,
     )
     .await?;
+
+    let config_settings_package = config_settings_package
+        .clone()
+        .merge(requirements_config_settings_package);
+    let config_settings_package = &config_settings_package;
 
     override_dependencies.extend(overrides_from_workspace);
 
