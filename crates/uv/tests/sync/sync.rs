@@ -9,6 +9,7 @@ use serde_json::json;
 use std::process::Command;
 use tempfile::tempdir_in;
 use url::Url;
+use walkdir::WalkDir;
 use wiremock::matchers::{basic_auth, body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -44,6 +45,92 @@ fn sync() -> Result<()> {
     ");
 
     assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Compile installed wheels without modifying their immutable source archives.
+#[tokio::test]
+async fn sync_compile_bytecode_per_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let server = MockServer::start().await;
+
+    let basic_wheel = fs_err::read(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+    )?;
+    let validation_wheel = fs_err::read(
+        context
+            .workspace_root
+            .join("test/links/validation-1.0.0-py3-none-any.whl"),
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(basic_wheel))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/files/validation-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(validation_wheel))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = [
+            "basic-package @ {server}/files/basic_package-0.1.0-py3-none-any.whl",
+            "validation @ {server}/files/validation-1.0.0-py3-none-any.whl",
+        ]
+        "#,
+            server = server.uri(),
+        })?;
+
+    context.lock().assert().success();
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--compile-bytecode")
+        .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "2")
+        .env(EnvVars::UV_CONCURRENT_INSTALLS, "2"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+    Bytecode compiled 3 files in [TIME]
+     + basic-package==0.1.0 (from http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl)
+     + validation==1.0.0 (from http://[LOCALHOST]/files/validation-1.0.0-py3-none-any.whl)
+    ");
+
+    assert!(
+        context
+            .site_packages()
+            .join("basic_package/__pycache__/__init__.cpython-313.pyc")
+            .exists()
+    );
+    assert!(
+        !WalkDir::new(context.cache_dir.join("archive-v0"))
+            .into_iter()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "pyc")),
+        "cached source wheel archives must not contain installed bytecode"
+    );
 
     Ok(())
 }
@@ -140,6 +227,64 @@ fn sync_reuses_pip_install_wheel_cache() -> Result<()> {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
+
+    Ok(())
+}
+
+/// Compile cached wheels during parallel installation without modifying their source archives.
+#[test]
+fn sync_compile_bytecode_for_cached_wheels() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+    context
+        .pip_install()
+        .arg("iniconfig==2.0.0")
+        .assert()
+        .success();
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--offline")
+        .arg("--compile-bytecode"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    assert!(
+        context
+            .site_packages()
+            .join("iniconfig/__pycache__/__init__.cpython-312.pyc")
+            .exists()
+    );
+    assert!(
+        !WalkDir::new(context.cache_dir.join("archive-v0"))
+            .into_iter()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "pyc")),
+        "cached source wheel archives must remain immutable"
+    );
 
     Ok(())
 }
