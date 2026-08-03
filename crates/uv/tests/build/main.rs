@@ -18,6 +18,9 @@ mod cache;
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod cache_clean;
 
+#[cfg(target_os = "macos")]
+mod cache_long_paths;
+
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod cache_prune;
 
