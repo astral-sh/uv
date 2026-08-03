@@ -130,19 +130,62 @@ jobs:
                   --limit 2 \
                   --json number,headRefName,headRefOid,headRepository
               )
+              if [ "$(jq 'length' <<< "$source_parent_pull_requests")" != "0" ]; then
+                if ! jq --exit-status \
+                  --arg base_ref "$BASE_REF" \
+                  --arg base_head "$base_head" \
+                  'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == "astral-sh/uv-dev"' \
+                  <<< "$source_parent_pull_requests" > /dev/null; then
+                  echo "The upstream base branch $BASE_REF does not have a matching open parent pull request; refusing to create its stack." >&2
+                  exit 1
+                fi
+
+                parent_number=$(jq --raw-output '.[0].number' <<< "$source_parent_pull_requests")
+                gh pr comment "$PULL_REQUEST_NUMBER" \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --body "Waiting for promotion of parent #$parent_number"
+                echo "queued=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+
+              merged_parent_pull_requests=$(
+                gh pr list \
+                  --repo astral-sh/uv \
+                  --state merged \
+                  --head "$BASE_REF" \
+                  --limit 2 \
+                  --json baseRefName,headRefName,headRefOid,headRepository
+              )
               if ! jq --exit-status \
                 --arg base_ref "$BASE_REF" \
                 --arg base_head "$base_head" \
-                'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == "astral-sh/uv-dev"' \
-                <<< "$source_parent_pull_requests" > /dev/null; then
-                echo "The upstream base branch $BASE_REF does not have a matching open parent pull request; refusing to create its stack." >&2
+                'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == "astral-sh/uv"' \
+                <<< "$merged_parent_pull_requests" > /dev/null; then
+                echo "The upstream base branch $BASE_REF does not have a matching open or merged parent pull request; refusing to create its stack." >&2
                 exit 1
               fi
 
-              parent_number=$(jq --raw-output '.[0].number' <<< "$source_parent_pull_requests")
-              gh pr comment "$PULL_REQUEST_NUMBER" \
-                --repo "$GITHUB_REPOSITORY" \
-                --body "Waiting for promotion of parent #$parent_number"
+              parent_base_ref=$(jq --raw-output '.[0].baseRefName' <<< "$merged_parent_pull_requests")
+              git check-ref-format "refs/heads/$parent_base_ref"
+              current_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
+              if ! jq --exit-status \
+                --arg base_ref "$BASE_REF" \
+                --arg base_head "$base_head" \
+                --arg head_ref "$HEAD_REF" \
+                --arg head_sha "$source_head" \
+                --argjson repository_id "$UV_DEV_REPOSITORY_ID" \
+                '.state == "open" and (.draft | not) and .base.ref == $base_ref and .base.sha == $base_head and .head.ref == $head_ref and .head.sha == $head_sha and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
+                <<< "$current_pull_request" > /dev/null; then
+                echo "The pull request changed before its merged parent could be retargeted; refusing to update it." >&2
+                exit 1
+              fi
+
+              gh api \
+                --method PATCH \
+                "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER" \
+                --raw-field base="$parent_base_ref" \
+                --silent
+              echo "Retargeted pull request #$PULL_REQUEST_NUMBER from its merged parent to $parent_base_ref." >> "$GITHUB_STEP_SUMMARY"
               echo "queued=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
