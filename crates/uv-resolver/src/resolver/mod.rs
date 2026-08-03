@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -1916,8 +1916,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         );
         if env.marker_environment().is_some() {
             result.map(|deps| match deps {
-                Dependencies::Available(deps) | Dependencies::Unforkable(deps) => {
-                    ForkedDependencies::Unforked(deps)
+                Dependencies::Available { dependencies, .. }
+                | Dependencies::Unforkable(dependencies) => {
+                    ForkedDependencies::Unforked(dependencies)
                 }
                 Dependencies::RequiresPython(requires_python) => {
                     ForkedDependencies::RequiresPython(requires_python)
@@ -1942,6 +1943,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
+        let mut cross_context_forks = BTreeSet::new();
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
                 let no_dev_deps = BTreeMap::default();
@@ -2088,6 +2090,89 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     Some(package),
                 )
                 .map(|mut dependencies| {
+                    // Production, optional, and group requirements are separate PubGrub
+                    // packages. Split now when another context can require an incompatible
+                    // version or source; otherwise, those requirements never become siblings.
+                    for dependency in &dependencies {
+                        if dependency.package.marker().is_true() {
+                            continue;
+                        }
+
+                        let Some(dependency_name) = dependency.package.name() else {
+                            continue;
+                        };
+
+                        let dependency_index = metadata
+                            .requires_dist
+                            .iter()
+                            .chain(
+                                metadata
+                                    .dependency_groups
+                                    .values()
+                                    .flat_map(|requirements| requirements.iter()),
+                            )
+                            .chain(self.constraints.get(dependency_name).into_iter().flatten())
+                            .filter(|requirement| requirement.name == *dependency_name)
+                            .filter(|requirement| {
+                                !dependency.package.marker().is_disjoint(requirement.marker)
+                            })
+                            .find_map(|requirement| match &requirement.source {
+                                RequirementSource::Registry { index, .. } => index.as_ref(),
+                                _ => None,
+                            });
+
+                        let has_conflicting_context = metadata
+                            .requires_dist
+                            .iter()
+                            .chain(
+                                metadata
+                                    .dependency_groups
+                                    .values()
+                                    .flat_map(|requirements| requirements.iter()),
+                            )
+                            .chain(self.constraints.get(dependency_name).into_iter().flatten())
+                            .filter(|requirement| requirement.name == *dependency_name)
+                            .any(|requirement| {
+                                // Equal environments are handled as siblings in the current fork.
+                                if requirement.marker.without_extras()
+                                    == dependency.package.marker()
+                                {
+                                    return false;
+                                }
+
+                                let incompatible_version = requirement
+                                    .source
+                                    .version_specifiers()
+                                    .is_some_and(|specifier| {
+                                        dependency
+                                            .version
+                                            .intersection(&Range::from(specifier.clone()))
+                                            == Range::empty()
+                                    });
+
+                                let incompatible_source = match (
+                                    dependency.source.verbatim_url(),
+                                    requirement.source.to_verbatim_parsed_url(),
+                                ) {
+                                    (Some(current), Some(candidate)) => current != &candidate,
+                                    (Some(_), None) | (None, Some(_)) => true,
+                                    (None, None) => false,
+                                };
+
+                                let incompatible_index = matches!(
+                                    &requirement.source,
+                                    RequirementSource::Registry { index, .. }
+                                        if dependency_index != index.as_ref()
+                                );
+
+                                incompatible_version || incompatible_source || incompatible_index
+                            });
+
+                        if has_conflicting_context {
+                            cross_context_forks.insert(dependency_name.clone());
+                        }
+                    }
+
                     dependencies.extend(system_dependencies);
                     dependencies
                 })
@@ -2172,7 +2257,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         };
         Ok(match dependencies {
-            Ok(dependencies) => Dependencies::Available(dependencies),
+            Ok(dependencies) => Dependencies::Available {
+                dependencies,
+                cross_context_forks,
+            },
             Err(requirement) => {
                 Dependencies::Unavailable(UnavailableVersion::UnsatisfiableDependency(requirement))
             }
@@ -3914,7 +4002,11 @@ enum Dependencies {
     /// Note that in universal mode, it is possible and allowed for multiple
     /// `PubGrubPackage` values in this list to have the same package name.
     /// These conflicts are resolved via `Dependencies::fork`.
-    Available(Vec<PubGrubDependency>),
+    Available {
+        dependencies: Vec<PubGrubDependency>,
+        /// Dependencies with incompatible versions, URLs, or indexes in another extra or group.
+        cross_context_forks: BTreeSet<PackageName>,
+    },
     /// Package metadata has a `Requires-Python` specifier that is incompatible with the target.
     RequiresPython(VersionSpecifiers),
     /// Dependencies that should never result in a fork.
@@ -3929,17 +4021,20 @@ impl Dependencies {
     /// Turn this flat list of dependencies into a potential set of forked
     /// groups of dependencies.
     ///
-    /// A fork *only* occurs when there are multiple dependencies with the same
-    /// name *and* those dependency specifications have corresponding marker
-    /// expressions that are completely disjoint with one another.
+    /// A fork occurs when sibling dependencies, or dependencies from different
+    /// extras or groups of the same distribution, require incompatible versions or sources
+    /// behind distinct marker expressions.
     fn fork(
         self,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         conflicts: &Conflicts,
     ) -> ForkedDependencies {
-        let deps = match self {
-            Self::Available(deps) => deps,
+        let (deps, cross_context_forks) = match self {
+            Self::Available {
+                dependencies,
+                cross_context_forks,
+            } => (dependencies, cross_context_forks),
             Self::Unforkable(deps) => return ForkedDependencies::Unforked(deps),
             Self::RequiresPython(requires_python) => {
                 return ForkedDependencies::RequiresPython(requires_python);
@@ -3958,7 +4053,13 @@ impl Dependencies {
         let Forks {
             mut forks,
             diverging_packages,
-        } = Forks::new(name_to_deps, env, python_requirement, conflicts);
+        } = Forks::new(
+            name_to_deps,
+            &cross_context_forks,
+            env,
+            python_requirement,
+            conflicts,
+        );
         if forks.is_empty() {
             ForkedDependencies::Unforked(vec![])
         } else if forks.len() == 1 {
@@ -4015,6 +4116,7 @@ struct Forks {
 impl Forks {
     fn new(
         name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>>,
+        cross_context_forks: &BTreeSet<PackageName>,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         conflicts: &Conflicts,
@@ -4036,15 +4138,16 @@ impl Forks {
             // that case, we don't detect the fork ahead of time (at
             // present).
             if let [dep] = deps.as_slice() {
-                // There's one exception: if the requirement increases the minimum-supported Python
-                // version, we also fork in order to respect that minimum in the subsequent
-                // resolution.
+                // There are two exceptions: if another dependency context requires an incompatible
+                // version, or if the requirement increases the minimum-supported Python version,
+                // we fork in order to respect those boundaries in the subsequent resolution.
                 //
                 // For example, given `requires-python = ">=3.7"` and `uv ; python_version >= "3.8"`,
                 // where uv itself only supports Python 3.8 and later, we need to fork to ensure
                 // that the resolution can find a solution.
-                if marker::requires_python(dep.package.marker())
-                    .is_none_or(|bound| !python_requirement.raises(&bound))
+                if !cross_context_forks.contains(&name)
+                    && marker::requires_python(dep.package.marker())
+                        .is_none_or(|bound| !python_requirement.raises(&bound))
                 {
                     let dep = deps.pop().unwrap();
                     let marker = dep.package.marker();
@@ -4063,8 +4166,9 @@ impl Forks {
                         // Unless that "same marker" is a Python requirement that is stricter than
                         // the current Python requirement. In that case, we need to fork to respect
                         // the stricter requirement.
-                        if marker::requires_python(marker)
-                            .is_none_or(|bound| !python_requirement.raises(&bound))
+                        if !cross_context_forks.contains(&name)
+                            && marker::requires_python(marker)
+                                .is_none_or(|bound| !python_requirement.raises(&bound))
                         {
                             for dep in deps {
                                 for fork in &mut forks {

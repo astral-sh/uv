@@ -1829,6 +1829,360 @@ fn lock_project_extra() -> Result<()> {
     Ok(())
 }
 
+/// Production and optional requirements can pin different versions on disjoint platforms.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_extra_disjoint_platform_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==1.0.0 ; sys_platform == 'win32'"]
+
+        [project.optional-dependencies]
+        feature = ["ok==2.0.0 ; sys_platform != 'win32'"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Production and group requirements can pin different versions on disjoint platforms.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_group_disjoint_platform_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==1.0.0 ; sys_platform == 'win32'"]
+
+        [dependency-groups]
+        test = ["ok==2.0.0 ; sys_platform != 'win32'"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Platform-specific constraints can diverge across production, optional, and group contexts.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_disjoint_platform_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let lockfile = context.temp_dir.child("uv.lock");
+
+    for section in [
+        "[project.optional-dependencies]\nfeature",
+        "[dependency-groups]\ntest",
+    ] {
+        pyproject_toml.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok ; sys_platform == 'win32'"]
+
+            {section} = ["ok ; sys_platform != 'win32'"]
+
+            [tool.uv]
+            constraint-dependencies = [
+                "ok==1.0.0 ; sys_platform == 'win32'",
+                "ok==2.0.0 ; sys_platform != 'win32'",
+            ]
+            "#})?;
+        if lockfile.exists() {
+            fs_err::remove_file(&lockfile)?;
+        }
+
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--offline")
+                .arg("--no-index")
+                .arg("--find-links")
+                .arg(context.workspace_root.join("test/links")), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            ");
+        }
+    }
+
+    Ok(())
+}
+
+/// Production and optional requirements can select different direct URLs per platform.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_extra_disjoint_platform_urls() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let windows_wheel = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+    )
+    .map_err(|()| anyhow::anyhow!("invalid Windows wheel path"))?;
+    let other_wheel = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+    )
+    .map_err(|()| anyhow::anyhow!("invalid fallback wheel path"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok @ {windows_wheel} ; sys_platform == 'win32'"]
+
+        [project.optional-dependencies]
+        feature = ["ok @ {other_wheel} ; sys_platform != 'win32'"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Production and group requirements can select different direct URLs per platform.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_group_disjoint_platform_urls() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let windows_wheel = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+    )
+    .map_err(|()| anyhow::anyhow!("invalid Windows wheel path"))?;
+    let other_wheel = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+    )
+    .map_err(|()| anyhow::anyhow!("invalid fallback wheel path"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok @ {windows_wheel} ; sys_platform == 'win32'"]
+
+        [dependency-groups]
+        test = ["ok @ {other_wheel} ; sys_platform != 'win32'"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Registry and direct-URL requirements can coexist in disjoint project contexts.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_disjoint_platform_registry_urls() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let windows_wheel = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+    )
+    .map_err(|()| anyhow::anyhow!("invalid Windows wheel path"))?;
+    let other_wheel = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+    )
+    .map_err(|()| anyhow::anyhow!("invalid fallback wheel path"))?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let lockfile = context.temp_dir.child("uv.lock");
+
+    for section in [
+        "[project.optional-dependencies]\nfeature",
+        "[dependency-groups]\ntest",
+    ] {
+        for (production, contextual) in [
+            (format!("ok @ {windows_wheel}"), "ok==2.0.0".to_string()),
+            ("ok==1.0.0".to_string(), format!("ok @ {other_wheel}")),
+        ] {
+            pyproject_toml.write_str(&formatdoc! {r#"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = ["{production} ; sys_platform == 'win32'"]
+
+                {section} = ["{contextual} ; sys_platform != 'win32'"]
+                "#})?;
+            if lockfile.exists() {
+                fs_err::remove_file(&lockfile)?;
+            }
+
+            insta::allow_duplicates! {
+                uv_snapshot!(context.filters(), context.lock()
+                    .arg("--offline")
+                    .arg("--no-index")
+                    .arg("--find-links")
+                    .arg(context.workspace_root.join("test/links")), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 3 packages in [TIME]
+                ");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Different explicit indexes can be selected in disjoint optional or group contexts.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_disjoint_platform_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let windows_index = context.temp_dir.child("windows-index");
+    let other_index = context.temp_dir.child("other-index");
+    windows_index.create_dir_all()?;
+    other_index.create_dir_all()?;
+    fs_err::copy(&wheel, windows_index.join("ok-1.0.0-py3-none-any.whl"))?;
+    fs_err::copy(&wheel, other_index.join("ok-1.0.0-py3-none-any.whl"))?;
+    let windows_url = Url::from_file_path(&windows_index)
+        .map_err(|()| anyhow::anyhow!("invalid Windows index path"))?;
+    let other_url = Url::from_file_path(&other_index)
+        .map_err(|()| anyhow::anyhow!("invalid fallback index path"))?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let lockfile = context.temp_dir.child("uv.lock");
+
+    for (section, scope) in [
+        (
+            "[project.optional-dependencies]\nfeature",
+            "extra = 'feature'",
+        ),
+        ("[dependency-groups]\ntest", "group = 'test'"),
+    ] {
+        pyproject_toml.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok==1.0.0 ; sys_platform == 'win32'"]
+
+            {section} = ["ok==1.0.0 ; sys_platform != 'win32'"]
+
+            [tool.uv.sources]
+            ok = [
+                {{ index = "windows", marker = "sys_platform == 'win32'" }},
+                {{ index = "other", {scope}, marker = "sys_platform != 'win32'" }},
+            ]
+
+            [[tool.uv.index]]
+            name = "windows"
+            url = "{windows_url}"
+            format = "flat"
+            explicit = true
+
+            [[tool.uv.index]]
+            name = "other"
+            url = "{other_url}"
+            format = "flat"
+            explicit = true
+            "#})?;
+        if lockfile.exists() {
+            fs_err::remove_file(&lockfile)?;
+        }
+
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-cache"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            ");
+        }
+    }
+
+    Ok(())
+}
+
 /// Lock a project with `uv.tool.override-dependencies`.
 #[cfg(feature = "test-universal")]
 #[test]
