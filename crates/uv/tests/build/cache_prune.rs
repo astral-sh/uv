@@ -40,7 +40,7 @@ fn prune_no_op() -> Result<()> {
     Ok(())
 }
 
-/// `cache prune` should report reclaimed space separately for files retained by hardlinks.
+/// `cache prune` should report reclaimed space for hardlinks only when the preview is enabled.
 #[test]
 fn prune_hardlinked_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -51,7 +51,23 @@ fn prune_hardlinked_file() -> Result<()> {
     stale.create_dir_all()?;
     fs_err::hard_link(&retained, stale.child("hardlinked.bin"))?;
 
-    uv_snapshot!(context.filters(), context.prune(), @"
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
+        .collect();
+
+    uv_snapshot!(&filters, context.prune(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    Removed 1 file (1.0MiB)
+    ");
+
+    stale.create_dir_all()?;
+    fs_err::hard_link(&retained, stale.child("hardlinked.bin"))?;
+
+    uv_snapshot!(context.filters(), context.prune().arg("--preview-features").arg("cache-reclaimed-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/

@@ -35,7 +35,7 @@ fn clean_all() -> Result<()> {
     Ok(())
 }
 
-/// `cache clean` should report reclaimed space separately for files retained by hardlinks.
+/// `cache clean` should report reclaimed space for hardlinks only when the preview is enabled.
 #[test]
 fn clean_all_hardlinked_file() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
@@ -45,7 +45,23 @@ fn clean_all_hardlinked_file() -> Result<()> {
     let cached = context.cache_dir.child("hardlinked.bin");
     fs_err::hard_link(&retained, &cached)?;
 
-    uv_snapshot!(context.filters(), context.clean(), @"
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
+        .collect();
+
+    uv_snapshot!(&filters, context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files (1.0MiB)
+    ");
+
+    context.cache_dir.create_dir_all()?;
+    fs_err::hard_link(&retained, &cached)?;
+
+    uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-reclaimed-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
@@ -58,7 +74,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
     Ok(())
 }
 
-/// `cache clean` should report reclaimed space separately for copy-on-write clones.
+/// `cache clean` should report reclaimed space for copy-on-write clones in preview mode.
 #[test]
 fn clean_all_cloned_file() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
@@ -72,7 +88,7 @@ fn clean_all_cloned_file() -> Result<()> {
         return Ok(());
     }
 
-    uv_snapshot!(context.filters(), context.clean(), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--preview"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/

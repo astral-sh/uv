@@ -7,6 +7,7 @@ use tracing::debug;
 use uv_cache::{Cache, Removal};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
+use uv_preview::{Preview, PreviewFeature};
 
 use crate::commands::reporters::{CleaningDirectoryReporter, CleaningPackageReporter};
 use crate::commands::{ExitStatus, human_readable_bytes};
@@ -18,6 +19,7 @@ pub(crate) async fn cache_clean(
     force: bool,
     cache: Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {
         writeln!(
@@ -45,7 +47,10 @@ pub(crate) async fn cache_clean(
 
     // The cache root itself is removed when cleaning the entire cache, so measure its parent.
     let filesystem_path = cache.root().parent().unwrap_or(cache.root()).to_path_buf();
-    let available_before = uv_fs::available_space(&filesystem_path).ok();
+    let available_before = preview
+        .is_enabled(PreviewFeature::CacheReclaimedSpace)
+        .then(|| uv_fs::available_space(&filesystem_path).ok())
+        .flatten();
 
     let summary = if packages.is_empty() {
         writeln!(

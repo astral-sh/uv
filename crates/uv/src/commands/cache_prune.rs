@@ -6,6 +6,7 @@ use tracing::debug;
 
 use uv_cache::{Cache, Removal};
 use uv_fs::Simplified;
+use uv_preview::{Preview, PreviewFeature};
 
 use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
@@ -16,6 +17,7 @@ pub(crate) async fn cache_prune(
     force: bool,
     cache: Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {
         writeln!(
@@ -47,7 +49,10 @@ pub(crate) async fn cache_prune(
         cache.root().user_display().cyan()
     )?;
 
-    let available_before = uv_fs::available_space(cache.root()).ok();
+    let available_before = preview
+        .is_enabled(PreviewFeature::CacheReclaimedSpace)
+        .then(|| uv_fs::available_space(cache.root()).ok())
+        .flatten();
     let mut summary = Removal::default();
 
     // Prune the source distribution cache, which is tightly coupled to the builder crate.
