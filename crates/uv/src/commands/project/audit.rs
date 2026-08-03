@@ -413,7 +413,7 @@ impl AuditResults {
         }
     }
 
-    pub(crate) fn split_findings(&self) -> (Vec<&Vulnerability>, Vec<&ProjectStatus>) {
+    fn split_findings(&self) -> (Vec<&Vulnerability>, Vec<&ProjectStatus>) {
         self.findings.iter().partition_map(|finding| match finding {
             Finding::Vulnerability(vulnerability) => {
                 itertools::Either::Left(vulnerability.as_ref())
