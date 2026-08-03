@@ -1,0 +1,707 @@
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: "The commit SHA to use for artifact names"
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  activation-posix:
+    name: "POSIX activation (${{ matrix.name }})"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: bash
+            package: bash
+            command: bash
+            environment: standard
+            ostype: present
+          - name: bash (relocatable)
+            package: bash
+            command: bash
+            environment: relocatable
+            ostype: present
+          - name: dash
+            package: dash
+            command: dash
+            environment: standard
+            ostype: present
+          - name: dash (OSTYPE unset)
+            package: dash
+            command: dash
+            environment: standard
+            ostype: absent
+          # Dash does not expose the path of a sourced activation script, so
+          # relocatable activation is not currently supported.
+          # - name: dash (relocatable)
+          #   package: dash
+          #   command: dash
+          #   environment: relocatable
+          #   ostype: present
+          - name: zsh
+            package: zsh
+            command: zsh
+            environment: standard
+            ostype: present
+          - name: zsh (relocatable)
+            package: zsh
+            command: zsh
+            environment: relocatable
+            ostype: present
+          - name: ksh
+            package: ksh
+            command: ksh
+            environment: standard
+            ostype: present
+          - name: ksh (relocatable)
+            package: ksh
+            command: ksh
+            environment: relocatable
+            ostype: present
+          - name: yash
+            package: yash
+            command: yash
+            environment: standard
+            ostype: present
+          # Yash does not expose the path of a sourced activation script, so
+          # relocatable activation is not currently supported.
+          # - name: yash (relocatable)
+          #   package: yash
+          #   command: yash
+          #   environment: relocatable
+          #   ostype: present
+          - name: busybox
+            package: busybox
+            command: busybox
+            environment: standard
+            ostype: present
+          - name: busybox (OSTYPE unset)
+            package: busybox
+            command: busybox
+            environment: standard
+            ostype: absent
+          # BusyBox ash does not expose the path of a sourced activation script,
+          # so relocatable activation is not currently supported.
+          # - name: busybox (relocatable)
+          #   package: busybox
+          #   command: busybox
+          #   environment: relocatable
+          #   ostype: present
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Install shell"
+        env:
+          SHELL_PACKAGE: ${{ matrix.package }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes "$SHELL_PACKAGE"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create virtual environment"
+        run: ./uv venv
+
+      - name: "Create relocatable virtual environment"
+        if: matrix.environment == 'relocatable'
+        run: |
+          ./uv venv --relocatable .relocatable
+          mv .relocatable relocated
+
+      - name: "Activate and deactivate virtual environment"
+        env:
+          ACTIVATION_ENVIRONMENT: ${{ matrix.environment }}
+          ACTIVATION_OSTYPE: ${{ matrix.ostype }}
+          ACTIVATION_SHELL: ${{ matrix.command }}
+        run: |
+          if [ "$ACTIVATION_SHELL" = busybox ]; then
+            activation_command=(busybox sh)
+          else
+            activation_command=("$ACTIVATION_SHELL")
+          fi
+
+          if [ "$ACTIVATION_ENVIRONMENT" = relocatable ]; then
+            ACTIVATION_DIRECTORY=relocated
+          else
+            ACTIVATION_DIRECTORY=.venv
+          fi
+          export ACTIVATION_DIRECTORY
+
+          ACTIVATION_STDERR="activation-${ACTIVATION_SHELL}-${ACTIVATION_ENVIRONMENT}-${ACTIVATION_OSTYPE}.stderr"
+          export ACTIVATION_STDERR
+
+          activation_status=0
+          "${activation_command[@]}" <<'ACTIVATION' || activation_status=$?
+          set -eu
+
+          original_path=$PATH
+          original_directory=$PWD
+          SCRIPT_PATH=original-script-path
+          export SCRIPT_PATH
+
+          if [ "$ACTIVATION_OSTYPE" = absent ]; then
+            unset OSTYPE
+          else
+            OSTYPE=${OSTYPE-linux-gnu}
+            export OSTYPE
+          fi
+
+          if ! . "./$ACTIVATION_DIRECTORY/bin/activate" 2>"$ACTIVATION_STDERR"; then
+            exit 1
+          fi
+
+          if [ -s "$ACTIVATION_STDERR" ]; then
+            exit 1
+          fi
+
+          test "$PWD" = "$original_directory"
+          test "$VIRTUAL_ENV" = "$original_directory/$ACTIVATION_DIRECTORY"
+          test "$SCRIPT_PATH" = original-script-path
+
+          python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
+
+          deactivate
+
+          test "$PWD" = "$original_directory"
+          test "$PATH" = "$original_path"
+          test "$SCRIPT_PATH" = original-script-path
+          test -z "${VIRTUAL_ENV-}"
+          test -z "${VIRTUAL_ENV_PROMPT-}"
+          ACTIVATION
+
+          if [ "$activation_status" -ne 0 ]; then
+            printf 'Activation failed for %s (%s, OSTYPE %s) with exit code %s\n' \
+              "$ACTIVATION_SHELL" "$ACTIVATION_ENVIRONMENT" "$ACTIVATION_OSTYPE" "$activation_status" >&2
+
+            if [ -s "$ACTIVATION_STDERR" ]; then
+              cat "$ACTIVATION_STDERR" >&2
+            fi
+
+            exit "$activation_status"
+          fi
+
+  activation-alpine:
+    name: "Alpine BusyBox activation (OSTYPE ${{ matrix.ostype }})"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    container: alpine:latest@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+    strategy:
+      fail-fast: false
+      matrix:
+        ostype: [present, absent]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-linux-musl-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create virtual environment"
+        run: ./uv venv
+
+      - name: "Activate and deactivate virtual environment"
+        shell: sh {0}
+        env:
+          ACTIVATION_OSTYPE: ${{ matrix.ostype }}
+        run: |
+          set -eu
+
+          original_path=$PATH
+          original_directory=$PWD
+          if [ "$ACTIVATION_OSTYPE" = absent ]; then
+            unset OSTYPE
+          else
+            OSTYPE=${OSTYPE-linux-gnu}
+            export OSTYPE
+          fi
+
+          activation_stderr="activation-alpine-${ACTIVATION_OSTYPE}.stderr"
+
+          if ! . ./.venv/bin/activate 2>"$activation_stderr"; then
+            cat "$activation_stderr" >&2
+            exit 1
+          fi
+
+          if [ -s "$activation_stderr" ]; then
+            cat "$activation_stderr" >&2
+            exit 1
+          fi
+
+          test "$PWD" = "$original_directory"
+          test "$VIRTUAL_ENV" = "$original_directory/.venv"
+
+          python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
+
+          deactivate
+
+          test "$PWD" = "$original_directory"
+          test "$PATH" = "$original_path"
+          test -z "${VIRTUAL_ENV-}"
+          test -z "${VIRTUAL_ENV_PROMPT-}"
+
+  activation-fish:
+    name: "Fish activation"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Install Fish"
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes fish
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create virtual environment"
+        run: ./uv venv
+
+      - name: "Activate and deactivate virtual environment"
+        shell: fish {0}
+        run: |
+          set original_path $PATH
+          set original_directory $PWD
+
+          source ./.venv/bin/activate.fish
+          or exit 1
+
+          test "$PWD" = "$original_directory"
+          or exit 1
+
+          test "$VIRTUAL_ENV" = "$original_directory/.venv"
+          or exit 1
+
+          python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
+          or exit 1
+
+          deactivate
+          or exit 1
+
+          test "$PWD" = "$original_directory"
+          or exit 1
+
+          test (string join : $PATH) = (string join : $original_path)
+          or exit 1
+
+          if set -q VIRTUAL_ENV
+              exit 1
+          end
+
+          if set -q VIRTUAL_ENV_PROMPT
+              exit 1
+          end
+
+      - name: "Create relocatable virtual environment"
+        run: |
+          ./uv venv --relocatable .relocatable
+          mv .relocatable relocated
+
+      - name: "Activate relocated virtual environment"
+        shell: fish {0}
+        run: |
+          set original_path $PATH
+          set original_directory $PWD
+
+          source ./relocated/bin/activate.fish
+          or exit 1
+
+          test "$PWD" = "$original_directory"
+          or exit 1
+
+          test "$VIRTUAL_ENV" = "$original_directory/relocated"
+          or exit 1
+
+          python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
+          or exit 1
+
+          deactivate
+          or exit 1
+
+          test "$PWD" = "$original_directory"
+          or exit 1
+
+          test (string join : $PATH) = (string join : $original_path)
+          or exit 1
+
+          if set -q VIRTUAL_ENV
+              exit 1
+          end
+
+          if set -q VIRTUAL_ENV_PROMPT
+              exit 1
+          end
+
+  activation-nushell:
+    name: "Nushell activation (${{ matrix.environment }})"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [standard, relocatable]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Install Nushell"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          nu_latest=$(gh release list --repo nushell/nushell --limit 1 --exclude-pre-releases --exclude-drafts --json tagName --jq '.[0].tagName')
+          nu_tag=${nu_latest%%[[:space:]]*}
+
+          gh release download "$nu_tag" --repo nushell/nushell --pattern "nu-${nu_tag}-x86_64-unknown-linux-gnu.tar.gz"
+          tar -xf "nu-${nu_tag}-x86_64-unknown-linux-gnu.tar.gz"
+          chmod +x "./nu-${nu_tag}-x86_64-unknown-linux-gnu/nu"
+          echo "${GITHUB_WORKSPACE}/nu-${nu_tag}-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create virtual environment"
+        if: matrix.environment == 'standard'
+        run: ./uv venv
+
+      - name: "Activate and deactivate virtual environment"
+        if: matrix.environment == 'standard'
+        shell: nu {0}
+        run: |
+          let original_path = $env.PATH
+          let original_directory = $env.PWD
+          let original_virtual_env = $env | get --optional VIRTUAL_ENV
+          let original_virtual_env_prompt = $env | get --optional VIRTUAL_ENV_PROMPT
+
+          overlay use ${{ github.workspace }}/.venv/bin/activate.nu
+
+          if $env.PWD != $original_directory {
+              error make { msg: "activation changed the working directory" }
+          }
+
+          if ($env.VIRTUAL_ENV | path expand) != (".venv" | path expand) {
+              error make { msg: "VIRTUAL_ENV does not identify the activated environment" }
+          }
+
+          python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
+
+          deactivate
+
+          if $env.PWD != $original_directory {
+              error make { msg: "deactivation changed the working directory" }
+          }
+
+          if $env.PATH != $original_path {
+              error make { msg: "deactivate did not restore PATH" }
+          }
+
+          if ($env | get --optional VIRTUAL_ENV) != $original_virtual_env {
+              error make { msg: "deactivate did not restore VIRTUAL_ENV" }
+          }
+
+          if ($env | get --optional VIRTUAL_ENV_PROMPT) != $original_virtual_env_prompt {
+              error make { msg: "deactivate did not restore VIRTUAL_ENV_PROMPT" }
+          }
+
+      - name: "Create relocatable virtual environment"
+        if: matrix.environment == 'relocatable'
+        run: |
+          ./uv venv --relocatable .relocatable
+          mv .relocatable relocated
+
+      - name: "Activate relocated virtual environment"
+        if: matrix.environment == 'relocatable'
+        shell: nu {0}
+        run: |
+          let original_path = $env.PATH
+          let original_directory = $env.PWD
+          let original_virtual_env = $env | get --optional VIRTUAL_ENV
+          let original_virtual_env_prompt = $env | get --optional VIRTUAL_ENV_PROMPT
+
+          overlay use ${{ github.workspace }}/relocated/bin/activate.nu
+
+          if $env.PWD != $original_directory {
+              error make { msg: "activation changed the working directory" }
+          }
+
+          if ($env.VIRTUAL_ENV | path expand) != ("relocated" | path expand) {
+              error make { msg: "VIRTUAL_ENV does not identify the relocated environment" }
+          }
+
+          python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
+
+          deactivate
+
+          if $env.PWD != $original_directory {
+              error make { msg: "deactivation changed the working directory" }
+          }
+
+          if $env.PATH != $original_path {
+              error make { msg: "deactivate did not restore PATH" }
+          }
+
+          if ($env | get --optional VIRTUAL_ENV) != $original_virtual_env {
+              error make { msg: "deactivate did not restore VIRTUAL_ENV" }
+          }
+
+          if ($env | get --optional VIRTUAL_ENV_PROMPT) != $original_virtual_env_prompt {
+              error make { msg: "deactivate did not restore VIRTUAL_ENV_PROMPT" }
+          }
+
+  activation-cshell:
+    name: "C shell activation"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Install tcsh"
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes tcsh
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create virtual environment"
+        run: ./uv venv
+
+      - name: "Activate and deactivate virtual environment"
+        shell: tcsh {0}
+        run: |
+          set original_path = "$PATH"
+          set original_directory = "$cwd"
+
+          source ./.venv/bin/activate.csh
+
+          if ("$cwd" != "$original_directory") exit 1
+          if ("$VIRTUAL_ENV" != "$original_directory/.venv") exit 1
+
+          python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
+          if ($status != 0) exit 1
+
+          deactivate
+
+          if ("$cwd" != "$original_directory") exit 1
+          if ("$PATH" != "$original_path") exit 1
+          if ($?VIRTUAL_ENV) exit 1
+          if ($?VIRTUAL_ENV_PROMPT) exit 1
+
+      - name: "Verify relocatable environments omit the C shell activator"
+        run: |
+          ./uv venv --relocatable .relocatable
+          test ! -e .relocatable/bin/activate.csh
+
+  activation-powershell:
+    name: "PowerShell activation"
+    timeout-minutes: 10
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-windows-x86_64-${{ inputs.sha }}
+
+      - name: "Create virtual environment"
+        shell: pwsh
+        run: ./uv.exe venv
+
+      - name: "Activate and deactivate virtual environment"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $originalPath = $env:PATH
+          $originalDirectory = (Get-Location).Path
+
+          . .\.venv\Scripts\activate.ps1
+
+          if ((Get-Location).Path -ne $originalDirectory) {
+            throw "activation changed the working directory"
+          }
+
+          if ($env:VIRTUAL_ENV -ne (Resolve-Path .\.venv).Path) {
+            throw "VIRTUAL_ENV does not identify the activated environment"
+          }
+
+          python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Python did not resolve to the activated environment"
+          }
+
+          deactivate
+
+          if ((Get-Location).Path -ne $originalDirectory) {
+            throw "deactivation changed the working directory"
+          }
+
+          if ($env:PATH -ne $originalPath) {
+            throw "deactivate did not restore PATH"
+          }
+
+          if (Test-Path Env:VIRTUAL_ENV) {
+            throw "deactivate did not remove VIRTUAL_ENV"
+          }
+
+          if (Test-Path Env:VIRTUAL_ENV_PROMPT) {
+            throw "deactivate did not remove VIRTUAL_ENV_PROMPT"
+          }
+
+      - name: "Create relocatable virtual environment"
+        shell: pwsh
+        run: |
+          ./uv.exe venv --relocatable .relocatable
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create relocatable virtual environment"
+          }
+
+          Move-Item .relocatable relocated
+
+      - name: "Activate relocated virtual environment"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $originalPath = $env:PATH
+          $originalDirectory = (Get-Location).Path
+
+          . .\relocated\Scripts\activate.ps1
+
+          if ((Get-Location).Path -ne $originalDirectory) {
+            throw "activation changed the working directory"
+          }
+
+          if ($env:VIRTUAL_ENV -ne (Resolve-Path .\relocated).Path) {
+            throw "VIRTUAL_ENV does not identify the relocated environment"
+          }
+
+          python -c 'import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ["VIRTUAL_ENV"])'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Python did not resolve to the relocated environment"
+          }
+
+          deactivate
+
+          if ((Get-Location).Path -ne $originalDirectory) {
+            throw "deactivation changed the working directory"
+          }
+
+          if ($env:PATH -ne $originalPath) {
+            throw "deactivate did not restore PATH"
+          }
+
+          if (Test-Path Env:VIRTUAL_ENV) {
+            throw "deactivate did not remove VIRTUAL_ENV"
+          }
+
+          if (Test-Path Env:VIRTUAL_ENV_PROMPT) {
+            throw "deactivate did not remove VIRTUAL_ENV_PROMPT"
+          }
+
+  activation-batch:
+    name: "Windows batch activation"
+    timeout-minutes: 10
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-windows-x86_64-${{ inputs.sha }}
+
+      - name: "Prepare batch activation test"
+        run: |
+          $activationTest = @'
+          @echo off
+          set "ORIGINAL_PATH=%PATH%"
+          set "ORIGINAL_DIRECTORY=%CD%"
+
+          call "%~1\Scripts\activate.bat"
+          if errorlevel 1 exit /b 1
+
+          if /I not "%CD%"=="%ORIGINAL_DIRECTORY%" exit /b 1
+          if /I not "%VIRTUAL_ENV%"=="%ORIGINAL_DIRECTORY%\%~1" exit /b 1
+
+          python -c "import os, sys; assert os.path.realpath(sys.prefix) == os.path.realpath(os.environ['VIRTUAL_ENV'])"
+          if errorlevel 1 exit /b 1
+
+          call "%~1\Scripts\deactivate.bat"
+          if errorlevel 1 exit /b 1
+
+          if /I not "%CD%"=="%ORIGINAL_DIRECTORY%" exit /b 1
+          if not "%PATH%"=="%ORIGINAL_PATH%" exit /b 1
+          if defined VIRTUAL_ENV exit /b 1
+          if defined VIRTUAL_ENV_PROMPT exit /b 1
+          '@
+
+          Set-Content -Path activation-test.cmd -Value $activationTest -Encoding ascii
+
+      - name: "Create virtual environment"
+        run: ./uv.exe venv
+
+      - name: "Activate and deactivate virtual environment"
+        run: |
+          cmd.exe /d /c .\activation-test.cmd .venv
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to activate and deactivate the virtual environment in cmd.exe"
+          }
+
+      - name: "Create relocatable virtual environment"
+        run: |
+          ./uv.exe venv --relocatable .relocatable
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create relocatable virtual environment"
+          }
+
+          Move-Item .relocatable relocated
+
+      - name: "Activate relocated virtual environment"
+        run: |
+          cmd.exe /d /c .\activation-test.cmd relocated
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to activate and deactivate the relocated virtual environment in cmd.exe"
+          }

@@ -105,6 +105,15 @@ jobs:
     with:
       sha: ${{ github.sha }}
 
+  test-shell-activation:
+    needs:
+      - plan
+      - build-dev-binaries
+    if: ${{ needs.plan.outputs.test-shell-activation == 'true' }}
+    uses: ./.github/workflows/test-shell-activation.yml
+    with:
+      sha: ${{ github.sha }}
+
   test-integration:
     needs:
       - plan
@@ -301,6 +310,7 @@ jobs:
       - check-generated-files
       - test
       - build-dev-binaries
+      - test-shell-activation
     runs-on: ubuntu-slim
     steps:
       - name: "Check required jobs passed"

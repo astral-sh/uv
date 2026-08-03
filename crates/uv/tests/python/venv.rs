@@ -1723,7 +1723,7 @@ fn verify_pyvenv_cfg_relocatable() {
     let activate_nu = scripts.child("activate.nu");
     activate_nu.assert(predicates::path::is_file());
     activate_nu.assert(predicates::str::contains(
-        r"let virtual_env = (path self | path dirname | path dirname)",
+        r"const virtual_env = (path self | path dirname | path dirname)",
     ));
 
     // csh cannot determine its own script location, so activate.csh should not
