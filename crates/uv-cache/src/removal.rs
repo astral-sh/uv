@@ -5,6 +5,8 @@
 use std::io;
 use std::path::Path;
 
+use tracing::debug;
+
 use crate::CleanReporter;
 
 /// A builder for a [`Remover`] that can remove files and directories.
@@ -56,6 +58,8 @@ pub struct Removal {
     pub total_bytes: u64,
     /// The exclusively owned allocated file data reclaimed by the removal, when available.
     pub reclaimed_bytes: Option<u64>,
+    /// Whether any removed entries could not be measured, making the reclaimed count a lower bound.
+    pub reclaimed_bytes_incomplete: bool,
 }
 
 impl Removal {
@@ -72,9 +76,18 @@ impl Removal {
         self.total_bytes += metadata.len();
 
         if let Some(reclaimed_bytes) = self.reclaimed_bytes {
-            self.reclaimed_bytes = uv_fs::reclaimable_space(path, metadata)
-                .ok()
-                .map(|reclaimable| reclaimed_bytes.saturating_add(reclaimable));
+            match uv_fs::reclaimable_space(path, metadata) {
+                Ok(reclaimable) => {
+                    self.reclaimed_bytes = Some(reclaimed_bytes.saturating_add(reclaimable));
+                }
+                Err(error) => {
+                    debug!(
+                        "Failed to measure reclaimed space for {}: {error}",
+                        path.display()
+                    );
+                    self.reclaimed_bytes_incomplete = true;
+                }
+            }
         }
     }
 
@@ -183,8 +196,8 @@ impl Removal {
                 // Remove the file.
                 if let Ok(metadata) = entry.metadata() {
                     self.add_file(entry.path(), &metadata);
-                } else {
-                    self.reclaimed_bytes = None;
+                } else if self.reclaimed_bytes.is_some() {
+                    self.reclaimed_bytes_incomplete = true;
                 }
                 remove_file(entry.path())?;
             }
@@ -207,6 +220,36 @@ impl std::ops::AddAssign for Removal {
             .reclaimed_bytes
             .zip(other.reclaimed_bytes)
             .map(|(left, right)| left.saturating_add(right));
+        self.reclaimed_bytes_incomplete |= other.reclaimed_bytes_incomplete;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Removal;
+
+    #[test]
+    fn retain_measured_space_when_an_entry_cannot_be_measured() -> std::io::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let measured = directory.path().join("measured.bin");
+        fs_err::write(&measured, vec![42; 4096])?;
+        let metadata = fs_err::metadata(&measured)?;
+        let expected = uv_fs::reclaimable_space(&measured, &metadata)?;
+
+        let mut removal = Removal::new(true);
+        removal.add_file(&measured, &metadata);
+        removal.add_file(&directory.path().join("missing.bin"), &metadata);
+        removal.add_file(&measured, &metadata);
+
+        assert_eq!(removal.reclaimed_bytes, Some(expected.saturating_mul(2)));
+        assert!(removal.reclaimed_bytes_incomplete);
+
+        let mut combined = Removal::new(true);
+        combined += removal;
+        assert_eq!(combined.reclaimed_bytes, Some(expected.saturating_mul(2)));
+        assert!(combined.reclaimed_bytes_incomplete);
+
+        Ok(())
     }
 }
 

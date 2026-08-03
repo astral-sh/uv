@@ -152,6 +152,9 @@ reclaimed, accounting for hardlinks and copy-on-write clones:
 $ uv cache clean --preview-features cache-reclaimed-space
 ```
 
+If an entry's allocated size cannot be measured, such as a compressed extent on Btrfs, uv reports a
+lower bound for the space reclaimed from the remaining entries.
+
 uv blocks cache-modifying operations while other uv commands are running. By default, those
 `uv cache` commands have a 5 min timeout waiting for other uv processes to terminate to avoid
 deadlocks. This timeout can be changed with

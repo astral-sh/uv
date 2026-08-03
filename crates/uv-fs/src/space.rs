@@ -144,6 +144,7 @@ fn linux_reclaimable_space(path: &Path) -> io::Result<u64> {
     const FIEMAP_EXTENT_DELALLOC: u32 = 0x0000_0004;
     const FIEMAP_EXTENT_ENCODED: u32 = 0x0000_0008;
     const FIEMAP_EXTENT_NOT_ALIGNED: u32 = 0x0000_0100;
+    const FIEMAP_EXTENT_DATA_INLINE: u32 = 0x0000_0200;
     const FIEMAP_EXTENT_SHARED: u32 = 0x0000_2000;
     const MAX_EXTENTS: usize = 32;
 
@@ -216,7 +217,10 @@ fn linux_reclaimable_space(path: &Path) -> io::Result<u64> {
         }
 
         for extent in &request.extents[..mapped_extents] {
-            if extent.flags & FIEMAP_EXTENT_DELALLOC != 0 {
+            if extent.flags
+                & (FIEMAP_EXTENT_DELALLOC | FIEMAP_EXTENT_DATA_INLINE | FIEMAP_EXTENT_SHARED)
+                != 0
+            {
                 continue;
             }
 
@@ -230,9 +234,7 @@ fn linux_reclaimable_space(path: &Path) -> io::Result<u64> {
                 ));
             }
 
-            if extent.flags & FIEMAP_EXTENT_SHARED == 0 {
-                reclaimable = reclaimable.saturating_add(extent.length);
-            }
+            reclaimable = reclaimable.saturating_add(extent.length);
         }
 
         let last_extent = &request.extents[mapped_extents - 1];

@@ -2,6 +2,9 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 
+#[cfg(target_os = "linux")]
+use std::process::Command;
+
 use uv_cache::Cache;
 use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_static::EnvVars;
@@ -180,6 +183,52 @@ fn clean_all_cached_clones() -> Result<()> {
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
     Removed [N] files (1.0MiB)
+    ");
+
+    Ok(())
+}
+
+/// Unknown compressed extents should not discard measurements for unrelated cache entries.
+#[cfg(target_os = "linux")]
+#[test]
+fn clean_all_compressed_file() -> Result<()> {
+    if std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none() {
+        return Ok(());
+    }
+
+    let context = copy_on_write_test_context()?;
+    let measured = context.cache_dir.child("measured.bin");
+    measured.write_binary(&vec![42; 1024 * 1024])?;
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(&measured)?
+        .sync_all()?;
+
+    let compressed = context.cache_dir.child("compressed.bin");
+    fs_err::File::create(&compressed)?;
+    Command::new("btrfs")
+        .args(["property", "set"])
+        .arg(compressed.path())
+        .args(["compression", "zstd"])
+        .assert()
+        .success();
+    compressed.write_binary(&vec![42; 1024 * 1024])?;
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(&compressed)?
+        .sync_all()?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
+        .collect();
+
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-reclaimed-space"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files (at least 1.0MiB)
     ");
 
     Ok(())

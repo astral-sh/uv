@@ -103,7 +103,11 @@ pub(crate) async fn cache_clean(
             let (bytes, unit) = human_readable_bytes(total_bytes);
             format!("{bytes:.1}{unit}")
         };
-        write!(printer.stderr(), " ({})", bytes.green())?;
+        if summary.reclaimed_bytes_incomplete {
+            write!(printer.stderr(), " (at least {})", bytes.green())?;
+        } else {
+            write!(printer.stderr(), " ({})", bytes.green())?;
+        }
     }
 
     writeln!(printer.stderr())?;
