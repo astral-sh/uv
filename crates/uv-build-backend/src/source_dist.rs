@@ -470,7 +470,7 @@ impl<W: Write + Unpin + Send> DirectoryWriter for TarGzWriter<W> {
         #[cfg(unix)]
         let executable_bit = {
             use std::os::unix::fs::PermissionsExt;
-            file.metadata()?.permissions().mode() & 0o111 != 0
+            metadata.permissions().mode() & 0o111 != 0
         };
         // Windows has no executable bit
         #[cfg(not(unix))]
