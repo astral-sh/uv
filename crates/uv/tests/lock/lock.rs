@@ -30795,6 +30795,37 @@ fn no_lowest_warning_with_name_and_url() -> Result<()> {
 
 #[cfg(feature = "test-universal")]
 #[test]
+fn lock_no_build_invalid_dependency_virtual_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<5>"]
+
+        [tool.uv]
+        no-build = true
+        package = false
+        "#,
+    )?;
+
+    // Hiding the invalid dependency behind a build-disabled error is misleading; see astral-sh/uv#20908.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ╰─▶ Building source distributions for `project` is disabled
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
 fn lock_no_build_static_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
