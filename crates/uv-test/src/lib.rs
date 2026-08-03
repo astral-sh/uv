@@ -1580,6 +1580,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv tool audit` command with options shared across scenarios.
+    pub fn tool_audit(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("tool").arg("audit");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv tool dir` command with options shared across scenarios.
     pub fn tool_dir(&self) -> Command {
         let mut command = self.new_command();

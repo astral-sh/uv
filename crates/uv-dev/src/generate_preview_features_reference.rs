@@ -108,7 +108,7 @@ mod tests {
         assert_snapshot!(generate(), @r"
         - `add-bounds`: Allows configuring the [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
         - `adjust-ulimit`: On Unix, raises the process's soft open-file limit at startup, up to the hard limit.
-        - `audit-command`: Allows using `uv audit`.
+        - `audit-command`: Allows using `uv audit` and `uv tool audit`.
         - `auth-helper`: Allows using `uv auth helper` as a credential helper for external tools.
         - `azure-endpoint`: Allows signing requests to Azure Blob Storage endpoints with Azure credentials.
         - `cache-size`: Allows using `uv cache size`.
@@ -152,8 +152,8 @@ mod tests {
           effect before configuration is loaded.
         - `toml-backwards-compatibility`: Rewrites `pyproject.toml` as TOML 1.0 when building source distributions, preserving the
           original as `pyproject.toml.orig` to ensure compatibility with older build tools.
-        - `tool-install-locks`: Stores a `uv.lock` alongside each installed tool and reuses it for reproducible installations
-          and upgrades.
+        - `tool-install-locks`: Stores a `uv.lock` alongside each installed tool and reuses it for reproducible installations,
+          upgrades, and audits.
         - `venv-safe-clear`: Prevents `uv venv --clear` from clearing a directory that does not contain a `pyvenv.cfg` file
           unless `--force` is provided.
         - `workspace-dir`: Allows using `uv workspace dir`.
