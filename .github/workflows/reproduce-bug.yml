@@ -148,6 +148,7 @@ jobs:
           git checkout --quiet FETCH_HEAD
 
           printf '%s\n' "$REPRODUCTION_RESULT" | jq '.' > reproduction.json
+          # TODO: Consider letting the reproduction agent update README.md directly.
           existing_context="$(awk '/^## Reproduction$/ { exit } { print }' README.md)"
 
           {
