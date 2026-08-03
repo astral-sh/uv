@@ -93,7 +93,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: "Set up Python"
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version-file: ".python-version"
 
@@ -116,7 +116,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: "Set up Python"
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version-file: "pyproject.toml"
 
