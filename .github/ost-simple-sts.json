@@ -129,16 +129,16 @@
       "caller": "uv-dev",
       "environment": "automations",
       "caller_workflow": "pull-request-labels.yml",
-      "on": ["pull_request", "workflow_dispatch"],
-      "permissions": { "issues": "write" },
+      "on": ["workflow_dispatch"],
+      "permissions": { "pull_requests": "write" },
       "target": "uv-dev"
     },
     {
       "caller": "uv",
       "environment": "automations",
       "caller_workflow": "pull-request-labels.yml",
-      "on": ["pull_request", "workflow_dispatch"],
-      "permissions": { "issues": "write" },
+      "on": ["workflow_dispatch"],
+      "permissions": { "pull_requests": "write" },
       "target": "uv"
     },
     {

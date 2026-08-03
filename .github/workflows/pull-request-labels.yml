@@ -2,28 +2,26 @@
 name: "Pull request labels"
 
 on:
-  pull_request:
-    types: [opened, reopened]
-    branches: [main]
   workflow_dispatch:
     inputs:
       pull_request:
         description: "A pull request number"
         required: true
         type: number
+      head_sha:
+        description: "The pull request head SHA at dispatch time"
+        required: false
+        type: string
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.pull_request || github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ inputs.pull_request }}
   cancel-in-progress: true
 
 jobs:
   labels:
-    if: >-
-      (github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev') &&
-      (github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
     runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 15
@@ -36,11 +34,20 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', inputs.pull_request) }}
+          ref: main
+          persist-credentials: false
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.head_sha || format('refs/pull/{0}/head', inputs.pull_request) }}
+          path: pull-request
           persist-credentials: false
 
       - name: "Collect pull request context"
+        working-directory: pull-request
         run: |
+          # Remove potential PR-controlled paths for label configuration.
+          rm -f .pull-request-labels-event.json .pull-request-labels.json
           gh pr view "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author,baseRefName,headRefName,isDraft,labels,files,additions,deletions,changedFiles \
@@ -52,7 +59,7 @@ jobs:
             > .pull-request-labels.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PULL_REQUEST_NUMBER: ${{ inputs.pull_request || github.event.pull_request.number }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
 
       - name: "Determine pull request labels"
         id: labels
@@ -61,11 +68,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-home: "agents/codex"
+          working-directory: "${{ github.workspace }}/pull-request"
+          codex-home: "${{ github.workspace }}/agents/codex"
           permission-profile: "pull-request-labels"
           safety-strategy: drop-sudo
-          prompt-file: "agents/prompts/pull-request-labels.md"
-          output-schema-file: "agents/schemas/pull-request-labels.json"
+          allow-bot-users: "astral-automations-bot[bot]"
+          prompt-file: "${{ github.workspace }}/agents/prompts/pull-request-labels.md"
+          output-schema-file: "${{ github.workspace }}/agents/schemas/pull-request-labels.json"
 
   report:
     needs: labels
@@ -98,7 +107,7 @@ jobs:
           audience: ${{ secrets.STS_API_URL }}
           repository: ${{ github.repository }}
           permissions: |
-            issues: write
+            pull_requests: write
 
       - name: "Apply recommended labels"
         run: |
@@ -113,4 +122,4 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           LABEL_RESULT: ${{ needs.labels.outputs.result }}
-          PULL_REQUEST_NUMBER: ${{ inputs.pull_request || github.event.pull_request.number }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
