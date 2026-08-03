@@ -124,7 +124,7 @@ fn clean_all_cloned_file() -> Result<()> {
     let link_mode = link_dir(&retained, &cached, &LinkOptions::new(LinkMode::Clone))?;
     if link_mode != LinkMode::Clone {
         assert!(
-            std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none(),
+            !copy_on_write_filesystem_configured(),
             "the configured copy-on-write filesystem did not clone the cached file"
         );
         return Ok(());
@@ -163,7 +163,7 @@ fn clean_all_cached_clones() -> Result<()> {
     let link_mode = link_dir(&original, &cloned, &LinkOptions::new(LinkMode::Clone))?;
     if link_mode != LinkMode::Clone {
         assert!(
-            std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none(),
+            !copy_on_write_filesystem_configured(),
             "the configured copy-on-write filesystem did not clone the cached file"
         );
         return Ok(());
@@ -185,22 +185,46 @@ fn clean_all_cached_clones() -> Result<()> {
     Ok(())
 }
 
-/// Put the cache and retained files on CI's Btrfs or APFS volume, when one is configured.
+/// Put the cache and retained files on CI's Btrfs, APFS, or ReFS volume, when configured.
 fn copy_on_write_test_context() -> Result<uv_test::TestContext> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
-    if std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none() {
+    if !copy_on_write_filesystem_configured() {
         return Ok(context);
     }
 
-    let Some(context) = context.with_cache_on_cow_fs()? else {
-        anyhow::bail!("the configured copy-on-write cache filesystem was unavailable");
-    };
-    let Some(context) = context.with_working_dir_on_cow_fs()? else {
-        anyhow::bail!("the configured copy-on-write working filesystem was unavailable");
+    let context = if std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_some() {
+        let Some(context) = context.with_cache_on_cow_fs()? else {
+            anyhow::bail!("the configured copy-on-write cache filesystem was unavailable");
+        };
+        let Some(context) = context.with_working_dir_on_cow_fs()? else {
+            anyhow::bail!("the configured copy-on-write working filesystem was unavailable");
+        };
+        context
+    } else {
+        #[cfg(windows)]
+        {
+            let Some(context) = context.with_cache_on_refs_fs()? else {
+                anyhow::bail!("the configured ReFS cache filesystem was unavailable");
+            };
+            let Some(context) = context.with_working_dir_on_refs_fs()? else {
+                anyhow::bail!("the configured ReFS working filesystem was unavailable");
+            };
+            context
+        }
+        #[cfg(not(windows))]
+        {
+            context
+        }
     };
 
     let cache_dir = context.cache_dir.path().to_path_buf();
     Ok(context.with_filtered_path(&cache_dir, "CACHE_DIR"))
+}
+
+/// Return whether CI explicitly configured a copy-on-write filesystem for accounting tests.
+fn copy_on_write_filesystem_configured() -> bool {
+    std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_some()
+        || cfg!(windows) && std::env::var_os(EnvVars::UV_INTERNAL__TEST_REFS_FS).is_some()
 }
 
 /// `cache clear` should behave as an alias of `cache clean`.
