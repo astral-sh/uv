@@ -1305,13 +1305,13 @@ pub(crate) async fn run(
     }
 
     #[cfg(unix)]
-    if let Some(limit) = run_ulimit {
-        uv_unix::set_open_file_limit(limit).with_context(|| {
-            format!(
-                "Failed to apply `{}` value `{limit}`",
-                EnvVars::UV_RUN_ULIMIT
-            )
-        })?;
+    if let Some(limit) = run_ulimit
+        && let Err(err) = uv_unix::set_open_file_limit(limit)
+    {
+        warn_user!(
+            "Failed to apply `{}` value `{limit}`: {err}",
+            EnvVars::UV_RUN_ULIMIT
+        );
     }
 
     // Spawn and wait for completion
