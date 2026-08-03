@@ -11,10 +11,6 @@ on:
         description: "The uv-dev pull request head SHA at dispatch time"
         required: false
         type: string
-      promoter:
-        description: "The person who promoted the uv-dev pull request"
-        required: false
-        type: string
 
 permissions: {}
 
@@ -86,7 +82,6 @@ jobs:
           BASE_REF: ${{ steps.verify.outputs.base_ref }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_REF: ${{ steps.verify.outputs.head_ref }}
-          PROMOTER: ${{ inputs.promoter || github.actor }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
         run: |
           source_pull_request=$(gh api --method GET "repos/astral-sh/uv-dev/pulls/$PULL_REQUEST_NUMBER")
@@ -97,6 +92,19 @@ jobs:
             '.state == "open" and (.draft | not) and .base.ref == $base_ref and .head.ref == $head_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
             <<< "$source_pull_request" > /dev/null; then
             echo "The uv-dev pull request is no longer ready on the expected branch; refusing to promote it." >&2
+            exit 1
+          fi
+
+          promoter=$(
+            gh api \
+              --method GET \
+              "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" \
+              --paginate \
+              --slurp |
+              jq --raw-output '[.[][] | select(.event == "ready_for_review" and .actor.type == "User") | .actor.login] | last // empty'
+          )
+          if [ -z "$promoter" ]; then
+            echo "The pull request does not have a human promoter; refusing to promote it." >&2
             exit 1
           fi
 
@@ -244,25 +252,10 @@ jobs:
                 --silent
           fi
 
-          if [[ "$PROMOTER" == *"[bot]" ]]; then
-            PROMOTER=$(
-              gh api \
-                --method GET \
-                "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" \
-                --paginate \
-                --slurp |
-                jq --raw-output '[.[][] | select(.event == "ready_for_review" and .actor.type == "User") | .actor.login] | last // empty'
-            )
-            if [ -z "$PROMOTER" ]; then
-              echo "The pull request does not have a human promoter; refusing to assign it." >&2
-              exit 1
-            fi
-          fi
-
           gh api \
             --method POST \
             "repos/astral-sh/uv/issues/$upstream_number/assignees" \
-            --raw-field "assignees[]=$PROMOTER" \
+            --raw-field "assignees[]=$promoter" \
             --silent
 
           echo "number=$upstream_number" >> "$GITHUB_OUTPUT"

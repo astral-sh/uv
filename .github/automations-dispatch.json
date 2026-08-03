@@ -40,10 +40,7 @@
       "on": {
         "pull_request": ["ready_for_review", "synchronize"]
       },
-      "workflow": "promote-pull-request.yml",
-      "inputs": {
-        "promoter": "/sender/login"
-      }
+      "workflow": "promote-pull-request.yml"
     },
     {
       "repository": "uv-dev",
