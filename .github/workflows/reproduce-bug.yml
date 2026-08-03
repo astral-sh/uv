@@ -88,6 +88,7 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-home: "agents/codex"
+          effort: high
           permission-profile: "reproduce-bug"
           safety-strategy: drop-sudo
           allow-users: "*"
@@ -166,6 +167,7 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-home: "agents/codex"
+          effort: high
           permission-profile: "create-bug-test"
           safety-strategy: drop-sudo
           allow-users: "*"

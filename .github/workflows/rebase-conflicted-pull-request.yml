@@ -96,6 +96,7 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: gpt-5.6-sol
+          effort: high
           codex-home: "${{ runner.temp }}/codex-home"
           permission-profile: "pull-request-rebase"
           safety-strategy: drop-sudo

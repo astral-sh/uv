@@ -97,6 +97,7 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-home: "agents/codex"
+          effort: high
           permission-profile: "workflow-failure"
           safety-strategy: drop-sudo
           allow-users: "*"

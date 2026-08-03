@@ -18,6 +18,15 @@ all reproduction files and caches; `$TMPDIR` and `/tmp` are writable. Do not mod
 checkout or any existing user state. Use the installed `uv` executable on `PATH`; do not assume the
 checkout contains a built uv binary.
 
+When the report describes a regression after an upgrade, inspect the relevant release notes, recent
+merged pull requests, implementation, and existing tests before choosing a reproduction fixture. Use
+those changes to identify relevant configuration omitted from the report, and compare the affected
+and last known-good versions when practical. If an initial reproduction does not fail, run a small
+number of evidence-backed configuration variants before concluding that the behavior cannot be
+reproduced. For workspace or project commands, consider root versus member selection, root and
+member dependency groups, implicit default groups such as `dev`, workspace sources, and frozen
+versus non-frozen execution when those dimensions are relevant.
+
 Set `reproduction` to exactly one of these values and explain the result in `reason`:
 
 - `reproducible` when a targeted reproduction produces the reported behavior. Include the minimal
@@ -25,13 +34,15 @@ Set `reproduction` to exactly one of these values and explain the result in `rea
 - `not_reproducible` when the report contains enough information for a targeted reproduction but the
   reported behavior cannot be reproduced. Include what was tried, the observed result, and the
   additional information needed to reproduce the reported behavior. Search the existing tests for
-  the reported behavior, prioritizing `crates/uv/tests/it/` and `crates/uv-client/tests/it/`. If a
-  test already covers it, include the repository-relative path, test name, and behavior it covers in
-  `reason`. Read the test setup and assertions before claiming coverage; a similar name or command
-  alone is not sufficient.
+  the reported behavior, prioritizing the relevant integration tests under `crates/uv/tests/` and
+  `crates/uv-client/tests/it/`. If a test already covers it, include the repository-relative path,
+  test name, and behavior it covers in `reason`. Read the test setup and assertions before claiming
+  coverage; a similar name or command alone is not sufficient. A simplified fixture behaving
+  correctly is not evidence that a configuration-dependent report is `not_reproducible`.
 - `needs_more_information` when the report does not contain enough information to construct a
   meaningful reproduction. Identify the specific commands, configuration, versions, platform
-  details, or input data needed.
+  details, or input data needed. Use this outcome when essential project or dependency-group
+  configuration is missing and evidence-backed variants do not reproduce the reported behavior.
 
 Do not infer that a bug is reproducible from source inspection or a related issue alone. Clearly
 distinguish observed behavior from hypotheses, and do not claim a root cause that has not been
