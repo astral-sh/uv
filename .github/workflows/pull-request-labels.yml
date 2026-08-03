@@ -46,6 +46,8 @@ jobs:
       - name: "Collect pull request context"
         working-directory: pull-request
         run: |
+          # Remove potential PR-controlled paths for label configuration.
+          rm -f .pull-request-labels-event.json .pull-request-labels.json
           gh pr view "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author,baseRefName,headRefName,isDraft,labels,files,additions,deletions,changedFiles \
