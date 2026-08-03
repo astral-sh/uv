@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, anyhow, bail};
 use futures::StreamExt;
 use itertools::Itertools;
+#[cfg(unix)]
+use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit, rlim_t, setrlimit};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 use tokio::process::Command;
@@ -1303,6 +1305,9 @@ pub(crate) async fn run(
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
     }
 
+    #[cfg(unix)]
+    set_run_open_file_limit()?;
+
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
@@ -1311,6 +1316,39 @@ pub(crate) async fn run(
         .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
     run_to_completion(handle).await
+}
+
+/// Apply the requested soft open-file descriptor limit before running the command.
+#[cfg(unix)]
+fn set_run_open_file_limit() -> anyhow::Result<()> {
+    let Some(limit) = std::env::var_os(EnvVars::UV_RUN_ULIMIT) else {
+        return Ok(());
+    };
+
+    let limit = limit.to_str().ok_or_else(|| {
+        anyhow!(
+            "Invalid value for `{}`: expected a non-negative integer",
+            EnvVars::UV_RUN_ULIMIT
+        )
+    })?;
+    let soft = limit
+        .parse::<u32>()
+        .with_context(|| format!("Invalid value for `{}`: `{limit}`", EnvVars::UV_RUN_ULIMIT))?;
+    let soft = rlim_t::from(soft);
+
+    let (_, hard) =
+        getrlimit(Resource::RLIMIT_NOFILE).context("Failed to read the open-file limit")?;
+    if hard != RLIM_INFINITY && soft > hard {
+        bail!(
+            "`{}` value `{soft}` exceeds the hard open-file limit `{hard}`",
+            EnvVars::UV_RUN_ULIMIT
+        );
+    }
+
+    setrlimit(Resource::RLIMIT_NOFILE, soft, hard)
+        .with_context(|| format!("Failed to set the open-file limit to `{soft}`"))?;
+
+    Ok(())
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.

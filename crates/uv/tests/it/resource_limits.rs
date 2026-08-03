@@ -30,3 +30,86 @@ fn adjust_open_file_limit() {
     True
     ");
 }
+
+#[test]
+fn run_open_file_limit_override() {
+    let context = uv_test::test_context!("3.12");
+    let python = &context.python_versions[0].1;
+
+    let mut command = Command::new(get_bin!());
+    command
+        .arg("run")
+        .arg("--no-project")
+        .arg("--")
+        .arg(python)
+        .arg("-c")
+        .arg(
+            "import resource; soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE); print(soft); print(hard > soft)",
+        )
+        .current_dir(context.temp_dir.path())
+        .env(EnvVars::UV_CACHE_DIR, context.cache_dir.path())
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
+        .env(EnvVars::UV_RUN_ULIMIT, "128");
+
+    uv_snapshot!(context.filters(), command, @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    128
+    True
+    ");
+}
+
+#[test]
+fn run_open_file_limit_override_invalid() {
+    let context = uv_test::test_context!("3.12");
+    let python = &context.python_versions[0].1;
+
+    let mut command = Command::new(get_bin!());
+    command
+        .arg("run")
+        .arg("--no-project")
+        .arg("--")
+        .arg(python)
+        .arg("-c")
+        .arg("pass")
+        .current_dir(context.temp_dir.path())
+        .env(EnvVars::UV_CACHE_DIR, context.cache_dir.path())
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
+        .env(EnvVars::UV_RUN_ULIMIT, "invalid");
+
+    uv_snapshot!(context.filters(), command, @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid value for `UV_RUN_ULIMIT`: `invalid`
+      Caused by: invalid digit found in string
+    ");
+}
+
+#[test]
+fn run_open_file_limit_override_exceeds_hard_limit() {
+    let context = uv_test::test_context!("3.12");
+    let python = &context.python_versions[0].1;
+
+    let mut command = Command::new("sh");
+    command
+        .arg("-c")
+        .arg("ulimit -S -n 128; ulimit -H -n 128; exec \"$@\"")
+        .arg("sh")
+        .arg(get_bin!())
+        .arg("run")
+        .arg("--no-project")
+        .arg("--")
+        .arg(python)
+        .arg("-c")
+        .arg("pass")
+        .current_dir(context.temp_dir.path())
+        .env(EnvVars::UV_CACHE_DIR, context.cache_dir.path())
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
+        .env(EnvVars::UV_RUN_ULIMIT, "256");
+
+    uv_snapshot!(context.filters(), command, @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `UV_RUN_ULIMIT` value `256` exceeds the hard open-file limit `128`
+    ");
+}
