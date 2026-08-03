@@ -15,7 +15,7 @@ use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
-use uv_resolver::{Lock, LockVersion, VERSION};
+use uv_resolver::Lock;
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{
     DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
@@ -355,7 +355,7 @@ impl<'lock> LockTarget<'lock> {
         match fs_err::tokio::read_to_string(&lock_path).await {
             Ok(encoded) => {
                 let lock = info_span!("parse uv lock", path = %lock_path.display())
-                    .in_scope(|| parse_lock(&encoded))?;
+                    .in_scope(|| Lock::from_toml(&encoded))?;
                 Ok(Some((lock, encoded)))
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -475,29 +475,6 @@ impl<'lock> LockTarget<'lock> {
                 }
                 Ok(lowered)
             }
-        }
-    }
-}
-
-/// Parse a lockfile and reject unsupported schema versions.
-pub(crate) fn parse_lock(contents: &str) -> Result<Lock, ProjectError> {
-    match Lock::from_toml(contents) {
-        Ok(lock) if lock.version() == VERSION => Ok(lock),
-        Ok(lock) => Err(ProjectError::UnsupportedLockVersion(
-            VERSION,
-            lock.version(),
-        )),
-        Err(error) => {
-            if let Ok(lock) = toml::from_str::<LockVersion>(contents)
-                && lock.version() != VERSION
-            {
-                return Err(ProjectError::UnparsableLockVersion(
-                    VERSION,
-                    lock.version(),
-                    error,
-                ));
-            }
-            Err(ProjectError::UvLockParse(error))
         }
     }
 }

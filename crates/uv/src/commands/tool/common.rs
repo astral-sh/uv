@@ -113,7 +113,7 @@ impl Hint for NoExecutablesError {
 }
 use crate::commands::project::{
     EnvironmentSpecification, PlatformState, PreferenceLocation, ProjectError, PythonRequestSource,
-    lock::ValidatedLock, lock_target::parse_lock,
+    lock::ValidatedLock,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -350,7 +350,7 @@ impl ToolLock {
     pub(crate) fn read(directory: &Path) -> Option<Self> {
         let path = directory.join("uv.lock");
         match fs_err::read_to_string(&path) {
-            Ok(contents) => match parse_lock(&contents) {
+            Ok(contents) => match Lock::from_toml(&contents) {
                 Ok(lock) => Some(Self {
                     root: directory.to_path_buf(),
                     lock,

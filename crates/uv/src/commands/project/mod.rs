@@ -44,7 +44,7 @@ use uv_requirements::{
     read_lock_requirements,
 };
 use uv_resolver::{
-    FlatIndex, Installable, Lock, OptionsBuilder, Preference, PythonRequirement,
+    FlatIndex, Installable, Lock, LockParseError, OptionsBuilder, Preference, PythonRequirement,
     ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
@@ -377,6 +377,22 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+}
+
+impl From<LockParseError> for ProjectError {
+    fn from(error: LockParseError) -> Self {
+        match error {
+            LockParseError::UnsupportedVersion { supported, version } => {
+                Self::UnsupportedLockVersion(supported, version)
+            }
+            LockParseError::UnparsableVersion {
+                supported,
+                version,
+                source,
+            } => Self::UnparsableLockVersion(supported, version, source),
+            LockParseError::Toml(source) => Self::UvLockParse(source),
+        }
+    }
 }
 
 /// Vulnerability identifiers grouped by dependency.
