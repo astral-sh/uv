@@ -107,14 +107,14 @@ where
 
 #[derive(Debug, thiserror::Error)]
 pub enum DirhashError {
-    #[error("Invalid path for directory hashing: {path}")]
-    InvalidPath { path: String },
-    #[error("Archive path is missing from the directory hash tree: {path}")]
-    MissingPath { path: String },
-    #[error("Archive contains duplicate entries for path: {path}")]
-    DuplicatePath { path: String },
-    #[error("Archive path is used as both a file and a directory: {path}")]
-    FileDirectoryConflict { path: String },
+    #[error("Invalid path for directory hashing: {path:?}")]
+    InvalidPath { path: PathBuf },
+    #[error("Archive path is missing from the directory hash tree: {path:?}")]
+    MissingPath { path: PathBuf },
+    #[error("Archive contains duplicate entries for path: {path:?}")]
+    DuplicatePath { path: PathBuf },
+    #[error("Archive path is used as both a file and a directory: {path:?}")]
+    FileDirectoryConflict { path: PathBuf },
     #[error("Encountered a symlink cycle while hashing a directory: {paths:?}")]
     SymlinkCycle { paths: Vec<PathBuf> },
     #[error(transparent)]
@@ -174,7 +174,7 @@ impl<'a> SeenSymlinks<'a> {
 fn canonical_path_to_symlink(symlink_path: &Path) -> Result<PathBuf, DirhashError> {
     let Some(filename) = symlink_path.file_name() else {
         return Err(DirhashError::InvalidPath {
-            path: symlink_path.to_string_lossy().into_owned(),
+            path: symlink_path.to_path_buf(),
         });
     };
     let parent = symlink_path
@@ -220,9 +220,7 @@ fn dirhash_path_inner_resolved(
             // Prior components of the `path` can be non-Unicode, but names in the hashed directory
             // tree are required to be Unicode, otherwise we report an error.
             let Ok(name) = entry.file_name().into_string() else {
-                return Err(DirhashError::InvalidPath {
-                    path: path.to_string_lossy().into(),
-                });
+                return Err(DirhashError::InvalidPath { path });
             };
             dir_contents.push((name, path));
         }
@@ -280,7 +278,7 @@ impl DirhashTree {
                         child.insertion_entry(rest, original_path, create_dirs)
                     }
                     DirhashEntry::File(_) => Err(DirhashError::FileDirectoryConflict {
-                        path: String::from(original_path),
+                        path: PathBuf::from(original_path),
                     }),
                 }
             } else {
@@ -296,7 +294,7 @@ impl DirhashTree {
                     child.insertion_entry(rest, original_path, create_dirs)
                 } else {
                     Err(DirhashError::MissingPath {
-                        path: String::from(original_path),
+                        path: PathBuf::from(original_path),
                     })
                 }
             }
@@ -315,7 +313,7 @@ impl DirhashTree {
                 Ok(())
             }
             Entry::Occupied(_) => Err(DirhashError::DuplicatePath {
-                path: String::from(path),
+                path: PathBuf::from(path),
             }),
         }
     }
@@ -325,7 +323,7 @@ impl DirhashTree {
         let entry = self.insertion_entry(&normalized_path, path, true)?;
         match entry {
             Entry::Vacant(_) => Err(DirhashError::MissingPath {
-                path: String::from(path),
+                path: PathBuf::from(path),
             }),
             Entry::Occupied(mut occupied) => match occupied.get_mut() {
                 DirhashEntry::File(prev_hash) => {
@@ -333,7 +331,7 @@ impl DirhashTree {
                     Ok(())
                 }
                 DirhashEntry::Directory(_) => Err(DirhashError::FileDirectoryConflict {
-                    path: String::from(path),
+                    path: PathBuf::from(path),
                 }),
             },
         }
@@ -350,7 +348,7 @@ impl DirhashTree {
             Entry::Occupied(occupied) => match occupied.get() {
                 DirhashEntry::Directory(_) => Ok(()),
                 DirhashEntry::File(_) => Err(DirhashError::FileDirectoryConflict {
-                    path: String::from(path),
+                    path: PathBuf::from(path),
                 }),
             },
         }
@@ -374,7 +372,7 @@ fn component_needs_normalization(component: &str) -> bool {
 fn normalize_dirhash_path(mut path: &str) -> Result<Cow<'_, str>, DirhashError> {
     if path.starts_with('/') {
         return Err(DirhashError::InvalidPath {
-            path: path.to_owned(),
+            path: PathBuf::from(path),
         });
     }
     path = path.trim_start_matches("./");
@@ -389,7 +387,7 @@ fn normalize_dirhash_path(mut path: &str) -> Result<Cow<'_, str>, DirhashError> 
             ".." => {
                 if components.pop().is_none() {
                     return Err(DirhashError::InvalidPath {
-                        path: String::from(path),
+                        path: PathBuf::from(path),
                     });
                 }
             }
@@ -398,7 +396,7 @@ fn normalize_dirhash_path(mut path: &str) -> Result<Cow<'_, str>, DirhashError> 
     }
     if components.is_empty() {
         return Err(DirhashError::InvalidPath {
-            path: String::from(path),
+            path: PathBuf::from(path),
         });
     }
     Ok(Cow::Owned(components.join("/")))
