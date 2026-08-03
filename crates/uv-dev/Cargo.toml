@@ -42,7 +42,10 @@ uv-workspace = { workspace = true, features = ["schemars"] }
 # dependencies, to ensure that we're forced to think twice before including them in other crates.
 anstream = { workspace = true }
 anyhow = { workspace = true }
+async_zip = { workspace = true }
+base64 = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
+csv = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 itertools = { workspace = true }
@@ -55,6 +58,7 @@ schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { version = "0.9.34" }
+sha2 = { workspace = true }
 tagu = { version = "0.1.6", optional = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
