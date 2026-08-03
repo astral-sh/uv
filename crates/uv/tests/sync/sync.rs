@@ -4665,6 +4665,48 @@ fn sync_group_non_project_member() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for: <https://github.com/astral-sh/uv/issues/20877>
+#[test]
+fn sync_group_transitive_self() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "idna"
+        version = "3.6"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        foo = ["anyio"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("idna")
+        .child("__init__.py")
+        .touch()?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-group").arg("foo"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
 /// Sync with `--only-group`, where the group includes the project itself.
 #[test]
 fn sync_group_self() -> Result<()> {
