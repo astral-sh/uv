@@ -10,6 +10,8 @@ use axoupdater::{
 };
 use owo_colors::OwoColorize;
 use serde::Deserialize;
+#[cfg(windows)]
+use serde_json::Value;
 use tempfile::TempDir;
 use thiserror::Error;
 use tokio::process::Command;
@@ -353,11 +355,12 @@ async fn run_official_updater(
         official_installer_urls_with_mirror(target_version, custom_astral_mirror.as_deref())?;
     let temp_dir = TempDir::new()?;
     let installer_path = temp_dir.path().join(installer_filename());
-    #[cfg(not(windows))]
     let install_prefix = PathBuf::from(updater.install_prefix_root()?.as_str());
     // If we can't determine the previous PATH behavior, abort rather than potentially changing the
     // user's shell configuration unexpectedly.
-    let modify_path = load_receipt_modify_path("uv")
+    let receipt_path = find_receipt_path("uv")?
+        .context("Failed to locate the standalone install receipt for `uv`")?;
+    let modify_path = load_receipt_modify_path(&receipt_path)
         .context("Failed to determine whether the existing standalone install modified PATH")?;
 
     #[cfg(windows)]
@@ -392,7 +395,13 @@ async fn run_official_updater(
     .await?;
 
     #[cfg(windows)]
-    replace_from_temporary_install(temporary_install_dir.path())?;
+    replace_from_temporary_install(
+        temporary_install_dir.path(),
+        temporary_config_dir.path(),
+        &receipt_path,
+        &install_prefix,
+        modify_path,
+    )?;
 
     let direction = if current_version > target_version {
         "Downgraded"
@@ -527,7 +536,13 @@ fn installer_download_github_token<'a>(
 }
 
 #[cfg(windows)]
-fn replace_from_temporary_install(temporary_install_dir: &Path) -> Result<()> {
+fn replace_from_temporary_install(
+    temporary_install_dir: &Path,
+    temporary_config_dir: &Path,
+    receipt_path: &Path,
+    install_prefix: &Path,
+    modify_path: bool,
+) -> Result<()> {
     let current_executable = std::env::current_exe()?;
     let current_file_name = current_executable.file_name().ok_or_else(|| {
         std::io::Error::new(
@@ -550,8 +565,57 @@ fn replace_from_temporary_install(temporary_install_dir: &Path) -> Result<()> {
         fs_err::copy(entry.path(), install_dir.join(entry.file_name()))?;
     }
 
+    update_standalone_install_receipt(
+        temporary_config_dir,
+        receipt_path,
+        install_prefix,
+        modify_path,
+    )?;
+
     self_replace::self_replace(temporary_install_dir.join(current_file_name))
         .context("Failed to replace the current executable")?;
+    Ok(())
+}
+
+/// Promote the receipt written by a staged Windows installation to its original location.
+///
+/// The installer records the staging directory as its install prefix and disables PATH
+/// modification, so those fields must retain the original installation's values.
+#[cfg(windows)]
+fn update_standalone_install_receipt(
+    temporary_config_dir: &Path,
+    receipt_path: &Path,
+    install_prefix: &Path,
+    modify_path: bool,
+) -> Result<()> {
+    let temporary_receipt_path = temporary_config_dir.join("uv").join("uv-receipt.json");
+    let receipt = fs_err::read(&temporary_receipt_path).with_context(|| {
+        format!(
+            "Failed to read staged install receipt at `{}`",
+            temporary_receipt_path.display()
+        )
+    })?;
+    let mut receipt: Value = serde_json::from_slice(&receipt).with_context(|| {
+        format!(
+            "Failed to parse staged install receipt at `{}`",
+            temporary_receipt_path.display()
+        )
+    })?;
+    let receipt = receipt
+        .as_object_mut()
+        .context("Staged install receipt must be a JSON object")?;
+    receipt.insert(
+        "install_prefix".to_string(),
+        serde_json::to_value(install_prefix)?,
+    );
+    receipt.insert("modify_path".to_string(), Value::Bool(modify_path));
+
+    fs_err::write(receipt_path, serde_json::to_vec(&receipt)?).with_context(|| {
+        format!(
+            "Failed to write updated install receipt at `{}`",
+            receipt_path.display()
+        )
+    })?;
     Ok(())
 }
 
@@ -614,13 +678,9 @@ async fn execute_official_installer(
 /// Read whether the existing standalone install opted out of PATH modification.
 ///
 /// Older receipts that lack this field default to `true` for modifying PATH.
-fn load_receipt_modify_path(app_name: &str) -> Result<bool> {
-    let Some(receipt_path) = find_receipt_path(app_name)? else {
-        anyhow::bail!("Failed to locate the standalone install receipt for `{app_name}`");
-    };
-
+fn load_receipt_modify_path(receipt_path: &Path) -> Result<bool> {
     // Axoupdater does not expose `modify_path`, so we re-read the already-validated receipt.
-    let receipt = fs_err::read(&receipt_path).with_context(|| {
+    let receipt = fs_err::read(receipt_path).with_context(|| {
         format!(
             "Failed to read install receipt at `{}`",
             receipt_path.display()
@@ -1148,6 +1208,58 @@ mod tests {
         let receipt: StandaloneInstallReceipt = serde_json::from_str("{\"modify_path\":false}\n")
             .expect("receipt with explicit modify_path should parse");
         assert!(!receipt.modify_path);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_update_standalone_install_receipt_preserves_install_details() -> Result<()> {
+        let temporary_config_dir = TempDir::new()?;
+        let temporary_receipt_path = temporary_config_dir
+            .path()
+            .join("uv")
+            .join("uv-receipt.json");
+        fs_err::create_dir_all(
+            temporary_receipt_path
+                .parent()
+                .context("Staged receipt path must have a parent directory")?,
+        )?;
+        fs_err::write(
+            &temporary_receipt_path,
+            serde_json::to_vec(&serde_json::json!({
+                "binaries": ["uv", "uvx", "uvw"],
+                "binary_aliases": {"uv": ["uv.exe"]},
+                "install_prefix": temporary_config_dir.path(),
+                "modify_path": false,
+                "version": "0.12.1",
+            }))?,
+        )?;
+
+        let receipt_dir = TempDir::new()?;
+        let receipt_path = receipt_dir.path().join("uv-receipt.json");
+        let install_prefix = receipt_dir.path().join("bin");
+        fs_err::write(&receipt_path, "{\"version\":\"0.12.0\"}")?;
+
+        update_standalone_install_receipt(
+            temporary_config_dir.path(),
+            &receipt_path,
+            &install_prefix,
+            true,
+        )?;
+
+        let receipt: Value = serde_json::from_slice(&fs_err::read(&receipt_path)?)?;
+        assert_eq!(
+            receipt["install_prefix"],
+            Value::String(install_prefix.display().to_string())
+        );
+        assert_eq!(receipt["modify_path"], Value::Bool(true));
+        assert_eq!(receipt["binaries"], serde_json::json!(["uv", "uvx", "uvw"]));
+        assert_eq!(
+            receipt["binary_aliases"],
+            serde_json::json!({"uv": ["uv.exe"]})
+        );
+        assert_eq!(receipt["version"], Value::String("0.12.1".to_string()));
+
+        Ok(())
     }
 
     #[cfg(unix)]
