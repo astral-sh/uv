@@ -238,8 +238,8 @@ fn dirhash_path_inner_resolved(
             .map(|((name, _), hash)| (name.as_str(), hash));
         Ok(hash_dir_entries(dirhash_entries))
     } else {
-        // This is a file. Hash it with BLAKE3 the usual way. `update_mmap_rayon` shares the same
-        // thread pool as `par_iter` above.
+        // This is not a directory, so treat it like a file and hash it. `update_mmap_rayon` shares
+        // the same thread pool as `par_iter` above.
         Ok(blake3::Hasher::new().update_mmap_rayon(path)?.finalize())
     }
 }
