@@ -2139,7 +2139,8 @@ fn build_fast_path_unbounded_backend() -> Result<()> {
     Ok(())
 }
 
-/// Only mention the bundled build backend when verbose logging is enabled.
+/// Only mention the bundled build backend when verbose logging is enabled, including when the
+/// bundled version satisfies build constraints.
 #[test]
 fn build_fast_path_verbose() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2156,11 +2157,16 @@ fn build_fast_path_verbose() -> Result<()> {
         build-backend = "uv_build"
     "#})?;
     project.child("src/project/__init__.py").touch()?;
+    project
+        .child("constraints.txt")
+        .write_str(&format!("uv_build=={}", uv_version::version()))?;
 
     let output = context
         .build()
         .arg("project")
         .arg("--sdist")
+        .arg("--build-constraint")
+        .arg(project.child("constraints.txt").path())
         .arg("--verbose")
         .env_remove(EnvVars::RUST_LOG)
         .output()?;

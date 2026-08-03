@@ -24,7 +24,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    PackageConfigSettings, Requirement, SourceDist,
+    PackageConfigSettings, Requirement, RequirementSource, SourceDist,
 };
 use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
@@ -631,6 +631,10 @@ async fn build_package(
     // Read build constraints.
     let build_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
+    let has_backend_build_constraint_hashes = hash_checking.is_some()
+        && build_constraints.iter().any(|constraint| {
+            constraint.requirement.name.as_str() == "uv-build" && !constraint.hashes.is_empty()
+        });
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -652,9 +656,17 @@ async fn build_package(
             .map(|constraint| constraint.requirement)
             .chain(build_constraints_from_workspace.iter().cloned()),
     );
-    let has_backend_build_constraints = build_constraints
-        .requirements()
-        .any(|requirement| requirement.name.as_str() == "uv-build");
+    let has_incompatible_backend_build_constraints =
+        build_constraints.requirements().any(|requirement| {
+            requirement.name.as_str() == "uv-build"
+                && match &requirement.source {
+                    RequirementSource::Registry { specifier, .. } => {
+                        Version::from_str(uv_version::version())
+                            .is_ok_and(|version| !specifier.contains(&version))
+                    }
+                    _ => true,
+                }
+        });
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -750,9 +762,15 @@ async fn build_package(
             source.path().user_display()
         );
         BuildAction::Pep517
-    } else if has_backend_build_constraints {
+    } else if has_backend_build_constraint_hashes {
         debug!(
-            "Not using `uv_build` direct build for `{}` because `uv_build` has build constraints",
+            "Not using `uv_build` direct build for `{}` because `uv_build` has build constraint hashes",
+            source.path().user_display()
+        );
+        BuildAction::Pep517
+    } else if has_incompatible_backend_build_constraints {
+        debug!(
+            "Not using `uv_build` direct build for `{}` because `uv_build` has incompatible build constraints",
             source.path().user_display()
         );
         BuildAction::Pep517
