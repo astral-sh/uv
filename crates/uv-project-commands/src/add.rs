@@ -125,7 +125,7 @@ pub async fn add(
     python: Option<String>,
     workspace: Option<bool>,
     install_mirrors: PythonInstallMirrors,
-    settings: ResolverInstallerSettings,
+    mut settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
@@ -389,6 +389,7 @@ pub async fn add(
     let RequirementsSpecification {
         requirements,
         constraints,
+        config_settings_package,
         ..
     } = RequirementsSpecification::from_sources(
         &requirements,
@@ -399,6 +400,12 @@ pub async fn add(
         &client_builder,
     )
     .await?;
+
+    settings.resolver.config_settings_package = settings
+        .resolver
+        .config_settings_package
+        .clone()
+        .merge(config_settings_package.clone());
 
     // Initialize any shared state.
     let state = PlatformState::default();
@@ -708,6 +715,10 @@ pub async fn add(
         index,
         &mut toml,
     )?;
+
+    for (package, config_settings) in config_settings_package.iter() {
+        toml.add_config_settings_package(package, config_settings)?;
+    }
 
     // If no requirements were added but a dependency group or optional dependency was specified,
     // ensure the group/extra exists. This handles the case where `uv add -r requirements.txt

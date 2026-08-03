@@ -135,6 +135,7 @@ pub async fn pip_sync(
         find_links,
         no_binary,
         no_build,
+        config_settings_package: requirements_config_settings_package,
         extras: _,
     } = uv_resolve_operations::read_requirements(
         requirements,
@@ -146,6 +147,11 @@ pub async fn pip_sync(
         &client_builder,
     )
     .await?;
+
+    let config_settings_package = config_settings_package
+        .clone()
+        .merge(requirements_config_settings_package);
+    let config_settings_package = &config_settings_package;
 
     let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
 
