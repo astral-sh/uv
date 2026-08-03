@@ -20,12 +20,15 @@ typical case: the single label that best matches the repository's established pr
 classification. Do not automatically add labels for every affected area or implementation detail.
 Recommend additional semantic labels only when recent usage establishes that they are orthogonal, or
 when the pull request has multiple independent user-visible effects. Even then, choose the smallest
-set and usually no more than three semantic labels total. Recommend `internal` for changes that are
-not user-facing, and distinguish bug fixes, enhancements, performance changes, documentation,
-testing, and CI changes using the repository's existing label conventions. Treat `breaking` and
-feature-status labels as orthogonal when applicable. When a change affects a preview feature,
-recommend `preview` in addition to the applicable change-type label, such as `bug` for a bug fix or
-`enhancement` for an improvement.
+set and usually no more than three semantic labels total. Classify the changes actually made, not
+the issue or behavior they describe. Reserve `bug` and `enhancement` for changes to user-facing
+product behavior. Recommend `testing` for pull requests that only add or modify tests, even when
+those tests reproduce a bug. Recommend `automations` for changes to internal automations, even when
+those changes fix a failure or add functionality. Recommend `internal` for other changes that are
+not user-facing, and distinguish performance changes, documentation, and CI changes using the
+repository's existing label conventions. Treat `breaking` and feature-status labels as orthogonal
+when applicable. When a change affects a preview feature, recommend `preview` in addition to the
+applicable change-type label, such as `bug` for a bug fix or `enhancement` for an improvement.
 
 Infer `test:*`, `build:*`, and `coverage` CI-control labels from the changed code and the pull
 request's intent. Treat these as rare opt-in controls: recommend one only with concrete evidence
