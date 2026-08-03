@@ -7,12 +7,6 @@ use std::path::Path;
 
 use crate::CleanReporter;
 
-/// Remove a file or directory and all its contents, returning a [`Removal`] with
-/// the number of files and directories removed, along with a total byte count.
-pub fn rm_rf(path: impl AsRef<Path>) -> io::Result<Removal> {
-    Remover::default().rm_rf(path, false)
-}
-
 /// A builder for a [`Remover`] that can remove files and directories.
 #[derive(Default)]
 pub(crate) struct Remover {
@@ -66,7 +60,7 @@ pub struct Removal {
 
 impl Removal {
     /// Create an empty removal summary with optional per-file reclaimed-space accounting.
-    pub fn new(measure_reclaimed_space: bool) -> Self {
+    pub(crate) fn new(measure_reclaimed_space: bool) -> Self {
         Self {
             reclaimed_bytes: measure_reclaimed_space.then_some(0),
             ..Self::default()

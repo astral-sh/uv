@@ -59,7 +59,10 @@ fn prune_hardlinked_file() -> Result<()> {
     // Keep both hardlinks on the selected filesystem, including Windows CI's NTFS test volume.
     let retained = context.cache_dir.path().with_file_name("retained.bin");
     fs_err::write(&retained, vec![42; 1024 * 1024])?;
-    fs_err::File::open(&retained)?.sync_all()?;
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(&retained)?
+        .sync_all()?;
 
     let stale = context.cache_dir.child("stale-v0");
     stale.create_dir_all()?;

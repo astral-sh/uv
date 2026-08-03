@@ -43,8 +43,7 @@ pub(crate) async fn cache_prune(
         }
     };
 
-    let measure_reclaimed_space = preview.is_enabled(PreviewFeature::CacheReclaimedSpace);
-    let cache = cache.with_reclaimed_space(measure_reclaimed_space);
+    let cache = cache.with_reclaimed_space(preview.is_enabled(PreviewFeature::CacheReclaimedSpace));
 
     writeln!(
         printer.stderr(),
@@ -52,9 +51,6 @@ pub(crate) async fn cache_prune(
         cache.root().user_display().cyan()
     )?;
 
-    let available_before = measure_reclaimed_space
-        .then(|| uv_fs::available_space(cache.root()).ok())
-        .flatten();
     let mut summary = cache.removal();
 
     // Prune the source distribution cache, which is tightly coupled to the builder crate.
@@ -65,14 +61,6 @@ pub(crate) async fn cache_prune(
     summary += cache
         .prune(ci)
         .with_context(|| format!("Failed to prune cache at: {}", cache.root().user_display()))?;
-
-    let reclaimed_bytes = summary.reclaimed_bytes.or_else(|| {
-        available_before.and_then(|before| {
-            uv_fs::available_space(cache.root())
-                .ok()
-                .map(|after| after.saturating_sub(before))
-        })
-    });
 
     // Write a summary of the number of files and directories removed.
     match (summary.num_files, summary.num_dirs) {
@@ -95,7 +83,7 @@ pub(crate) async fn cache_prune(
 
     // If any, report the reclaimed space, falling back to the apparent removed size.
     if summary.total_bytes > 0 {
-        let total_bytes = reclaimed_bytes.unwrap_or(summary.total_bytes);
+        let total_bytes = summary.reclaimed_bytes.unwrap_or(summary.total_bytes);
         let bytes = if total_bytes < 1024 {
             format!("{total_bytes}B")
         } else {

@@ -17,8 +17,8 @@ use uv_pypi_types::ResolutionMetadata;
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
+pub use crate::removal::Removal;
 use crate::removal::Remover;
-pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 pub use archive::ArchiveId;

@@ -45,14 +45,7 @@ pub(crate) async fn cache_clean(
         }
     };
 
-    let measure_reclaimed_space = preview.is_enabled(PreviewFeature::CacheReclaimedSpace);
-    let cache = cache.with_reclaimed_space(measure_reclaimed_space);
-
-    // The cache root itself is removed when cleaning the entire cache, so measure its parent.
-    let filesystem_path = cache.root().parent().unwrap_or(cache.root()).to_path_buf();
-    let available_before = measure_reclaimed_space
-        .then(|| uv_fs::available_space(&filesystem_path).ok())
-        .flatten();
+    let cache = cache.with_reclaimed_space(preview.is_enabled(PreviewFeature::CacheReclaimedSpace));
 
     let summary = if packages.is_empty() {
         writeln!(
@@ -82,14 +75,6 @@ pub(crate) async fn cache_clean(
         summary
     };
 
-    let reclaimed_bytes = summary.reclaimed_bytes.or_else(|| {
-        available_before.and_then(|before| {
-            uv_fs::available_space(&filesystem_path)
-                .ok()
-                .map(|after| after.saturating_sub(before))
-        })
-    });
-
     // Write a summary of the number of files and directories removed.
     match (summary.num_files, summary.num_dirs) {
         (0, 0) => {
@@ -111,7 +96,7 @@ pub(crate) async fn cache_clean(
 
     // If any, report the reclaimed space, falling back to the apparent removed size.
     if summary.total_bytes > 0 {
-        let total_bytes = reclaimed_bytes.unwrap_or(summary.total_bytes);
+        let total_bytes = summary.reclaimed_bytes.unwrap_or(summary.total_bytes);
         let bytes = if total_bytes < 1024 {
             format!("{total_bytes}B")
         } else {

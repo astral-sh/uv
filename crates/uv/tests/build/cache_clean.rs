@@ -55,7 +55,10 @@ fn clean_all_hardlinked_file() -> Result<()> {
     // Windows CI explicitly places the cache on its NTFS test volume.
     let retained = context.cache_dir.path().with_file_name("retained.bin");
     fs_err::write(&retained, vec![42; 1024 * 1024])?;
-    fs_err::File::open(&retained)?.sync_all()?;
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(&retained)?
+        .sync_all()?;
 
     let cached = context.cache_dir.child("hardlinked.bin");
     fs_err::hard_link(&retained, &cached)?;
@@ -88,7 +91,10 @@ fn clean_all_hardlinked_file() -> Result<()> {
 
     context.cache_dir.create_dir_all()?;
     cached.write_binary(&vec![42; 1024 * 1024])?;
-    fs_err::File::open(cached.path())?.sync_all()?;
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(cached.path())?
+        .sync_all()?;
     fs_err::hard_link(&cached, context.cache_dir.child("second-hardlink.bin"))?;
 
     uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-reclaimed-space"), @"
