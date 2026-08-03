@@ -2017,6 +2017,30 @@ enum CopyEntrypointError {
     Trampoline(#[from] uv_trampoline_builder::Error),
 }
 
+#[cfg(unix)]
+const RELOCATABLE_SHEBANG: &str = r#"#!/bin/sh
+'''exec' "$(dirname -- "$(realpath "$0")")"/'python' "$0" "$@"
+' '''
+"#;
+
+#[cfg(unix)]
+const RELOCATABLE_PYTHON3_SHEBANG: &str = r#"#!/bin/sh
+'''exec' "$(dirname -- "$(realpath "$0")")"/'python3' "$0" "$@"
+' '''
+"#;
+
+#[cfg(unix)]
+const LEGACY_RELOCATABLE_SHEBANG: &str = r#"#!/bin/sh
+'''exec' "$(dirname -- "$(realpath -- "$0")")"/'python' "$0" "$@"
+' '''
+"#;
+
+#[cfg(unix)]
+const LEGACY_RELOCATABLE_PYTHON3_SHEBANG: &str = r#"#!/bin/sh
+'''exec' "$(dirname -- "$(realpath -- "$0")")"/'python3' "$0" "$@"
+' '''
+"#;
+
 /// Create a copy of the entrypoint at `source` at `target`, if it has a Python shebang, replacing
 /// the previous Python executable with a new one.
 ///
@@ -2072,13 +2096,12 @@ fn copy_entrypoint(
     }
 
     let Some(contents) = contents
-        // Check for a relative path or relocatable shebang
-        .strip_prefix(
-            r#"#!/bin/sh
-'''exec' "$(dirname -- "$(realpath -- "$0")")"/'python' "$0" "$@"
-' '''
-"#,
-        )
+        // Check for corrected relocatable shebangs.
+        .strip_prefix(RELOCATABLE_SHEBANG)
+        .or_else(|| contents.strip_prefix(RELOCATABLE_PYTHON3_SHEBANG))
+        // Keep recognizing launchers generated before BusyBox compatibility was fixed.
+        .or_else(|| contents.strip_prefix(LEGACY_RELOCATABLE_SHEBANG))
+        .or_else(|| contents.strip_prefix(LEGACY_RELOCATABLE_PYTHON3_SHEBANG))
         // Or, an absolute path shebang
         .or_else(|| contents.strip_prefix(&format!("#!{}\n", previous_executable.display())))
         // If the previous executable ends with `python3`, check for a shebang with `python` too
@@ -2161,5 +2184,56 @@ impl uv_errors::Hint for RecursionLimitError {
             "uv run".green(),
             "--script".green(),
         ))
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+
+    use super::{
+        LEGACY_RELOCATABLE_PYTHON3_SHEBANG, LEGACY_RELOCATABLE_SHEBANG,
+        RELOCATABLE_PYTHON3_SHEBANG, RELOCATABLE_SHEBANG, copy_entrypoint,
+    };
+
+    fn assert_relocatable_shebang_is_copied(shebang: &str) {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let source = temp_dir.path().join("source-entrypoint");
+        let target = temp_dir.path().join("target-entrypoint");
+        fs_err::write(&source, format!("{shebang}print('probe')\n")).unwrap();
+
+        let mut permissions = fs_err::metadata(&source).unwrap().permissions();
+        permissions.set_mode(0o751);
+        fs_err::set_permissions(&source, permissions).unwrap();
+
+        copy_entrypoint(
+            &source,
+            &target,
+            Path::new("/old/environment/bin/python3"),
+            Path::new("/new/environment/bin/python"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs_err::read_to_string(&target).unwrap(),
+            "#!/new/environment/bin/python\nprint('probe')\n"
+        );
+        assert_eq!(
+            fs_err::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o751
+        );
+    }
+
+    #[test]
+    fn copy_entrypoint_accepts_current_and_legacy_relocatable_shebangs() {
+        for shebang in [
+            RELOCATABLE_SHEBANG,
+            RELOCATABLE_PYTHON3_SHEBANG,
+            LEGACY_RELOCATABLE_SHEBANG,
+            LEGACY_RELOCATABLE_PYTHON3_SHEBANG,
+        ] {
+            assert_relocatable_shebang_is_copied(shebang);
+        }
     }
 }

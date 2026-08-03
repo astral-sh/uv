@@ -482,12 +482,12 @@ pub(crate) fn create(
                 path: location.clone(),
             })?;
         let virtual_env_dir = match (relocatable, name.to_owned()) {
-            (true, "activate") => Cow::Borrowed(
-                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#,
-            ),
+            (true, "activate") => {
+                Cow::Borrowed(r#"'"$(dirname -- "$(dirname -- "$(realpath "$SCRIPT_PATH")")")"'"#)
+            }
             (true, "activate.bat") => Cow::Borrowed(r"%~dp0.."),
             (true, "activate.fish") => {
-                Cow::Borrowed(r"'(dirname -- (dirname -- (realpath -- (status -f))))'")
+                Cow::Borrowed(r"'(dirname -- (dirname -- (realpath (status -f))))'")
             }
             (true, "activate.nu") => Cow::Borrowed(r"(path self | path dirname | path dirname)"),
             (false, "activate.nu") => Cow::Owned(format!(
