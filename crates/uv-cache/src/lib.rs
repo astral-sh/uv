@@ -18,7 +18,7 @@ pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 pub use crate::removal::Removal;
-use crate::removal::Remover;
+use crate::removal::{RemovalMode, Remover};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 pub use archive::ArchiveId;
@@ -174,8 +174,8 @@ pub struct Cache {
     /// Ensure that `uv cache` operations don't remove items from the cache that are used by another
     /// uv process.
     lock_file: Option<Arc<LockedFile>>,
-    /// Inspect each removed file's actual sharing state when reporting reclaimed cache space.
-    measure_reclaimed_space: bool,
+    /// The storage accounting used when removing cache entries.
+    removal_mode: RemovalMode,
 }
 
 impl Cache {
@@ -186,7 +186,7 @@ impl Cache {
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: None,
             lock_file: None,
-            measure_reclaimed_space: false,
+            removal_mode: RemovalMode::Logical,
         }
     }
 
@@ -198,7 +198,7 @@ impl Cache {
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: Some(Arc::new(temp_dir)),
             lock_file: None,
-            measure_reclaimed_space: false,
+            removal_mode: RemovalMode::Logical,
         })
     }
 
@@ -208,19 +208,23 @@ impl Cache {
         Self { refresh, ..self }
     }
 
-    /// Enable per-file reclaimed-space accounting when the filesystem can support it.
+    /// Enable per-file physical-space accounting when the filesystem can support it.
     #[must_use]
-    pub fn with_reclaimed_space(self, enabled: bool) -> Self {
-        let measure_reclaimed_space = enabled && uv_fs::supports_reclaimable_space();
+    pub fn with_physical_space(self, enabled: bool) -> Self {
+        let removal_mode = if enabled && uv_fs::supports_physical_space() {
+            RemovalMode::Physical
+        } else {
+            RemovalMode::Logical
+        };
         Self {
-            measure_reclaimed_space,
+            removal_mode,
             ..self
         }
     }
 
     /// Create an empty removal summary using the cache's configured accounting mode.
     pub fn removal(&self) -> Removal {
-        Removal::new(self.measure_reclaimed_space)
+        Removal::new(self.removal_mode)
     }
 
     /// Acquire a lock that allows removing entries from the cache.
@@ -230,7 +234,7 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file,
-            measure_reclaimed_space,
+            removal_mode,
         } = self;
 
         // Release the existing lock, avoid deadlocks from a cloned cache.
@@ -253,7 +257,7 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file: Some(Arc::new(lock_file)),
-            measure_reclaimed_space,
+            removal_mode,
         })
     }
 
@@ -266,7 +270,7 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file,
-            measure_reclaimed_space,
+            removal_mode,
         } = self;
 
         match LockedFile::acquire_no_wait(
@@ -279,14 +283,14 @@ impl Cache {
                 refresh,
                 temp_dir,
                 lock_file: Some(Arc::new(lock_file)),
-                measure_reclaimed_space,
+                removal_mode,
             }),
             None => Err(Self {
                 root,
                 refresh,
                 temp_dir,
                 lock_file,
-                measure_reclaimed_space,
+                removal_mode,
             }),
         }
     }
@@ -546,7 +550,7 @@ impl Cache {
     pub fn clear(self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
         // Remove everything but `.lock`, Windows does not allow removal of a locked file
         let mut removal = Remover::new(reporter)
-            .with_reclaimed_space(self.measure_reclaimed_space)
+            .with_removal_mode(self.removal_mode)
             .rm_rf(&self.root, true)?;
         let Self {
             root, lock_file, ..
@@ -737,10 +741,10 @@ impl Cache {
         Ok(summary)
     }
 
-    /// Remove a cache path using the cache's configured reclaimed-space accounting.
+    /// Remove a cache path using the cache's configured storage accounting.
     pub fn remove_path(&self, path: impl AsRef<Path>) -> io::Result<Removal> {
         Remover::default()
-            .with_reclaimed_space(self.measure_reclaimed_space)
+            .with_removal_mode(self.removal_mode)
             .rm_rf(path, false)
     }
 

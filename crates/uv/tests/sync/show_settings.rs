@@ -3386,7 +3386,7 @@ fn preview_features() {
     +            NativeAuth,
     +            S3Endpoint,
     +            CacheSize,
-    +            CacheReclaimedSpace,
+    +            CachePhysicalSpace,
     +            InitProjectFlag,
     +            WorkspaceMetadata,
     +            WorkspaceDir,

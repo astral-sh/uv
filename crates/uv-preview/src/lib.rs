@@ -253,8 +253,8 @@ pub enum PreviewFeature {
     S3Endpoint,
     /// Allows using `uv cache size`.
     CacheSize,
-    /// Reports the disk space reclaimed by cache cleanup, accounting for hardlinks and copy-on-write clones.
-    CacheReclaimedSpace,
+    /// Reports the physical disk space reclaimed by cache cleanup, accounting for hardlinks and copy-on-write clones.
+    CachePhysicalSpace,
     /// Rejects the deprecated `--project` option in `uv init`.
     InitProjectFlag,
     /// Allows using `uv workspace metadata`.

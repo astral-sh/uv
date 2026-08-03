@@ -43,7 +43,7 @@ pub(crate) async fn cache_prune(
         }
     };
 
-    let cache = cache.with_reclaimed_space(preview.is_enabled(PreviewFeature::CacheReclaimedSpace));
+    let cache = cache.with_physical_space(preview.is_enabled(PreviewFeature::CachePhysicalSpace));
 
     writeln!(
         printer.stderr(),
@@ -81,16 +81,16 @@ pub(crate) async fn cache_prune(
         }
     }
 
-    // If any, report the reclaimed space, falling back to the apparent removed size.
-    let total_bytes = summary.reclaimed_bytes.unwrap_or(summary.total_bytes);
-    if summary.total_bytes > 0 || total_bytes > 0 {
-        let bytes = if total_bytes < 1024 {
-            format!("{total_bytes}B")
+    // If any, report the physical space, falling back to the logical removed size.
+    let reported_bytes = summary.physical_bytes.unwrap_or(summary.logical_bytes);
+    if summary.logical_bytes > 0 || reported_bytes > 0 {
+        let bytes = if reported_bytes < 1024 {
+            format!("{reported_bytes}B")
         } else {
-            let (bytes, unit) = human_readable_bytes(total_bytes);
+            let (bytes, unit) = human_readable_bytes(reported_bytes);
             format!("{bytes:.1}{unit}")
         };
-        if summary.reclaimed_bytes_incomplete {
+        if summary.physical_bytes_incomplete {
             write!(printer.stderr(), " (at least {})", bytes.green())?;
         } else {
             write!(printer.stderr(), " ({})", bytes.green())?;

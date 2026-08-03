@@ -8,8 +8,8 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
-/// Return whether the current platform can identify storage reclaimed by individual files.
-pub const fn supports_reclaimable_space() -> bool {
+/// Return whether the current platform can identify individual files' physical storage.
+pub const fn supports_physical_space() -> bool {
     cfg!(any(
         target_os = "linux",
         target_os = "macos",
@@ -17,11 +17,11 @@ pub const fn supports_reclaimable_space() -> bool {
     ))
 }
 
-/// Return the allocated file data that would be reclaimed by deleting `path` immediately.
+/// Return the physical file data that would be reclaimed by deleting `path`.
 ///
 /// The result excludes data retained by another hardlink, copy-on-write clone, or snapshot.
 /// Filesystem metadata is not included.
-pub fn reclaimable_space(path: &Path, metadata: &std::fs::Metadata) -> io::Result<u64> {
+pub fn physical_space(path: &Path, metadata: &std::fs::Metadata) -> io::Result<u64> {
     if !metadata.is_file() {
         #[cfg(unix)]
         {
@@ -41,12 +41,12 @@ pub fn reclaimable_space(path: &Path, metadata: &std::fs::Metadata) -> io::Resul
 
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
-        apple_reclaimable_space(path)
+        apple_physical_space(path)
     }
 
     #[cfg(target_os = "linux")]
     {
-        linux_reclaimable_space(path)
+        linux_physical_space(path)
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
@@ -61,7 +61,7 @@ pub fn reclaimable_space(path: &Path, metadata: &std::fs::Metadata) -> io::Resul
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[expect(unsafe_code)]
-fn apple_reclaimable_space(path: &Path) -> io::Result<u64> {
+fn apple_physical_space(path: &Path) -> io::Result<u64> {
     let path = CString::new(path.as_os_str().as_bytes())
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     let mut attributes = libc::attrlist {
@@ -106,7 +106,7 @@ fn apple_reclaimable_space(path: &Path) -> io::Result<u64> {
 
 #[cfg(target_os = "linux")]
 #[expect(unsafe_code)]
-fn linux_reclaimable_space(path: &Path) -> io::Result<u64> {
+fn linux_physical_space(path: &Path) -> io::Result<u64> {
     const FIEMAP_EXTENT_LAST: u32 = 0x0000_0001;
     const FIEMAP_EXTENT_UNKNOWN: u32 = 0x0000_0002;
     const FIEMAP_EXTENT_DELALLOC: u32 = 0x0000_0004;
@@ -149,7 +149,7 @@ fn linux_reclaimable_space(path: &Path) -> io::Result<u64> {
         rustix::ioctl::opcode::read_write::<Fiemap>(b'f', 11);
 
     let file = fs_err::File::open(path)?;
-    let mut reclaimable = 0_u64;
+    let mut physical = 0_u64;
     let mut start = 0_u64;
 
     loop {
@@ -181,7 +181,7 @@ fn linux_reclaimable_space(path: &Path) -> io::Result<u64> {
             ));
         }
         if mapped_extents == 0 {
-            return Ok(reclaimable);
+            return Ok(physical);
         }
 
         for extent in &request.extents[..mapped_extents] {
@@ -202,12 +202,12 @@ fn linux_reclaimable_space(path: &Path) -> io::Result<u64> {
                 ));
             }
 
-            reclaimable = reclaimable.saturating_add(extent.length);
+            physical = physical.saturating_add(extent.length);
         }
 
         let last_extent = &request.extents[mapped_extents - 1];
         if last_extent.flags & FIEMAP_EXTENT_LAST != 0 {
-            return Ok(reclaimable);
+            return Ok(physical);
         }
 
         let next = last_extent.logical.saturating_add(last_extent.length);

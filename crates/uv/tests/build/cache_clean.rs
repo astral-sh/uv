@@ -39,7 +39,7 @@ fn clean_all() -> Result<()> {
     Ok(())
 }
 
-/// `cache clean` should report reclaimed space for hardlinks only when the preview is enabled.
+/// `cache clean` should report physical space for hardlinks only when the preview is enabled.
 #[cfg(unix)]
 #[test]
 fn clean_all_hardlinked_file() -> Result<()> {
@@ -72,7 +72,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
     context.cache_dir.create_dir_all()?;
     fs_err::hard_link(&retained, &cached)?;
 
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-reclaimed-space"), @"
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
@@ -90,7 +90,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
         .sync_all()?;
     fs_err::hard_link(&cached, context.cache_dir.child("second-hardlink.bin"))?;
 
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-reclaimed-space"), @"
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
@@ -100,7 +100,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
     Ok(())
 }
 
-/// `cache clean` should report reclaimed space for copy-on-write clones in preview mode.
+/// `cache clean` should report physical space for copy-on-write clones in preview mode.
 #[cfg(unix)]
 #[test]
 fn clean_all_cloned_file() -> Result<()> {
@@ -170,7 +170,7 @@ fn clean_all_cached_clones() -> Result<()> {
         .filter(|(_, replacement)| *replacement != "$1[SIZE]")
         .collect();
 
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-reclaimed-space"), @"
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
@@ -216,7 +216,7 @@ fn clean_all_compressed_file() -> Result<()> {
         .filter(|(_, replacement)| *replacement != "$1[SIZE]")
         .collect();
 
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-reclaimed-space"), @"
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/

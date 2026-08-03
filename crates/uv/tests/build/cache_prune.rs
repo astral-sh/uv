@@ -40,7 +40,7 @@ fn prune_no_op() -> Result<()> {
     Ok(())
 }
 
-/// `cache prune` should report reclaimed space for hardlinks only when the preview is enabled.
+/// `cache prune` should report physical space for hardlinks only when the preview is enabled.
 #[cfg(unix)]
 #[test]
 fn prune_hardlinked_file() -> Result<()> {
@@ -74,7 +74,7 @@ fn prune_hardlinked_file() -> Result<()> {
     stale.create_dir_all()?;
     fs_err::hard_link(&retained, stale.child("hardlinked.bin"))?;
 
-    uv_snapshot!(&filters, context.prune().arg("--preview-features").arg("cache-reclaimed-space"), @"
+    uv_snapshot!(&filters, context.prune().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/

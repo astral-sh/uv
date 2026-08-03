@@ -1794,7 +1794,7 @@
             "native-auth",
             "s3-endpoint",
             "cache-size",
-            "cache-reclaimed-space",
+            "cache-physical-space",
             "init-project-flag",
             "workspace-metadata",
             "workspace-dir",

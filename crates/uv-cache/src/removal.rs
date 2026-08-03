@@ -9,11 +9,21 @@ use tracing::debug;
 
 use crate::CleanReporter;
 
+/// The storage accounting used when removing cache entries.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) enum RemovalMode {
+    /// Report the logical size of the removed files.
+    #[default]
+    Logical,
+    /// Report the exclusively owned physical storage reclaimed by the removed files.
+    Physical,
+}
+
 /// A builder for a [`Remover`] that can remove files and directories.
 #[derive(Default)]
 pub(crate) struct Remover {
     reporter: Option<Box<dyn CleanReporter>>,
-    measure_reclaimed_space: bool,
+    removal_mode: RemovalMode,
 }
 
 impl Remover {
@@ -21,13 +31,13 @@ impl Remover {
     pub(crate) fn new(reporter: Box<dyn CleanReporter>) -> Self {
         Self {
             reporter: Some(reporter),
-            measure_reclaimed_space: false,
+            ..Self::default()
         }
     }
 
-    /// Enable accounting for exclusively owned storage before each file is removed.
-    pub(crate) fn with_reclaimed_space(mut self, enabled: bool) -> Self {
-        self.measure_reclaimed_space = enabled;
+    /// Set the storage accounting used before each file is removed.
+    pub(crate) fn with_removal_mode(mut self, removal_mode: RemovalMode) -> Self {
+        self.removal_mode = removal_mode;
         self
     }
 
@@ -38,7 +48,7 @@ impl Remover {
         path: impl AsRef<Path>,
         skip_locked_file: bool,
     ) -> io::Result<Removal> {
-        let mut removal = Removal::new(self.measure_reclaimed_space);
+        let mut removal = Removal::new(self.removal_mode);
         removal.rm_rf(path.as_ref(), self.reporter.as_deref(), skip_locked_file)?;
         Ok(removal)
     }
@@ -51,41 +61,44 @@ pub struct Removal {
     pub num_files: u64,
     /// The number of directories removed.
     pub num_dirs: u64,
-    /// The total number of bytes removed.
+    /// The logical number of bytes removed.
     ///
     /// Note: this will both over-count bytes removed for hard-linked files, and under-count
     /// bytes in general since it's a measure of the exact byte size (as opposed to the block size).
-    pub total_bytes: u64,
-    /// The exclusively owned allocated file data reclaimed by the removal, when available.
-    pub reclaimed_bytes: Option<u64>,
-    /// Whether any removed entries could not be measured, making the reclaimed count a lower bound.
-    pub reclaimed_bytes_incomplete: bool,
+    pub logical_bytes: u64,
+    /// The exclusively owned physical file data reclaimed by the removal, when available.
+    pub physical_bytes: Option<u64>,
+    /// Whether any removed entries could not be measured, making the physical count a lower bound.
+    pub physical_bytes_incomplete: bool,
 }
 
 impl Removal {
-    /// Create an empty removal summary with optional per-file reclaimed-space accounting.
-    pub(crate) fn new(measure_reclaimed_space: bool) -> Self {
+    /// Create an empty removal summary with the requested storage accounting.
+    pub(crate) fn new(removal_mode: RemovalMode) -> Self {
         Self {
-            reclaimed_bytes: measure_reclaimed_space.then_some(0),
+            physical_bytes: match removal_mode {
+                RemovalMode::Logical => None,
+                RemovalMode::Physical => Some(0),
+            },
             ..Self::default()
         }
     }
 
     /// Account for a file while its current sharing state can still be inspected.
     fn add_file(&mut self, path: &Path, metadata: &std::fs::Metadata) {
-        self.total_bytes += metadata.len();
+        self.logical_bytes += metadata.len();
 
-        if let Some(reclaimed_bytes) = self.reclaimed_bytes {
-            match uv_fs::reclaimable_space(path, metadata) {
-                Ok(reclaimable) => {
-                    self.reclaimed_bytes = Some(reclaimed_bytes.saturating_add(reclaimable));
+        if let Some(physical_bytes) = self.physical_bytes {
+            match uv_fs::physical_space(path, metadata) {
+                Ok(physical) => {
+                    self.physical_bytes = Some(physical_bytes.saturating_add(physical));
                 }
                 Err(error) => {
                     debug!(
-                        "Failed to measure reclaimed space for {}: {error}",
+                        "Failed to measure physical space for {}: {error}",
                         path.display()
                     );
-                    self.reclaimed_bytes_incomplete = true;
+                    self.physical_bytes_incomplete = true;
                 }
             }
         }
@@ -196,8 +209,8 @@ impl Removal {
                 // Remove the file.
                 if let Ok(metadata) = entry.metadata() {
                     self.add_file(entry.path(), &metadata);
-                } else if self.reclaimed_bytes.is_some() {
-                    self.reclaimed_bytes_incomplete = true;
+                } else if self.physical_bytes.is_some() {
+                    self.physical_bytes_incomplete = true;
                 }
                 remove_file(entry.path())?;
             }
@@ -215,18 +228,18 @@ impl std::ops::AddAssign for Removal {
     fn add_assign(&mut self, other: Self) {
         self.num_files += other.num_files;
         self.num_dirs += other.num_dirs;
-        self.total_bytes += other.total_bytes;
-        self.reclaimed_bytes = self
-            .reclaimed_bytes
-            .zip(other.reclaimed_bytes)
+        self.logical_bytes += other.logical_bytes;
+        self.physical_bytes = self
+            .physical_bytes
+            .zip(other.physical_bytes)
             .map(|(left, right)| left.saturating_add(right));
-        self.reclaimed_bytes_incomplete |= other.reclaimed_bytes_incomplete;
+        self.physical_bytes_incomplete |= other.physical_bytes_incomplete;
     }
 }
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos", target_os = "ios")))]
 mod tests {
-    use super::Removal;
+    use super::{Removal, RemovalMode};
 
     #[test]
     fn retain_measured_space_when_an_entry_cannot_be_measured() -> std::io::Result<()> {
@@ -234,20 +247,20 @@ mod tests {
         let measured = directory.path().join("measured.bin");
         fs_err::write(&measured, vec![42; 4096])?;
         let metadata = fs_err::metadata(&measured)?;
-        let expected = uv_fs::reclaimable_space(&measured, &metadata)?;
+        let expected = uv_fs::physical_space(&measured, &metadata)?;
 
-        let mut removal = Removal::new(true);
+        let mut removal = Removal::new(RemovalMode::Physical);
         removal.add_file(&measured, &metadata);
         removal.add_file(&directory.path().join("missing.bin"), &metadata);
         removal.add_file(&measured, &metadata);
 
-        assert_eq!(removal.reclaimed_bytes, Some(expected.saturating_mul(2)));
-        assert!(removal.reclaimed_bytes_incomplete);
+        assert_eq!(removal.physical_bytes, Some(expected.saturating_mul(2)));
+        assert!(removal.physical_bytes_incomplete);
 
-        let mut combined = Removal::new(true);
+        let mut combined = Removal::new(RemovalMode::Physical);
         combined += removal;
-        assert_eq!(combined.reclaimed_bytes, Some(expected.saturating_mul(2)));
-        assert!(combined.reclaimed_bytes_incomplete);
+        assert_eq!(combined.physical_bytes, Some(expected.saturating_mul(2)));
+        assert!(combined.physical_bytes_incomplete);
 
         Ok(())
     }
