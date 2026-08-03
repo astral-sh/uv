@@ -5551,6 +5551,76 @@ fn add_requirements_file() -> Result<()> {
     Ok(())
 }
 
+/// Preserve per-requirement build settings when importing a requirements file.
+#[test]
+fn add_requirements_file_config_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "-e {} --config-settings=editable_mode=compat",
+        context
+            .workspace_root
+            .join("test/packages/setuptools_editable")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--dev")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-workspace"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+    "
+    );
+
+    let pyproject_toml = context.read("pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = [
+            "setuptools-editable",
+        ]
+
+        [tool.uv.sources]
+        setuptools-editable = { path = "[WORKSPACE]/test/packages/setuptools_editable", editable = true }
+
+        [tool.uv.config-settings-package]
+        setuptools-editable = { editable_mode = "compat" }
+        "#);
+    });
+
+    let finder = context
+        .site_packages()
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(!finder.exists());
+
+    Ok(())
+}
+
 /// Add a path dependency from a requirements file, respecting the lack of a `-e` flag.
 #[test]
 fn add_requirements_file_non_editable() -> Result<()> {

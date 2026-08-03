@@ -217,6 +217,7 @@ pub(crate) async fn pip_compile(
         find_links,
         no_binary,
         no_build,
+        config_settings_package: requirements_config_settings_package,
     } = RequirementsSpecification::from_sources(
         requirements,
         constraints,
@@ -226,6 +227,9 @@ pub(crate) async fn pip_compile(
         &client_builder,
     )
     .await?;
+
+    let config_settings_package =
+        config_settings_package.merge(requirements_config_settings_package);
 
     override_dependencies.extend(overrides_from_workspace);
 
@@ -715,6 +719,7 @@ pub(crate) async fn pip_compile(
                     &resolution,
                     &resolver_env,
                     &no_emit_packages,
+                    &config_settings_package,
                     generate_hashes,
                     include_extras,
                     include_markers || universal,
