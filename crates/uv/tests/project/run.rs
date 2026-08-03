@@ -6577,13 +6577,12 @@ fn run_target_workspace_discovery_workspace_group_defaults() -> Result<()> {
         .arg("child/scripts/groups.py"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    installed: typing_extensions, sniffio
+    installed: typing_extensions
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + sniffio==1.3.1
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + typing-extensions==4.10.0
     ");
 

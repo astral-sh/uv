@@ -1051,7 +1051,6 @@ fn requirements_txt_workspace_member_ignores_root_default_group() -> Result<()> 
         .arg("--package").arg("child"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    iniconfig==2.0.0
     typing-extensions==4.10.0
     ");
 
@@ -1062,7 +1061,6 @@ fn requirements_txt_workspace_member_ignores_root_default_group() -> Result<()> 
         .arg("--package").arg("child"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    iniconfig==2.0.0
     typing-extensions==4.10.0
 
     ----- stderr -----
@@ -1134,7 +1132,6 @@ fn requirements_txt_frozen_workspace_member_group_precedence() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     iniconfig==2.0.0
-    sniffio==1.3.1
     typing-extensions==4.10.0
     ");
 
@@ -1148,7 +1145,6 @@ fn requirements_txt_frozen_workspace_member_group_precedence() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     iniconfig==2.0.0
-    sniffio==1.3.1
     typing-extensions==4.10.0
     ");
 
@@ -1163,7 +1159,6 @@ fn requirements_txt_frozen_workspace_member_group_precedence() -> Result<()> {
     ----- stdout -----
     idna==3.6
     iniconfig==2.0.0
-    sniffio==1.3.1
     typing-extensions==4.10.0
     ");
 
