@@ -88,7 +88,7 @@ mod serialize;
 mod tree;
 
 /// The current version of the lockfile format.
-pub const VERSION: u32 = 1;
+const VERSION: u32 = 1;
 
 /// An error returned when parsing a lockfile.
 #[derive(Debug, thiserror::Error)]
@@ -1346,7 +1346,7 @@ impl Lock {
     }
 
     /// Returns the lockfile version.
-    pub fn version(&self) -> u32 {
+    fn version(&self) -> u32 {
         self.version
     }
 
