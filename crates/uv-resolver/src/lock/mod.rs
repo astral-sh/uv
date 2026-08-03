@@ -5446,8 +5446,7 @@ enum GitSourceKind {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct SourceDistMetadata {
     /// A hash of the source distribution.
     hash: Option<Hash>,
@@ -5456,7 +5455,6 @@ struct SourceDistMetadata {
     /// This is only present for source distributions that come from registries.
     size: Option<u64>,
     /// The upload time of the source distribution.
-    #[serde(alias = "upload_time")]
     upload_time: Option<Timestamp>,
 }
 
