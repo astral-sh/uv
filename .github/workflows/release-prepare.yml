@@ -74,6 +74,7 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: gpt-5.6-sol
+          effort: high
           permission-profile: ":read-only"
           safety-strategy: drop-sudo
           prompt-file: "${{ runner.temp }}/editorialize-changelog-prompt.md"

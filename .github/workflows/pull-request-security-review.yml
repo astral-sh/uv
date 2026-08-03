@@ -82,6 +82,7 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.144.4"
           codex-home: "agents/codex"
+          effort: high
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
           allow-bot-users: "astral-automations-bot[bot],renovate[bot]"
