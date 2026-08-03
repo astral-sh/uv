@@ -82,8 +82,8 @@ pub(crate) async fn cache_prune(
     }
 
     // If any, report the reclaimed space, falling back to the apparent removed size.
-    if summary.total_bytes > 0 {
-        let total_bytes = summary.reclaimed_bytes.unwrap_or(summary.total_bytes);
+    let total_bytes = summary.reclaimed_bytes.unwrap_or(summary.total_bytes);
+    if summary.total_bytes > 0 || total_bytes > 0 {
         let bytes = if total_bytes < 1024 {
             format!("{total_bytes}B")
         } else {
