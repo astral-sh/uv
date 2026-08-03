@@ -11,8 +11,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, anyhow, bail};
 use futures::StreamExt;
 use itertools::Itertools;
-#[cfg(unix)]
-use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit, rlim_t, setrlimit};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 use tokio::process::Command;
@@ -123,6 +121,7 @@ pub(crate) async fn run(
     preview: Preview,
     max_recursion_depth: u32,
     malware_settings: MalwareCheckSettings,
+    #[cfg(unix)] run_ulimit: Option<u32>,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
@@ -1306,7 +1305,14 @@ pub(crate) async fn run(
     }
 
     #[cfg(unix)]
-    set_run_open_file_limit()?;
+    if let Some(limit) = run_ulimit {
+        uv_unix::set_open_file_limit(limit).with_context(|| {
+            format!(
+                "Failed to apply `{}` value `{limit}`",
+                EnvVars::UV_RUN_ULIMIT
+            )
+        })?;
+    }
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
@@ -1316,39 +1322,6 @@ pub(crate) async fn run(
         .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
     run_to_completion(handle).await
-}
-
-/// Apply the requested soft open-file descriptor limit before running the command.
-#[cfg(unix)]
-fn set_run_open_file_limit() -> anyhow::Result<()> {
-    let Some(limit) = std::env::var_os(EnvVars::UV_RUN_ULIMIT) else {
-        return Ok(());
-    };
-
-    let limit = limit.to_str().ok_or_else(|| {
-        anyhow!(
-            "Invalid value for `{}`: expected a non-negative integer",
-            EnvVars::UV_RUN_ULIMIT
-        )
-    })?;
-    let soft = limit
-        .parse::<u32>()
-        .with_context(|| format!("Invalid value for `{}`: `{limit}`", EnvVars::UV_RUN_ULIMIT))?;
-    let soft = rlim_t::from(soft);
-
-    let (_, hard) =
-        getrlimit(Resource::RLIMIT_NOFILE).context("Failed to read the open-file limit")?;
-    if hard != RLIM_INFINITY && soft > hard {
-        bail!(
-            "`{}` value `{soft}` exceeds the hard open-file limit `{hard}`",
-            EnvVars::UV_RUN_ULIMIT
-        );
-    }
-
-    setrlimit(Resource::RLIMIT_NOFILE, soft, hard)
-        .with_context(|| format!("Failed to set the open-file limit to `{soft}`"))?;
-
-    Ok(())
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.

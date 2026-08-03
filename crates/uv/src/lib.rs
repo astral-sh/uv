@@ -2342,6 +2342,8 @@ async fn run_project(
                 globals.preview,
                 args.max_recursion_depth,
                 args.malware_settings,
+                #[cfg(unix)]
+                args.run_ulimit,
             ))
             .await
         }

@@ -80,8 +80,7 @@ fn run_open_file_limit_override_invalid() {
     uv_snapshot!(context.filters(), command, @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid value for `UV_RUN_ULIMIT`: `invalid`
-      Caused by: invalid digit found in string
+    error: Failed to parse environment variable `UV_RUN_ULIMIT` with invalid value `invalid`: invalid digit found in string
     ");
 }
 
@@ -110,6 +109,7 @@ fn run_open_file_limit_override_exceeds_hard_limit() {
     uv_snapshot!(context.filters(), command, @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: `UV_RUN_ULIMIT` value `256` exceeds the hard open-file limit `128`
+    error: Failed to apply `UV_RUN_ULIMIT` value `256`
+      Caused by: requested open file limit (256) exceeds the hard limit (128)
     ");
 }

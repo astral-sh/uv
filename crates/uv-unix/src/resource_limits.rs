@@ -14,7 +14,7 @@
 //! See: <https://github.com/astral-sh/uv/issues/16999>
 
 use nix::errno::Errno;
-use nix::sys::resource::{Resource, getrlimit, rlim_t, setrlimit};
+use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit, rlim_t, setrlimit};
 use thiserror::Error;
 
 /// Errors that can occur when adjusting resource limits.
@@ -29,7 +29,10 @@ pub enum OpenFileLimitError {
     #[error("soft limit ({current}) already meets the target ({target})")]
     AlreadySufficient { current: u64, target: u64 },
 
-    #[error("failed to raise open file limit from {current} to {target}: {}", source.desc())]
+    #[error("requested open file limit ({target}) exceeds the hard limit ({hard})")]
+    ExceedsHardLimit { target: u64, hard: rlim_t },
+
+    #[error("failed to set open file limit from {current} to {target}: {}", source.desc())]
     SetLimitFailed {
         current: u64,
         target: u64,
@@ -90,9 +93,36 @@ pub fn adjust_open_file_limit() -> Result<u64, OpenFileLimitError> {
     // Safe because target <= MAX_NOFILE_LIMIT which fits in both i64 and u64.
     let target_rlim = target as rlim_t;
 
+    set_open_file_limit_to(soft, target, target_rlim, hard)
+}
+
+/// Set the soft open-file descriptor limit while preserving the hard limit.
+pub fn set_open_file_limit(target: u32) -> Result<u64, OpenFileLimitError> {
+    let (soft, hard) =
+        getrlimit(Resource::RLIMIT_NOFILE).map_err(OpenFileLimitError::GetLimitFailed)?;
+    let Some(soft) = rlim_t_to_u64(soft) else {
+        return Err(OpenFileLimitError::NegativeSoftLimit { value: soft });
+    };
+
+    let target_rlim = rlim_t::from(target);
+    let target = u64::from(target);
+    if hard != RLIM_INFINITY && target_rlim > hard {
+        return Err(OpenFileLimitError::ExceedsHardLimit { target, hard });
+    }
+
+    set_open_file_limit_to(soft, target, target_rlim, hard)
+}
+
+/// Update the soft open-file descriptor limit while preserving the hard limit.
+fn set_open_file_limit_to(
+    current: u64,
+    target: u64,
+    target_rlim: rlim_t,
+    hard: rlim_t,
+) -> Result<u64, OpenFileLimitError> {
     setrlimit(Resource::RLIMIT_NOFILE, target_rlim, hard).map_err(|err| {
         OpenFileLimitError::SetLimitFailed {
-            current: soft,
+            current,
             target,
             source: err,
         }

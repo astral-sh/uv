@@ -775,6 +775,8 @@ pub struct EnvironmentOptions {
     pub init_bare: EnvFlag,
     pub malware_check: EnvFlag,
     pub malware_check_url: Option<DisplaySafeUrl>,
+    #[cfg(unix)]
+    pub run_ulimit: Option<u32>,
 }
 
 impl EnvironmentOptions {
@@ -909,6 +911,8 @@ impl EnvironmentOptions {
                     })
                 })
                 .transpose()?,
+            #[cfg(unix)]
+            run_ulimit: parse_integer_environment_variable(EnvVars::UV_RUN_ULIMIT, None)?,
         })
     }
 }
