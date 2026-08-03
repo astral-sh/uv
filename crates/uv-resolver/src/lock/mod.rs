@@ -5464,23 +5464,60 @@ struct SourceDistMetadata {
 /// locked against was found. The location does not need to exist in the
 /// future, so this should be treated as only a hint to where to look
 /// and/or recording where the source dist file originally came from.
-#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-#[serde(from = "SourceDistWire")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum SourceDist {
     Url {
         url: UrlString,
-        #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
     Path {
         path: Box<Path>,
-        #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
     Metadata {
-        #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
+}
+
+impl<'de> serde::Deserialize<'de> for SourceDist {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "kebab-case")]
+        struct Fields {
+            url: Option<UrlString>,
+            path: Option<PortablePathBuf>,
+            hash: Option<Hash>,
+            size: Option<u64>,
+            #[serde(alias = "upload_time")]
+            upload_time: Option<Timestamp>,
+        }
+
+        let Fields {
+            url,
+            path,
+            hash,
+            size,
+            upload_time,
+        } = serde::Deserialize::deserialize(deserializer)?;
+
+        let metadata = SourceDistMetadata {
+            hash,
+            size,
+            upload_time,
+        };
+
+        Ok(match (url, path) {
+            (Some(url), _) => Self::Url { url, metadata },
+            (None, Some(path)) => Self::Path {
+                path: path.into(),
+                metadata,
+            },
+            (None, None) => Self::Metadata { metadata },
+        })
+    }
 }
 
 impl SourceDist {
@@ -5738,37 +5775,6 @@ impl SourceDist {
                 upload_time: None,
             },
         })
-    }
-}
-
-#[derive(Clone, Debug, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct SourceDistWire {
-    url: Option<UrlString>,
-    path: Option<PortablePathBuf>,
-    hash: Option<Hash>,
-    size: Option<u64>,
-    #[serde(alias = "upload_time")]
-    upload_time: Option<Timestamp>,
-}
-
-impl From<SourceDistWire> for SourceDist {
-    fn from(wire: SourceDistWire) -> Self {
-        let metadata = SourceDistMetadata {
-            hash: wire.hash,
-            size: wire.size,
-            upload_time: wire.upload_time,
-        };
-        if let Some(url) = wire.url {
-            Self::Url { url, metadata }
-        } else if let Some(path) = wire.path {
-            Self::Path {
-                path: path.into(),
-                metadata,
-            }
-        } else {
-            Self::Metadata { metadata }
-        }
     }
 }
 
