@@ -768,7 +768,7 @@ fn parse_entry(
             Some(requirements_txt)
         };
 
-        let (requirement, hashes, config_settings) = parse_requirement_and_options(
+        let mut entry = parse_requirement_and_options(
             s,
             content,
             source,
@@ -776,19 +776,14 @@ fn parse_entry(
             true,
             leading_config_settings,
         )?;
-        let requirement =
-            requirement
-                .into_editable()
-                .map_err(|err| RequirementsTxtParserError::NonEditable {
-                    source: err,
-                    start,
-                    end: s.cursor(),
-                })?;
-        RequirementsTxtStatement::EditableRequirementEntry(RequirementEntry {
-            requirement,
-            hashes,
-            config_settings,
-        })
+        entry.requirement = entry.requirement.into_editable().map_err(|err| {
+            RequirementsTxtParserError::NonEditable {
+                source: err,
+                start,
+                end: s.cursor(),
+            }
+        })?;
+        RequirementsTxtStatement::EditableRequirementEntry(entry)
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value("--index-url", content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
@@ -925,7 +920,7 @@ fn parse_entry(
             Some(requirements_txt)
         };
 
-        let (requirement, hashes, config_settings) = parse_requirement_and_options(
+        let entry = parse_requirement_and_options(
             s,
             content,
             source,
@@ -933,11 +928,7 @@ fn parse_entry(
             false,
             leading_config_settings,
         )?;
-        RequirementsTxtStatement::RequirementEntry(RequirementEntry {
-            requirement,
-            hashes,
-            config_settings,
-        })
+        RequirementsTxtStatement::RequirementEntry(entry)
     } else if let Some(char) = s.peek() {
         // Identify an unsupported option, like `--trusted-host`.
         if let Some(option) = UnsupportedOption::iter().find(|option| s.eat_if(option.name())) {
@@ -1005,14 +996,7 @@ fn parse_requirement_and_options(
     working_dir: &Path,
     editable: bool,
     mut config_settings: Vec<ConfigSettingEntry>,
-) -> Result<
-    (
-        RequirementsTxtRequirement,
-        Vec<String>,
-        Option<ConfigSettings>,
-    ),
-    RequirementsTxtParserError,
-> {
+) -> Result<RequirementEntry, RequirementsTxtParserError> {
     // PEP 508 requirement
     let start = s.cursor();
     // Termination: s.eat() eventually becomes None
@@ -1111,7 +1095,11 @@ fn parse_requirement_and_options(
 
     let config_settings = (!config_settings.is_empty())
         .then(|| config_settings.into_iter().collect::<ConfigSettings>());
-    Ok((requirement, hashes, config_settings))
+    Ok(RequirementEntry {
+        requirement,
+        hashes,
+        config_settings,
+    })
 }
 
 /// Consume a supported spelling of the per-requirement build setting option.
