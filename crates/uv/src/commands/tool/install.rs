@@ -367,6 +367,13 @@ pub(crate) async fn install(
     )
     .await?;
 
+    let mut settings = settings;
+    settings.resolver.config_settings_package = settings
+        .resolver
+        .config_settings_package
+        .clone()
+        .merge(spec.config_settings_package.clone());
+
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());

@@ -4055,6 +4055,54 @@ fn tool_install_requirements_txt() {
     });
 }
 
+/// Apply per-requirement build settings to installed tool environments.
+#[test]
+fn tool_install_requirements_txt_config_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "-e {} --config-settings=editable_mode=compat",
+        context
+            .workspace_root
+            .join("test/packages/setuptools_editable")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with-requirements")
+        .arg("requirements.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + iniconfig==2.0.0
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+    Installed 2 executables: black, blackd
+    ");
+
+    let finder = uv_test::site_packages_path(&tool_dir.join("black"), "python3.12")
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(!finder.exists());
+
+    Ok(())
+}
+
 /// Ignore and warn when (e.g.) the `--index-url` argument is a provided `requirements.txt`.
 #[test]
 fn tool_install_requirements_txt_arguments() {
