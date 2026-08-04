@@ -1348,12 +1348,38 @@ fn sync_non_project_dev_dependencies() -> Result<()> {
      + urllib3==2.2.1
     ");
 
-    // Selecting a member still includes the non-project root's default dependency group.
+    // Selecting a member excludes the non-project root's default dependency group.
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    Checked 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - pysocks==1.7.1
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    ");
+
+    // Explicitly requesting the root's group still includes its dependencies.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package").arg("child")
+        .arg("--group").arg("dev"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + pysocks==1.7.1
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
     ");
 
     Ok(())
