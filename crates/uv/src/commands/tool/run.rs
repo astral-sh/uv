@@ -949,12 +949,14 @@ async fn get_or_create_environment(
     .await?;
     let exclusions = uv_configuration::Excludes::from_entries(spec.excludes.iter().cloned());
 
+    let marker_environment = pip::resolution_markers(None, python_platform.as_ref(), &interpreter);
     let mut settings = settings.clone();
-    settings.resolver.config_settings_package = settings
-        .resolver
-        .config_settings_package
-        .clone()
-        .merge(spec.config_settings_package.clone());
+    settings.resolver.config_settings_package =
+        settings.resolver.config_settings_package.clone().merge(
+            spec.config_settings_package
+                .clone()
+                .evaluate(Some(&marker_environment)),
+        );
     let settings = &settings;
 
     // Resolve the `--from` and `--with` requirements.

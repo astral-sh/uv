@@ -5646,6 +5646,64 @@ fn add_requirements_file_config_settings() -> Result<()> {
     Ok(())
 }
 
+/// Preserve settings from marked requirements because project settings cannot retain markers.
+#[test]
+fn add_requirements_file_config_settings_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "-e {} ; python_version < '3.0' --config-settings=editable_mode=compat",
+        context
+            .workspace_root
+            .join("test/packages/setuptools_editable")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--frozen")
+        .arg("--dev")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-workspace"), @"
+    exit_code: 0 (success)
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("pyproject.toml"), @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = [
+            "setuptools-editable ; python_full_version < '3'",
+        ]
+
+        [tool.uv.sources]
+        setuptools-editable = { path = "[WORKSPACE]/test/packages/setuptools_editable", editable = true }
+
+        [tool.uv.config-settings-package]
+        setuptools-editable = { editable_mode = "compat" }
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Preserve imported build settings at the workspace root when editing a workspace member.
 #[test]
 fn add_requirements_file_config_settings_workspace_root() -> Result<()> {
