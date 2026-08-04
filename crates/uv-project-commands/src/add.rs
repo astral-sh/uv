@@ -617,9 +617,17 @@ pub async fn add(
         }
     };
 
-    // If workspace mode is enabled, add any members to the `workspace` section of the
-    // `pyproject.toml` file.
-    if use_workspace {
+    // Package-specific build settings are workspace settings and belong in the root project.
+    let config_settings_in_workspace = match &target {
+        EditTarget::Script(_) => false,
+        EditTarget::Project(project) => {
+            project.workspace().install_path() != project.root()
+                && !config_settings_package.is_empty()
+        }
+    };
+
+    // Update workspace members and package-specific build settings in the root `pyproject.toml`.
+    if use_workspace || config_settings_in_workspace {
         let mut modified = false;
         let EditTarget::Project(project) = target else {
             unreachable!("`--workspace` and `--script` are conflicting options");
@@ -666,6 +674,13 @@ pub async fn add(
                     relative_path.user_display().cyan()
                 )?;
             }
+        }
+
+        if config_settings_in_workspace {
+            for (package, config_settings) in config_settings_package.iter() {
+                toml.add_config_settings_package(package, config_settings)?;
+            }
+            modified = true;
         }
 
         // If we modified the workspace root, we need to reload it entirely, since this can impact
@@ -716,8 +731,10 @@ pub async fn add(
         &mut toml,
     )?;
 
-    for (package, config_settings) in config_settings_package.iter() {
-        toml.add_config_settings_package(package, config_settings)?;
+    if !config_settings_in_workspace {
+        for (package, config_settings) in config_settings_package.iter() {
+            toml.add_config_settings_package(package, config_settings)?;
+        }
     }
 
     // If no requirements were added but a dependency group or optional dependency was specified,
