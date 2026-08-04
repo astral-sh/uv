@@ -358,11 +358,7 @@ functional and we didn't miss any files. This step is recommended, but optional.
 
     This example workflow uses two separate jobs (`build` and `publish`) so that the publishing
     step (which has access to a publishing credential via `id-token: write`) does not share its
-    permissions with the building step (which does not need any special permissions other
-    than reading the repository contents).
-
-    Separating your publishing workflow into separate jobs, each with its own minimal permissions,
-    is **strongly recommended**.
+    permissions with the building step. This reduces the surface for supply chain attacks.
 
 First, add a release workflow to your project:
 
