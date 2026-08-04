@@ -172,6 +172,9 @@ impl Removal {
 
             if let Err(ref err) = entry {
                 // On Unix, `ENAMETOOLONG` is the only OS error mapped to `InvalidFilename`.
+                // NOTE: In the future, we may want to extend this to Linux and other targets,
+                // although it's less likely there given that Linux's `MAX_PATH` is 4096 instead
+                // of macOS's 1024.
                 #[cfg(target_os = "macos")]
                 if err
                     .io_error()
