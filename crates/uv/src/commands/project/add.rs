@@ -65,7 +65,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, UvError, project};
 use crate::printer::Printer;
-use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings, ResolverSettings};
 
 /// A failed dependency addition, with `uv add`-specific recovery context.
 #[derive(Debug, thiserror::Error)]
@@ -125,7 +125,7 @@ pub(crate) async fn add(
     python: Option<String>,
     workspace: Option<bool>,
     install_mirrors: PythonInstallMirrors,
-    mut settings: ResolverInstallerSettings,
+    settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
@@ -389,11 +389,16 @@ pub(crate) async fn add(
     // `uv add` stores per-requirement build settings in `[tool.uv.config-settings-package]`.
     // Since that table cannot store markers, settings from marked requirements apply everywhere.
     let config_settings_package = config_settings_package.evaluate(None);
-    settings.resolver.config_settings_package = settings
-        .resolver
-        .config_settings_package
-        .clone()
-        .merge(config_settings_package.clone());
+    let settings = ResolverInstallerSettings {
+        resolver: ResolverSettings {
+            config_settings_package: settings
+                .resolver
+                .config_settings_package
+                .merge(config_settings_package.clone()),
+            ..settings.resolver
+        },
+        ..settings
+    };
 
     // Initialize any shared state.
     let state = PlatformState::default();
