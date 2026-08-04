@@ -17,7 +17,6 @@
         "pull_request": ["opened", "reopened"]
       },
       "conditions": {
-        "/pull_request/base/ref": "main",
         "/pull_request/head/repo/full_name": "astral-sh/uv"
       },
       "allow_draft": true,
@@ -29,7 +28,6 @@
         "pull_request": ["opened", "reopened"]
       },
       "conditions": {
-        "/pull_request/base/ref": "main",
         "/pull_request/head/repo/full_name": "astral-sh/uv-dev"
       },
       "allow_draft": true,
