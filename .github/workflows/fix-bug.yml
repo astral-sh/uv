@@ -50,6 +50,7 @@ jobs:
     environment: automations
     timeout-minutes: 60
     permissions:
+      actions: read
       contents: read
       issues: read
     outputs:
@@ -63,6 +64,22 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: "Load issue context"
+        uses: ./.github/actions/load-issue-context
+        with:
+          issue-number: ${{ inputs.issue-number }}
+          path: ${{ runner.temp }}/issue-context
+
+      - name: "Load reproduction Codex thread"
+        id: reproduction-thread
+        uses: ./.github/actions/load-codex-thread
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          artifact-name: codex-thread-reproduce-bug-${{ github.run_id }}-${{ github.run_attempt }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/codex-home/sessions
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -81,10 +98,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ inputs.issue }}
+          ISSUE_NUMBER: ${{ inputs.issue-number }}
           PARENT_HEAD_REF: ${{ inputs.parent-head-ref }}
           PARENT_HEAD_SHA: ${{ inputs.parent-head-sha }}
           PARENT_PULL_REQUEST: ${{ inputs.parent-pull-request }}
           REPRODUCTION_RESULT: ${{ inputs.reproduction-result }}
+          ROOT_SESSION_ID: ${{ steps.reproduction-thread.outputs.session-id }}
         run: |
           mkdir -p "$RUNNER_TEMP/codex-home"
           cp agents/codex/config.toml "$RUNNER_TEMP/codex-home/config.toml"
@@ -98,10 +117,25 @@ jobs:
           printf '%s\n' "$REPRODUCTION_RESULT" > "$RUNNER_TEMP/bug-reproduction-result.json"
 
           issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
-          if [ "$PARENT_HEAD_REF" != "zb/reproduce-bug/$issue_number" ] ||
+          if ! [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] ||
+            [ "$issue_number" != "$ISSUE_NUMBER" ] ||
+            [ "$PARENT_HEAD_REF" != "zb/reproduce-bug/$issue_number" ] ||
             ! [[ "$PARENT_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] ||
+            ! [[ "$ROOT_SESSION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
             ! [[ "$PARENT_PULL_REQUEST" =~ ^https://github\.com/astral-sh/uv-dev/pull/[1-9][0-9]*$ ]]; then
             echo "The regression-test pull request context is invalid." >&2
+            exit 1
+          fi
+
+          if ! jq --exit-status --argjson issue_number "$ISSUE_NUMBER" \
+            '.number == $issue_number' "$RUNNER_TEMP/issue-context/issue.json" > /dev/null ||
+            ! jq --exit-status '.type == "bug"' \
+              "$RUNNER_TEMP/issue-context/triage.json" > /dev/null ||
+            ! jq --exit-status \
+              --slurpfile expected "$RUNNER_TEMP/bug-reproduction-result.json" '
+                . == $expected[0] and .reproduction == "reproducible"
+              ' "$RUNNER_TEMP/issue-context/reproduction.json" > /dev/null; then
+            echo "The persisted issue context does not match the reproduced bug." >&2
             exit 1
           fi
 
@@ -227,6 +261,9 @@ jobs:
             echo "existing=$existing"
             echo "existing-head=$fix_head"
           } >> "$GITHUB_OUTPUT"
+          printf 'codex_args=%s\n' \
+            "$(jq --null-input --compact-output --arg id "$ROOT_SESSION_ID" '["resume", $id]')" \
+            >> "$GITHUB_OUTPUT"
 
       - name: "Fix reproduced bug"
         id: fix-bug
@@ -242,6 +279,7 @@ jobs:
           codex-version: "0.146.0"
           codex-home: "${{ runner.temp }}/codex-home"
           effort: high
+          codex-args: ${{ steps.prepare.outputs.codex_args }}
           permission-profile: "fix-reproduced-bug"
           safety-strategy: drop-sudo
           allow-users: "*"
@@ -556,3 +594,130 @@ jobs:
           fi
           echo "url=$pull_request" >> "$GITHUB_OUTPUT"
           printf 'Stacked fix pull request: %s\n' "$pull_request" >> "$GITHUB_STEP_SUMMARY"
+
+  context:
+    needs:
+      - fix
+      - publish
+    if: >-
+      always() &&
+      needs.fix.result == 'success' &&
+      needs.fix.outputs.result != '' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 10
+    concurrency:
+      group: issue-context-${{ inputs.issue-number }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write # for the uv-dev issue-context credential broker
+    steps:
+      - name: "Prepare fix context"
+        id: prepare-context
+        env:
+          FIX_PULL_REQUEST: ${{ needs.publish.outputs.pull-request }}
+          FIX_RESULT: ${{ needs.fix.outputs.result }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          ISSUE_NUMBER: ${{ inputs.issue-number }}
+          REPRODUCTION_RESULT: ${{ inputs.reproduction-result }}
+        run: |
+          if ! [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "The issue number is invalid." >&2
+            exit 1
+          fi
+
+          printf '%s\n' "$FIX_RESULT" > "$RUNNER_TEMP/bug-fix-result.json"
+          printf '%s\n' "$REPRODUCTION_RESULT" > "$RUNNER_TEMP/bug-reproduction-result.json"
+          if ! jq --exit-status --arg pull_request "$FIX_PULL_REQUEST" '
+            (.summary | type == "string" and length > 0)
+            and (.validation | type == "array")
+            and (
+              (
+                .outcome == "fixed"
+                and (.validation | length > 0)
+                and ($pull_request | test("^https://github\\.com/astral-sh/uv-dev/pull/[1-9][0-9]*$"))
+              )
+              or (
+                .outcome == "not_fixed"
+                and (.validation | length == 0)
+                and $pull_request == ""
+              )
+            )
+          ' "$RUNNER_TEMP/bug-fix-result.json" > /dev/null; then
+            echo "The bug-fix result does not match its published pull request." >&2
+            exit 1
+          fi
+
+          branch="issue/$ISSUE_NUMBER"
+          git init --quiet "$RUNNER_TEMP/issue-context"
+          cd "$RUNNER_TEMP/issue-context"
+          git remote add origin https://github.com/astral-sh/uv-dev.git
+          git -c core.hooksPath=/dev/null fetch --quiet origin "refs/heads/$branch"
+          git -c core.hooksPath=/dev/null checkout --quiet FETCH_HEAD
+
+          if ! jq --exit-status --argjson issue_number "$ISSUE_NUMBER" \
+            '.number == $issue_number' issue.json > /dev/null ||
+            ! jq --exit-status '.type == "bug"' triage.json > /dev/null ||
+            ! jq --exit-status \
+              --slurpfile expected "$RUNNER_TEMP/bug-reproduction-result.json" '
+                . == $expected[0] and .reproduction == "reproducible"
+              ' reproduction.json > /dev/null; then
+            echo "The persisted issue context changed before the fix completed." >&2
+            exit 1
+          fi
+
+          jq --arg pull_request "$FIX_PULL_REQUEST" '
+            . + {pull_request: (if $pull_request == "" then null else $pull_request end)}
+          ' "$RUNNER_TEMP/bug-fix-result.json" > fix.json
+          existing_context="$(awk '/^## Fix$/ { exit } { print }' README.md)"
+          {
+            printf '%s\n\n## Fix\n\n' "$existing_context"
+            jq --raw-output '"Status: `\(.outcome)`\n\n\(.summary)"' fix.json
+            if [ -n "$FIX_PULL_REQUEST" ]; then
+              printf '\nPull request: %s\n' "$FIX_PULL_REQUEST"
+            fi
+          } > "$RUNNER_TEMP/README.md"
+          cp "$RUNNER_TEMP/README.md" README.md
+
+          git -c core.hooksPath=/dev/null add fix.json README.md
+          if git diff --cached --quiet; then
+            echo "The existing fix context is unchanged."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git \
+            -c core.hooksPath=/dev/null \
+            -c user.name="astral-automations-bot[bot]" \
+            -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
+            commit --message "Update fix context for $GITHUB_REPOSITORY#$ISSUE_NUMBER"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: "Get issue context token"
+        if: steps.prepare-context.outputs.changed == 'true'
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: |
+            contents: write
+
+      - name: "Persist fix context"
+        if: steps.prepare-context.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          ISSUE_NUMBER: ${{ inputs.issue-number }}
+        run: |
+          branch="issue/$ISSUE_NUMBER"
+          cd "$RUNNER_TEMP/issue-context"
+          git -c core.hooksPath=/dev/null push \
+            "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
+            "HEAD:refs/heads/$branch"
+          printf 'Issue context: https://github.com/astral-sh/uv-dev/tree/%s\n' "$branch" \
+            >> "$GITHUB_STEP_SUMMARY"

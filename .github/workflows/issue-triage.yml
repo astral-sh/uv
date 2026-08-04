@@ -271,6 +271,7 @@ jobs:
       fromJSON(needs.reproduce-bug.outputs.result).reproduction == 'reproducible' &&
       needs.reproduce-bug.outputs.pull-request != ''
     permissions:
+      actions: read
       contents: read
       id-token: write
       issues: read
