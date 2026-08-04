@@ -16259,3 +16259,30 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn lockfile_requirements_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let lockfile = context.temp_dir.child("uv.lock");
+    lockfile.write_str(indoc::indoc! {r#"
+        version = 1
+        revision = 1
+
+        [[package]]
+        name = "foo"
+        version = "0.1.0"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("uv.lock"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Couldn't parse requirement in `uv.lock` at position 0
+      Caused by: Expected package name, found `version`
+    hint: `uv.lock` appears to be a uv lockfile, not a requirements file
+    "#);
+
+    Ok(())
+}

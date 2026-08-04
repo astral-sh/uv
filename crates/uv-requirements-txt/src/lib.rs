@@ -243,6 +243,7 @@ impl RequirementsTxt {
         .map_err(|err| RequirementsTxtFileError {
             file: requirements_txt.to_path_buf(),
             error: err,
+            is_lockfile: is_lockfile_content(content),
         })
     }
 
@@ -274,6 +275,7 @@ impl RequirementsTxt {
                         io::ErrorKind::InvalidInput,
                         "Remote file not supported without `http` feature",
                     )),
+                    is_lockfile: false,
                 });
             }
 
@@ -286,6 +288,7 @@ impl RequirementsTxt {
                         requirements_txt.display().to_string(),
                         err,
                     ),
+                    is_lockfile: false,
                 })?;
 
                 // Avoid constructing a client if network is disabled already
@@ -298,6 +301,7 @@ impl RequirementsTxt {
                                 "Network connectivity is disabled, but a remote requirements file was requested: {url}"
                             ),
                         )),
+                        is_lockfile: false,
                     });
                 }
                 let client = client_builder
@@ -305,12 +309,14 @@ impl RequirementsTxt {
                     .map_err(|err| RequirementsTxtFileError {
                         file: requirements_txt.to_path_buf(),
                         error: RequirementsTxtParserError::ClientBuild(url.clone(), Box::new(err)),
+                        is_lockfile: false,
                     })?;
                 let content = read_url_to_string(&requirements_txt, client)
                     .await
                     .map_err(|err| RequirementsTxtFileError {
                         file: requirements_txt.to_path_buf(),
                         error: err,
+                        is_lockfile: false,
                     })?;
                 cache.insert(requirements_txt.to_path_buf(), content.clone());
                 content
@@ -322,6 +328,7 @@ impl RequirementsTxt {
                 .map_err(|err| RequirementsTxtFileError {
                     file: requirements_txt.to_path_buf(),
                     error: RequirementsTxtParserError::Io(err),
+                    is_lockfile: false,
                 })?;
             cache.insert(requirements_txt.to_path_buf(), content.clone());
             content
@@ -341,6 +348,7 @@ impl RequirementsTxt {
         .map_err(|err| RequirementsTxtFileError {
             file: requirements_txt.to_path_buf(),
             error: err,
+            is_lockfile: is_lockfile_content(&content),
         })?;
 
         Ok(data)
@@ -1138,11 +1146,35 @@ async fn read_url_to_string(
     Ok(text)
 }
 
+/// Returns `true` if the given content appears to be a `uv` lockfile (e.g., `uv.lock`).
+fn is_lockfile_content(content: &str) -> bool {
+    content.lines().any(|line| {
+        let line = line.trim_start();
+        line.starts_with("version = 1")
+            || line.starts_with("[[package]]")
+            || line.starts_with("[manifest]")
+            || line.starts_with("revision = ")
+    })
+}
+
 /// Error parsing requirements.txt, wrapper with filename
 #[derive(Debug)]
 pub struct RequirementsTxtFileError {
     file: PathBuf,
     error: RequirementsTxtParserError,
+    is_lockfile: bool,
+}
+
+impl RequirementsTxtFileError {
+    /// Return the path to the requirements file.
+    pub fn file(&self) -> &Path {
+        &self.file
+    }
+
+    /// Return `true` if the requirements file appears to be a `uv` lockfile.
+    pub fn is_lockfile(&self) -> bool {
+        self.is_lockfile
+    }
 }
 
 /// Error parsing requirements.txt, error disambiguation
@@ -1491,6 +1523,21 @@ impl std::error::Error for RequirementsTxtFileError {
     }
 }
 
+impl uv_errors::Hint for RequirementsTxtFileError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        let mut hints = uv_errors::Hints::none();
+        if self.is_lockfile {
+            hints.push(format!(
+                "`{}` appears to be a uv lockfile, not a requirements file",
+                self.file.user_display()
+            ));
+        } else if let RequirementsTxtParserError::Subfile { source, .. } = &self.error {
+            hints.extend(source.hints());
+        }
+        hints
+    }
+}
+
 impl From<io::Error> for RequirementsTxtParserError {
     fn from(err: io::Error) -> Self {
         Self::Io(err)
@@ -1591,7 +1638,16 @@ mod test {
 
     use uv_fs::Simplified;
 
-    use crate::{RequirementsTxt, calculate_row_column};
+    use crate::{RequirementsTxt, calculate_row_column, is_lockfile_content};
+
+    #[test]
+    fn test_lockfile_content() {
+        assert!(is_lockfile_content("version = 1\nrevision = 1\n[[package]]"));
+        assert!(is_lockfile_content("[[package]]\nname = \"foo\""));
+        assert!(is_lockfile_content("[manifest]\nversion = 1"));
+        assert!(is_lockfile_content("revision = 3\nrequires-python = \">=3.8\""));
+        assert!(!is_lockfile_content("flask>=1.0.0\nrequests"));
+    }
 
     fn workspace_test_data_dir() -> PathBuf {
         Path::new("./test-data").simple_canonicalize().unwrap()
