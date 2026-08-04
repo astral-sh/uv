@@ -77,11 +77,40 @@ async fn mount_vulnerable_service(server: &MockServer) {
 }
 
 #[test]
+fn tool_audit_requires_selection() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.tool_audit(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the following required arguments were not provided:
+      <NAME>...
+
+    Usage: uv tool audit --cache-dir [CACHE_DIR] <NAME>...
+
+    For more information, try '--help'.
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
+        .arg("simple-launcher"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument '--all' cannot be used with '<NAME>...'
+
+    Usage: uv tool audit --cache-dir [CACHE_DIR] --all <NAME>...
+
+    For more information, try '--help'.
+    ");
+}
+
+#[test]
 fn tool_audit_preview_features() {
     let context = uv_test::test_context!("3.12");
     let tool_dir = context.temp_dir.child("tools");
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -90,6 +119,7 @@ fn tool_audit_preview_features() {
     ");
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .env(EnvVars::UV_PREVIEW_FEATURES, "audit")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -99,6 +129,7 @@ fn tool_audit_preview_features() {
     ");
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -108,6 +139,7 @@ fn tool_audit_preview_features() {
     ");
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -138,6 +170,7 @@ fn tool_audit_missing_lockfile() {
     install_tool(&context, "simple-launcher", false);
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -167,6 +200,7 @@ fn tool_audit_invalid_receipt() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -198,6 +232,7 @@ fn tool_audit_invalid_lockfile() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -241,6 +276,7 @@ fn tool_audit_unsupported_lockfile_version() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -318,6 +354,33 @@ async fn tool_audit_all_tools() {
     mount_clean_service(&server).await;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
+        .arg("--service-url")
+        .arg(server.uri())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Auditing `basic-app`
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    Auditing `simple-launcher`
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+#[tokio::test]
+async fn tool_audit_multiple_tools() {
+    let context = uv_test::test_context!("3.13");
+    let tool_dir = context.temp_dir.child("tools");
+    install_tool(&context, "simple-launcher", true);
+    install_tool(&context, "basic-app", true);
+
+    let server = MockServer::start().await;
+    mount_clean_service(&server).await;
+
+    uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("simple-launcher")
+        .arg("basic-app")
         .arg("--service-url")
         .arg(server.uri())
         .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
@@ -342,6 +405,7 @@ async fn tool_audit_mixed_lockfiles() {
     mount_clean_service(&server).await;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .arg("--service-url")
         .arg(server.uri())
         .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
@@ -386,6 +450,7 @@ async fn tool_audit_shared_dependencies() {
         .await;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .arg("--service-url")
         .arg(server.uri())
         .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
@@ -445,6 +510,7 @@ async fn tool_audit_ignore() {
     mount_vulnerable_service(&server).await;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .arg("--ignore")
         .arg("PYSEC-2026-0001")
         .arg("--ignore")
@@ -476,6 +542,7 @@ async fn tool_audit_configured_ignore() -> Result<()> {
     mount_vulnerable_service(&server).await;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .arg("--config-file")
         .arg(config.path())
         .arg("--service-url")
@@ -501,6 +568,7 @@ async fn tool_audit_json() {
     mount_clean_service(&server).await;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .arg("--output-format")
         .arg("json")
         .arg("--service-url")
@@ -539,6 +607,7 @@ async fn tool_audit_json_preview_warning() {
     mount_clean_service(&server).await;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .arg("--output-format")
         .arg("json")
         .arg("--service-url")
@@ -581,6 +650,7 @@ async fn tool_audit_json_all_tools() {
     mount_clean_service(&server).await;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .arg("--output-format")
         .arg("json")
         .arg("--service-url")
@@ -629,6 +699,7 @@ async fn tool_audit_sarif() {
     mount_clean_service(&server).await;
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .arg("--output-format")
         .arg("sarif")
         .arg("--service-url")
@@ -672,6 +743,7 @@ fn tool_audit_sarif_no_auditable_tools() {
     let tool_dir = context.temp_dir.child("tools");
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .arg("--output-format")
         .arg("sarif")
         .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
@@ -688,6 +760,7 @@ fn tool_audit_sarif_no_auditable_tools() {
     install_tool(&context, "simple-launcher", false);
 
     uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
         .arg("--output-format")
         .arg("sarif")
         .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks")
@@ -717,6 +790,7 @@ async fn tool_audit_sarif_all_tools() -> Result<()> {
 
     let output = context
         .tool_audit()
+        .arg("--all")
         .arg("--output-format")
         .arg("sarif")
         .arg("--service-url")

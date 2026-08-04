@@ -25,9 +25,9 @@ use crate::commands::project::audit::{
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
-/// Audit one installed tool, or every installed tool if no name is provided.
+/// Audit selected installed tools, or every installed tool if no names are provided.
 pub(crate) async fn audit(
-    name: Option<PackageName>,
+    names: Vec<PackageName>,
     output_format: AuditOutputFormat,
     service: VulnerabilityServiceFormat,
     service_url: Option<DisplaySafeUrl>,
@@ -70,7 +70,7 @@ pub(crate) async fn audit(
                 .as_io_error()
                 .is_some_and(|error| error.kind() == io::ErrorKind::NotFound) =>
         {
-            if let Some(name) = name {
+            if let Some(name) = names.first() {
                 bail!("`{name}` is not installed; run `uv tool install {name}` to install");
             }
             if matches!(output_format, AuditOutputFormat::Text) {
@@ -82,21 +82,26 @@ pub(crate) async fn audit(
         Err(error) => return Err(error.into()),
     };
 
-    let explicit_tool = name.is_some();
-    let mut tools = if let Some(name) = name {
-        match installed_tools.get_tool_receipt(&name) {
-            Ok(Some(tool)) => vec![(name, Ok(tool))],
-            Ok(None) => {
-                bail!("`{name}` is not installed; run `uv tool install {name}` to install");
-            }
-            Err(error) => {
-                bail!("Tool `{name}` has an invalid receipt: {error}");
+    let explicit_tool = !names.is_empty();
+    let mut tools = if names.is_empty() {
+        installed_tools.tools()?
+    } else {
+        let mut tools = Vec::with_capacity(names.len());
+        for name in names {
+            match installed_tools.get_tool_receipt(&name) {
+                Ok(Some(tool)) => tools.push((name, Ok(tool))),
+                Ok(None) => {
+                    bail!("`{name}` is not installed; run `uv tool install {name}` to install");
+                }
+                Err(error) => {
+                    bail!("Tool `{name}` has an invalid receipt: {error}");
+                }
             }
         }
-    } else {
-        installed_tools.tools()?
+        tools
     };
     tools.sort_by(|(left, _), (right, _)| left.cmp(right));
+    tools.dedup_by(|(left, _), (right, _)| left == right);
 
     if tools.is_empty() {
         if matches!(output_format, AuditOutputFormat::Text) {

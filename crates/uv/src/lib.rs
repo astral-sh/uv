@@ -1753,7 +1753,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             let cache = cache.init().await?;
 
             commands::tool_audit(
-                args.name,
+                args.names,
                 args.output_format,
                 args.service_format,
                 args.service_url,

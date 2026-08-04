@@ -1294,7 +1294,7 @@ impl ToolListSettings {
 /// The resolved settings to use for a `tool audit` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct ToolAuditSettings {
-    pub(crate) name: Option<PackageName>,
+    pub(crate) names: Vec<PackageName>,
     pub(crate) output_format: AuditOutputFormat,
     pub(crate) service_format: VulnerabilityServiceFormat,
     pub(crate) service_url: Option<DisplaySafeUrl>,
@@ -1308,6 +1308,7 @@ impl ToolAuditSettings {
     pub(crate) fn resolve(args: ToolAuditArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ToolAuditArgs {
             name,
+            all,
             audit:
                 AuditCommonArgs {
                     output_format,
@@ -1339,7 +1340,7 @@ impl ToolAuditSettings {
             .collect();
 
         Self {
-            name,
+            names: if all { vec![] } else { name },
             output_format,
             service_format,
             service_url,

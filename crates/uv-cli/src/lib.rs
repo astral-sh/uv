@@ -5722,9 +5722,13 @@ pub struct ToolListArgs {
 
 #[derive(Args)]
 pub struct ToolAuditArgs {
-    /// The installed tool to audit. If omitted, audit all installed tools.
-    #[arg(value_hint = ValueHint::Other)]
-    pub name: Option<PackageName>,
+    /// The names of the installed tools to audit.
+    #[arg(required = true, value_hint = ValueHint::Other)]
+    pub name: Vec<PackageName>,
+
+    /// Audit all installed tools.
+    #[arg(long, conflicts_with("name"))]
+    pub all: bool,
 
     #[command(flatten)]
     pub audit: AuditCommonArgs,
