@@ -14,14 +14,14 @@ use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, AuditArgs, AuditOutputFormat, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs,
-    ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe, MetadataArgs,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipTreeArgs, PipUninstallArgs, ProjectDependencyGroupsArgs, PythonFindArgs,
-    PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs, PythonUninstallArgs,
-    PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs,
-    ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, TreeFormat, UpgradeArgs, VenvArgs,
-    VersionArgs, VersionBumpSpec, VersionFormat,
+    AddArgs, AuditArgs, AuditCommonArgs, AuditOutputFormat, AuthLoginArgs, AuthLogoutArgs,
+    AuthTokenArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
+    MetadataArgs, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs,
+    PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, ProjectDependencyGroupsArgs,
+    PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
+    PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat,
+    ToolAuditArgs, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs,
+    TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, BuildOptionsArgs, CheckArgs, ExcludeNewerArgs, ExportArgs, FormatArgs,
@@ -1288,6 +1288,66 @@ impl ToolListSettings {
             },
             filesystem,
         })
+    }
+}
+
+/// The resolved settings to use for a `tool audit` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct ToolAuditSettings {
+    pub(crate) names: Vec<PackageName>,
+    pub(crate) output_format: AuditOutputFormat,
+    pub(crate) service_format: VulnerabilityServiceFormat,
+    pub(crate) service_url: Option<DisplaySafeUrl>,
+    pub(crate) ignore: Vec<VulnerabilityID>,
+    pub(crate) ignore_until_fixed: Vec<VulnerabilityID>,
+    pub(crate) filesystem: ResolverInstallerOptions,
+}
+
+impl ToolAuditSettings {
+    /// Resolve the [`ToolAuditSettings`] from the CLI and user-level configuration.
+    pub(crate) fn resolve(args: ToolAuditArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let ToolAuditArgs {
+            name,
+            all,
+            audit:
+                AuditCommonArgs {
+                    output_format,
+                    ignore,
+                    ignore_until_fixed,
+                    service_format,
+                    service_url,
+                },
+        } = args;
+
+        let audit = filesystem
+            .as_ref()
+            .and_then(|options| options.audit.clone())
+            .unwrap_or_default();
+        let filesystem = filesystem
+            .map(FilesystemOptions::into_options)
+            .map(|options| ResolverInstallerOptions::from(options.top_level))
+            .unwrap_or_default();
+
+        let ignore = ignore
+            .into_iter()
+            .chain(audit.ignore.unwrap_or_default())
+            .map(VulnerabilityID::new)
+            .collect();
+        let ignore_until_fixed = ignore_until_fixed
+            .into_iter()
+            .chain(audit.ignore_until_fixed.unwrap_or_default())
+            .map(VulnerabilityID::new)
+            .collect();
+
+        Self {
+            names: if all { vec![] } else { name },
+            output_format,
+            service_format,
+            service_url,
+            ignore,
+            ignore_until_fixed,
+            filesystem,
+        }
     }
 }
 
@@ -3127,13 +3187,16 @@ impl AuditSettings {
             python_platform,
             locked,
             frozen,
-            output_format,
+            audit:
+                AuditCommonArgs {
+                    output_format,
+                    ignore,
+                    ignore_until_fixed,
+                    service_format,
+                    service_url,
+                },
             build,
             resolver,
-            ignore,
-            ignore_until_fixed,
-            service_format,
-            service_url,
         } = args;
 
         let filesystem_install_mirrors = filesystem
