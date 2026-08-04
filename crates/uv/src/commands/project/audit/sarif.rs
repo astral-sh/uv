@@ -104,7 +104,7 @@ impl Report {
                 .into_iter()
                 .map(|mut run| {
                     run.automation_details = Some(RunAutomationDetails {
-                        id: format!("uv/tool-audit/{name}"),
+                        id: RunId(format!("uv/tool-audit/{name}")),
                     });
                     run
                 });
@@ -129,8 +129,13 @@ struct Run {
 /// Stable automation identity for an individual audited tool.
 #[derive(Debug, Serialize)]
 struct RunAutomationDetails {
-    id: String,
+    id: RunId,
 }
+
+/// Stable identity for a SARIF run.
+#[derive(Debug, Serialize)]
+#[serde(transparent)]
+struct RunId(String);
 
 /// Tool metadata wrapper (SARIF §3.18).
 #[derive(Debug, Serialize)]
