@@ -439,6 +439,10 @@ pub enum Pep723Error {
         "An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`."
     )]
     UnclosedBlock,
+    #[error(
+        "An opening tag (`# /// script`) was found, but the closing tag (`# ///`) has trailing whitespace. Remove the trailing whitespace so the line is exactly `# ///`."
+    )]
+    UnclosedBlockTrailingWhitespace,
     #[error("The script contains multiple PEP 723 metadata blocks")]
     DuplicateBlock,
     #[error("The PEP 723 metadata block is missing from the script.")]
@@ -558,6 +562,11 @@ impl ScriptTag {
         //
         // The latter `///` is the closing pragma
         let Some(index) = toml.iter().rev().position(|line| *line == "///") else {
+            // A closing tag with trailing whitespace (e.g. `# /// `) is a common mistake; flag it
+            // specifically instead of the generic "no closing tag" error.
+            if toml.iter().any(|line| line.trim_end() == "///") {
+                return Err(Pep723Error::UnclosedBlockTrailingWhitespace);
+            }
             return Err(Pep723Error::UnclosedBlock);
         };
         let index = toml.len() - index;
@@ -735,6 +744,17 @@ mod tests {
         assert!(matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlock)
+        ));
+    }
+
+    #[test]
+    fn closing_tag_trailing_whitespace() {
+        // Explicit string (not `indoc`) so the closing tag's trailing space is preserved.
+        let contents = "# /// script\n# requires-python = '>=3.11'\n# /// \n";
+
+        assert!(matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlockTrailingWhitespace)
         ));
     }
 
