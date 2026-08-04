@@ -717,8 +717,8 @@ fn parse_entry(
 
     let start = s.cursor();
     let mut leading_config_settings = Vec::new();
-    while eat_config_setting_option(s).is_some() {
-        leading_config_settings.push(parse_config_setting(content, s)?);
+    while let Some(option) = eat_config_setting_option(s) {
+        leading_config_settings.push(parse_config_setting(option, content, s)?);
         eat_wrappable_whitespace(s);
     }
 
@@ -1074,8 +1074,8 @@ fn parse_requirement_and_options(
             if s.eat_if("--hash") {
                 let hash = parse_value("--hash", content, s, |c: char| !c.is_whitespace())?;
                 hashes.push(hash.to_string());
-            } else if eat_config_setting_option(s).is_some() {
-                config_settings.push(parse_config_setting(content, s)?);
+            } else if let Some(option) = eat_config_setting_option(s) {
+                config_settings.push(parse_config_setting(option, content, s)?);
             } else {
                 let (line, column) = calculate_row_column(content, s.cursor());
                 return Err(RequirementsTxtParserError::Parser {
@@ -1104,7 +1104,7 @@ fn parse_requirement_and_options(
     })
 }
 
-/// Consume a supported spelling of the per-requirement build setting option.
+/// Consume a supported spelling of the option, leaving its separator and value for parsing.
 fn eat_config_setting_option(s: &mut Scanner) -> Option<&'static str> {
     for option in ["--config-settings", "--config-setting", "-C"] {
         if let Some(remainder) = s.after().strip_prefix(option)
@@ -1119,13 +1119,12 @@ fn eat_config_setting_option(s: &mut Scanner) -> Option<&'static str> {
 
 /// Parse one `KEY=VALUE` build configuration setting.
 fn parse_config_setting(
+    option: &str,
     content: &str,
     s: &mut Scanner,
 ) -> Result<ConfigSettingEntry, RequirementsTxtParserError> {
     let start = s.cursor();
-    let value = parse_value("--config-settings", content, s, |c: char| {
-        !c.is_whitespace()
-    })?;
+    let value = parse_value(option, content, s, |c: char| !c.is_whitespace())?;
     ConfigSettingEntry::from_str(value).map_err(|message| {
         let (line, column) = calculate_row_column(content, start);
         RequirementsTxtParserError::Parser {
