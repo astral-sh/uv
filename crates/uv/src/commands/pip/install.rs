@@ -169,10 +169,9 @@ pub(crate) async fn pip_install(
     )
     .await?;
 
-    let config_settings_package = config_settings_package
+    let merged_config_settings_package = config_settings_package
         .clone()
         .merge(requirements_config_settings_package);
-    let config_settings_package = &config_settings_package;
 
     override_dependencies.extend(overrides_from_workspace);
 
@@ -350,7 +349,7 @@ pub(crate) async fn pip_install(
             &marker_env,
             &tags,
             config_settings,
-            config_settings_package,
+            &merged_config_settings_package,
             &extra_build_requires,
             extra_build_variables,
         )? {
@@ -495,7 +494,7 @@ pub(crate) async fn pip_install(
         state.clone(),
         index_strategy,
         config_settings,
-        config_settings_package,
+        &merged_config_settings_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
@@ -620,7 +619,7 @@ pub(crate) async fn pip_install(
         state.clone(),
         index_strategy,
         config_settings,
-        config_settings_package,
+        &merged_config_settings_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
