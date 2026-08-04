@@ -140,7 +140,7 @@ pub(crate) async fn pip_sync(
     )
     .await?;
 
-    let merged_config_settings_package = config_settings_package
+    let config_settings_package = config_settings_package
         .clone()
         .merge(requirements_config_settings_package);
 
@@ -375,7 +375,7 @@ pub(crate) async fn pip_sync(
         state.clone(),
         index_strategy,
         config_settings,
-        &merged_config_settings_package,
+        &config_settings_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
@@ -490,7 +490,7 @@ pub(crate) async fn pip_sync(
         state.clone(),
         index_strategy,
         config_settings,
-        &merged_config_settings_package,
+        &config_settings_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
