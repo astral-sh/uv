@@ -30,7 +30,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
 use url::Url;
@@ -273,7 +273,7 @@ impl RequirementsSpecification {
                         // would require carrying these settings on the unresolved requirement and
                         // passing them directly to its metadata and build hooks.
                         let ParsedUrl::Directory(directory) = &requirement.url.parsed_url else {
-                            return Err(anyhow::anyhow!(
+                            return Err(anyhow!(
                                 "Cannot apply `--config-settings` to unnamed requirement `{requirement}`; specify the package name explicitly"
                             ));
                         };
@@ -300,7 +300,7 @@ impl RequirementsSpecification {
 
                         (
                             package.ok_or_else(|| {
-                                anyhow::anyhow!(
+                                anyhow!(
                                     "Cannot apply `--config-settings` to unnamed requirement `{requirement}`; specify the package name explicitly"
                                 )
                             })?,
