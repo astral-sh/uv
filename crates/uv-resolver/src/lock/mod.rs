@@ -88,7 +88,30 @@ mod serialize;
 mod tree;
 
 /// The current version of the lockfile format.
-pub const VERSION: u32 = 1;
+const VERSION: u32 = 1;
+
+/// An error returned when parsing a lockfile.
+#[derive(Debug, thiserror::Error)]
+pub enum LockParseError {
+    /// The lockfile uses an unsupported schema version.
+    #[error("unsupported lockfile schema version (v{version}, but only v{supported} is supported)")]
+    UnsupportedVersion { supported: u32, version: u32 },
+
+    /// The lockfile cannot be parsed and uses an unsupported schema version.
+    #[error(
+        "failed to parse lockfile using an unsupported schema version (v{version}, but only v{supported} is supported)"
+    )]
+    UnparsableVersion {
+        supported: u32,
+        version: u32,
+        #[source]
+        source: toml::de::Error,
+    },
+
+    /// The lockfile is not valid TOML or cannot be deserialized.
+    #[error(transparent)]
+    Toml(#[from] toml::de::Error),
+}
 
 /// The current revision of the lockfile format.
 const REVISION: u32 = 3;
@@ -1323,7 +1346,7 @@ impl Lock {
     }
 
     /// Returns the lockfile version.
-    pub fn version(&self) -> u32 {
+    fn version(&self) -> u32 {
         self.version
     }
 
@@ -1960,12 +1983,36 @@ impl Lock {
     /// Parses a lockfile, using the canonical fast path when possible.
     ///
     /// Lockfiles not written in uv's canonical layout fall back to the general
-    /// TOML parser, preserving its compatibility and error reporting.
-    pub fn from_toml(input: &str) -> Result<Self, toml::de::Error> {
-        match Self::from_canonical_toml(input) {
-            Ok(lock) => Ok(lock),
-            Err(_) => toml::from_str(input),
+    /// TOML parser, preserving its compatibility and error reporting. Lockfiles
+    /// that use an unsupported schema version are rejected.
+    pub fn from_toml(input: &str) -> Result<Self, LockParseError> {
+        let lock = match Self::from_canonical_toml(input) {
+            Ok(lock) => lock,
+            Err(_) => match toml::from_str(input) {
+                Ok(lock) => lock,
+                Err(source) => {
+                    if let Ok(lock) = toml::from_str::<LockVersion>(input)
+                        && lock.version() != VERSION
+                    {
+                        return Err(LockParseError::UnparsableVersion {
+                            supported: VERSION,
+                            version: lock.version(),
+                            source,
+                        });
+                    }
+                    return Err(LockParseError::Toml(source));
+                }
+            },
+        };
+
+        if lock.version() != VERSION {
+            return Err(LockParseError::UnsupportedVersion {
+                supported: VERSION,
+                version: lock.version(),
+            });
         }
+
+        Ok(lock)
     }
 
     /// Returns the TOML representation of this lockfile.
@@ -3735,13 +3782,13 @@ impl TryFrom<LockWire> for Lock {
 /// unparsable.
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct LockVersion {
+struct LockVersion {
     version: u32,
 }
 
 impl LockVersion {
     /// Returns the lockfile version.
-    pub fn version(&self) -> u32 {
+    fn version(&self) -> u32 {
         self.version
     }
 }
