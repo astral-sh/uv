@@ -66,35 +66,63 @@ impl Launcher {
     /// Returns `Err` if the file looks like a trampoline executable but is formatted incorrectly.
     #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
-        let data = fs_err::read(path)?;
-        let Ok(image) = editpe::Image::parse(data) else {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::System::LibraryLoader::{LOAD_LIBRARY_AS_DATAFILE, LoadLibraryExW};
+
+        let path_wide = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+
+        // SAFETY: `path_wide` is a null-terminated UTF-16 string.
+        #[allow(unsafe_code)]
+        let Some(module) = (unsafe {
+            LoadLibraryExW(
+                windows::core::PCWSTR(path_wide.as_ptr()),
+                None,
+                LOAD_LIBRARY_AS_DATAFILE,
+            )
+            .ok()
+        }) else {
             return Ok(None);
         };
 
-        let Some(kind_data) = read_resource_from_image(&image, RESOURCE_TRAMPOLINE_KIND) else {
-            return Ok(None);
-        };
-        let Some(&kind_value) = kind_data.first() else {
-            return Err(Error::UnprocessableMetadata);
-        };
-        let Some(kind) = LauncherKind::from_resource_value(kind_value) else {
-            return Err(Error::UnprocessableMetadata);
-        };
+        let result = (|| {
+            let Some(kind_data) = read_resource(module, RESOURCE_TRAMPOLINE_KIND) else {
+                return Ok(None);
+            };
+            let Some(&kind_value) = kind_data.first() else {
+                return Err(Error::UnprocessableMetadata);
+            };
+            let Some(kind) = LauncherKind::from_resource_value(kind_value) else {
+                return Err(Error::UnprocessableMetadata);
+            };
 
-        let Some(path_data) = read_resource_from_image(&image, RESOURCE_PYTHON_PATH) else {
-            return Ok(None);
-        };
-        let python_path = PathBuf::from(
-            String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
-        );
+            let Some(path_data) = read_resource(module, RESOURCE_PYTHON_PATH) else {
+                return Ok(None);
+            };
+            let python_path = PathBuf::from(
+                String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
+            );
 
-        let script_data = read_resource_from_image(&image, RESOURCE_SCRIPT_DATA);
+            let script_data = read_resource(module, RESOURCE_SCRIPT_DATA);
 
-        Ok(Some(Self {
-            kind,
-            python_path,
-            script_data,
-        }))
+            Ok(Some(Self {
+                kind,
+                python_path,
+                script_data,
+            }))
+        })();
+
+        // SAFETY: `module` was returned by a successful `LoadLibraryExW` call.
+        #[allow(unsafe_code)]
+        unsafe {
+            windows::Win32::Foundation::FreeLibrary(module)
+                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+        }
+
+        result
     }
 
     /// Write this trampoline launcher to a file.
@@ -352,29 +380,44 @@ fn write_resources_with_winapi(path: &Path, resources: &[(&str, &[u8])]) -> Resu
     Ok(())
 }
 
-/// Read a named resource from a parsed PE [`Image`].
-///
-/// Navigates the PE resource directory tree: `RT_RCDATA` → `name` → first language entry.
+/// Safely read a named resource from a loaded PE image.
 #[cfg(windows)]
-fn read_resource_from_image(image: &editpe::Image<'_>, name: &str) -> Option<Vec<u8>> {
-    use editpe::ResourceEntryName;
+fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Option<Vec<u8>> {
+    use windows::Win32::System::LibraryLoader::{
+        FindResourceW, LoadResource, LockResource, SizeofResource,
+    };
 
-    let resource_directory = image.resource_directory()?;
-    let root = resource_directory.root();
+    let name_wide = name
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
 
-    let rcdata_entry = root.get(ResourceEntryName::ID(RT_RCDATA))?;
-    let rcdata_table = rcdata_entry.as_table()?;
+    // SAFETY: `name_wide` is null-terminated, `handle` is valid, and the resource pointer is
+    // checked before reading the number of bytes reported by `SizeofResource`.
+    #[allow(unsafe_code)]
+    unsafe {
+        let resource = FindResourceW(
+            Some(handle),
+            windows::core::PCWSTR(name_wide.as_ptr()),
+            windows::core::PCWSTR(RT_RCDATA as usize as *const u16),
+        );
+        if resource.is_invalid() {
+            return None;
+        }
 
-    let name_entry = rcdata_table.get(ResourceEntryName::from_string(name))?;
-    let language_table = name_entry.as_table()?;
+        let size = SizeofResource(Some(handle), resource);
+        if size == 0 {
+            return Some(Vec::new());
+        }
 
-    // Get the first language entry (typically ID(0) for neutral).
-    let entries = language_table.entries();
-    let first_language = entries.first()?;
-    let language_entry = language_table.get(*first_language)?;
-    let data = language_entry.as_data()?;
+        let data = LoadResource(Some(handle), resource).ok()?;
+        let pointer = LockResource(data).cast::<u8>();
+        if pointer.is_null() {
+            return None;
+        }
 
-    Some(data.data().to_vec())
+        Some(std::slice::from_raw_parts(pointer, size as usize).to_vec())
+    }
 }
 
 /// Construct a Windows script launcher.
@@ -651,6 +694,17 @@ if __name__ == "__main__":
             .success();
 
         println!("Signed binary: {}", bin_path.as_ref().display());
+    }
+
+    #[test]
+    fn malformed_trampoline_is_not_recognized() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let launcher_path = temp_dir.child("malformed.exe");
+        fs_err::write(launcher_path.path(), b"MZ")?;
+
+        assert!(Launcher::try_from_path(launcher_path.path())?.is_none());
+
+        Ok(())
     }
 
     #[test]

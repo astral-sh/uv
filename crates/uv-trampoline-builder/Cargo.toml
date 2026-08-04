@@ -35,10 +35,10 @@ thiserror = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 async_zip = { workspace = true }
 futures-lite = { workspace = true }
+windows = { workspace = true }
 
 [target.'cfg(all(target_os = "windows", target_arch = "x86"))'.dependencies]
 tempfile = { workspace = true }
-windows = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
