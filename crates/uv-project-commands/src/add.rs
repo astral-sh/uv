@@ -55,6 +55,7 @@ use uv_resolver::FlatIndex;
 use uv_scripts::Pep723Script;
 use uv_settings::{
     FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
+    ResolverSettings,
 };
 use uv_static::is_known_standard_library_package;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
@@ -125,7 +126,7 @@ pub async fn add(
     python: Option<String>,
     workspace: Option<bool>,
     install_mirrors: PythonInstallMirrors,
-    mut settings: ResolverInstallerSettings,
+    settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
@@ -404,11 +405,16 @@ pub async fn add(
     // `uv add` stores per-requirement build settings in `[tool.uv.config-settings-package]`.
     // Since that table cannot store markers, settings from marked requirements apply everywhere.
     let config_settings_package = config_settings_package.evaluate(None);
-    settings.resolver.config_settings_package = settings
-        .resolver
-        .config_settings_package
-        .clone()
-        .merge(config_settings_package.clone());
+    let settings = ResolverInstallerSettings {
+        resolver: ResolverSettings {
+            config_settings_package: settings
+                .resolver
+                .config_settings_package
+                .merge(config_settings_package.clone()),
+            ..settings.resolver
+        },
+        ..settings
+    };
 
     // Initialize any shared state.
     let state = PlatformState::default();
