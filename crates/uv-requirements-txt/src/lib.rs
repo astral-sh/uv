@@ -763,16 +763,15 @@ fn parse_entry(
             true,
             leading_config_settings,
         )?;
-        entry
-            .requirement
-            .make_editable()
-            .map_err(|source| RequirementsTxtParserError::NonEditable {
+        entry.requirement.make_editable().map_err(|source| {
+            RequirementsTxtParserError::NonEditable {
                 source,
                 requirement: entry.requirement.to_string(),
                 start,
                 end: s.cursor(),
                 line: calculate_row_column(content, start).0,
-            })?;
+            }
+        })?;
         RequirementsTxtStatement::EditableRequirementEntry(entry)
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value("--index-url", content, s, |c: char| !is_terminal(c))?;
