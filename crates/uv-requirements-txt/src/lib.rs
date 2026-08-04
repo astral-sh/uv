@@ -756,7 +756,7 @@ fn parse_entry(
             Some(requirements_txt)
         };
 
-        let mut entry = parse_requirement_and_options(
+        let entry = parse_requirement_and_options(
             s,
             content,
             source,
@@ -764,14 +764,17 @@ fn parse_entry(
             true,
             leading_config_settings,
         )?;
-        entry.requirement = entry.requirement.into_editable().map_err(|err| {
+        let requirement = entry.requirement.into_editable().map_err(|err| {
             RequirementsTxtParserError::NonEditable {
                 source: err,
                 start,
                 end: s.cursor(),
             }
         })?;
-        RequirementsTxtStatement::EditableRequirementEntry(entry)
+        RequirementsTxtStatement::EditableRequirementEntry(RequirementEntry {
+            requirement,
+            ..entry
+        })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value("--index-url", content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
