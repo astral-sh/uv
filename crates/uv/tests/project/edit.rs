@@ -5646,6 +5646,98 @@ fn add_requirements_file_config_settings() -> Result<()> {
     Ok(())
 }
 
+/// Preserve imported build settings at the workspace root when editing a workspace member.
+#[test]
+fn add_requirements_file_config_settings_workspace_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let workspace = context.temp_dir.child("pyproject.toml");
+    workspace.write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "-e {} --config-settings=editable_mode=compat",
+        context
+            .workspace_root
+            .join("test/packages/setuptools_editable")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .current_dir(member.path())
+        .arg("--dev")
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--no-workspace"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("pyproject.toml"), @r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.config-settings-package]
+        setuptools-editable = { editable_mode = "compat" }
+        "#);
+
+        assert_snapshot!(context.read("member/pyproject.toml"), @r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = [
+            "setuptools-editable",
+        ]
+
+        [tool.uv.sources]
+        setuptools-editable = { path = "[WORKSPACE]/test/packages/setuptools_editable", editable = true }
+        "#);
+    });
+
+    let finder = context
+        .site_packages()
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(!finder.exists());
+
+    Ok(())
+}
+
 /// Add a path dependency from a requirements file, respecting the lack of a `-e` flag.
 #[test]
 fn add_requirements_file_non_editable() -> Result<()> {
