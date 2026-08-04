@@ -109,7 +109,7 @@ pub async fn run(
     python: Option<String>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
-    settings: ResolverInstallerSettings,
+    mut settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_arch: Option<PythonArchitecture>,
@@ -916,6 +916,14 @@ pub async fn run(
 
         Some(spec)
     };
+
+    if let Some(spec) = &spec {
+        settings.resolver.config_settings_package = settings
+            .resolver
+            .config_settings_package
+            .clone()
+            .merge(spec.config_settings_package.clone());
+    }
 
     // If necessary, create an environment for the ephemeral requirements or command.
     let base_site_packages = SitePackages::from_interpreter(&base_interpreter)?;
