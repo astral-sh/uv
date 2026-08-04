@@ -360,8 +360,8 @@ pub(crate) async fn add(
     )
     .await?;
 
-    // Project configuration cannot represent marker-scoped build settings, so preserve all
-    // imported settings for use across the workspace's supported environments.
+    // `uv add` stores per-requirement build settings in `[tool.uv.config-settings-package]`.
+    // Since that table cannot store markers, settings from marked requirements apply everywhere.
     let config_settings_package = config_settings_package.evaluate(None);
     settings.resolver.config_settings_package = settings
         .resolver
