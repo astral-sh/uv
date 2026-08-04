@@ -135,6 +135,24 @@ uv pip install wheel && uv pip install --no-build-isolation biopython==1.77
 For a list of packages that are known to fail under PEP 517 build isolation, see
 [#2252](https://github.com/astral-sh/uv/issues/2252).
 
+## Per-requirement build settings
+
+Both uv and pip support `--config-settings` on individual requirements in a requirements file.
+However, unlike pip, uv requires the package name to be available before invoking its build backend.
+
+For unnamed local projects, including editable projects, uv can apply per-requirement build settings
+only if the project declares its name statically in `[project]` or `[tool.poetry]` in
+`pyproject.toml`. The following requirements are unsupported if `./project` does not declare a
+static name:
+
+```requirements title="requirements.txt"
+./project --config-settings=key=value
+-e ./project --config-settings=key=value
+```
+
+Unnamed archive and URL requirements with per-requirement build settings are also unsupported. As a
+workaround, include the package name explicitly in the requirement.
+
 ## Transitive URL dependencies
 
 While uv includes first-class support for URL dependencies (e.g., `ruff @ https://...`), it differs
