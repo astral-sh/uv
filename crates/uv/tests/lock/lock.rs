@@ -10973,13 +10973,17 @@ async fn lock_index_workspace_member() -> Result<()> {
         proxy_uri = proxy.uri()
     ))?;
 
-    // Locking without the necessary credentials should fail.
+    // Locking without the necessary credentials should fail. The member's own index is now
+    // consulted (that's the fix), so the failure comes from a 401 against it rather than the
+    // index being silently skipped.
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and child depends on iniconfig>=2, we can conclude that child's requirements are unsatisfiable.
           And because your workspace requires child, we can conclude that your workspace's requirements are unsatisfiable.
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     ");
 
     uv_snapshot!(context.filters(), context.lock()
