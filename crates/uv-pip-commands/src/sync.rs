@@ -148,10 +148,9 @@ pub async fn pip_sync(
     )
     .await?;
 
-    let config_settings_package = config_settings_package
+    let merged_config_settings_package = config_settings_package
         .clone()
         .merge(requirements_config_settings_package);
-    let config_settings_package = &config_settings_package;
 
     let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
 
@@ -386,7 +385,7 @@ pub async fn pip_sync(
         state.clone(),
         index_strategy,
         config_settings,
-        config_settings_package,
+        &merged_config_settings_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
@@ -510,7 +509,7 @@ pub async fn pip_sync(
         state.clone(),
         index_strategy,
         config_settings,
-        config_settings_package,
+        &merged_config_settings_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
