@@ -60,6 +60,7 @@ enum IncompatibleWheelHint {
     Python {
         wheel_tags: Vec<LanguageTag>,
         current: Option<LanguageTag>,
+        is_freethreaded: bool,
     },
     /// The wheel targets a different ABI than the current interpreter.
     Abi {
@@ -84,13 +85,23 @@ impl fmt::Display for IncompatibleWheelHint {
             Self::Python {
                 wheel_tags,
                 current,
+                is_freethreaded,
             } => {
                 if let Some(current) = current {
+                    let current_display = if *is_freethreaded {
+                        if let Some(pretty) = current.pretty() {
+                            format!("{}t (`{}t`)", pretty.cyan(), current.cyan())
+                        } else {
+                            format!("`{}t`", current.cyan())
+                        }
+                    } else {
+                        format_language_tag(*current)
+                    };
                     write!(
                         f,
                         "The wheel is compatible with {}, but you're using {}",
                         format_language_tags(wheel_tags),
-                        format_language_tag(*current),
+                        current_display,
                     )
                 } else {
                     write!(f, "The wheel requires {}", format_language_tags(wheel_tags))
@@ -797,6 +808,7 @@ fn generate_wheel_compatibility_hint(
         IncompatibleTag::Python => Some(IncompatibleWheelHint::Python {
             wheel_tags: filename.python_tags().to_vec(),
             current: tags.python_tag(),
+            is_freethreaded: tags.is_freethreaded(),
         }),
         IncompatibleTag::FreethreadedAbi => Some(IncompatibleWheelHint::FreethreadedAbi {
             wheel_tags: filename.abi_tags().to_vec(),

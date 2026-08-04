@@ -493,7 +493,13 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
             let current_tag = tags.python_tag();
 
             if let Some(current) = current_tag {
-                let message = if let Some(pretty) = current.pretty() {
+                let message = if tags.is_freethreaded() {
+                    if let Some(pretty) = current.pretty() {
+                        format!("{pretty}t (`{current}t`)")
+                    } else {
+                        format!("`{current}t`")
+                    }
+                } else if let Some(pretty) = current.pretty() {
                     format!("{pretty} (`{current}`)")
                 } else {
                     format!("`{current}`")
