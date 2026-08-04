@@ -108,7 +108,7 @@ pub(crate) async fn run(
     python: Option<String>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
-    mut settings: ResolverInstallerSettings,
+    settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -957,13 +957,20 @@ pub(crate) async fn run(
         Some(spec)
     };
 
-    if let Some(spec) = &spec {
-        settings.resolver.config_settings_package = settings
-            .resolver
-            .config_settings_package
-            .clone()
-            .merge(spec.config_settings_package.clone());
-    }
+    let settings = if let Some(spec) = &spec {
+        ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                config_settings_package: settings
+                    .resolver
+                    .config_settings_package
+                    .merge(spec.config_settings_package.clone()),
+                ..settings.resolver
+            },
+            ..settings
+        }
+    } else {
+        settings
+    };
 
     // If necessary, create an environment for the ephemeral requirements or command.
     let base_site_packages = SitePackages::from_interpreter(&base_interpreter)?;
