@@ -151,24 +151,24 @@ impl Removal {
         for entry in walkdir::WalkDir::new(&path).contents_first(true) {
             // Capture file metadata up front so overlong files share the directory error handling.
             let mut metadata = None;
-            let entry = entry.and_then(|entry| {
-                if !entry.file_type().is_dir() {
-                    match entry.metadata() {
-                        Ok(entry_metadata) => metadata = Some(entry_metadata),
-                        #[cfg(target_os = "macos")]
-                        Err(error)
-                            if error.io_error().is_some_and(|error| {
-                                error.kind() == io::ErrorKind::InvalidFilename
-                            }) =>
-                        {
-                            return Err(error);
-                        }
-                        Err(_) => {}
+            let entry = match entry {
+                Ok(entry) if !entry.file_type().is_dir() => match entry.metadata() {
+                    Ok(entry_metadata) => {
+                        metadata = Some(entry_metadata);
+                        Ok(entry)
                     }
-                }
-
-                Ok(entry)
-            });
+                    #[cfg(target_os = "macos")]
+                    Err(error)
+                        if error.io_error().is_some_and(|error| {
+                            error.kind() == io::ErrorKind::InvalidFilename
+                        }) =>
+                    {
+                        Err(error)
+                    }
+                    Err(_) => Ok(entry),
+                },
+                entry => entry,
+            };
 
             if let Err(ref err) = entry {
                 // On Unix, `ENAMETOOLONG` is the only OS error mapped to `InvalidFilename`.
