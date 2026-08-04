@@ -1093,7 +1093,7 @@ async fn retry_read_timeout_stream() {
       ├─▶ Request failed after 1 retry in [TIME]
       ├─▶ Failed to read metadata: `http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
       ├─▶ Failed to read from zip file
-      ├─▶ an upstream reader returned an error: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
-      ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
+      ├─▶ an upstream reader returned an error: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT to a larger integer value (in seconds, current: [TIME]).
+      ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT to a larger integer value (in seconds, current: [TIME]).
     ");
 }

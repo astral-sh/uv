@@ -1332,7 +1332,7 @@ impl RegistryClient {
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT to a larger integer value (in seconds, current: {}).",
                     self.read_timeout().as_secs()
                 ),
             )
