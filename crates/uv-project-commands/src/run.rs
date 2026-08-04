@@ -62,6 +62,7 @@ use uv_requirements::{
     script_specification,
 };
 use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
+use uv_resolve_operations::resolution_markers;
 use uv_resolver::{DependencyMode, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{
@@ -917,13 +918,15 @@ pub async fn run(
         Some(spec)
     };
 
+    let marker_environment = resolution_markers(None, python_platform.as_ref(), &base_interpreter);
     let settings = if let Some(spec) = &spec {
         ResolverInstallerSettings {
             resolver: ResolverSettings {
-                config_settings_package: settings
-                    .resolver
-                    .config_settings_package
-                    .merge(spec.config_settings_package.clone()),
+                config_settings_package: settings.resolver.config_settings_package.merge(
+                    spec.config_settings_package
+                        .clone()
+                        .evaluate(Some(&marker_environment)),
+                ),
                 ..settings.resolver
             },
             ..settings
