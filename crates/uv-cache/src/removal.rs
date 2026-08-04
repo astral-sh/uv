@@ -149,6 +149,27 @@ impl Removal {
         }
 
         for entry in walkdir::WalkDir::new(&path).contents_first(true) {
+            // Capture file metadata up front so overlong files share the directory error handling.
+            let mut metadata = None;
+            let entry = entry.and_then(|entry| {
+                if !entry.file_type().is_dir() {
+                    match entry.metadata() {
+                        Ok(entry_metadata) => metadata = Some(entry_metadata),
+                        #[cfg(target_os = "macos")]
+                        Err(error)
+                            if error.io_error().is_some_and(|error| {
+                                error.kind() == io::ErrorKind::InvalidFilename
+                            }) =>
+                        {
+                            return Err(error);
+                        }
+                        Err(_) => {}
+                    }
+                }
+
+                Ok(entry)
+            });
+
             if let Err(ref err) = entry {
                 // On Unix, `ENAMETOOLONG` is the only OS error mapped to `InvalidFilename`.
                 #[cfg(target_os = "macos")]
@@ -215,24 +236,13 @@ impl Removal {
                 self.num_dirs += 1;
             } else {
                 // Remove the file.
-                if let Ok(metadata) = entry.metadata() {
-                    self.add_file(entry.path(), &metadata);
+                if let Some(metadata) = &metadata {
+                    self.add_file(entry.path(), metadata);
                 } else if self.physical_bytes.is_some() {
                     self.physical_bytes_incomplete = true;
                 }
 
-                let result = remove_file(entry.path());
-
-                #[cfg(target_os = "macos")]
-                if let Err(error) = &result
-                    && error.kind() == io::ErrorKind::InvalidFilename
-                    && let Some(parent) = entry.path().parent()
-                    && parent != path.as_ref()
-                {
-                    return self.rm_rf_overlong_subtree(&path, parent, reporter, skip_locked_file);
-                }
-
-                result?;
+                remove_file(entry.path())?;
                 self.num_files += 1;
             }
 
@@ -258,6 +268,9 @@ impl Removal {
         // directory passed to it.
         remove_dir_all(directory)?;
         self.num_dirs += 1;
+        if self.physical_bytes.is_some() {
+            self.physical_bytes_incomplete = true;
+        }
         reporter.map(CleanReporter::on_clean);
 
         // Restart because `walkdir` may otherwise yield entries from the removed directory.
