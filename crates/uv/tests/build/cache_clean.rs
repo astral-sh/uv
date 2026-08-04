@@ -179,11 +179,11 @@ fn clean_all_compressed_file() -> Result<()> {
     measured.write_binary(&vec![42; 1024 * 1024])?;
     fs_err::OpenOptions::new()
         .write(true)
-        .open(&measured)?
+        .open(measured.path())?
         .sync_all()?;
 
     let compressed = context.cache_dir.child("compressed.bin");
-    fs_err::File::create(&compressed)?;
+    fs_err::File::create(compressed.path())?;
     Command::new("btrfs")
         .args(["property", "set"])
         .arg(compressed.path())
@@ -193,7 +193,7 @@ fn clean_all_compressed_file() -> Result<()> {
     compressed.write_binary(&vec![42; 1024 * 1024])?;
     fs_err::OpenOptions::new()
         .write(true)
-        .open(&compressed)?
+        .open(compressed.path())?
         .sync_all()?;
 
     let filters = size_filters(&context);
