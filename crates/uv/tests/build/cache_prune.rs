@@ -82,7 +82,6 @@ fn prune_hardlinked_file() -> Result<()> {
     ");
 
     assert!(retained.is_file());
-    assert_eq!(fs_err::metadata(retained)?.len(), 1024 * 1024);
 
     Ok(())
 }

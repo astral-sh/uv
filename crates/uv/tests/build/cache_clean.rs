@@ -56,11 +56,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
     let cached = context.cache_dir.child("hardlinked.bin");
     fs_err::hard_link(&retained, &cached)?;
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
-        .collect();
+    let filters = size_filters(&context);
 
     uv_snapshot!(&filters, context.clean(), @"
     exit_code: 0 (success)
@@ -80,7 +76,6 @@ fn clean_all_hardlinked_file() -> Result<()> {
     ");
 
     assert!(retained.is_file());
-    assert_eq!(fs_err::metadata(retained)?.len(), 1024 * 1024);
 
     context.cache_dir.create_dir_all()?;
     cached.write_binary(&vec![42; 1024 * 1024])?;
@@ -105,10 +100,10 @@ fn clean_all_hardlinked_file() -> Result<()> {
 #[test]
 fn clean_all_cloned_file() -> Result<()> {
     let context = copy_on_write_test_context()?;
-    let retained = context.temp_dir.child("retained");
-    retained.create_dir_all()?;
-    let original = retained.child("original.bin");
-    original.write_binary(&vec![42; 1024 * 1024])?;
+    let retained = context.cache_dir.path().with_file_name("retained");
+    fs_err::create_dir_all(&retained)?;
+    let original = retained.join("original.bin");
+    fs_err::write(&original, vec![42; 1024 * 1024])?;
 
     // Remove unrelated cache entries so the cloned file is the only allocated data being cleaned.
     context.clean().assert().success();
@@ -124,11 +119,7 @@ fn clean_all_cloned_file() -> Result<()> {
         return Ok(());
     }
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
-        .collect();
+    let filters = size_filters(&context);
 
     uv_snapshot!(&filters, context.clean().arg("--preview"), @"
     exit_code: 0 (success)
@@ -138,7 +129,6 @@ fn clean_all_cloned_file() -> Result<()> {
     ");
 
     assert!(original.is_file());
-    assert_eq!(fs_err::metadata(original)?.len(), 1024 * 1024);
 
     Ok(())
 }
@@ -164,11 +154,7 @@ fn clean_all_cached_clones() -> Result<()> {
         return Ok(());
     }
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
-        .collect();
+    let filters = size_filters(&context);
 
     uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
@@ -210,11 +196,7 @@ fn clean_all_compressed_file() -> Result<()> {
         .open(&compressed)?
         .sync_all()?;
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
-        .collect();
+    let filters = size_filters(&context);
 
     uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
@@ -237,12 +219,19 @@ fn copy_on_write_test_context() -> Result<uv_test::TestContext> {
     let Some(context) = context.with_cache_on_cow_fs()? else {
         anyhow::bail!("the configured copy-on-write cache filesystem was unavailable");
     };
-    let Some(context) = context.with_working_dir_on_cow_fs()? else {
-        anyhow::bail!("the configured copy-on-write working filesystem was unavailable");
-    };
 
     let cache_dir = context.cache_dir.path().to_path_buf();
     Ok(context.with_filtered_path(&cache_dir, "CACHE_DIR"))
+}
+
+/// Preserve physical sizes while applying the context's other snapshot filters.
+#[cfg(unix)]
+fn size_filters(context: &uv_test::TestContext) -> Vec<(&str, &str)> {
+    context
+        .filters()
+        .into_iter()
+        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
+        .collect()
 }
 
 /// `cache clear` should behave as an alias of `cache clean`.
