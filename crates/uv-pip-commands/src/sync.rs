@@ -150,10 +150,6 @@ pub async fn pip_sync(
     )
     .await?;
 
-    let config_settings_package = config_settings_package
-        .clone()
-        .merge(requirements_config_settings_package);
-
     let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
     let build_hash_checking = resolve_build_hash_checking(hash_checking, build_hash_checking);
 
@@ -285,6 +281,9 @@ pub async fn pip_sync(
         python_platform.as_ref(),
         interpreter,
     )?;
+    let config_settings_package = config_settings_package
+        .clone()
+        .merge(requirements_config_settings_package.evaluate(Some(&marker_env)));
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
