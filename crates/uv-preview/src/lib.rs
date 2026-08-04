@@ -327,7 +327,7 @@ pub enum PreviewFeature {
     IndexHashAlgorithm,
     /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
     LockfileFormatCheck,
-    /// Omit `package.metadata` from `uv.lock`.
+    /// Omit `package.metadata` from `uv.lock`, except for remote sources.
     LockWithoutMetadata,
 }
 

@@ -779,7 +779,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             .source
             .satisfies_requirement_source(&requirement.source, self.workspace_root)?;
 
-        // A constraint or another first-party requirement can select a direct source for an
+        // A constraint or another refreshed requirement can select a direct source for an
         // otherwise unqualified registry requirement. Source selections apply globally, even
         // across disjoint marker environments, but the locked source must match exactly.
         if !source_matches
@@ -1317,14 +1317,43 @@ impl Lock {
         self
     }
 
-    /// Omit package declaration metadata using the revision that supports metadata-free locks.
-    #[must_use]
-    pub fn without_package_metadata(mut self) -> Self {
+    /// Omit package metadata except for remote sources that cannot be refreshed offline.
+    ///
+    /// For freshness checks to be offline, we need to be able to validate whether a URL in a fork
+    /// in the lockfile is used by any other URL package in that fork. We always read the
+    /// requirements for local sources, but when there's a URL without a matching local source, we
+    /// need the metadata from remote sources to determine whether the URL is requested by a remote
+    /// source (the lockfile is fresh) or whether it was only requested by a local sources that
+    /// changes (the lockfile is stale).
+    ///
+    /// In effect, we prune the metadata for workspace packages, but add it for Git dependencies.
+    pub fn without_package_metadata(
+        mut self,
+        resolution: &ResolverOutput,
+        root: &Path,
+    ) -> Result<Self, LockError> {
         self.revision = METADATA_FREE_REVISION;
         for package in &mut self.packages {
-            package.metadata = PackageMetadata::default();
+            if !matches!(package.id.source, Source::Direct(..) | Source::Git(..)) {
+                package.metadata = PackageMetadata::default();
+            }
         }
-        self
+
+        for (_, distribution) in resolution.base_dists() {
+            let package_id = PackageId::from_annotated_dist(distribution, root)?;
+            if !matches!(package_id.source, Source::Git(..)) {
+                continue;
+            }
+
+            if let Some(metadata) = distribution.metadata.as_ref()
+                && let Some(index) = self.by_id.get(&package_id)
+                && let Some(package) = self.packages.get_mut(*index)
+            {
+                package.metadata = PackageMetadata::from_distribution(metadata, root)?;
+            }
+        }
+
+        Ok(self)
     }
 
     /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
@@ -3142,6 +3171,20 @@ impl Lock {
                 continue;
             }
 
+            if matches!(package.id.source, Source::Direct(..) | Source::Git(..)) {
+                add_source_requirements(
+                    package,
+                    package
+                        .metadata
+                        .requires_dist
+                        .iter()
+                        .chain(package.metadata.dependency_groups.values().flatten())
+                        .cloned()
+                        .collect(),
+                )?;
+                continue;
+            }
+
             if package
                 .all_dependencies()
                 .all(|dependency| matches!(dependency.package_id.source, Source::Registry(..)))
@@ -3149,11 +3192,9 @@ impl Lock {
                 continue;
             }
 
-            let Some(source_tree) = package.id.source.as_source_tree() else {
-                continue;
-            };
-            let (requires_dist, dependency_groups) =
-                if let Some(SourceTreeRequiresDist { metadata, .. }) =
+            let (requires_dist, dependency_groups) = if let Some(source_tree) =
+                package.id.source.as_source_tree()
+                && let Some(SourceTreeRequiresDist { metadata, .. }) =
                     Self::source_tree_requires_dist_cached(
                         source_tree,
                         root,
@@ -3162,22 +3203,32 @@ impl Lock {
                         source_tree_metadata,
                     )
                     .await?
-                {
-                    (metadata.requires_dist, metadata.dependency_groups)
-                } else {
-                    let metadata = Self::package_metadata(
-                        package,
-                        root,
-                        tags,
-                        markers,
-                        build_options,
-                        hasher,
-                        index,
-                        database,
-                    )
-                    .await?;
-                    (metadata.requires_dist, metadata.dependency_groups)
-                };
+            {
+                (metadata.requires_dist, metadata.dependency_groups)
+            } else if matches!(package.id.source, Source::Path(..))
+                || package.id.source.is_source_tree()
+            {
+                // For offline lockfile checking to succeed, we assume that we can
+                // query requirements from source distributions statically or at
+                // least with offline dependencies alone.
+                //
+                // This means a path dep with `dynamic = ["dependencies"]` will currently
+                // fail validation.
+                let metadata = Self::package_metadata(
+                    package,
+                    root,
+                    tags,
+                    markers,
+                    build_options,
+                    hasher,
+                    index,
+                    database,
+                )
+                .await?;
+                (metadata.requires_dist, metadata.dependency_groups)
+            } else {
+                continue;
+            };
             let direct_requirements = requires_dist
                 .into_vec()
                 .into_iter()
@@ -3828,49 +3879,16 @@ impl Package {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist, index_locations)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist, index_locations)?;
-        let requires_dist = if id.source.is_immutable() {
-            BTreeSet::default()
+        let metadata = if id.source.is_immutable() {
+            PackageMetadata::default()
         } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .requires_dist
-                .iter()
-                .cloned()
-                .map(|requirement| requirement.relative_to(root))
-                .collect::<Result<_, _>>()
-                .map_err(LockErrorKind::RequirementRelativePath)?
-        };
-        let provides_extra = if id.source.is_immutable() {
-            Box::default()
-        } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .provides_extra
-                .clone()
-        };
-        let dependency_groups = if id.source.is_immutable() {
-            BTreeMap::default()
-        } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .dependency_groups
-                .iter()
-                .map(|(group, requirements)| {
-                    let requirements = requirements
-                        .iter()
-                        .cloned()
-                        .map(|requirement| requirement.relative_to(root))
-                        .collect::<Result<_, _>>()
-                        .map_err(LockErrorKind::RequirementRelativePath)?;
-                    Ok::<_, LockError>((group.clone(), requirements))
-                })
-                .collect::<Result<_, _>>()?
+            PackageMetadata::from_distribution(
+                annotated_dist
+                    .metadata
+                    .as_ref()
+                    .expect("metadata is present"),
+                root,
+            )?
         };
         Ok(Self {
             id,
@@ -3880,11 +3898,7 @@ impl Package {
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
             dependency_groups: BTreeMap::default(),
-            metadata: PackageMetadata {
-                requires_dist,
-                provides_extra,
-                dependency_groups,
-            },
+            metadata,
         })
     }
 
@@ -4648,6 +4662,37 @@ struct PackageMetadata {
     provides_extra: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
+}
+
+impl PackageMetadata {
+    fn from_distribution(metadata: &DistributionMetadata, root: &Path) -> Result<Self, LockError> {
+        let requires_dist = metadata
+            .requires_dist
+            .iter()
+            .cloned()
+            .map(|requirement| requirement.relative_to(root))
+            .collect::<Result<_, _>>()
+            .map_err(LockErrorKind::RequirementRelativePath)?;
+        let dependency_groups = metadata
+            .dependency_groups
+            .iter()
+            .map(|(group, requirements)| {
+                let requirements = requirements
+                    .iter()
+                    .cloned()
+                    .map(|requirement| requirement.relative_to(root))
+                    .collect::<Result<_, _>>()
+                    .map_err(LockErrorKind::RequirementRelativePath)?;
+                Ok::<_, LockError>((group.clone(), requirements))
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self {
+            requires_dist,
+            provides_extra: metadata.provides_extra.clone(),
+            dependency_groups,
+        })
+    }
 }
 
 impl PackageWire {

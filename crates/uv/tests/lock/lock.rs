@@ -1,3 +1,6 @@
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+use std::process::Command;
+
 use anyhow::Result;
 #[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
@@ -18,7 +21,7 @@ use uv_fs::Simplified;
 #[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
-use uv_test::packse::PackseServer;
+use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::uv_snapshot;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
@@ -18947,10 +18950,17 @@ fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
     Ok(())
 }
 
-/// Direct sources selected by a non-workspace local dependency are shared across the resolution.
-#[cfg(feature = "test-universal")]
+/// Direct sources selected by local and remote dependencies are shared across the resolution.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
 fn lock_metadata_free_shared_transitive_direct_source() -> Result<()> {
+    #[derive(Clone, Copy)]
+    enum ProviderSource {
+        Remote,
+        Local,
+        Git,
+    }
+
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("extras/lock-without-metadata.toml");
 
@@ -19002,6 +19012,138 @@ fn lock_metadata_free_shared_transitive_direct_source() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
+
+    let scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+        name = "direct-url-archive-sources"
+
+        [root]
+        requires = ["provider"]
+
+        [expected]
+        satisfiable = true
+
+        [packages.provider.versions."1.0.0"]
+        requires = ["httpx @ {httpx_url}"]
+        "#,
+        httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+    })?;
+    let provider_server = PackseServer::from_scenario(&scenario);
+    let filename = "provider-1.0.0-py3-none-any.whl";
+
+    for source in [
+        ProviderSource::Remote,
+        ProviderSource::Local,
+        ProviderSource::Git,
+    ] {
+        let context = uv_test::test_context!("3.12");
+        let provider_url = match source {
+            ProviderSource::Remote => provider_server.file_url(filename),
+            ProviderSource::Local => {
+                let archive = context.temp_dir.child(filename);
+                download_to_disk(&provider_server.file_url(filename), archive.path());
+                Url::from_file_path(archive.path())
+                    .map_err(|()| anyhow::anyhow!("invalid provider archive path"))?
+                    .to_string()
+            }
+            #[cfg(feature = "test-git")]
+            ProviderSource::Git => {
+                let repository = context.temp_dir.child("provider");
+                repository
+                    .child("pyproject.toml")
+                    .write_str(&formatdoc! {r#"
+                    [project]
+                    name = "provider"
+                    version = "1.0.0"
+                    requires-python = ">=3.12"
+                    dependencies = ["httpx @ {httpx_url}"]
+                    "#,
+                        httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+                    })?;
+                Command::new("git")
+                    .args(["init", "-q"])
+                    .arg(repository.path())
+                    .assert()
+                    .success();
+                Command::new("git")
+                    .arg("-C")
+                    .arg(repository.path())
+                    .args(["add", "."])
+                    .assert()
+                    .success();
+                Command::new("git")
+                    .arg("-C")
+                    .arg(repository.path())
+                    .args([
+                        "-c",
+                        "user.name=ferris",
+                        "-c",
+                        "user.email=ferris@example.com",
+                        "commit",
+                        "-qm",
+                        "Git dep initial commit",
+                    ])
+                    .assert()
+                    .success();
+                let repository_url = Url::from_directory_path(repository.path())
+                    .map_err(|()| anyhow::anyhow!("invalid provider repository path"))?;
+                format!("git+{}", repository_url.as_str().trim_end_matches('/'))
+            }
+        };
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["httpx[http2]", "provider @ {provider_url}"]
+            "#})?;
+
+        context
+            .lock()
+            .arg("--preview-features")
+            .arg("lock-without-metadata")
+            .arg("--index-url")
+            .arg(server.index_url())
+            .assert()
+            .success();
+
+        let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+        let packages = lock["package"]
+            .as_array_of_tables()
+            .ok_or_else(|| anyhow::anyhow!("lockfile did not contain a package array"))?;
+        let provider = packages
+            .iter()
+            .find(|package| package.get("name").and_then(|name| name.as_str()) == Some("provider"))
+            .ok_or_else(|| anyhow::anyhow!("lockfile did not contain the provider package"))?;
+        assert_eq!(
+            provider.get("metadata").is_some(),
+            !matches!(source, ProviderSource::Local)
+        );
+
+        if matches!(source, ProviderSource::Git) {
+            fs_err::rename(
+                context.temp_dir.child("provider").path(),
+                context.temp_dir.child("provider-unavailable").path(),
+            )?;
+        }
+
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--preview-features")
+                .arg("lock-without-metadata")
+                .arg("--locked")
+                .arg("--offline")
+                .arg("--no-cache")
+                .arg("--index-url")
+                .arg(server.index_url()), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 4 packages in [TIME]
+            ");
+        }
+    }
 
     Ok(())
 }
