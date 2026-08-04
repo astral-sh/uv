@@ -223,6 +223,10 @@ impl RequirementsSpecification {
                 let package = match &entry.requirement {
                     RequirementsTxtRequirement::Named(requirement) => requirement.name.clone(),
                     RequirementsTxtRequirement::Unnamed(requirement) => {
+                        // Settings are currently keyed by package name, so we need a static name
+                        // before invoking the build backend. Supporting dynamically named projects
+                        // would require carrying these settings on the unresolved requirement and
+                        // passing them directly to its metadata and build hooks.
                         let ParsedUrl::Directory(directory) = &requirement.url.parsed_url else {
                             return Err(anyhow::anyhow!(
                                 "Cannot apply `--config-settings` to unnamed requirement `{requirement}`; specify the package name explicitly"
