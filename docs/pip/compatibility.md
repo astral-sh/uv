@@ -153,6 +153,10 @@ static name:
 Unnamed archive and URL requirements with per-requirement build settings are also unsupported. As a
 workaround, include the package name explicitly in the requirement.
 
+When importing a requirements file with `uv add`, per-requirement build settings are stored in
+`[tool.uv.config-settings-package]`. This project setting cannot represent environment markers, so
+settings from marked requirements apply to the package in all environments.
+
 ## Transitive URL dependencies
 
 While uv includes first-class support for URL dependencies (e.g., `ruff @ https://...`), it differs

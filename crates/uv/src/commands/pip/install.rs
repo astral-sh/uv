@@ -168,10 +168,6 @@ pub(crate) async fn pip_install(
     )
     .await?;
 
-    let config_settings_package = config_settings_package
-        .clone()
-        .merge(requirements_config_settings_package);
-
     override_dependencies.extend(overrides_from_workspace);
 
     let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
@@ -315,6 +311,9 @@ pub(crate) async fn pip_install(
         python_platform.as_ref(),
         interpreter,
     )?;
+    let config_settings_package = config_settings_package
+        .clone()
+        .merge(requirements_config_settings_package.evaluate(Some(&marker_env)));
 
     // With sufficient modifications, installation only needs installed distributions selected by
     // the resolution. A `pylock.toml` resolution never consults the environment, while reinstalling

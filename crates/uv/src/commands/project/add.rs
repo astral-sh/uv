@@ -360,6 +360,9 @@ pub(crate) async fn add(
     )
     .await?;
 
+    // Project configuration cannot represent marker-scoped build settings, so preserve all
+    // imported settings for use across the workspace's supported environments.
+    let config_settings_package = config_settings_package.evaluate(None);
     settings.resolver.config_settings_package = settings
         .resolver
         .config_settings_package

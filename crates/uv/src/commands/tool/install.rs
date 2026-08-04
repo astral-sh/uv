@@ -367,12 +367,14 @@ pub(crate) async fn install(
     )
     .await?;
 
+    let marker_environment = resolution_markers(None, python_platform.as_ref(), &interpreter);
     let mut settings = settings;
-    settings.resolver.config_settings_package = settings
-        .resolver
-        .config_settings_package
-        .clone()
-        .merge(spec.config_settings_package.clone());
+    settings.resolver.config_settings_package =
+        settings.resolver.config_settings_package.clone().merge(
+            spec.config_settings_package
+                .clone()
+                .evaluate(Some(&marker_environment)),
+        );
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {

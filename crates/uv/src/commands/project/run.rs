@@ -66,6 +66,7 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::resolution_markers;
 use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironment};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
@@ -956,13 +957,15 @@ pub(crate) async fn run(
         Some(spec)
     };
 
+    let marker_environment = resolution_markers(None, python_platform.as_ref(), &base_interpreter);
     let settings = if let Some(spec) = &spec {
         ResolverInstallerSettings {
             resolver: ResolverSettings {
-                config_settings_package: settings
-                    .resolver
-                    .config_settings_package
-                    .merge(spec.config_settings_package.clone()),
+                config_settings_package: settings.resolver.config_settings_package.merge(
+                    spec.config_settings_package
+                        .clone()
+                        .evaluate(Some(&marker_environment)),
+                ),
                 ..settings.resolver
             },
             ..settings

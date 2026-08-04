@@ -228,9 +228,6 @@ pub(crate) async fn pip_compile(
     )
     .await?;
 
-    let config_settings_package =
-        config_settings_package.merge(requirements_config_settings_package);
-
     override_dependencies.extend(overrides_from_workspace);
 
     // Reject `pylock.toml` files, which are valid outputs but not inputs.
@@ -414,6 +411,8 @@ pub(crate) async fn pip_compile(
         );
         (Some(tags), ResolverEnvironment::specific(marker_env))
     };
+    let config_settings_package = config_settings_package
+        .merge(requirements_config_settings_package.evaluate(resolver_env.marker_environment()));
 
     // Generate, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
     // present, but otherwise, we omit them by default.

@@ -65,7 +65,7 @@ fn requirements_config_settings() -> Result<()> {
     Ok(())
 }
 
-/// Requirement markers do not scope package-specific build settings.
+/// Settings from requirements with non-matching markers do not affect other requirements.
 #[test]
 fn requirements_config_settings_with_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -91,7 +91,7 @@ fn requirements_config_settings_with_marker() -> Result<()> {
     let finder = context
         .site_packages()
         .join("__editable___setuptools_editable_0_1_0_finder.py");
-    assert!(!finder.exists());
+    assert!(finder.exists());
 
     Ok(())
 }
