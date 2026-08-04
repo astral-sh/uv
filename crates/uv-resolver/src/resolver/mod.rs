@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::fmt::{Display, Formatter, Write};
+use std::fmt::{Display, Formatter};
 use std::ops::Bound;
 use std::sync::Arc;
 use std::time::Instant;
@@ -77,10 +77,11 @@ pub use crate::resolver::provider::{
 pub use crate::resolver::reporter::Reporter;
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
+use crate::universal_marker::UniversalMarker;
 use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
 pub(crate) use provider::MetadataUnavailable;
+pub(crate) use resolution::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 
 mod availability;
 mod batch_prefetch;
@@ -91,6 +92,7 @@ mod index;
 mod indexes;
 mod provider;
 mod reporter;
+mod resolution;
 mod system;
 mod urls;
 
@@ -399,7 +401,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             )?;
                         }
 
-                        Self::reprioritize_conflicts(&mut state);
+                        state.reprioritize_conflicts();
 
                         trace!(
                             "Assigned packages: {}",
@@ -820,7 +822,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
         for resolution in &resolutions {
-            Self::trace_resolution(resolution);
+            resolution.trace_resolution();
         }
         ResolverOutput::from_state(
             &resolutions,
@@ -835,102 +837,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.selector.resolution_strategy(),
             self.options.clone(),
         )
-    }
-
-    /// Change the priority of often conflicting packages and backtrack.
-    ///
-    /// To be called after unit propagation.
-    fn reprioritize_conflicts(state: &mut ForkState) {
-        for package in state.conflict_tracker.prioritize.drain(..) {
-            let changed = state
-                .priorities
-                .mark_conflict_early(&state.pubgrub.package_store[package]);
-            if changed {
-                debug!(
-                    "Package {} has too many conflicts (affected), prioritizing",
-                    &state.pubgrub.package_store[package]
-                );
-            } else {
-                debug!(
-                    "Package {} has too many conflicts (affected), already {:?}",
-                    state.pubgrub.package_store[package],
-                    state.priorities.get(&state.pubgrub.package_store[package])
-                );
-            }
-        }
-
-        for package in state.conflict_tracker.deprioritize.drain(..) {
-            let changed = state
-                .priorities
-                .mark_conflict_late(&state.pubgrub.package_store[package]);
-            if changed {
-                debug!(
-                    "Package {} has too many conflicts (culprit), deprioritizing and backtracking",
-                    state.pubgrub.package_store[package],
-                );
-                let backtrack_level = state.pubgrub.backtrack_package(package);
-                if let Some(backtrack_level) = backtrack_level {
-                    debug!("Backtracked {backtrack_level} decisions");
-                } else {
-                    debug!(
-                        "Package {} is not decided, cannot backtrack",
-                        state.pubgrub.package_store[package]
-                    );
-                }
-            } else {
-                debug!(
-                    "Package {} has too many conflicts (culprit), already {:?}",
-                    state.pubgrub.package_store[package],
-                    state.priorities.get(&state.pubgrub.package_store[package])
-                );
-            }
-        }
-    }
-
-    /// When trace level logging is enabled, we dump the final
-    /// set of resolutions, including markers, to help with
-    /// debugging. Namely, this tells use precisely the state
-    /// emitted by the resolver before going off to construct a
-    /// resolution graph.
-    fn trace_resolution(combined: &Resolution) {
-        if !tracing::enabled!(Level::TRACE) {
-            return;
-        }
-        trace!("Resolution: {:?}", combined.env);
-        for edge in &combined.edges {
-            trace!(
-                "Resolution edge: {} -> {}",
-                edge.from
-                    .as_ref()
-                    .map(PackageName::as_str)
-                    .unwrap_or("ROOT"),
-                edge.to,
-            );
-            // The unwraps below are OK because `write`ing to
-            // a String can never fail (except for OOM).
-            let mut msg = String::new();
-            write!(msg, "{}", edge.from_version).unwrap();
-            if let Some(ref extra) = edge.from_extra {
-                write!(msg, " (extra: {extra})").unwrap();
-            }
-            if let Some(ref dev) = edge.from_group {
-                write!(msg, " (group: {dev})").unwrap();
-            }
-
-            write!(msg, " -> ").unwrap();
-
-            write!(msg, "{}", edge.to_version).unwrap();
-            if let Some(ref extra) = edge.to_extra {
-                write!(msg, " (extra: {extra})").unwrap();
-            }
-            if let Some(ref dev) = edge.to_group {
-                write!(msg, " (group: {dev})").unwrap();
-            }
-            if let Some(marker) = edge.marker.contents() {
-                write!(msg, " ; {marker}").unwrap();
-            }
-            trace!("Resolution edge:     {msg}");
-        }
     }
 
     /// Convert the dependency [`Fork`]s into [`ForkState`]s.
@@ -2823,17 +2729,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Validate the Python requirement.
-                let requires_python = match dist {
-                    CompatibleDist::InstalledDist(_) => None,
-                    CompatibleDist::SourceDist { sdist, .. }
-                    | CompatibleDist::IncompatibleWheel { sdist, .. } => {
-                        sdist.file.requires_python.as_ref()
-                    }
-                    CompatibleDist::CompatibleWheel { wheel, .. } => {
-                        wheel.file.requires_python.as_ref()
-                    }
-                };
-                if let Some(requires_python) = requires_python.as_ref() {
+                if let Some(requires_python) = dist.requires_python() {
                     if !python_requirement.target().is_contained_by(requires_python) {
                         return Ok(None);
                     }
@@ -3427,6 +3323,56 @@ impl ForkState {
         }
     }
 
+    /// Change the priority of often conflicting packages and backtrack.
+    ///
+    /// To be called after unit propagation.
+    fn reprioritize_conflicts(&mut self) {
+        for package in self.conflict_tracker.prioritize.drain(..) {
+            let changed = self
+                .priorities
+                .mark_conflict_early(&self.pubgrub.package_store[package]);
+            if changed {
+                debug!(
+                    "Package {} has too many conflicts (affected), prioritizing",
+                    &self.pubgrub.package_store[package]
+                );
+            } else {
+                debug!(
+                    "Package {} has too many conflicts (affected), already {:?}",
+                    self.pubgrub.package_store[package],
+                    self.priorities.get(&self.pubgrub.package_store[package])
+                );
+            }
+        }
+
+        for package in self.conflict_tracker.deprioritize.drain(..) {
+            let changed = self
+                .priorities
+                .mark_conflict_late(&self.pubgrub.package_store[package]);
+            if changed {
+                debug!(
+                    "Package {} has too many conflicts (culprit), deprioritizing and backtracking",
+                    self.pubgrub.package_store[package],
+                );
+                let backtrack_level = self.pubgrub.backtrack_package(package);
+                if let Some(backtrack_level) = backtrack_level {
+                    debug!("Backtracked {backtrack_level} decisions");
+                } else {
+                    debug!(
+                        "Package {} is not decided, cannot backtrack",
+                        self.pubgrub.package_store[package]
+                    );
+                }
+            } else {
+                debug!(
+                    "Package {} has too many conflicts (culprit), already {:?}",
+                    self.pubgrub.package_store[package],
+                    self.priorities.get(&self.pubgrub.package_store[package])
+                );
+            }
+        }
+    }
+
     fn add_unavailable_version(&mut self, version: Version, reason: UnavailableVersion) {
         // Incompatible requires-python versions are special in that we track
         // them as incompatible dependencies instead of marking the package version
@@ -3754,61 +3700,6 @@ impl ForkState {
             pins: self.pins,
             env: self.env,
         }
-    }
-}
-
-/// The resolution from a single fork including the virtual packages and the edges between them.
-#[derive(Debug)]
-pub(crate) struct Resolution {
-    pub(crate) nodes: FxHashMap<ResolutionPackage, Version>,
-    /// The directed connections between the nodes, where the marker is the node weight. We don't
-    /// store the requirement itself, but it can be retrieved from the package metadata.
-    pub(crate) edges: Vec<ResolutionDependencyEdge>,
-    /// Map each package name, version tuple from `packages` to a distribution.
-    pub(crate) pins: FilePins,
-    /// The environment setting this resolution was found under.
-    pub(crate) env: ResolverEnvironment,
-}
-
-/// Package representation we used during resolution where each extra and also the dev-dependencies
-/// group are their own package.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct ResolutionPackage {
-    pub(crate) name: PackageName,
-    pub(crate) extra: Option<ExtraName>,
-    pub(crate) dev: Option<GroupName>,
-    /// For registry packages, this is `None`; otherwise, the direct URL of the distribution.
-    pub(crate) url: Option<VerbatimParsedUrl>,
-    /// For URL packages, this is `None`; otherwise, the index URL of the distribution.
-    pub(crate) index: Option<IndexUrl>,
-}
-
-/// The `from_` fields and the `to_` fields allow mapping to the originating and target
-///  [`ResolutionPackage`] respectively. The `marker` is the edge weight.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct ResolutionDependencyEdge {
-    /// This value is `None` if the dependency comes from the root package.
-    pub(super) from: Option<PackageName>,
-    pub(super) from_version: Version,
-    pub(super) from_url: Option<VerbatimParsedUrl>,
-    pub(super) from_index: Option<IndexUrl>,
-    pub(super) from_extra: Option<ExtraName>,
-    pub(super) from_group: Option<GroupName>,
-    pub(super) to: PackageName,
-    pub(super) to_version: Version,
-    pub(super) to_url: Option<VerbatimParsedUrl>,
-    pub(super) to_index: Option<IndexUrl>,
-    pub(super) to_extra: Option<ExtraName>,
-    pub(super) to_group: Option<GroupName>,
-    pub(super) marker: MarkerTree,
-}
-
-impl ResolutionDependencyEdge {
-    pub(crate) fn universal_marker(&self) -> UniversalMarker {
-        // We specifically do not account for conflict
-        // markers here. Instead, those are computed via
-        // a traversal on the resolution graph.
-        UniversalMarker::new(self.marker, ConflictMarker::TRUE)
     }
 }
 
