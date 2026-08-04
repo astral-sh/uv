@@ -273,6 +273,11 @@ impl FromIterator<ConfigSettingPackageEntry> for PackageConfigSettings {
 }
 
 impl PackageConfigSettings {
+    /// Returns `true` if there are no package-specific configuration settings.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Returns the config settings for a specific package, if any.
     pub fn get(&self, package: &PackageName) -> Option<&ConfigSettings> {
         self.0.get(package)
@@ -300,15 +305,7 @@ impl PackageConfigSettings {
     #[must_use]
     pub fn merge(mut self, other: Self) -> Self {
         for (package, settings) in other.0 {
-            match self.0.entry(package) {
-                Entry::Vacant(vacant) => {
-                    vacant.insert(settings);
-                }
-                Entry::Occupied(mut occupied) => {
-                    let merged = occupied.get().clone().merge(settings);
-                    occupied.insert(merged);
-                }
-            }
+            self.insert(package, settings);
         }
         self
     }
