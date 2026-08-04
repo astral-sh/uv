@@ -949,6 +949,14 @@ async fn get_or_create_environment(
     .await?;
     let exclusions = uv_configuration::Excludes::from_entries(spec.excludes.iter().cloned());
 
+    let mut settings = settings.clone();
+    settings.resolver.config_settings_package = settings
+        .resolver
+        .config_settings_package
+        .clone()
+        .merge(spec.config_settings_package.clone());
+    let settings = &settings;
+
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
