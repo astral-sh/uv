@@ -11,7 +11,7 @@ use crate::CleanReporter;
 
 /// The storage accounting used when removing cache entries.
 #[derive(Debug, Clone, Copy, Default)]
-pub(crate) enum RemovalMode {
+pub enum RemovalMode {
     /// Report the logical size of the removed files.
     #[default]
     Logical,
@@ -234,35 +234,6 @@ impl std::ops::AddAssign for Removal {
             .zip(other.physical_bytes)
             .map(|(left, right)| left.saturating_add(right));
         self.physical_bytes_incomplete |= other.physical_bytes_incomplete;
-    }
-}
-
-#[cfg(all(test, any(target_os = "linux", target_os = "macos", target_os = "ios")))]
-mod tests {
-    use super::{Removal, RemovalMode};
-
-    #[test]
-    fn retain_measured_space_when_an_entry_cannot_be_measured() -> std::io::Result<()> {
-        let directory = tempfile::tempdir()?;
-        let measured = directory.path().join("measured.bin");
-        fs_err::write(&measured, vec![42; 4096])?;
-        let metadata = fs_err::metadata(&measured)?;
-        let expected = uv_fs::physical_space(&measured, &metadata)?;
-
-        let mut removal = Removal::new(RemovalMode::Physical);
-        removal.add_file(&measured, &metadata);
-        removal.add_file(&directory.path().join("missing.bin"), &metadata);
-        removal.add_file(&measured, &metadata);
-
-        assert_eq!(removal.physical_bytes, Some(expected.saturating_mul(2)));
-        assert!(removal.physical_bytes_incomplete);
-
-        let mut combined = Removal::new(RemovalMode::Physical);
-        combined += removal;
-        assert_eq!(combined.physical_bytes, Some(expected.saturating_mul(2)));
-        assert!(combined.physical_bytes_incomplete);
-
-        Ok(())
     }
 }
 

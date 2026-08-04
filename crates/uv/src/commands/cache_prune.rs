@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_cache::Cache;
+use uv_cache::{Cache, RemovalMode};
 use uv_fs::Simplified;
 use uv_preview::{Preview, PreviewFeature};
 
@@ -43,7 +43,12 @@ pub(crate) async fn cache_prune(
         }
     };
 
-    let cache = cache.with_physical_space(preview.is_enabled(PreviewFeature::CachePhysicalSpace));
+    let removal_mode = if preview.is_enabled(PreviewFeature::CachePhysicalSpace) {
+        RemovalMode::Physical
+    } else {
+        RemovalMode::Logical
+    };
+    let cache = cache.with_removal_mode(removal_mode);
 
     writeln!(
         printer.stderr(),

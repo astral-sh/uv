@@ -17,8 +17,8 @@ use uv_pypi_types::ResolutionMetadata;
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
-pub use crate::removal::Removal;
-use crate::removal::{RemovalMode, Remover};
+use crate::removal::Remover;
+pub use crate::removal::{Removal, RemovalMode};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 pub use archive::ArchiveId;
@@ -208,13 +208,14 @@ impl Cache {
         Self { refresh, ..self }
     }
 
-    /// Enable per-file physical-space accounting when the filesystem can support it.
+    /// Set the storage accounting used when removing cache entries.
+    ///
+    /// Falls back to logical accounting when physical accounting is unsupported.
     #[must_use]
-    pub fn with_physical_space(self, enabled: bool) -> Self {
-        let removal_mode = if enabled && uv_fs::supports_physical_space() {
-            RemovalMode::Physical
-        } else {
-            RemovalMode::Logical
+    pub fn with_removal_mode(self, removal_mode: RemovalMode) -> Self {
+        let removal_mode = match removal_mode {
+            RemovalMode::Physical if !uv_fs::supports_physical_space() => RemovalMode::Logical,
+            removal_mode => removal_mode,
         };
         Self {
             removal_mode,
