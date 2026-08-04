@@ -53,20 +53,12 @@ fn clean_handles_overlong_file_paths() -> Result<()> {
 /// `cache prune` should remove stale directory trees that exceed the macOS path length limit.
 #[test]
 fn prune_handles_overlong_paths() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filter((r"Removed \d+ directories", "Removed [N] directories"));
     let stale_bucket = context.cache_dir.child("simple-v4");
     create_overlong_path(stale_bucket.path(), OverlongPathKind::Directory)?;
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain(std::iter::once((
-            r"Removed \d+ directories",
-            "Removed [N] directories",
-        )))
-        .collect();
-
-    uv_snapshot!(&filters, context.prune(), @"
+    uv_snapshot!(context.filters(), context.prune(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
