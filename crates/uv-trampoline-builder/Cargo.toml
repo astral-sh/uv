@@ -27,13 +27,13 @@ name = "normalize-pe-timestamps"
 uv-fs = { workspace = true }
 
 anyhow = { workspace = true }
-editpe = { workspace = true }
 fs-err = { workspace = true }
 goblin = { workspace = true }
 thiserror = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 async_zip = { workspace = true }
+editpe = { workspace = true }
 futures-lite = { workspace = true }
 windows = { workspace = true }
 

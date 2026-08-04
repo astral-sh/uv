@@ -226,8 +226,10 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[cfg(windows)]
     #[error("Failed to parse Windows PE image")]
     PeRead(#[from] editpe::ImageReadError),
+    #[cfg(windows)]
     #[error("Failed to update Windows PE resources")]
     PeWrite(#[from] editpe::ImageWriteError),
 }
