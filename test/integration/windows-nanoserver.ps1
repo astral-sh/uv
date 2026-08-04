@@ -28,4 +28,8 @@ if ($LASTEXITCODE -ne 0) { throw "uv init failed" }
 uv --directory C:\test-project add pytest
 if ($LASTEXITCODE -ne 0) { throw "uv add pytest failed" }
 
-Write-Host "Successfully installed package with entrypoints on Windows NanoServer"
+# Verify the generated trampoline can execute on NanoServer.
+& C:\test-project\.venv\Scripts\pytest.exe --version
+if ($LASTEXITCODE -ne 0) { throw "pytest entrypoint failed" }
+
+Write-Host "Successfully installed and ran an entrypoint on Windows NanoServer"
