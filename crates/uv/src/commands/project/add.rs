@@ -577,7 +577,7 @@ pub(crate) async fn add(
         &target,
         AddTarget::Project(project, _)
             if project.workspace().install_path() != project.root()
-                && config_settings_package.iter().next().is_some()
+                && !config_settings_package.is_empty()
     );
 
     // Update workspace members and package-specific build settings in the root `pyproject.toml`.
