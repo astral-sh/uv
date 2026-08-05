@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::Debug;
+use std::fs;
 
 use same_file::is_same_file;
 use tracing::{debug, trace};
@@ -14,6 +15,7 @@ use uv_distribution_types::{
     PackageConfigSettings, RequirementSource,
 };
 use uv_git_types::{GitLfs, GitOid};
+use uv_install_wheel::read_record;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{AbiTag, IncompatibleTag, TagCompatibility, Tags};
@@ -30,6 +32,39 @@ pub(crate) enum RequirementSatisfaction {
 }
 
 impl RequirementSatisfaction {
+    /// Returns true if the editable install is exposed through a `.pth` file
+    /// that is still present on disk.
+    ///
+    /// Editable installs expose the source tree via a `.pth` file in
+    /// site-packages (e.g., `<name>.pth` for uv's build backend, or
+    /// `__editable__...pth` for setuptools). If the file is removed, the
+    /// distribution metadata remains intact, but the package's modules are no
+    /// longer importable, and uv would otherwise report the requirement as
+    /// already installed.
+    fn editable_pth_is_present(distribution: &InstalledDist) -> bool {
+        let Some(site_packages) = distribution.install_path().parent() else {
+            return false;
+        };
+
+        // The `.pth` files that should be present are recorded in the `RECORD`.
+        let record_path = distribution.install_path().join("RECORD");
+        let Ok(record) = fs::read_to_string(record_path) else {
+            return true;
+        };
+        let Ok(entries) = read_record(record.as_bytes()) else {
+            return true;
+        };
+
+        entries
+            .iter()
+            .filter(|entry| {
+                entry.path.ends_with(".pth")
+                    && !entry.path.contains('/')
+                    && !entry.path.contains('\\')
+            })
+            .all(|entry| site_packages.join(&entry.path).is_file())
+    }
+
     /// Returns true if a requirement is satisfied by an installed distribution.
     ///
     /// Returns an error if IO fails during a freshness check for a local path.
@@ -412,6 +447,15 @@ impl RequirementSatisfaction {
                         debug!("Failed to read cached requirement for: {distribution} ({err})");
                         return Self::CacheInvalid;
                     }
+                }
+
+                // If the installed distribution is editable, verify that the
+                // `.pth` file exposing the source tree is still present.
+                if (*requested_editable).unwrap_or(false)
+                    && !Self::editable_pth_is_present(distribution)
+                {
+                    debug!("Editable `.pth` file is missing for: {distribution}");
+                    return Self::OutOfDate;
                 }
             }
         }
