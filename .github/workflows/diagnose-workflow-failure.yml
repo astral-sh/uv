@@ -148,11 +148,6 @@ jobs:
           HEAD_SHA: ${{ inputs.head_sha }}
           RUN_ID: ${{ inputs.run }}
         run: |
-          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]] || ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Invalid workflow retry context; refusing to rerun the failed jobs." >&2
-            exit 1
-          fi
-
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
             > "$RUNNER_TEMP/workflow-run.json"
 
@@ -162,57 +157,44 @@ jobs:
             exit 0
           fi
 
-          validate_run() {
-            jq --exit-status \
-              --arg repository "$GITHUB_REPOSITORY" \
-              --arg head_sha "$HEAD_SHA" \
-              --argjson attempt "$run_attempt" '
-                .repository.full_name == $repository
-                and (.head_repository.full_name | IN("astral-sh/uv", "astral-sh/uv-dev"))
-                and .head_sha == $head_sha
-                and .path != ".github/workflows/diagnose-workflow-failure.yml"
-                and (.event | IN("pull_request", "push", "schedule", "workflow_dispatch"))
-                and .status == "completed"
-                and (.conclusion | IN("failure", "timed_out", "startup_failure"))
-                and .run_attempt == $attempt
-              ' "$RUNNER_TEMP/workflow-run.json" > /dev/null
-          }
-
-          validate_pull_request() {
-            if [ "$(jq --raw-output '.event' "$RUNNER_TEMP/workflow-run.json")" != "pull_request" ]; then
-              return 0
-            fi
-
-            pull_request="$(jq --raw-output '
-              if (.pull_requests | length) == 1 then .pull_requests[0].number else empty end
-            ' "$RUNNER_TEMP/workflow-run.json")"
-            if ! [[ "$pull_request" =~ ^[0-9]+$ ]]; then
-              return 1
-            fi
-
-            gh pr view "$pull_request" \
-              --repo "$GITHUB_REPOSITORY" \
-              --json state,headRefOid \
-              > "$RUNNER_TEMP/workflow-run-pull-request.json"
-            jq --exit-status --arg head_sha "$HEAD_SHA" '
-              .state == "OPEN" and .headRefOid == $head_sha
-            ' "$RUNNER_TEMP/workflow-run-pull-request.json" > /dev/null
-          }
-
-          if ! validate_run || ! validate_pull_request; then
-            echo "The workflow run or pull request is no longer eligible for an automatic retry."
-            exit 0
-          fi
-
           delay_seconds="$((60 * (1 << (run_attempt - 1)) + RANDOM % 20))"
           echo "Waiting ${delay_seconds}s before retrying flaky workflow jobs."
           sleep "$delay_seconds"
 
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
             > "$RUNNER_TEMP/workflow-run.json"
-          if ! validate_run || ! validate_pull_request; then
-            echo "The workflow run changed, was already retried, or has a stale pull request."
+
+          if ! jq --exit-status \
+            --arg head_sha "$HEAD_SHA" \
+            --argjson attempt "$run_attempt" '
+              .head_sha == $head_sha
+              and .status == "completed"
+              and (.conclusion | IN("failure", "timed_out", "startup_failure"))
+              and .run_attempt == $attempt
+            ' "$RUNNER_TEMP/workflow-run.json" > /dev/null; then
+            echo "The workflow run changed or was already retried."
             exit 0
+          fi
+
+          if [ "$(jq --raw-output '.event' "$RUNNER_TEMP/workflow-run.json")" = "pull_request" ]; then
+            pull_request="$(jq --raw-output '
+              if (.pull_requests | length) == 1 then .pull_requests[0].number else empty end
+            ' "$RUNNER_TEMP/workflow-run.json")"
+            if [ -z "$pull_request" ]; then
+              echo "The workflow run has no unique pull request to retry."
+              exit 0
+            fi
+
+            gh pr view "$pull_request" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json state,headRefOid \
+              > "$RUNNER_TEMP/workflow-run-pull-request.json"
+            if ! jq --exit-status --arg head_sha "$HEAD_SHA" '
+              .state == "OPEN" and .headRefOid == $head_sha
+            ' "$RUNNER_TEMP/workflow-run-pull-request.json" > /dev/null; then
+              echo "The pull request is closed or its head changed."
+              exit 0
+            fi
           fi
 
           gh run rerun "$RUN_ID" \
