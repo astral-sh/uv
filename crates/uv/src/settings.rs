@@ -681,6 +681,8 @@ pub(crate) struct RunSettings {
     pub(crate) env_file: EnvFile,
     pub(crate) max_recursion_depth: u32,
     pub(crate) malware_settings: MalwareCheckSettings,
+    #[cfg(unix)]
+    pub(crate) run_rlimit_nofile: Option<u32>,
 }
 
 impl RunSettings {
@@ -847,6 +849,8 @@ impl RunSettings {
                 .combine(filesystem_install_mirrors),
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
             malware_settings,
+            #[cfg(unix)]
+            run_rlimit_nofile: environment.run_rlimit_nofile,
         })
     }
 }
