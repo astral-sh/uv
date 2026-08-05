@@ -155,6 +155,7 @@ dependencies = [
  "quote",
  "syn 3.0.3",
  "textwrap",
+ "uv-version",
 ]
 
 [[package]]
@@ -177,6 +178,10 @@ dependencies = [
  "uv-windows",
  "windows",
 ]
+
+[[package]]
+name = "uv-version"
+version = "0.12.1"
 
 [[package]]
 name = "uv-windows"
