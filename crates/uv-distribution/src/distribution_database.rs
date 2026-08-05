@@ -17,7 +17,7 @@ use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashPolicy, Hashed, IndexUrl,
     InstalledDist, Name, SourceDist, ToUrlError,
@@ -33,6 +33,7 @@ use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
+use uv_warnings::warn_user_once;
 
 use crate::archive::Archive;
 use crate::error::PythonVersion;
@@ -307,7 +308,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         None,
                         &wheel.filename,
                         WheelExtension::Whl,
-                        wheel.size,
+                        None,
                         &wheel_entry,
                         dist,
                         hashes,
@@ -345,7 +346,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                 None,
                                 &wheel.filename,
                                 WheelExtension::Whl,
-                                wheel.size,
+                                None,
                                 &wheel_entry,
                                 dist,
                                 hashes,
@@ -445,6 +446,34 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        // Warn if the source distribution isn't PEP 625 compliant.
+        // We do this here instead of in `SourceDistExtension::from_path` to minimize log volume:
+        // a non-compliant distribution isn't a huge problem if it's not actually being
+        // materialized into a wheel. Observe that we also allow no extension, since we expect that
+        // for directory and Git installs.
+        // NOTE: Observe that we also allow `.zip` sdists here, which are not PEP 625 compliant.
+        // This is because they were allowed on PyPI until relatively recently (2020).
+        if let Some(extension) = dist.extension()
+            && !matches!(
+                extension,
+                SourceDistExtension::TarGz | SourceDistExtension::Zip
+            )
+        {
+            if matches!(dist, SourceDist::Registry(_)) {
+                // Observe that we display a slightly different warning when the sdist comes
+                // from a registry, since that suggests that the user has inadvertently
+                // (rather than explicitly) depended on a non-compliant sdist.
+                warn_user_once!(
+                    "{dist} uses a legacy source distribution format ('.{extension}') that is not compliant with PEP 625. A future version of uv will reject this source distribution. Consider upgrading to a newer version of {package}",
+                    package = dist.name(),
+                );
+            } else {
+                warn_user_once!(
+                    "{dist} is not a standards-compliant source distribution: expected '.tar.gz' but found '.{extension}'. A future version of uv will reject source distributions that do not meet the requirements specified in PEP 625",
+                );
+            }
+        }
+
         let built_wheel = self
             .builder
             .download_and_build(&BuildableSource::Dist(dist), tags, hashes, &self.client)
@@ -684,12 +713,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<Archive, Error> {
-        let expected_size = match dist {
-            BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => size,
-            BuiltDist::DirectUrl(_) => size,
-            _ => None,
-        };
-
         // Acquire an advisory lock, to guard against concurrent writes.
         #[cfg(windows)]
         let _lock = {
@@ -700,16 +723,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
+        let query_url = &url.clone();
+
         let download = |response: reqwest::Response| {
             async {
-                let progress_size = size.or_else(|| content_length(&response));
+                let size = size.or_else(|| content_length(&response));
 
-                let progress = self.reporter.as_ref().map(|reporter| {
-                    (
-                        reporter,
-                        reporter.on_download_start(dist.name(), progress_size),
-                    )
-                });
+                let progress = self
+                    .reporter
+                    .as_ref()
+                    .map(|reporter| (reporter, reporter.on_download_start(dist.name(), size)));
 
                 let reader = response
                     .bytes_stream()
@@ -730,6 +753,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         match extension {
                             WheelExtension::Whl => ExtractedWheelManifest::extract_streaming(
+                                query_url,
                                 &mut reader,
                                 temp_dir.path(),
                                 self.content_addressed_cache,
@@ -747,6 +771,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     }
                     None => match extension {
                         WheelExtension::Whl => ExtractedWheelManifest::extract_streaming(
+                            query_url,
                             &mut hasher,
                             temp_dir.path(),
                             self.content_addressed_cache,
@@ -763,16 +788,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 };
                 // Exhaust the reader to compute the hashes.
                 hasher.finish().await.map_err(Error::HashExhaustion)?;
-                let actual_size = hasher.bytes_read();
-                if let Some(expected) = expected_size
-                    && actual_size != expected
-                {
-                    return Err(Error::MismatchedSize {
-                        distribution: dist.to_string(),
-                        expected,
-                        actual: actual_size,
-                    });
-                }
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
@@ -795,7 +810,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     id,
                     hashers.into_iter().map(HashDigest::from).collect(),
                     filename.clone(),
-                    Some(actual_size),
                 ))
             }
             .instrument(info_span!("wheel", wheel = %dist))
@@ -840,21 +854,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
-            && expected != actual
-        {
-            return Err(Error::MismatchedSize {
-                distribution: dist.to_string(),
-                expected,
-                actual,
-            });
-        }
-
-        // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
+        // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.exists(self.build_context.cache()))
-            .filter(|archive| expected_size.is_none() || archive.size.is_some());
+            .filter(|archive| archive.exists(self.build_context.cache()));
 
         let archive = if let Some(archive) = archive {
             archive
@@ -893,11 +896,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<Archive, Error> {
-        let expected_size = match dist {
-            BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => size,
-            BuiltDist::DirectUrl(_) => size,
-            _ => None,
-        };
         let content_addressed_cache = self.content_addressed_cache;
 
         // Acquire an advisory lock, to guard against concurrent writes.
@@ -912,14 +910,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let download = |response: reqwest::Response| {
             async {
-                let progress_size = size.or_else(|| content_length(&response));
+                let size = size.or_else(|| content_length(&response));
 
-                let progress = self.reporter.as_ref().map(|reporter| {
-                    (
-                        reporter,
-                        reporter.on_download_start(dist.name(), progress_size),
-                    )
-                });
+                let progress = self
+                    .reporter
+                    .as_ref()
+                    .map(|reporter| (reporter, reporter.on_download_start(dist.name(), size)));
 
                 let reader = response
                     .bytes_stream()
@@ -953,18 +949,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             .map_err(Error::CacheWrite)?;
                     }
                 }
-
-                if let Some(expected) = expected_size
-                    && hasher.bytes_read() != expected
-                {
-                    return Err(Error::MismatchedSize {
-                        distribution: dist.to_string(),
-                        expected,
-                        actual: hasher.bytes_read(),
-                    });
-                }
-
-                let actual_size = hasher.bytes_read();
 
                 // Unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
@@ -1014,12 +998,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(
-                    id,
-                    hashes,
-                    filename.clone(),
-                    Some(actual_size),
-                ))
+                Ok(Archive::new(id, hashes, filename.clone()))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -1063,21 +1042,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
-            && expected != actual
-        {
-            return Err(Error::MismatchedSize {
-                distribution: dist.to_string(),
-                expected,
-                actual,
-            });
-        }
-
-        // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
+        // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.exists(self.build_context.cache()))
-            .filter(|archive| expected_size.is_none() || archive.size.is_some());
+            .filter(|archive| archive.exists(self.build_context.cache()));
 
         let archive = if let Some(archive) = archive {
             archive
@@ -1154,7 +1122,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await?,
                 HashDigests::empty(),
                 filename.clone(),
-                None,
             );
 
             // Write the archive pointer to the cache.
@@ -1192,6 +1159,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // Unzip the wheel to a temporary directory.
             let ExtractedWheelManifest { files, mut digest } = match extension {
                 WheelExtension::Whl => ExtractedWheelManifest::extract_streaming(
+                    path.display(),
                     &mut hasher,
                     temp_dir.path(),
                     self.content_addressed_cache,
@@ -1225,7 +1193,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .await?;
 
             // Create an archive.
-            let archive = Archive::new(id, hashes, filename.clone(), None);
+            let archive = Archive::new(id, hashes, filename.clone());
 
             // Write the archive pointer to the cache.
             let pointer = PathArchivePointer {
@@ -1343,7 +1311,8 @@ struct ExtractedWheelManifest {
 
 impl ExtractedWheelManifest {
     /// Extract a wheel from a streaming reader, optionally computing its directory digest.
-    async fn extract_streaming<R>(
+    async fn extract_streaming<D: std::fmt::Display, R>(
+        source_hint: D,
         reader: R,
         target: &Path,
         content_addressed: bool,
@@ -1352,13 +1321,14 @@ impl ExtractedWheelManifest {
         R: AsyncRead + Unpin,
     {
         if content_addressed {
-            let (files, digest) = uv_extract::stream::unzip_and_hash(reader, target).await?;
+            let (files, digest) =
+                uv_extract::stream::unzip_and_hash(source_hint, reader, target).await?;
             Ok(Self {
                 files,
                 digest: Some(digest),
             })
         } else {
-            let files = uv_extract::stream::unzip(reader, target).await?;
+            let files = uv_extract::stream::unzip(source_hint, reader, target).await?;
             Ok(Self::without_digest(files))
         }
     }

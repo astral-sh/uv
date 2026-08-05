@@ -12,9 +12,9 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
 
 /// Unzip a `.zip` archive into the target directory while computing a digest of the extracted files.
 ///
-/// The digest includes canonical relative paths, executable bits, sizes, contents, and explicit
-/// empty leaf directories. ZIP entries are never followed as symlinks; non-directory entries are
-/// materialized and hashed as regular files.
+/// The digest includes canonical relative paths, contents, and explicit empty directories. ZIP
+/// entries are never followed as symlinks; non-directory entries are materialized and hashed as
+/// regular files.
 ///
 /// Returns the list of unpacked files and their sizes, along with the digest.
 pub fn unzip_and_hash(

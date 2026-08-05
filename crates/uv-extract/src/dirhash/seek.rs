@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock, mpsc};
 
 use crate::vendor::CloneableSeekableReader;
-use crate::{Error, insecure_no_validate, validate_archive_member_name};
+use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 use async_zip::base::read::seek::ZipFileReader;
 use async_zip::error::ZipError;
 use async_zip::{Compression, StoredZipEntry};
@@ -16,10 +16,9 @@ use rustc_hash::FxHashSet;
 use tokio::sync::{Semaphore, SemaphorePermit};
 use tracing::warn;
 use uv_configuration::initialize_rayon_once;
+use uv_warnings::warn_user_once;
 
-use super::{
-    DirectoryDigest, ExtractedFile, directory_digest_from_extracted, empty_directory_paths,
-};
+use super::{DirectoryDigest, ExtractedFile, directory_digest_from_extracted};
 use crate::archive_path::SanitizedArchivePath;
 
 const LOCAL_FILE_HEADER_LENGTH: u64 = 30;
@@ -74,7 +73,7 @@ pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf,
 /// Unzip a `.zip` archive into the target directory while computing a digest of the extracted files.
 ///
 /// Returns the list of unpacked files and their sizes, along with a digest over the canonicalized
-/// extracted file paths, executable bits, sizes, contents, and empty leaf directories.
+/// extracted file paths, contents, and empty directories.
 pub(crate) fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
@@ -93,7 +92,7 @@ fn unzip_inner(
     target: &Path,
     hash_contents: bool,
 ) -> Result<UnzipOutput, Error> {
-    let (reader, _) = reader.into_parts();
+    let (reader, filename) = reader.into_parts();
 
     // Parse the central directory once, then clone the archive reader per Rayon worker so
     // extraction stays parallel for already-downloaded wheels.
@@ -114,6 +113,7 @@ fn unzip_inner(
             &mut archive,
             file_number,
             target,
+            &filename,
             &directories,
             skip_validation,
             hash_contents,
@@ -164,11 +164,7 @@ fn unzip_inner(
             }
         }
     }
-    let hash_directories = empty_directory_paths(
-        &digest_directories,
-        extracted_files.iter().map(ExtractedFile::path),
-    );
-    let digest = directory_digest_from_extracted(&extracted_files, hash_directories);
+    let digest = directory_digest_from_extracted(&extracted_files, &digest_directories)?;
     let files = extracted_files
         .into_iter()
         .map(ExtractedFile::into_record)
@@ -205,6 +201,7 @@ fn extract_entry<R>(
     archive: &mut ZipFileReader<AllowStdIo<R>>,
     file_number: usize,
     target: &Path,
+    source_hint: &Path,
     directories: &Mutex<FxHashSet<PathBuf>>,
     skip_validation: bool,
     hash_contents: bool,
@@ -216,6 +213,16 @@ where
     let entry = archive.file().entries()[file_number].clone();
     let file_name = entry_file_name(&entry, file_number)?;
     let compression = entry.compression();
+    let compression_method = CompressionMethod::from(compression);
+    if !compression_method.is_well_known() {
+        warn_user_once!(
+            "One or more file entries in '{source_hint}' use the '{compression_method}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
+            source_hint = source_hint.display(),
+            stored = CompressionMethod::Stored,
+            deflate = CompressionMethod::Deflated,
+            zstd = CompressionMethod::Zstd,
+        );
+    }
 
     if let Err(err) = validate_archive_member_name(file_name) {
         if !skip_validation {

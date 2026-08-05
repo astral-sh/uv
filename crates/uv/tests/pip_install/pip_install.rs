@@ -13570,10 +13570,7 @@ fn reject_invalid_streaming_zip() {
         .arg("cbwheelstreamtest==0.0.1")
         .arg("--preview-features")
         .arg("content-addressed-cache"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to download `cbwheelstreamtest==0.0.1`
