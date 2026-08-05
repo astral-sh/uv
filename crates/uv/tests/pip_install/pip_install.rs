@@ -102,7 +102,6 @@ fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
 }
 
 #[test]
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let wheel = context.temp_dir.join("large_wheel-1.0.0-py3-none-any.whl");
