@@ -3,6 +3,41 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.2
+
+Released on 2026-08-05.
+
+### Preview features
+
+- Implement `uv tool audit` ([#20921](https://github.com/astral-sh/uv/pull/20921))
+
+### Performance
+
+- Avoid flattened source-distribution deserialization ([#20882](https://github.com/astral-sh/uv/pull/20882))
+- Avoid flattened wheel-source deserialization ([#20881](https://github.com/astral-sh/uv/pull/20881))
+- Avoid metadata lookups during bytecode compilation ([#20928](https://github.com/astral-sh/uv/pull/20928))
+- Reuse source distribution file metadata ([#20927](https://github.com/astral-sh/uv/pull/20927))
+
+### Bug fixes
+
+- Require explicitly selection of workspace root groups when a workspace member is active ([#20930](https://github.com/astral-sh/uv/pull/20930))
+
+### Documentation
+
+- integration/github: split build and publish jobs ([#20946](https://github.com/astral-sh/uv/pull/20946))
+
+### Other changes
+
+- Add regression test for uv#20908 ([#20911](https://github.com/astral-sh/uv/pull/20911))
+- Assign promoted pull requests to the ready reviewer ([#20918](https://github.com/astral-sh/uv/pull/20918))
+- Fixup pull request label ([#20870](https://github.com/astral-sh/uv/pull/20870))
+- Improve reasoning depth for Codex automations ([#20915](https://github.com/astral-sh/uv/pull/20915))
+- Promote ready pull requests after branch updates ([#20914](https://github.com/astral-sh/uv/pull/20914))
+- Pull request label automation ([#20869](https://github.com/astral-sh/uv/pull/20869))
+- Reproduce questions during issue triage ([#20913](https://github.com/astral-sh/uv/pull/20913))
+- Sync latest Python releases ([#20948](https://github.com/astral-sh/uv/pull/20948))
+- Verify mold release checksums before installation ([#20941](https://github.com/astral-sh/uv/pull/20941))
+
 ## 0.12.1
 
 Released on 2026-07-31.
@@ -319,4 +354,5 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
 
