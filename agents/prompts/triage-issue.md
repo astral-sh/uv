@@ -74,9 +74,9 @@ Clearly distinguish source-backed findings from hypotheses. Do not draft a publi
 root cause that you have not confirmed from the repository.
 
 Author the complete `$RUNNER_TEMP/issue-context/README.md` as a coherent, self-contained maintainer
-handoff. Replace the template heading with the issue title, identify the issue using its canonical
-owner/repository#number reference, and include its classification. Use `## Summary`,
-`## Classification`, and `## Related` sections as a starting structure, explaining the report,
-classification reasoning, related issues or pull requests, and supporting evidence. Add or adjust
-sections when that makes the document clearer, and keep the README consistent with the structured
-JSON result.
+handoff, using the existing template as its starting structure. Replace the template heading with
+the issue title, identify the issue using its canonical owner/repository#number reference, and
+include its classification. Replace every instructional placeholder with issue-specific content
+explaining the report, classification reasoning, related issues or pull requests, and supporting
+evidence. Add or adjust sections when that makes the document clearer, and keep the README
+consistent with the structured JSON result.
