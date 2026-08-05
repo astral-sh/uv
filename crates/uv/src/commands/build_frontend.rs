@@ -656,17 +656,6 @@ async fn build_package(
             .map(|constraint| constraint.requirement)
             .chain(build_constraints_from_workspace.iter().cloned()),
     );
-    let has_incompatible_backend_build_constraints =
-        build_constraints.requirements().any(|requirement| {
-            requirement.name.as_str() == "uv-build"
-                && match &requirement.source {
-                    RequirementSource::Registry { specifier, .. } => {
-                        Version::from_str(uv_version::version())
-                            .is_ok_and(|version| !specifier.contains(&version))
-                    }
-                    _ => true,
-                }
-        });
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -765,12 +754,6 @@ async fn build_package(
     } else if has_backend_build_constraint_hashes {
         debug!(
             "Not using `uv_build` direct build for `{}` because `uv_build` has build constraint hashes",
-            source.path().user_display()
-        );
-        BuildAction::Pep517
-    } else if has_incompatible_backend_build_constraints {
-        debug!(
-            "Not using `uv_build` direct build for `{}` because `uv_build` has incompatible build constraints",
             source.path().user_display()
         );
         BuildAction::Pep517
