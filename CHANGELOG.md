@@ -41,6 +41,7 @@ Released on 2026-08-05.
 
 - Separate build and publish jobs in the GitHub Actions publishing guide ([#20946](https://github.com/astral-sh/uv/pull/20946))
 - Ensure the GitHub Actions publishing example waits for the build job to finish ([#20957](https://github.com/astral-sh/uv/pull/20957))
+- Correct typos in the Docker integration guide ([#20970](https://github.com/astral-sh/uv/pull/20970))
 
 ## 0.12.1
 
