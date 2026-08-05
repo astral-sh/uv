@@ -18,6 +18,16 @@ relevant source and workflow configuration when that helps establish whether the
 by the proposed change, a repository defect, a flaky test, or external infrastructure. Clearly
 distinguish source-backed findings from hypotheses.
 
+Set `failure_kind` to exactly one of:
+
+- `flaky` only when every independent root-cause failure is an intermittent test, temporary model
+  capacity or rate-limit problem, network outage, or other transient infrastructure failure that can
+  plausibly succeed without changing the code or configuration. Ignore dependent cancellations and
+  rollup failures when identifying independent root causes.
+- `deterministic` when any independent failure is caused by the proposed change, requires a code,
+  configuration, or credential change, or cannot confidently be identified as transient. A run
+  containing both flaky and deterministic failures is `deterministic`.
+
 Before deciding to open an issue, follow the related-issue search guidance in
 `agents/prompts/triage-issue.md`. Apply that guidance to each independent failure and search the
 open and closed issues and the open, closed, and merged pull requests in both `astral-sh/uv` and
@@ -37,9 +47,9 @@ Set `decision` to exactly one of:
   test failure caused by the pull request; a superseded or follow-on failure; or a transient
   external outage with no repository-side remediation.
 
-Explain the decision in `decision_reason`. Do not create an issue merely because a pull request is
-red. If a run contains multiple independent actionable failures, describe the most important
-untracked failure and mention the others in the body or related results.
+Explain the failure classification and decision in `decision_reason`. Do not create an issue merely
+because a pull request is red. If a run contains multiple independent actionable failures, describe
+the most important untracked failure and mention the others in the body or related results.
 
 For `duplicate`, populate `comment_note` with a concise note only when this occurrence differs in a
 useful way from the tracked failure, such as an affected job, platform, error, or contributing
