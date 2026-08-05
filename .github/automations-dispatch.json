@@ -23,6 +23,17 @@
       "workflow": "pull-request-labels.yml"
     },
     {
+      "repository": "uv",
+      "on": {
+        "pull_request": ["labeled"]
+      },
+      "conditions": {
+        "/label/name": "bot:rebase"
+      },
+      "allow_draft": true,
+      "workflow": "pull-request-conflicts.yml"
+    },
+    {
       "repository": "uv-dev",
       "on": {
         "pull_request": ["opened", "reopened"]
@@ -32,6 +43,17 @@
       },
       "allow_draft": true,
       "workflow": "pull-request-labels.yml"
+    },
+    {
+      "repository": "uv-dev",
+      "on": {
+        "pull_request": ["labeled"]
+      },
+      "conditions": {
+        "/label/name": "bot:rebase"
+      },
+      "allow_draft": true,
+      "workflow": "pull-request-conflicts.yml"
     },
     {
       "repository": "uv-dev",
