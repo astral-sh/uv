@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 use std::fmt::Debug;
-use std::fs;
+use std::path::Path;
 
+use fs_err as fs;
 use same_file::is_same_file;
 use tracing::{debug, trace};
 use url::Url;
@@ -58,9 +59,10 @@ impl RequirementSatisfaction {
         entries
             .iter()
             .filter(|entry| {
-                entry.path.ends_with(".pth")
+                Path::new(&entry.path)
+                    .extension()
+                    .is_some_and(|ext| ext == "pth")
                     && !entry.path.contains('/')
-                    && !entry.path.contains('\\')
             })
             .all(|entry| site_packages.join(&entry.path).is_file())
     }
