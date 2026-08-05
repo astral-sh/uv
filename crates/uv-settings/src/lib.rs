@@ -776,7 +776,7 @@ pub struct EnvironmentOptions {
     pub malware_check: EnvFlag,
     pub malware_check_url: Option<DisplaySafeUrl>,
     #[cfg(unix)]
-    pub run_ulimit: Option<u32>,
+    pub run_rlimit_nofile: Option<u32>,
 }
 
 impl EnvironmentOptions {
@@ -912,7 +912,10 @@ impl EnvironmentOptions {
                 })
                 .transpose()?,
             #[cfg(unix)]
-            run_ulimit: parse_integer_environment_variable(EnvVars::UV_RUN_ULIMIT, None)?,
+            run_rlimit_nofile: parse_integer_environment_variable(
+                EnvVars::UV_RUN_RLIMIT_NOFILE,
+                None,
+            )?,
         })
     }
 }

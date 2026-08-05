@@ -4164,7 +4164,7 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
         @"
     ...
          },
-         run_ulimit: None,
+         run_rlimit_nofile: None,
      }
     +
     +----- stderr -----

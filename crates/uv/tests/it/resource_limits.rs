@@ -49,7 +49,7 @@ fn run_open_file_limit_override() {
         .current_dir(context.temp_dir.path())
         .env(EnvVars::UV_CACHE_DIR, context.cache_dir.path())
         .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
-        .env(EnvVars::UV_RUN_ULIMIT, "128");
+        .env(EnvVars::UV_RUN_RLIMIT_NOFILE, "128");
 
     uv_snapshot!(context.filters(), command, @r"
     exit_code: 0 (success)
@@ -75,12 +75,12 @@ fn run_open_file_limit_override_invalid() {
         .current_dir(context.temp_dir.path())
         .env(EnvVars::UV_CACHE_DIR, context.cache_dir.path())
         .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
-        .env(EnvVars::UV_RUN_ULIMIT, "invalid");
+        .env(EnvVars::UV_RUN_RLIMIT_NOFILE, "invalid");
 
     uv_snapshot!(context.filters(), command, @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse environment variable `UV_RUN_ULIMIT` with invalid value `invalid`: invalid digit found in string
+    error: Failed to parse environment variable `UV_RUN_RLIMIT_NOFILE` with invalid value `invalid`: invalid digit found in string
     ");
 }
 
@@ -104,12 +104,12 @@ fn run_open_file_limit_override_exceeds_hard_limit() {
         .current_dir(context.temp_dir.path())
         .env(EnvVars::UV_CACHE_DIR, context.cache_dir.path())
         .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
-        .env(EnvVars::UV_RUN_ULIMIT, "256");
+        .env(EnvVars::UV_RUN_RLIMIT_NOFILE, "256");
 
     uv_snapshot!(context.filters(), command, @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to apply `UV_RUN_ULIMIT` value `256`
+    error: Failed to apply `UV_RUN_RLIMIT_NOFILE` value `256`
       Caused by: requested open file limit (256) exceeds the hard limit (128)
     ");
 }

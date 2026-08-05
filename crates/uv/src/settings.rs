@@ -682,7 +682,7 @@ pub(crate) struct RunSettings {
     pub(crate) max_recursion_depth: u32,
     pub(crate) malware_settings: MalwareCheckSettings,
     #[cfg(unix)]
-    pub(crate) run_ulimit: Option<u32>,
+    pub(crate) run_rlimit_nofile: Option<u32>,
 }
 
 impl RunSettings {
@@ -850,7 +850,7 @@ impl RunSettings {
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
             malware_settings,
             #[cfg(unix)]
-            run_ulimit: environment.run_ulimit,
+            run_rlimit_nofile: environment.run_rlimit_nofile,
         })
     }
 }

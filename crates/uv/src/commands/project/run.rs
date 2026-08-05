@@ -121,7 +121,7 @@ pub(crate) async fn run(
     preview: Preview,
     max_recursion_depth: u32,
     malware_settings: MalwareCheckSettings,
-    #[cfg(unix)] run_ulimit: Option<u32>,
+    #[cfg(unix)] run_rlimit_nofile: Option<u32>,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
@@ -1305,11 +1305,11 @@ pub(crate) async fn run(
     }
 
     #[cfg(unix)]
-    if let Some(limit) = run_ulimit {
+    if let Some(limit) = run_rlimit_nofile {
         uv_unix::set_open_file_limit(limit).with_context(|| {
             format!(
                 "Failed to apply `{}` value `{limit}`",
-                EnvVars::UV_RUN_ULIMIT
+                EnvVars::UV_RUN_RLIMIT_NOFILE
             )
         })?;
     }
