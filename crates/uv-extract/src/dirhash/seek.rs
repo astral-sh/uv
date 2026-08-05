@@ -17,9 +17,7 @@ use tokio::sync::{Semaphore, SemaphorePermit};
 use tracing::warn;
 use uv_configuration::initialize_rayon_once;
 
-use super::{
-    DirectoryDigest, ExtractedFile, directory_digest_from_extracted, empty_directory_paths,
-};
+use super::{DirectoryDigest, ExtractedFile, directory_digest_from_extracted};
 use crate::archive_path::SanitizedArchivePath;
 
 const LOCAL_FILE_HEADER_LENGTH: u64 = 30;
@@ -74,7 +72,7 @@ pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf,
 /// Unzip a `.zip` archive into the target directory while computing a digest of the extracted files.
 ///
 /// Returns the list of unpacked files and their sizes, along with a digest over the canonicalized
-/// extracted file paths, executable bits, sizes, contents, and empty leaf directories.
+/// extracted file paths, contents, and empty directories.
 pub(crate) fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
@@ -164,11 +162,7 @@ fn unzip_inner(
             }
         }
     }
-    let hash_directories = empty_directory_paths(
-        &digest_directories,
-        extracted_files.iter().map(ExtractedFile::path),
-    );
-    let digest = directory_digest_from_extracted(&extracted_files, hash_directories);
+    let digest = directory_digest_from_extracted(&extracted_files, &digest_directories)?;
     let files = extracted_files
         .into_iter()
         .map(ExtractedFile::into_record)
@@ -216,7 +210,6 @@ where
     let entry = archive.file().entries()[file_number].clone();
     let file_name = entry_file_name(&entry, file_number)?;
     let compression = entry.compression();
-
     if let Err(err) = validate_archive_member_name(file_name) {
         if !skip_validation {
             return Err(err);

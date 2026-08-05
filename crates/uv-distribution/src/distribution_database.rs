@@ -898,6 +898,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             BuiltDist::DirectUrl(_) => size,
             _ => None,
         };
+
         let content_addressed_cache = self.content_addressed_cache;
 
         // Acquire an advisory lock, to guard against concurrent writes.

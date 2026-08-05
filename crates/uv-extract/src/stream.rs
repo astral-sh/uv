@@ -18,7 +18,7 @@ use uv_preview::PreviewFeature;
 
 use crate::archive_path::SanitizedArchivePath;
 use crate::dirhash::{
-    DirectoryDigest, ExtractedFile, directory_digest_from_extracted, empty_directory_paths,
+    DirectoryDigest, ExtractedFile, blake3_copy, directory_digest_from_extracted,
 };
 use crate::{Error, insecure_no_validate, validate_archive_member_name};
 
@@ -76,9 +76,8 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 /// Unpack a `.zip` archive into the target directory while computing a digest of the extracted
 /// files.
 ///
-/// The digest includes regular-file paths, executable bits, sizes, contents, and empty leaf
-/// directories. ZIP entries are never followed as symlinks; non-directory entries are materialized
-/// and hashed as regular files.
+/// The digest includes regular-file paths, contents, and empty directories. ZIP entries are never
+/// followed as symlinks; non-directory entries are materialized and hashed as regular files.
 ///
 /// See [`unzip`] for details.
 pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
@@ -217,30 +216,35 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                             tokio::io::BufWriter::new(file)
                         };
                         let mut reader = entry.reader_mut().compat();
-                        let mut hasher = hash_contents.then(blake3::Hasher::new);
-                        let mut bytes_read = 0;
-                        let mut buffer = vec![0; DEFAULT_BUF_SIZE];
-                        loop {
-                            let read = tokio::io::AsyncReadExt::read(&mut reader, &mut buffer)
-                                .await
-                                .map_err(Error::io_or_compression)?;
-                            if read == 0 {
-                                break;
+                        let (bytes_read, digest) = if hash_contents {
+                            let (bytes_read, digest) =
+                                Box::pin(blake3_copy(&mut reader, &mut writer))
+                                    .await
+                                    .map_err(Error::io_or_compression)?;
+                            (bytes_read, Some(digest))
+                        } else {
+                            let mut bytes_read = 0;
+                            let mut buffer = vec![0; DEFAULT_BUF_SIZE];
+                            loop {
+                                let read = tokio::io::AsyncReadExt::read(&mut reader, &mut buffer)
+                                    .await
+                                    .map_err(Error::io_or_compression)?;
+                                if read == 0 {
+                                    break;
+                                }
+                                tokio::io::AsyncWriteExt::write_all(&mut writer, &buffer[..read])
+                                    .await
+                                    .map_err(Error::Io)?;
+                                bytes_read += read as u64;
                             }
-                            if let Some(hasher) = hasher.as_mut() {
-                                hasher.update(&buffer[..read]);
-                            }
-                            tokio::io::AsyncWriteExt::write_all(&mut writer, &buffer[..read])
+                            tokio::io::AsyncWriteExt::flush(&mut writer)
                                 .await
                                 .map_err(Error::Io)?;
-                            bytes_read += read as u64;
-                        }
-                        tokio::io::AsyncWriteExt::flush(&mut writer)
-                            .await
-                            .map_err(Error::Io)?;
+                            (bytes_read, None)
+                        };
                         let reader = reader.into_inner();
 
-                        (bytes_read, hasher.map(|hasher| hasher.finalize()), reader)
+                        (bytes_read, digest, reader)
                     }
                     Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
                         debug!(
@@ -653,13 +657,9 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         }
     }
 
-    let digest = hash_contents.then(|| {
-        let hash_directories = empty_directory_paths(
-            &digest_directories,
-            extracted_files.iter().map(ExtractedFile::path),
-        );
-        directory_digest_from_extracted(&extracted_files, hash_directories)
-    });
+    let digest = hash_contents
+        .then(|| directory_digest_from_extracted(&extracted_files, &digest_directories))
+        .transpose()?;
 
     Ok(UnzipOutput { files, digest })
 }
