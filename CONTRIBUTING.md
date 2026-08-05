@@ -294,6 +294,9 @@ uv run --script scripts/coverage-html-report.py TRACKING_ID
 
 # optional: open the HTML report in the default browser
 uv run --script scripts/coverage-html-report.py --open TRACKING_ID
+
+# optional: merge all LCOV reports in a directory into a single HTML report
+uv run --script scripts/coverage-html-report.py combined --lcov-dir path/to/reports
 ```
 
 Note that HTML reports can be very large, and may take some time to render in your browser.

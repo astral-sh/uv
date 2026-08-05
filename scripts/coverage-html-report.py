@@ -133,6 +133,19 @@ def parse_lcov(path: pathlib.Path) -> CoverageData:
     return raw_data
 
 
+def merge_lcov(paths: collections.abc.Iterable[pathlib.Path]) -> CoverageData:
+    merged_data: collections.defaultdict[str, collections.defaultdict[int, int]] = (
+        collections.defaultdict(lambda: collections.defaultdict(int))
+    )
+
+    for path in paths:
+        for filename, lines in parse_lcov(path).items():
+            for line_number, count in lines.items():
+                merged_data[filename][line_number] += count
+
+    return merged_data
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate terminal and HTML reports from a Rust coverage run."
@@ -143,13 +156,27 @@ def main() -> None:
         action="store_true",
         help="Open the generated HTML report in the default browser",
     )
+    parser.add_argument(
+        "--lcov-dir",
+        type=pathlib.Path,
+        help="Recursively merge LCOV reports from this directory",
+    )
     args = parser.parse_args()
 
-    lcov_path = REPO_ROOT / "target" / "coverage" / "lcov" / f"{args.id}.lcov"
-    if not lcov_path.is_file():
-        parser.error(f"LCOV file does not exist: {lcov_path}")
+    if args.lcov_dir is None:
+        lcov_path = REPO_ROOT / "target" / "coverage" / "lcov" / f"{args.id}.lcov"
+        if not lcov_path.is_file():
+            parser.error(f"LCOV file does not exist: {lcov_path}")
+        lcov_paths = [lcov_path]
+    else:
+        if not args.lcov_dir.is_dir():
+            parser.error(f"LCOV directory does not exist: {args.lcov_dir}")
+        lcov_paths = sorted(args.lcov_dir.rglob("*.lcov"))
+        if not lcov_paths:
+            parser.error(f"LCOV directory contains no reports: {args.lcov_dir}")
+        print(f"Merging {len(lcov_paths)} LCOV reports from {args.lcov_dir}")
 
-    raw_data = parse_lcov(lcov_path)
+    raw_data = merge_lcov(lcov_paths)
     covered_lines = {
         filename: {line for line, count in lines.items() if count > 0}
         for filename, lines in raw_data.items()
