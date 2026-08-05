@@ -106,6 +106,7 @@ fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
     allow_duplicates! {
         for version in ["0.11.1", "0.12.0"] {
             let context = uv_test::test_context!("3.12")
+                // TODO: Remove this once the older `interpreter-v4` cache layout is supported.
                 .with_filter((r"(?m)^WARN Broken interpreter cache entry at .*\n", ""))
                 .with_filter((r" \+ uv==0\.(?:11\.1|12\.0)", " + uv==[VERSION]"));
             let wheel = context.temp_dir.join("large_wheel-1.0.0-py3-none-any.whl");
