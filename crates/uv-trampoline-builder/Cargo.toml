@@ -37,9 +37,6 @@ editpe = { workspace = true }
 futures-lite = { workspace = true }
 windows = { workspace = true }
 
-[target.'cfg(all(target_os = "windows", target_arch = "x86"))'.dependencies]
-tempfile = { workspace = true }
-
 [dev-dependencies]
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
