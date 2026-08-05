@@ -397,8 +397,6 @@ jobs:
         shell: bash
         run: |
           test_args=(
-            --cargo-profile fast-build-nightly
-            -Z panic-abort-tests
             -Z checksum-freshness
             --no-default-features
             --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native
@@ -407,10 +405,15 @@ jobs:
             --partition hash:${{ matrix.partition }}/3
           )
           if ${{ inputs.collect-coverage }}; then
+            # We don't include `-Z panic-abort-tests` on Windows when collecting
+            # coverage, since it causes tests to exit with `ExitProcess`, in turn
+            # stopping LLVM from flushing any coverage with its `atexit` handler.
+            test_args+=(--cargo-profile fast-build)
             tracking_id="${GITHUB_SHA:0:16}"
             cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
             echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
           else
+            test_args+=(--cargo-profile fast-build-nightly -Z panic-abort-tests)
             cargo nextest run "${test_args[@]}"
           fi
 
