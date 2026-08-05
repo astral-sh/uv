@@ -403,6 +403,8 @@ jobs:
           path: dist/
 
   publish:
+    needs:
+      - build
     runs-on: ubuntu-latest
     environment:
       name: pypi
