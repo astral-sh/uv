@@ -68,65 +68,54 @@ impl OperationDiagnostic {
     ///
     /// Returns `Some` if the error was not handled.
     pub(crate) fn report(self, err: pip::operations::Error) -> Option<pip::operations::Error> {
-        let result = match err {
+        let mut hints = match err {
             pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err)) => {
-                no_solution(&err, self.context);
-                None
+                no_solution(&err, self.context)
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
                 kind,
                 dist,
                 chain,
                 err,
-            )) => {
-                requested_dist_error(kind, dist, &chain, err);
-                None
-            }
+            )) => requested_dist_error(kind, dist, &chain, err),
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
                 error,
                 name,
                 version,
                 chain,
-            )) => {
-                dependencies_error(error, &name, &version, &chain);
-                None
-            }
+            )) => dependencies_error(error, &name, &version, &chain),
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
-                dist_error(kind, dist, &DerivationChain::default(), Arc::new(*err));
-                None
+                dist_error(kind, dist, &DerivationChain::default(), Arc::new(*err))
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
                 kind,
                 dist,
                 chain,
                 err,
-            )) => {
-                dist_error(kind, dist, &chain, Arc::new(*err));
-                None
-            }
+            )) => dist_error(kind, dist, &chain, Arc::new(*err)),
             pip::operations::Error::Requirements(err) if let Some(context) = self.context => {
                 let err = miette::Report::msg(format!("{err}"))
                     .context(format!("Failed to resolve {context} requirement"));
                 anstream::eprint!("{err:?}");
-                None
+                Hints::none()
             }
             pip::operations::Error::Requirements(err) => {
-                Some(pip::operations::Error::Requirements(err))
+                return Some(pip::operations::Error::Requirements(err));
             }
             err @ pip::operations::Error::OutdatedEnvironment(..) => {
                 anstream::eprintln!("{}", err);
-                None
+                Hints::none()
             }
-            err => Some(err),
+            err => return Some(err),
         };
 
-        // Render the caller-provided hints after the error output.
-        if result.is_none() {
-            let hints: Hints<'_> = self.hints.into_iter().collect();
-            anstream::eprint!("{hints}");
+        // Render all hints after the error output.
+        hints.extend(self.hints);
+        if !hints.is_empty() {
+            anstream::eprintln!("{hints}");
         }
 
-        result
+        None
     }
 }
 
@@ -138,7 +127,7 @@ fn dist_error(
     dist: Box<Dist>,
     chain: &DerivationChain,
     cause: Arc<uv_distribution::Error>,
-) {
+) -> Hints<'static> {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("{kind} `{dist}`")]
     #[diagnostic()]
@@ -152,7 +141,7 @@ fn dist_error(
     let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
     let report = miette::Report::new(Diagnostic { kind, dist, cause });
     anstream::eprint!("{report:?}");
-    anstream::eprint!("{hints}");
+    hints
 }
 
 /// Render a requested distribution failure (read, download or build) with a help message.
@@ -163,7 +152,7 @@ fn requested_dist_error(
     dist: Box<RequestedDist>,
     chain: &DerivationChain,
     cause: Arc<uv_distribution::Error>,
-) {
+) -> Hints<'static> {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("{kind} `{dist}`")]
     #[diagnostic()]
@@ -177,7 +166,7 @@ fn requested_dist_error(
     let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
     let report = miette::Report::new(Diagnostic { kind, dist, cause });
     anstream::eprint!("{report:?}");
-    anstream::eprint!("{hints}");
+    hints
 }
 
 /// Render an error in fetching a package's dependencies.
@@ -188,7 +177,7 @@ fn dependencies_error(
     name: &PackageName,
     version: &Version,
     chain: &DerivationChain,
-) {
+) -> Hints<'static> {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("Failed to resolve dependencies for `{}` ({})", name.cyan(), format!("v{version}").cyan())]
     #[diagnostic()]
@@ -206,11 +195,14 @@ fn dependencies_error(
         cause: error,
     });
     anstream::eprint!("{report:?}");
-    anstream::eprint!("{hints}");
+    hints
 }
 
 /// Render a [`uv_resolver::NoSolutionError`].
-fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>) {
+fn no_solution(
+    err: &uv_resolver::NoSolutionError,
+    context: Option<&'static str>,
+) -> Hints<'static> {
     let header = uv_resolver::NoSolutionHeader::new(err.environment().clone());
     let header = if let Some(context) = context {
         header.with_context(context)
@@ -219,8 +211,7 @@ fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>
     };
     let report = miette::Report::msg(err.report().to_string()).context(header);
     anstream::eprint!("{report:?}");
-    let hints = err.hints();
-    anstream::eprint!("{hints}");
+    err.hints().into_owned()
 }
 
 /// Format an error chain with the default user-facing hints and output settings.
