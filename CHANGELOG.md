@@ -10,6 +10,7 @@ Released on 2026-08-05.
 ### Python
 
 - Add CPython 3.15.0rc1 ([#20948](https://github.com/astral-sh/uv/pull/20948))
+- Add CPython 3.14.7 ([#20971](https://github.com/astral-sh/uv/pull/20971))
 
 ### Enhancements
 
