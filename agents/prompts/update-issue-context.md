@@ -1,3 +1,6 @@
+Continue the existing issue-triage investigation for a new follow-up task. Structured-output
+requirements from the completed triage turn do not apply to this update.
+
 Review the newly created issue comment in `$RUNNER_TEMP/issue-comment.json`, the full issue and its
 discussion in `$RUNNER_TEMP/issue.json`, and the existing maintainer handoff in
 `$RUNNER_TEMP/issue-context/README.md`. Other files in `$RUNNER_TEMP/issue-context`, such as

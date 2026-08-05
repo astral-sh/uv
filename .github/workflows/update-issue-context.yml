@@ -14,6 +14,7 @@ jobs:
     environment: automations
     timeout-minutes: 15
     permissions:
+      actions: read
       contents: read
       issues: read
     outputs:
@@ -80,6 +81,52 @@ jobs:
           echo "context-sha=$(git -C "$RUNNER_TEMP/issue-context" rev-parse HEAD)" \
             >> "$GITHUB_OUTPUT"
 
+          artifact_name="codex-thread-issue-$ISSUE_NUMBER"
+          artifacts="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$artifact_name&per_page=20")"
+          thread_run_id=
+          while IFS=$'\t' read -r run_id; do
+            [ -n "$run_id" ] || continue
+            workflow_run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")"
+            if jq --exit-status '
+              .head_branch == "main"
+              and .status == "completed"
+              and (
+                (
+                  .path == ".github/workflows/issue-triage.yml"
+                  and (.event == "issues" or .event == "workflow_dispatch")
+                )
+                or (
+                  .path == ".github/workflows/update-issue-context.yml"
+                  and .event == "issue_comment"
+                )
+              )
+            ' <<< "$workflow_run" > /dev/null; then
+              thread_run_id="$run_id"
+              break
+            fi
+          done < <(
+            jq --raw-output '
+              [.artifacts[] | select(.expired == false)]
+              | sort_by(.created_at)
+              | reverse
+              | .[]
+              | .workflow_run.id
+            ' <<< "$artifacts"
+          )
+
+          if [ -z "$thread_run_id" ]; then
+            echo "No trusted Codex thread exists for $GITHUB_REPOSITORY#$ISSUE_NUMBER."
+            echo "thread-found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "thread-found=true"
+            echo "thread-run-id=$thread_run_id"
+            echo "thread-artifact=$artifact_name"
+          } >> "$GITHUB_OUTPUT"
+
           {
             printf 'Issue context update for #%s: %s\n\n' \
               "$ISSUE_NUMBER" \
@@ -90,8 +137,58 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
 
+      - name: "Restore Codex thread"
+        if: steps.issue.outputs.thread-found == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.issue.outputs.thread-run-id }}
+          name: ${{ steps.issue.outputs.thread-artifact }}
+          path: agents/codex/sessions
+
+      - name: "Validate Codex thread"
+        id: thread
+        if: steps.issue.outputs.thread-found == 'true'
+        run: |
+          while IFS= read -r -d '' compressed_rollout; do
+            zstd --decompress --stdout "$compressed_rollout" > "${compressed_rollout%.zst}"
+          done < <(find agents/codex/sessions -type f -name '*.jsonl.zst' -print0)
+
+          root_sessions=0
+          root_session_id=
+          while IFS= read -r -d '' rollout; do
+            metadata="$(head -n 1 "$rollout")"
+            if ! jq --exit-status '
+              .type == "session_meta"
+              and (.payload | type == "object")
+              and (.payload.id | type == "string")
+            ' <<< "$metadata" > /dev/null; then
+              echo "The artifact contains an invalid Codex session." >&2
+              exit 1
+            fi
+
+            if jq --exit-status '.payload.source == "exec"' <<< "$metadata" > /dev/null; then
+              root_sessions=$((root_sessions + 1))
+              root_session_id="$(jq --raw-output '.payload.id' <<< "$metadata")"
+              session_workspace="$(jq --raw-output '.payload.cwd' <<< "$metadata")"
+              if ! [[ "$root_session_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
+                [ "$session_workspace" != "$GITHUB_WORKSPACE" ]; then
+                echo "The Codex session does not match the trusted workspace." >&2
+                exit 1
+              fi
+            fi
+          done < <(find agents/codex/sessions -type f -name '*.jsonl' -print0)
+
+          if [ "$root_sessions" -ne 1 ]; then
+            echo "The artifact must contain exactly one root Codex session." >&2
+            exit 1
+          fi
+
+          echo "session-id=$root_session_id" >> "$GITHUB_OUTPUT"
+
       - name: "Update issue context"
-        if: steps.issue.outputs.exists == 'true'
+        if: steps.issue.outputs.thread-found == 'true'
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -105,10 +202,12 @@ jobs:
           safety-strategy: drop-sudo
           allow-users: "*"
           prompt-file: "${{ runner.temp }}/update-issue-context-prompt.md"
+          codex-args: >-
+            ["resume", "${{ steps.thread.outputs.session-id }}", "-"]
 
       - name: "Check issue context changes"
         id: changes
-        if: steps.issue.outputs.exists == 'true'
+        if: steps.issue.outputs.thread-found == 'true'
         run: |
           if [ -n "$(git -C "$RUNNER_TEMP/issue-context" status --porcelain -- . ':!README.md')" ]; then
             echo "Codex changed files outside the issue-context README."
@@ -135,12 +234,13 @@ jobs:
           retention-days: 1
 
       - name: "Upload Codex thread"
-        if: always() && steps.issue.outputs.exists == 'true'
+        if: always() && steps.issue.outputs.thread-found == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: codex-thread-update-issue-context-${{ github.run_id }}-${{ github.run_attempt }}
+          name: codex-thread-issue-${{ steps.issue.outputs.number }}
           path: agents/codex/sessions
           if-no-files-found: warn
+          overwrite: true
 
   persist:
     needs: update
