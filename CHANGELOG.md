@@ -3,6 +3,47 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.2
+
+Released on 2026-08-05.
+
+### Python
+
+- Add CPython 3.15.0rc1 ([#20948](https://github.com/astral-sh/uv/pull/20948))
+- Add CPython 3.14.7 ([#20971](https://github.com/astral-sh/uv/pull/20971))
+
+### Enhancements
+
+- Ensure diagnostic hints end with a newline to prevent malformed terminal output ([#20959](https://github.com/astral-sh/uv/pull/20959))
+
+### Preview features
+
+- Audit one or all installed tools with `uv tool audit` ([#20921](https://github.com/astral-sh/uv/pull/20921))
+- Report physically reclaimed disk space during cache cleanup with the `cache-physical-space` preview feature ([#20925](https://github.com/astral-sh/uv/pull/20925))
+
+### Configuration
+
+- Add `UV_RUN_RLIMIT_NOFILE` to set the open-file limit for commands launched by `uv run` ([#20926](https://github.com/astral-sh/uv/pull/20926))
+
+### Performance
+
+- Speed up `uv.lock` parsing for wheel entries ([#20881](https://github.com/astral-sh/uv/pull/20881))
+- Speed up `uv.lock` parsing for source distribution entries ([#20882](https://github.com/astral-sh/uv/pull/20882))
+- Speed up filename extraction from distribution URLs ([#20879](https://github.com/astral-sh/uv/pull/20879))
+- Reduce filesystem metadata lookups during bytecode compilation ([#20928](https://github.com/astral-sh/uv/pull/20928))
+- Reuse file metadata when building source distributions ([#20927](https://github.com/astral-sh/uv/pull/20927))
+
+### Bug fixes
+
+- Preserve compatibility with older uv versions when recording artifact sizes in cached wheels and source distributions ([#20963](https://github.com/astral-sh/uv/pull/20963))
+- Avoid including workspace-root default dependency groups when syncing or exporting a selected workspace member unless explicitly requested ([#20930](https://github.com/astral-sh/uv/pull/20930))
+
+### Documentation
+
+- Separate build and publish jobs in the GitHub Actions publishing guide ([#20946](https://github.com/astral-sh/uv/pull/20946))
+- Ensure the GitHub Actions publishing example waits for the build job to finish ([#20957](https://github.com/astral-sh/uv/pull/20957))
+- Correct typos in the Docker integration guide ([#20970](https://github.com/astral-sh/uv/pull/20970))
+
 ## 0.12.1
 
 Released on 2026-07-31.
@@ -319,4 +360,5 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
 
