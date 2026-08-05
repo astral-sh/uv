@@ -15,6 +15,9 @@ on:
 
 permissions: {}
 
+env:
+  MAX_ATTEMPTS: "3"
+
 jobs:
   diagnose:
     if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
@@ -154,8 +157,7 @@ jobs:
             > "$RUNNER_TEMP/workflow-run.json"
 
           run_attempt="$(jq --raw-output '.run_attempt' "$RUNNER_TEMP/workflow-run.json")"
-          max_attempts=3
-          if [ "$run_attempt" -ge "$max_attempts" ]; then
+          if [ "$run_attempt" -ge "$MAX_ATTEMPTS" ]; then
             echo "The workflow run has exhausted its automatic retry budget."
             exit 0
           fi
@@ -221,7 +223,7 @@ jobs:
             printf '### Retried flaky workflow failures\n\n'
             printf -- '- Workflow run: https://github.com/%s/actions/runs/%s\n' \
               "$GITHUB_REPOSITORY" "$RUN_ID"
-            printf -- '- Attempt: %s of 3\n' "$((run_attempt + 1))"
+            printf -- '- Attempt: %s of %s\n' "$((run_attempt + 1))" "$MAX_ATTEMPTS"
           } >> "$GITHUB_STEP_SUMMARY"
 
   report:
