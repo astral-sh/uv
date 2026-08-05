@@ -368,8 +368,10 @@ name: "Publish release to PyPI"
 on:
   push:
     tags:
-      # Publish on any tag starting with a `v`, e.g., v0.1.0
-      - v*
+      # Publish on version tags, e.g. v0.1.0
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+rc[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+[ab][0-9]+"
 
 jobs:
   build:
