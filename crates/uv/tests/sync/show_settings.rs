@@ -3226,6 +3226,7 @@ fn preview_features() {
     +            NoDistutilsPatch,
     +            IndexHashAlgorithm,
     +            LockfileFormatCheck,
+    +            ContentAddressedCache,
     +        ],
          },
          python_preference: Managed,
