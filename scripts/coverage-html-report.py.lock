@@ -2,9 +2,6 @@ version = 1
 revision = 3
 requires-python = ">=3.11"
 
-[options]
-exclude-newer = "2026-07-28T21:57:38Z"
-
 [manifest]
 requirements = [{ name = "coverage" }]
 
