@@ -1,0 +1,14 @@
+name: Coverage
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  test:
+    uses: $/.github/workflows/test.yml
+    with:
+      test-macos: "true"
+      collect-coverage: true

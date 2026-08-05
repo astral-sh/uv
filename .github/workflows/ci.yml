@@ -81,7 +81,11 @@ jobs:
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
       test-macos: ${{ needs.plan.outputs.test-macos }}
-      collect-coverage: ${{ needs.plan.outputs.collect-coverage == 'true' }}
+
+  coverage:
+    needs: plan
+    if: ${{ needs.plan.outputs.collect-coverage == 'true' }}
+    uses: $/.github/workflows/coverage.yml
 
   test-windows-trampolines:
     needs: plan

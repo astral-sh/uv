@@ -162,7 +162,7 @@ jobs:
         run: python3 scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
-        if: ${{ failure() }}
+        if: ${{ failure() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pending-snapshots-linux
@@ -172,7 +172,7 @@ jobs:
           retention-days: 14
 
       - name: "Upload JUnit results"
-        if: always()
+        if: ${{ always() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: junit-results-linux
@@ -295,7 +295,7 @@ jobs:
         run: python3 scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
-        if: ${{ failure() }}
+        if: ${{ failure() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pending-snapshots-macos
@@ -305,7 +305,7 @@ jobs:
           retention-days: 14
 
       - name: "Upload JUnit results"
-        if: always()
+        if: ${{ always() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: junit-results-macos
@@ -443,7 +443,7 @@ jobs:
         run: python scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$env:RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
-        if: ${{ failure() }}
+        if: ${{ failure() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pending-snapshots-windows-${{ matrix.partition }}
@@ -453,7 +453,7 @@ jobs:
           retention-days: 14
 
       - name: "Upload JUnit results"
-        if: always()
+        if: ${{ always() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: junit-results-windows-${{ matrix.partition }}
