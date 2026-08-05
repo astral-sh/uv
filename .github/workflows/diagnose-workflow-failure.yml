@@ -154,7 +154,8 @@ jobs:
             > "$RUNNER_TEMP/workflow-run.json"
 
           run_attempt="$(jq --raw-output '.run_attempt' "$RUNNER_TEMP/workflow-run.json")"
-          if ! [[ "$run_attempt" =~ ^[12]$ ]]; then
+          max_attempts=3
+          if [ "$run_attempt" -ge "$max_attempts" ]; then
             echo "The workflow run has exhausted its automatic retry budget."
             exit 0
           fi
