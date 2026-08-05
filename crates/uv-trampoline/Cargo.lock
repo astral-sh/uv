@@ -149,17 +149,18 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "uv-macros"
-version = "0.0.68"
+version = "0.0.69"
 dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.3",
  "textwrap",
+ "uv-version",
 ]
 
 [[package]]
 name = "uv-static"
-version = "0.0.68"
+version = "0.0.69"
 dependencies = [
  "thiserror",
  "uv-macros",
@@ -179,8 +180,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-version"
+version = "0.12.2"
+
+[[package]]
 name = "uv-windows"
-version = "0.0.68"
+version = "0.0.69"
 dependencies = [
  "windows",
 ]

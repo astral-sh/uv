@@ -12,12 +12,14 @@ use tracing::{debug, warn};
 pub use crate::locked_file::*;
 pub use crate::path::*;
 pub use crate::read::ValidatedReader;
+pub use crate::space::{physical_space, supports_physical_space};
 
 pub mod cachedir;
 pub mod link;
 mod locked_file;
 mod path;
 mod read;
+mod space;
 pub mod which;
 
 /// Attempt to check if the two paths refer to the same file.

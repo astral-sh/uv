@@ -2,7 +2,12 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 
+#[cfg(target_os = "linux")]
+use std::process::Command;
+
 use uv_cache::Cache;
+#[cfg(unix)]
+use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_static::EnvVars;
 
 use uv_test::uv_snapshot;
@@ -32,6 +37,201 @@ fn clean_all() -> Result<()> {
     ");
 
     Ok(())
+}
+
+/// `cache clean` should report physical space for hardlinks only when the preview is enabled.
+#[cfg(unix)]
+#[test]
+fn clean_all_hardlinked_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    // Keep the retained hardlink beside the cache so both entries share a filesystem.
+    let retained = context.cache_dir.path().with_file_name("retained.bin");
+    fs_err::write(&retained, vec![42; 1024 * 1024])?;
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(&retained)?
+        .sync_all()?;
+
+    let cached = context.cache_dir.child("hardlinked.bin");
+    fs_err::hard_link(&retained, &cached)?;
+
+    let filters = size_filters(&context);
+
+    uv_snapshot!(&filters, context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files (1.0MiB)
+    ");
+
+    context.cache_dir.create_dir_all()?;
+    fs_err::hard_link(&retained, &cached)?;
+
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files (0B)
+    ");
+
+    assert!(retained.is_file());
+
+    context.cache_dir.create_dir_all()?;
+    cached.write_binary(&vec![42; 1024 * 1024])?;
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(cached.path())?
+        .sync_all()?;
+    fs_err::hard_link(&cached, context.cache_dir.child("second-hardlink.bin"))?;
+
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files (1.0MiB)
+    ");
+
+    Ok(())
+}
+
+/// `cache clean` should report physical space for copy-on-write clones in preview mode.
+#[cfg(unix)]
+#[test]
+fn clean_all_cloned_file() -> Result<()> {
+    let context = copy_on_write_test_context()?;
+    let retained = context.cache_dir.path().with_file_name("retained");
+    fs_err::create_dir_all(&retained)?;
+    let original = retained.join("original.bin");
+    fs_err::write(&original, vec![42; 1024 * 1024])?;
+
+    // Remove unrelated cache entries so the cloned file is the only allocated data being cleaned.
+    context.clean().assert().success();
+    context.cache_dir.create_dir_all()?;
+
+    let cached = context.cache_dir.child("cloned");
+    let link_mode = link_dir(&retained, &cached, &LinkOptions::new(LinkMode::Clone))?;
+    if link_mode != LinkMode::Clone {
+        assert!(
+            std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none(),
+            "the configured copy-on-write filesystem did not clone the cached file"
+        );
+        return Ok(());
+    }
+
+    let filters = size_filters(&context);
+
+    uv_snapshot!(&filters, context.clean().arg("--preview"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files (0B)
+    ");
+
+    assert!(original.is_file());
+
+    Ok(())
+}
+
+/// Clones shared only within the cache should be counted once when their final reference is removed.
+#[cfg(unix)]
+#[test]
+fn clean_all_cached_clones() -> Result<()> {
+    let context = copy_on_write_test_context()?;
+    let original = context.cache_dir.child("original");
+    original.create_dir_all()?;
+    original
+        .child("original.bin")
+        .write_binary(&vec![42; 1024 * 1024])?;
+
+    let cloned = context.cache_dir.child("cloned");
+    let link_mode = link_dir(&original, &cloned, &LinkOptions::new(LinkMode::Clone))?;
+    if link_mode != LinkMode::Clone {
+        assert!(
+            std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none(),
+            "the configured copy-on-write filesystem did not clone the cached file"
+        );
+        return Ok(());
+    }
+
+    let filters = size_filters(&context);
+
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files (1.0MiB)
+    ");
+
+    Ok(())
+}
+
+/// Unknown compressed extents should not discard measurements for unrelated cache entries.
+#[cfg(target_os = "linux")]
+#[test]
+fn clean_all_compressed_file() -> Result<()> {
+    if std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none() {
+        return Ok(());
+    }
+
+    let context = copy_on_write_test_context()?;
+    let measured = context.cache_dir.child("measured.bin");
+    measured.write_binary(&vec![42; 1024 * 1024])?;
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(measured.path())?
+        .sync_all()?;
+
+    let compressed = context.cache_dir.child("compressed.bin");
+    fs_err::File::create(compressed.path())?;
+    Command::new("btrfs")
+        .args(["property", "set"])
+        .arg(compressed.path())
+        .args(["compression", "zstd"])
+        .assert()
+        .success();
+    compressed.write_binary(&vec![42; 1024 * 1024])?;
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(compressed.path())?
+        .sync_all()?;
+
+    let filters = size_filters(&context);
+
+    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files (at least 1.0MiB)
+    ");
+
+    Ok(())
+}
+
+/// Put the cache and retained files on CI's Btrfs or APFS volume, when configured.
+#[cfg(unix)]
+fn copy_on_write_test_context() -> Result<uv_test::TestContext> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    if std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none() {
+        return Ok(context);
+    }
+
+    let Some(context) = context.with_cache_on_cow_fs()? else {
+        anyhow::bail!("the configured copy-on-write cache filesystem was unavailable");
+    };
+
+    let cache_dir = context.cache_dir.path().to_path_buf();
+    Ok(context.with_filtered_path(&cache_dir, "CACHE_DIR"))
+}
+
+/// Preserve physical sizes while applying the context's other snapshot filters.
+#[cfg(unix)]
+fn size_filters(context: &uv_test::TestContext) -> Vec<(&str, &str)> {
+    context
+        .filters()
+        .into_iter()
+        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
+        .collect()
 }
 
 /// `cache clear` should behave as an alias of `cache clean`.

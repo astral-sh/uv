@@ -40,6 +40,52 @@ fn prune_no_op() -> Result<()> {
     Ok(())
 }
 
+/// `cache prune` should report physical space for hardlinks only when the preview is enabled.
+#[cfg(unix)]
+#[test]
+fn prune_hardlinked_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Keep both hardlinks on the selected filesystem.
+    let retained = context.cache_dir.path().with_file_name("retained.bin");
+    fs_err::write(&retained, vec![42; 1024 * 1024])?;
+    fs_err::OpenOptions::new()
+        .write(true)
+        .open(&retained)?
+        .sync_all()?;
+
+    let stale = context.cache_dir.child("stale-v0");
+    stale.create_dir_all()?;
+    fs_err::hard_link(&retained, stale.child("hardlinked.bin"))?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
+        .collect();
+
+    uv_snapshot!(&filters, context.prune(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    Removed 1 file (1.0MiB)
+    ");
+
+    stale.create_dir_all()?;
+    fs_err::hard_link(&retained, stale.child("hardlinked.bin"))?;
+
+    uv_snapshot!(&filters, context.prune().arg("--preview-features").arg("cache-physical-space"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    Removed 1 file (0B)
+    ");
+
+    assert!(retained.is_file());
+
+    Ok(())
+}
+
 /// `cache prune` should remove any stale top-level directories from the cache.
 #[test]
 fn prune_stale_directory() -> Result<()> {

@@ -53,9 +53,12 @@ impl Hints<'_> {
     }
 
     /// Extend with another set of hints, converting borrowed hints to owned.
-    pub fn extend(&mut self, other: Hints<'_>) {
-        for hint in other.0 {
-            let hint = Cow::Owned(hint.into_owned());
+    pub fn extend<T>(&mut self, other: impl IntoIterator<Item = T>)
+    where
+        T: Into<String>,
+    {
+        for hint in other {
+            let hint = Cow::Owned(hint.into());
             if !self.0.iter().any(|existing| existing == &hint) {
                 self.0.push(hint);
             }

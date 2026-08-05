@@ -1,10 +1,11 @@
+use serde::ser::SerializeMap;
 use uv_cache::{ARCHIVE_VERSION, ArchiveId, Cache};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::Hashed;
 use uv_pypi_types::{HashDigest, HashDigests};
 
 /// An archive (unzipped wheel) that exists in the local cache.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct Archive {
     /// The unique ID of the entry in the wheel's archive bucket.
     pub id: ArchiveId,
@@ -17,6 +18,23 @@ pub struct Archive {
     /// The size of the downloaded archive.
     #[serde(default)]
     pub size: Option<u64>,
+}
+
+impl serde::Serialize for Archive {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Cache buckets are shared with older uv versions, whose readers can ignore unknown map
+        // entries but reject MessagePack arrays with additional fields.
+        let mut map = serializer.serialize_map(Some(5))?;
+        map.serialize_entry("id", &self.id)?;
+        map.serialize_entry("hashes", &self.hashes)?;
+        map.serialize_entry("filename", &self.filename)?;
+        map.serialize_entry("version", &self.version)?;
+        map.serialize_entry("size", &self.size)?;
+        map.end()
+    }
 }
 
 impl Archive {
@@ -75,5 +93,57 @@ mod tests {
         let archive: Archive = rmp_serde::from_slice(&bytes).expect("deserialize legacy archive");
 
         assert_eq!(archive.size, None);
+    }
+
+    #[test]
+    fn deserialize_uv_0_12_archive() {
+        #[derive(serde::Serialize)]
+        struct ReleasedArchive {
+            id: ArchiveId,
+            hashes: HashDigests,
+            filename: WheelFilename,
+            version: u8,
+            size: Option<u64>,
+        }
+
+        let released = ReleasedArchive {
+            id: ArchiveId::default(),
+            hashes: HashDigests::empty(),
+            filename: WheelFilename::from_str("iniconfig-2.0.0-py3-none-any.whl")
+                .expect("valid wheel filename"),
+            version: ARCHIVE_VERSION,
+            size: Some(42),
+        };
+        let bytes = rmp_serde::to_vec(&released).expect("serialize uv 0.12 archive");
+        let archive: Archive = rmp_serde::from_slice(&bytes).expect("deserialize uv 0.12 archive");
+
+        assert_eq!(archive.size, Some(42));
+    }
+
+    #[test]
+    fn serialize_archive_for_legacy_reader() {
+        #[derive(serde::Deserialize)]
+        struct LegacyArchive {
+            id: ArchiveId,
+            hashes: HashDigests,
+            filename: WheelFilename,
+            version: u8,
+        }
+
+        let archive = Archive::new(
+            ArchiveId::default(),
+            HashDigests::empty(),
+            WheelFilename::from_str("iniconfig-2.0.0-py3-none-any.whl")
+                .expect("valid wheel filename"),
+            Some(42),
+        );
+        let bytes = rmp_serde::to_vec(&archive).expect("serialize archive");
+        let legacy: LegacyArchive =
+            rmp_serde::from_slice(&bytes).expect("deserialize archive with legacy reader");
+
+        assert_eq!(legacy.id, archive.id);
+        assert_eq!(legacy.hashes, archive.hashes);
+        assert_eq!(legacy.filename, archive.filename);
+        assert_eq!(legacy.version, archive.version);
     }
 }

@@ -3386,6 +3386,7 @@ fn preview_features() {
     +            NativeAuth,
     +            S3Endpoint,
     +            CacheSize,
+    +            CachePhysicalSpace,
     +            InitProjectFlag,
     +            WorkspaceMetadata,
     +            WorkspaceDir,
@@ -4163,8 +4164,8 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
         show_settings(),
         @"
     ...
-             malware_check_url: None,
          },
+         run_rlimit_nofile: None,
      }
     +
     +----- stderr -----

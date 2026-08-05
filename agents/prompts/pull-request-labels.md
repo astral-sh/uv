@@ -15,15 +15,21 @@ or replacing them. Use label names and descriptions as the primary guidance for 
 a label is ambiguous or has no description, inspect its recent use on pull requests and follow the
 repository's established convention rather than its generic meaning.
 
-Prioritize labels that describe the user-visible effect. Recommend exactly one semantic label in the
-typical case: the single label that best matches the repository's established primary
-classification. Do not automatically add labels for every affected area or implementation detail.
-Recommend additional semantic labels only when recent usage establishes that they are orthogonal, or
-when the pull request has multiple independent user-visible effects. Even then, choose the smallest
-set and usually no more than three semantic labels total. Recommend `internal` for changes that are
-not user-facing, and distinguish bug fixes, enhancements, performance changes, documentation,
-testing, and CI changes using the repository's existing label conventions. Treat `breaking` and
-feature-status labels as orthogonal when applicable. When a change affects a preview feature,
+Prioritize labels that describe the user-visible effect. Recommend a single primary classification
+in the typical case. Add a second semantic label when established repository practice shows that it
+conveys an independent, useful distinction, such as `internal` with `testing` or `automations`, or
+`preview` or `breaking` with the applicable change type. Do not add affected-area or platform labels
+merely because a change touches that subsystem. Add an area label only when it is the primary
+classification or recent usage clearly establishes it as a meaningful pairing for similar changes.
+Prefer one or two semantic labels; add a third only when independently necessary. Classify the
+changes actually made, not the issue or behavior they describe. Reserve `bug` and `enhancement` for
+changes to user-facing product behavior. Recommend `testing` for pull requests that only add or
+modify tests, even when those tests reproduce a bug, and pair it with `internal` when the change is
+not user-facing. Recommend `automations` for changes to internal automations, even when those
+changes fix a failure or add functionality. Recommend `internal` for changes that are not
+user-facing; it may complement a more specific label. Distinguish performance changes,
+documentation, and CI changes using the repository's existing label conventions. Treat `breaking`
+and feature-status labels as orthogonal when applicable. When a change affects a preview feature,
 recommend `preview` in addition to the applicable change-type label, such as `bug` for a bug fix or
 `enhancement` for an improvement.
 

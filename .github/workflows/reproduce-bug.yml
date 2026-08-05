@@ -58,7 +58,7 @@ jobs:
       issue-number: ${{ steps.issue.outputs.number }}
       result: ${{ steps.reproduce.outputs.final-message }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -75,12 +75,19 @@ jobs:
             --json number,title,body,author \
             > .issue-triage-event.json
 
+          issue_number="$(jq --raw-output '.number' .issue-triage-event.json)"
           jq --raw-output '"number=\(.number)"' \
             .issue-triage-event.json >> "$GITHUB_OUTPUT"
 
+          git init --quiet "$RUNNER_TEMP/issue-context"
+          git -C "$RUNNER_TEMP/issue-context" fetch --quiet --depth 1 \
+            https://github.com/astral-sh/uv-dev.git \
+            "refs/heads/issue/$issue_number"
+          git -C "$RUNNER_TEMP/issue-context" checkout --quiet FETCH_HEAD
+
           {
             printf 'Issue reproduction for #%s: %s\n\n' \
-              "$(jq -r '.number' .issue-triage-event.json)" \
+              "$issue_number" \
               "$(jq -r '.title | gsub("[\r\n]+"; " ")' .issue-triage-event.json)"
             cat agents/prompts/reproduce-bug.md
           } > "$RUNNER_TEMP/reproduce-bug-prompt.md"
@@ -90,13 +97,14 @@ jobs:
 
       - name: "Reproduce issue behavior"
         id: reproduce
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}
           UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.146.0"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "reproduce-bug"
@@ -104,6 +112,15 @@ jobs:
           allow-users: "*"
           prompt-file: "${{ runner.temp }}/reproduce-bug-prompt.md"
           output-schema-file: "agents/schemas/issue-triage-bug.json"
+
+      - name: "Upload issue context"
+        if: steps.reproduce.outputs.final-message != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: issue-context-${{ steps.issue.outputs.number }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/issue-context/README.md
+          if-no-files-found: error
+          retention-days: 1
 
       - name: "Upload Codex thread"
         if: always()
@@ -132,6 +149,12 @@ jobs:
         env:
           REPRODUCTION_RESULT: ${{ needs.reproduce.outputs.result }}
 
+      - name: "Download issue context"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: issue-context-${{ needs.reproduce.outputs.issue-number }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/issue-context-update
+
       - name: "Get issue context token"
         id: token
         uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
@@ -154,14 +177,7 @@ jobs:
           git checkout --quiet FETCH_HEAD
 
           printf '%s\n' "$REPRODUCTION_RESULT" | jq '.' > reproduction.json
-          # TODO: Consider letting the reproduction agent update README.md directly.
-          existing_context="$(awk '/^## Reproduction$/ { exit } { print }' README.md)"
-
-          {
-            printf '%s\n\n## Reproduction\n\n' "$existing_context"
-            jq --raw-output '"Status: `\(.reproduction)`\n\n\(.reason)"' reproduction.json
-          } > "$RUNNER_TEMP/README.md"
-          cp "$RUNNER_TEMP/README.md" README.md
+          cp "$RUNNER_TEMP/issue-context-update/README.md" README.md
 
           git add reproduction.json README.md
 
@@ -200,7 +216,7 @@ jobs:
       result: ${{ steps.create-test.outputs.final-message }}
       pull-request: ${{ steps.open-pr.outputs.url }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -230,7 +246,7 @@ jobs:
 
       - name: "Create integration test"
         id: create-test
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INSTA_UPDATE: "no"
@@ -238,6 +254,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-create-test-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.146.0"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "create-bug-test"

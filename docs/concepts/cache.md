@@ -144,6 +144,18 @@ uv provides a few different mechanisms for removing entries from the cache:
   longer necessary and can be safely removed. Centralized project environments are recreated as
   needed. `uv cache prune` is safe to run periodically, to keep the cache directory clean.
 
+By default, cache cleanup reports the logical size of removed entries. Enable the
+`cache-physical-space` [preview feature](./preview.md) to instead report the physical disk space
+reclaimed, accounting for hardlinks and copy-on-write clones:
+
+```console
+$ uv cache clean --preview-features cache-physical-space
+```
+
+If an entry's allocated size cannot be measured, such as a compressed extent on Btrfs, uv reports a
+lower bound for the space reclaimed from the remaining entries. The preview feature is currently
+supported on macOS and Linux; other platforms continue reporting the logical removed size.
+
 uv blocks cache-modifying operations while other uv commands are running. By default, those
 `uv cache` commands have a 5 min timeout waiting for other uv processes to terminate to avoid
 deadlocks. This timeout can be changed with

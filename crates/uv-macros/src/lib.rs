@@ -170,29 +170,27 @@ fn get_added_in(attrs: &[Attribute]) -> Option<String> {
         .map(|lit_str| lit_str.value())
 }
 
-fn is_valid_added_in(added_in: &str) -> bool {
-    added_in == "next release" || is_semantic_version(added_in)
-}
-
-fn is_semantic_version(version: &str) -> bool {
+fn parse_semantic_version(version: &str) -> Option<(u64, u64, u64)> {
     let mut components = version.split('.');
-    let Some(major) = components.next() else {
-        return false;
-    };
-    let Some(minor) = components.next() else {
-        return false;
-    };
-    let Some(patch) = components.next() else {
-        return false;
-    };
+    let major = components.next()?;
+    let minor = components.next()?;
+    let patch = components.next()?;
 
     if components.next().is_some() {
-        return false;
+        return None;
     }
 
-    [major, minor, patch].into_iter().all(|component| {
-        !component.is_empty() && component.bytes().all(|byte| byte.is_ascii_digit())
-    })
+    if [major, minor, patch].into_iter().any(|component| {
+        component.is_empty() || !component.bytes().all(|byte| byte.is_ascii_digit())
+    }) {
+        return None;
+    }
+
+    Some((
+        major.parse().ok()?,
+        minor.parse().ok()?,
+        patch.parse().ok()?,
+    ))
 }
 
 fn is_hidden(attrs: &[Attribute]) -> bool {
@@ -233,7 +231,9 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
         })
         .collect();
 
-    // Look for missing or invalid attr_added_in values and issue a compiler error if any are found.
+    // Look for missing, invalid, or future attr_added_in values and issue a compiler error.
+    let current_version = uv_version::version();
+    let current_semantic_version = parse_semantic_version(current_version);
     let added_in_errors: Vec<_> = constants
         .iter()
         .filter_map(|(name, _, added_in, span)| {
@@ -241,10 +241,21 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
                 None => format!(
                     "missing #[attr_added_in(\"x.y.z\")] on `{name}`\nnote: env vars for an upcoming release should be annotated with `#[attr_added_in(\"next release\")]`"
                 ),
-                Some(added_in) if !is_valid_added_in(added_in) => format!(
-                    "invalid #[attr_added_in(\"{added_in}\")] on `{name}`\nnote: expected `#[attr_added_in(\"x.y.z\")]` or `#[attr_added_in(\"next release\")]`"
-                ),
-                Some(_) => return None,
+                Some(added_in) if added_in == "next release" => return None,
+                Some(added_in) => match parse_semantic_version(added_in) {
+                    None => format!(
+                        "invalid #[attr_added_in(\"{added_in}\")] on `{name}`\nnote: expected `#[attr_added_in(\"x.y.z\")]` or `#[attr_added_in(\"next release\")]`"
+                    ),
+                    Some(added_in_version)
+                        if current_semantic_version
+                            .is_some_and(|current_version| added_in_version > current_version) =>
+                    {
+                        format!(
+                            "invalid #[attr_added_in(\"{added_in}\")] on `{name}`\nnote: `{added_in}` is newer than the current uv version `{current_version}`; use `#[attr_added_in(\"next release\")]` instead"
+                        )
+                    }
+                    Some(_) => return None,
+                },
             };
             Some(quote_spanned! {*span => compile_error!(#msg); })
         })

@@ -34,7 +34,7 @@ jobs:
       matrix: ${{ steps.identify.outputs.matrix }}
       rebasable: ${{ steps.identify.outputs.rebasable }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -118,11 +118,36 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix: ${{ fromJSON(needs.identify.outputs.matrix) }}
-    uses: ./.github/workflows/rebase-conflicted-pull-request.yml
-    secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
+    uses: $/.github/workflows/rebase-conflicted-pull-request.yml
+    secrets: inherit
     with:
       number: ${{ matrix.number }}
       base-ref: ${{ matrix.base_ref }}
       head-ref: ${{ matrix.head_ref }}
       head-sha: ${{ matrix.head_sha }}
       head-repository: ${{ matrix.head_repository }}
+
+  remove-rebase-label:
+    name: "Remove rebase label from pull request #${{ inputs.pull_request }}"
+    needs: rebase-and-push
+    if: inputs.pull_request != ''
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Remove rebase label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
+        run: |
+          rebase_requested=$(
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER" \
+              --jq '.labels | any(.name == "bot:rebase")'
+          )
+          if [[ "$rebase_requested" == "true" ]]; then
+            gh api \
+              --method DELETE \
+              "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels/bot%3Arebase" \
+              --silent
+          fi

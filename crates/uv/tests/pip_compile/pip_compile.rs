@@ -6893,7 +6893,7 @@ fn no_index_requirements_txt() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("--no-index\ntqdm")?;
 
-    uv_snapshot!(context.filters(), context.pip_compile()
+    let output = uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in"), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -6903,6 +6903,7 @@ fn no_index_requirements_txt() -> Result<()> {
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
+    assert_eq!(output.stderr.last(), Some(&b'\n'));
 
     Ok(())
 }

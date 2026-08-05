@@ -10,9 +10,9 @@ pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
     CanonicalLockError, DependencySelection, Installable, InstallableRootKind, Lock, LockError,
-    LockVersion, Metadata, Package, PackageMap, PylockToml, PylockTomlError, PylockTomlErrorKind,
-    PythonReport, RequirementsTxtExport, ResolverManifest, SatisfiesResult, SelectedDependency,
-    TreeDisplay, TreeJsonTarget, VERSION, cyclonedx_json, implicit_constraints_marker,
+    LockParseError, Metadata, Package, PackageMap, PylockToml, PylockTomlError,
+    PylockTomlErrorKind, PythonReport, RequirementsTxtExport, ResolverManifest, SatisfiesResult,
+    SelectedDependency, TreeDisplay, TreeJsonTarget, cyclonedx_json, implicit_constraints_marker,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};

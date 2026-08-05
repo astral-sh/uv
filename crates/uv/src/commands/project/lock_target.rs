@@ -15,7 +15,7 @@ use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
-use uv_resolver::{Lock, LockVersion, VERSION};
+use uv_resolver::Lock;
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{
     DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
@@ -354,34 +354,9 @@ impl<'lock> LockTarget<'lock> {
         let lock_path = self.lock_path();
         match fs_err::tokio::read_to_string(&lock_path).await {
             Ok(encoded) => {
-                let result = info_span!("parse uv lock", path = %lock_path.display())
-                    .in_scope(|| Lock::from_toml(&encoded));
-                match result {
-                    Ok(lock) => {
-                        // If the lockfile uses an unsupported version, raise an error.
-                        if lock.version() != VERSION {
-                            return Err(ProjectError::UnsupportedLockVersion(
-                                VERSION,
-                                lock.version(),
-                            ));
-                        }
-                        Ok(Some((lock, encoded)))
-                    }
-                    Err(err) => {
-                        // If we failed to parse the lockfile, determine whether it's a supported
-                        // version.
-                        if let Ok(lock) = toml::from_str::<LockVersion>(&encoded) {
-                            if lock.version() != VERSION {
-                                return Err(ProjectError::UnparsableLockVersion(
-                                    VERSION,
-                                    lock.version(),
-                                    err,
-                                ));
-                            }
-                        }
-                        Err(ProjectError::UvLockParse(err))
-                    }
-                }
+                let lock = info_span!("parse uv lock", path = %lock_path.display())
+                    .in_scope(|| Lock::from_toml(&encoded))?;
+                Ok(Some((lock, encoded)))
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),

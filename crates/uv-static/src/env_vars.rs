@@ -1346,6 +1346,14 @@ impl EnvVars {
     #[attr_added_in("0.5.19")]
     pub const UV_GIT_LFS: &'static str = "UV_GIT_LFS";
 
+    /// Sets the soft open-file descriptor limit for commands executed by `uv run`.
+    ///
+    /// The limit is applied after uv prepares the environment and immediately before the command
+    /// is spawned. The hard open-file descriptor limit remains unchanged. If the limit cannot be
+    /// applied, uv exits with an error without running the command. Only supported on Unix.
+    #[attr_added_in("next release")]
+    pub const UV_RUN_RLIMIT_NOFILE: &'static str = "UV_RUN_RLIMIT_NOFILE";
+
     /// Number of times that `uv run` has been recursively invoked. Used to guard against infinite
     /// recursion, e.g., when `uv run`` is used in a script shebang.
     #[attr_hidden]

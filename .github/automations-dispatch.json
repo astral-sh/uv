@@ -17,11 +17,21 @@
         "pull_request": ["opened", "reopened"]
       },
       "conditions": {
-        "/pull_request/base/ref": "main",
         "/pull_request/head/repo/full_name": "astral-sh/uv"
       },
       "allow_draft": true,
       "workflow": "pull-request-labels.yml"
+    },
+    {
+      "repository": "uv",
+      "on": {
+        "pull_request": ["labeled"]
+      },
+      "conditions": {
+        "/label/name": "bot:rebase"
+      },
+      "allow_draft": true,
+      "workflow": "pull-request-conflicts.yml"
     },
     {
       "repository": "uv-dev",
@@ -29,11 +39,21 @@
         "pull_request": ["opened", "reopened"]
       },
       "conditions": {
-        "/pull_request/base/ref": "main",
         "/pull_request/head/repo/full_name": "astral-sh/uv-dev"
       },
       "allow_draft": true,
       "workflow": "pull-request-labels.yml"
+    },
+    {
+      "repository": "uv-dev",
+      "on": {
+        "pull_request": ["labeled"]
+      },
+      "conditions": {
+        "/label/name": "bot:rebase"
+      },
+      "allow_draft": true,
+      "workflow": "pull-request-conflicts.yml"
     },
     {
       "repository": "uv-dev",

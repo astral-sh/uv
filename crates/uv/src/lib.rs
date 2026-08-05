@@ -1279,13 +1279,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         })
         | Commands::Clean(args) => {
             show_settings!(args);
-            commands::cache_clean(&args.package, args.force, cache, printer).await
+            commands::cache_clean(&args.package, args.force, cache, printer, globals.preview).await
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Prune(args),
         }) => {
             show_settings!(args);
-            commands::cache_prune(args.ci, args.force, cache, printer).await
+            commands::cache_prune(args.ci, args.force, cache, printer, globals.preview).await
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
@@ -1741,6 +1741,30 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 globals.concurrency,
                 &cache,
                 printer,
+            )
+            .await
+        }
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::Audit(args),
+        }) => {
+            let args = settings::ToolAuditSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            let cache = cache.init().await?;
+
+            commands::tool_audit(
+                args.names,
+                args.output_format,
+                args.service_format,
+                args.service_url,
+                args.ignore,
+                args.ignore_until_fixed,
+                args.filesystem,
+                client_builder.subcommand(vec!["tool".to_owned(), "audit".to_owned()]),
+                globals.concurrency,
+                &cache,
+                printer,
+                globals.preview,
             )
             .await
         }
@@ -2342,6 +2366,8 @@ async fn run_project(
                 globals.preview,
                 args.max_recursion_depth,
                 args.malware_settings,
+                #[cfg(unix)]
+                args.run_rlimit_nofile,
             ))
             .await
         }
