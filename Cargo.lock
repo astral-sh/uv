@@ -6810,6 +6810,7 @@ dependencies = [
  "quote",
  "syn 3.0.3",
  "textwrap",
+ "uv-version",
 ]
 
 [[package]]
