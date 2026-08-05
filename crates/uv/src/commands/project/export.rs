@@ -96,16 +96,27 @@ pub(crate) async fn export(
         ExportTarget::Script(script)
     } else {
         let project = if frozen.is_some() {
-            VirtualProject::discover(
-                project_dir,
-                &DiscoveryOptions {
-                    members: MemberDiscovery::None,
-                    ..DiscoveryOptions::default()
+            let options = DiscoveryOptions {
+                members: if package.is_empty() {
+                    MemberDiscovery::None
+                } else {
+                    MemberDiscovery::Existing
                 },
-                cache,
-                workspace_cache,
-            )
-            .await?
+                ..DiscoveryOptions::default()
+            };
+
+            if let [name] = package.as_slice() {
+                VirtualProject::discover_with_package(
+                    project_dir,
+                    &options,
+                    cache,
+                    workspace_cache,
+                    name.clone(),
+                )
+                .await?
+            } else {
+                VirtualProject::discover(project_dir, &options, cache, workspace_cache).await?
+            }
         } else if let [name] = package.as_slice() {
             VirtualProject::discover_with_package(
                 project_dir,

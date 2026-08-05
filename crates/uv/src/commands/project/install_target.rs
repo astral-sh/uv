@@ -151,6 +151,12 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
             return true;
         }
 
+        // Workspace-root groups must be requested explicitly when a member is selected.
+        // Defaults belong to the selected member, not to an inherited workspace root.
+        if groups.contains_because_default(group) {
+            return false;
+        }
+
         !workspace.packages().get(*name).is_some_and(|member| {
             let pyproject = member.pyproject_toml();
             pyproject
