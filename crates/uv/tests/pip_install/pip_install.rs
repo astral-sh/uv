@@ -102,6 +102,45 @@ fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context.temp_dir.join("large_wheel-1.0.0-py3-none-any.whl");
+    write_many_files_wheel(&wheel, 1)?;
+
+    context.pip_install().arg(&wheel).assert().success();
+    context.venv().arg("--clear").assert().success();
+
+    // New cache entries should not make older uv versions fail; see astral-sh/uv#20949.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("uv==0.11.1")
+        .arg("uv")
+        .arg("pip")
+        .arg("install")
+        .arg("--python")
+        .arg(context.venv.path())
+        .arg(&wheel)
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env_remove(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv==0.11.1
+    Resolved 1 package in [TIME]
+      × Failed to read `large-wheel @ file://[TEMP_DIR]/large_wheel-1.0.0-py3-none-any.whl`
+      ├─▶ Failed to deserialize cache entry
+      ╰─▶ array had incorrect length, expected 4
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn missing_requirements_txt() {
     let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
