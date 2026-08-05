@@ -3,9 +3,9 @@ $ErrorActionPreference = "Stop"
 # Test that uv can install packages with entrypoints on Windows NanoServer.
 #
 # Windows NanoServer does not support the `BeginUpdateResourceW`,
-# `UpdateResourceW`, and `EndUpdateResourceW` APIs that are used to embed
-# metadata in trampoline executables. uv must fall back to the legacy
-# trampoline format on this platform.
+# `UpdateResourceW`, and `EndUpdateResourceW` APIs. uv uses the `editpe`
+# crate to directly manipulate PE resources instead of these syscalls,
+# which allows trampoline creation to work on this platform.
 #
 # See: https://github.com/astral-sh/uv/issues/18663
 
@@ -28,4 +28,8 @@ if ($LASTEXITCODE -ne 0) { throw "uv init failed" }
 uv --directory C:\test-project add pytest
 if ($LASTEXITCODE -ne 0) { throw "uv add pytest failed" }
 
-Write-Host "Successfully installed package with entrypoints on Windows NanoServer"
+# Verify the generated trampoline can execute on NanoServer.
+& C:\test-project\.venv\Scripts\pytest.exe --version
+if ($LASTEXITCODE -ne 0) { throw "pytest entrypoint failed" }
+
+Write-Host "Successfully installed and ran an entrypoint on Windows NanoServer"
