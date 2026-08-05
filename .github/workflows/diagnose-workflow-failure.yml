@@ -120,17 +120,28 @@ jobs:
       needs.diagnose.outputs.result != '' &&
       fromJSON(needs.diagnose.outputs.result).failure_kind == 'flaky'
     runs-on: ubuntu-latest
+    environment: automations
     timeout-minutes: 5
     concurrency:
       group: workflow-failure-retry-${{ github.repository }}-${{ inputs.run }}
       cancel-in-progress: false
     permissions:
-      actions: write
-      pull-requests: read
+      id-token: write # for the workflow retry credential broker
     steps:
+      - name: "Get workflow retry token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: ${{ github.repository }}
+          permissions: |
+            actions: write
+            pull_requests: read
+
       - name: "Retry flaky workflow failures"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ inputs.head_sha }}
           RUN_ID: ${{ inputs.run }}
         run: |
