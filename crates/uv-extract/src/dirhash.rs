@@ -71,6 +71,13 @@ use std::pin::{Pin, pin};
 use rayon::prelude::*;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+mod archive;
+mod seek;
+
+pub use archive::DirectoryDigest;
+pub(crate) use archive::{ExtractedFile, directory_digest_from_extracted};
+pub(crate) use seek::{unzip, unzip_and_hash};
+
 // Read repeatedly until the whole buffer is full, similar to `read_exact`. But if EOF is
 // encountered, return `Ok(n)` with a short length instead of reporting an error.
 async fn read_exact_or_eof(

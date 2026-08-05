@@ -20,6 +20,8 @@ pub enum Error {
         #[from]
         tar_codec::ExtractError<tar_codec::DecodeError>,
     ),
+    #[error(transparent)]
+    DirectoryHash(#[from] crate::dirhash::DirhashError),
     #[error(
         "The top-level of the archive must only contain a list directory, but it contains: {0:?}"
     )]
