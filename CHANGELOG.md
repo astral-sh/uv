@@ -7,36 +7,28 @@
 
 Released on 2026-08-05.
 
+### Python
+
+- Add CPython 3.15.0rc1 ([#20948](https://github.com/astral-sh/uv/pull/20948))
+
 ### Preview features
 
-- Implement `uv tool audit` ([#20921](https://github.com/astral-sh/uv/pull/20921))
+- Audit one or all installed tools with `uv tool audit` ([#20921](https://github.com/astral-sh/uv/pull/20921))
 
 ### Performance
 
-- Avoid flattened source-distribution deserialization ([#20882](https://github.com/astral-sh/uv/pull/20882))
-- Avoid flattened wheel-source deserialization ([#20881](https://github.com/astral-sh/uv/pull/20881))
-- Avoid metadata lookups during bytecode compilation ([#20928](https://github.com/astral-sh/uv/pull/20928))
-- Reuse source distribution file metadata ([#20927](https://github.com/astral-sh/uv/pull/20927))
+- Speed up `uv.lock` parsing for wheel entries ([#20881](https://github.com/astral-sh/uv/pull/20881))
+- Speed up `uv.lock` parsing for source distribution entries ([#20882](https://github.com/astral-sh/uv/pull/20882))
+- Reduce filesystem metadata lookups during bytecode compilation ([#20928](https://github.com/astral-sh/uv/pull/20928))
+- Reuse file metadata when building source distributions ([#20927](https://github.com/astral-sh/uv/pull/20927))
 
 ### Bug fixes
 
-- Require explicitly selection of workspace root groups when a workspace member is active ([#20930](https://github.com/astral-sh/uv/pull/20930))
+- Avoid including workspace-root default dependency groups when syncing or exporting a selected workspace member unless explicitly requested ([#20930](https://github.com/astral-sh/uv/pull/20930))
 
 ### Documentation
 
-- integration/github: split build and publish jobs ([#20946](https://github.com/astral-sh/uv/pull/20946))
-
-### Other changes
-
-- Add regression test for uv#20908 ([#20911](https://github.com/astral-sh/uv/pull/20911))
-- Assign promoted pull requests to the ready reviewer ([#20918](https://github.com/astral-sh/uv/pull/20918))
-- Fixup pull request label ([#20870](https://github.com/astral-sh/uv/pull/20870))
-- Improve reasoning depth for Codex automations ([#20915](https://github.com/astral-sh/uv/pull/20915))
-- Promote ready pull requests after branch updates ([#20914](https://github.com/astral-sh/uv/pull/20914))
-- Pull request label automation ([#20869](https://github.com/astral-sh/uv/pull/20869))
-- Reproduce questions during issue triage ([#20913](https://github.com/astral-sh/uv/pull/20913))
-- Sync latest Python releases ([#20948](https://github.com/astral-sh/uv/pull/20948))
-- Verify mold release checksums before installation ([#20941](https://github.com/astral-sh/uv/pull/20941))
+- Separate build and publish jobs in the GitHub Actions publishing guide ([#20946](https://github.com/astral-sh/uv/pull/20946))
 
 ## 0.12.1
 
