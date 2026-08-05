@@ -434,6 +434,8 @@ lto = false
 [profile.fast-build]
 inherits = "dev"
 opt-level = 1
+# Disable the local ThinLTO implicitly enabled by `opt-level = 1`.
+lto = "off"
 debug = 0
 strip = "debuginfo"
 
