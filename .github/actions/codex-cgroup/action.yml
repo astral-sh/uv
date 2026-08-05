@@ -1,0 +1,94 @@
+name: "Run Codex in a dedicated cgroup"
+description: "Run Codex under a dedicated, unprivileged systemd service on hosted Linux."
+
+inputs:
+  openai-api-key:
+    description: "OpenAI API key used by the Responses API proxy."
+    required: true
+  prompt-file:
+    description: "Path to the Codex prompt."
+    required: true
+  output-schema-file:
+    description: "Path to the JSON schema for the final Codex message."
+    required: true
+  permission-profile:
+    description: "Named Codex permission profile."
+    required: true
+  codex-home:
+    description: "Path to the trusted Codex configuration."
+    required: false
+    default: "agents/codex"
+  safety-strategy:
+    description: "Safety strategy used for the macOS fallback."
+    required: false
+    default: "drop-sudo"
+  allow-users:
+    description: "GitHub users permitted to invoke Codex."
+    required: false
+    default: "*"
+
+outputs:
+  final-message:
+    description: "Schema-constrained final message emitted by Codex."
+    value: ${{ steps.linux.outputs.final-message || steps.macos.outputs.final-message }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Reject unsupported runners"
+      if: ${{ runner.os != 'Linux' && runner.os != 'macOS' }}
+      shell: bash
+      run: |
+        echo 'Codex cgroup isolation requires a GitHub-hosted Linux or macOS runner.' >&2
+        exit 1
+
+    - name: "Prepare dedicated Codex user"
+      id: prepare
+      if: ${{ runner.os == 'Linux' }}
+      shell: bash
+      env:
+        RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        CODEX_CONFIG_HOME: ${{ inputs.codex-home }}
+        CODEX_PERMISSION_PROFILE: ${{ inputs.permission-profile }}
+      run: bash "$GITHUB_ACTION_PATH/run.sh" prepare
+
+    - name: "Bootstrap Codex and the Responses API proxy"
+      if: ${{ runner.os == 'Linux' }}
+      uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+      with:
+        openai-api-key: ${{ inputs.openai-api-key }}
+        codex-home: ${{ inputs.codex-home }}
+        permission-profile: ${{ inputs.permission-profile }}
+        safety-strategy: "unprivileged-user"
+        codex-user: ${{ steps.prepare.outputs.codex-user }}
+        allow-users: ${{ inputs.allow-users }}
+
+    - name: "Run Codex in a supervised cgroup"
+      id: linux
+      if: ${{ runner.os == 'Linux' }}
+      shell: bash
+      env:
+        RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        CODEX_GUEST_USER: ${{ steps.prepare.outputs.codex-user }}
+        CODEX_GUEST_TEMP: ${{ steps.prepare.outputs.guest-temp }}
+        CODEX_SERVICE_UNIT: ${{ steps.prepare.outputs.service-unit }}
+        CODEX_RUSTUP_HOME: ${{ steps.prepare.outputs.rustup-home }}
+        CODEX_UV_PYTHON_INSTALL_DIR: ${{ steps.prepare.outputs.uv-python-install-dir }}
+        CODEX_CONFIG_HOME: ${{ inputs.codex-home }}
+        CODEX_PROMPT_FILE: ${{ inputs.prompt-file }}
+        CODEX_OUTPUT_SCHEMA_FILE: ${{ inputs.output-schema-file }}
+        CODEX_PERMISSION_PROFILE: ${{ inputs.permission-profile }}
+      run: bash "$GITHUB_ACTION_PATH/run.sh" run
+
+    - name: "Run Codex with macOS process protections"
+      id: macos
+      if: ${{ runner.os == 'macOS' }}
+      uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+      with:
+        openai-api-key: ${{ inputs.openai-api-key }}
+        prompt-file: ${{ inputs.prompt-file }}
+        output-schema-file: ${{ inputs.output-schema-file }}
+        permission-profile: ${{ inputs.permission-profile }}
+        codex-home: ${{ inputs.codex-home }}
+        safety-strategy: ${{ inputs.safety-strategy }}
+        allow-users: ${{ inputs.allow-users }}
