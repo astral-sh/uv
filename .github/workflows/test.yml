@@ -136,24 +136,13 @@ jobs:
             cargo nextest run "${test_args[@]}"
           fi
 
-      - name: "Generate HTML coverage report"
-        if: ${{ inputs.collect-coverage }}
-        env:
-          COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
-        run: |
-          uv run --script scripts/coverage-html-report.py "$COVERAGE_ID"
-          test -f "target/coverage/lcov/$COVERAGE_ID.lcov"
-          test -f "target/coverage/html/$COVERAGE_ID/index.html"
-
-      - name: "Upload coverage report"
+      - name: "Upload LCOV coverage report"
         if: ${{ inputs.collect-coverage }}
         id: upload-coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-linux-${{ github.sha }}
-          path: |
-            target/coverage/html/${{ steps.test.outputs.tracking_id }}/
-            target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
+          path: target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
           if-no-files-found: error
           retention-days: 14
 
@@ -269,24 +258,13 @@ jobs:
             cargo nextest run "${test_args[@]}"
           fi
 
-      - name: "Generate HTML coverage report"
-        if: ${{ inputs.collect-coverage }}
-        env:
-          COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
-        run: |
-          uv run --script scripts/coverage-html-report.py "$COVERAGE_ID"
-          test -f "target/coverage/lcov/$COVERAGE_ID.lcov"
-          test -f "target/coverage/html/$COVERAGE_ID/index.html"
-
-      - name: "Upload coverage report"
+      - name: "Upload LCOV coverage report"
         if: ${{ inputs.collect-coverage }}
         id: upload-coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-macos-${{ github.sha }}
-          path: |
-            target/coverage/html/${{ steps.test.outputs.tracking_id }}/
-            target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
+          path: target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
           if-no-files-found: error
           retention-days: 14
 
@@ -417,26 +395,13 @@ jobs:
             cargo nextest run "${test_args[@]}"
           fi
 
-      - name: "Generate HTML coverage report"
-        if: ${{ inputs.collect-coverage }}
-        working-directory: ${{ env.UV_WORKSPACE }}
-        shell: bash
-        env:
-          COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
-        run: |
-          uv run --script scripts/coverage-html-report.py "$COVERAGE_ID"
-          test -f "target/coverage/lcov/$COVERAGE_ID.lcov"
-          test -f "target/coverage/html/$COVERAGE_ID/index.html"
-
-      - name: "Upload coverage report"
+      - name: "Upload LCOV coverage report"
         if: ${{ inputs.collect-coverage }}
         id: upload-coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-windows-${{ matrix.partition }}-${{ github.sha }}
-          path: |
-            ${{ env.UV_WORKSPACE }}/target/coverage/html/${{ steps.test.outputs.tracking_id }}/
-            ${{ env.UV_WORKSPACE }}/target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
+          path: ${{ env.UV_WORKSPACE }}/target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
           if-no-files-found: error
           retention-days: 14
 
