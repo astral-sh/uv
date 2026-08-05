@@ -44,6 +44,7 @@ jobs:
         id: rust-cache
         with:
           prefix-key: v1-rust-workspace
+          key: ${{ hashFiles('Cargo.toml') }}
           cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
@@ -160,6 +161,7 @@ jobs:
         id: rust-cache
         with:
           prefix-key: v1-rust-workspace
+          key: ${{ hashFiles('Cargo.toml') }}
           cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
@@ -278,6 +280,7 @@ jobs:
         id: rust-cache
         with:
           prefix-key: v1-rust-workspace
+          key: ${{ hashFiles('Cargo.toml') }}
           workspaces: ${{ env.UV_WORKSPACE }}
           cache-workspace-crates: "true"
           # Use the same cache entry across the partitions
