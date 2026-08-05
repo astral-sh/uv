@@ -8,6 +8,10 @@ Classification: bug, enhancement, duplicate, or question
 
 Describe the reported behavior or requested capability and summarize the most important findings.
 
+## Draft response
+
+Draft a proposed reply for maintainer review.
+
 ## Classification
 
 Explain why the selected classification fits, distinguishing confirmed findings from hypotheses.
