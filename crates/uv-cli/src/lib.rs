@@ -5036,6 +5036,51 @@ pub struct CheckArgs {
 }
 
 #[derive(Args)]
+#[group(skip)]
+pub struct AuditCommonArgs {
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = AuditOutputFormat::default())]
+    pub output_format: AuditOutputFormat,
+
+    /// Ignore a vulnerability by ID.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub ignore: Vec<String>,
+
+    /// Ignore a vulnerability by ID, but only while no fix is available.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results as long as they have no known fix versions. Once a fix version becomes
+    /// available, the vulnerability will be reported again.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub ignore_until_fixed: Vec<String>,
+
+    /// The service format to use for vulnerability lookups.
+    ///
+    /// Each service format has a default URL, which can be
+    /// changed with `--service-url`. The defaults are:
+    ///
+    /// * OSV: <https://api.osv.dev/>
+    #[arg(long, value_enum, default_value = "osv")]
+    pub service_format: VulnerabilityServiceFormat,
+
+    /// The URL to vulnerability service API endpoint.
+    ///
+    /// If not provided, the default URL for the selected service will be used.
+    ///
+    /// The service needs to use the OSV protocol, unless a different
+    /// format was requested by `--service-format`.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub service_url: Option<DisplaySafeUrl>,
+}
+
+#[derive(Args)]
 pub struct AuditArgs {
     /// Don't audit the specified optional dependencies.
     ///
@@ -5091,9 +5136,8 @@ pub struct AuditArgs {
     #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
-    /// Select the output format.
-    #[arg(long, value_enum, default_value_t = AuditOutputFormat::default())]
-    pub output_format: AuditOutputFormat,
+    #[command(flatten)]
+    pub audit: AuditCommonArgs,
 
     #[command(flatten)]
     pub build: BuildOptionsArgs,
@@ -5128,43 +5172,6 @@ pub struct AuditArgs {
     /// `aarch64-apple-darwin`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
-
-    /// Ignore a vulnerability by ID.
-    ///
-    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
-    /// the audit results.
-    ///
-    /// May be provided multiple times.
-    #[arg(long)]
-    pub ignore: Vec<String>,
-
-    /// Ignore a vulnerability by ID, but only while no fix is available.
-    ///
-    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
-    /// the audit results as long as they have no known fix versions. Once a fix version becomes
-    /// available, the vulnerability will be reported again.
-    ///
-    /// May be provided multiple times.
-    #[arg(long)]
-    pub ignore_until_fixed: Vec<String>,
-
-    /// The service format to use for vulnerability lookups.
-    ///
-    /// Each service format has a default URL, which can be
-    /// changed with `--service-url`. The defaults are:
-    ///
-    /// * OSV: <https://api.osv.dev/>
-    #[arg(long, value_enum, default_value = "osv")]
-    pub service_format: VulnerabilityServiceFormat,
-
-    /// The URL to vulnerability service API endpoint.
-    ///
-    /// If not provided, the default URL for the selected service will be used.
-    ///
-    /// The service needs to use the OSV protocol, unless a different
-    /// format was requested by `--service-format`.
-    #[arg(long, value_hint = ValueHint::Url)]
-    pub service_url: Option<DisplaySafeUrl>,
 }
 
 #[derive(Args)]
@@ -5267,6 +5274,8 @@ pub enum ToolCommand {
     /// List installed tools.
     #[command(alias = "ls")]
     List(ToolListArgs),
+    /// Audit installed tools and their dependencies.
+    Audit(ToolAuditArgs),
     /// Uninstall a tool.
     Uninstall(ToolUninstallArgs),
     /// Ensure that the tool executable directory is on the `PATH`.
@@ -5709,6 +5718,20 @@ pub struct ToolListArgs {
 
     #[arg(long, hide = true)]
     pub no_python_downloads: bool,
+}
+
+#[derive(Args)]
+pub struct ToolAuditArgs {
+    /// The names of the installed tools to audit.
+    #[arg(required = true, value_hint = ValueHint::Other)]
+    pub name: Vec<PackageName>,
+
+    /// Audit all installed tools.
+    #[arg(long, conflicts_with("name"))]
+    pub all: bool,
+
+    #[command(flatten)]
+    pub audit: AuditCommonArgs,
 }
 
 #[derive(Args)]

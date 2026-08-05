@@ -284,7 +284,7 @@ pub enum PreviewFeature {
     /// Requires normalized distribution filenames when publishing, skipping files whose names are
     /// not normalized.
     PublishRequireNormalized,
-    /// Allows using `uv audit`.
+    /// Allows using `uv audit` and `uv tool audit`.
     #[preview(alias = "audit")]
     AuditCommand,
     /// Rejects an invalid `--project` path instead of warning and continuing. Except for `uv init`,
@@ -313,8 +313,8 @@ pub enum PreviewFeature {
     /// Stores [project virtual environments](./projects/layout.md#centralized-project-environments)
     /// in the uv cache.
     CentralizedProjectEnvs,
-    /// Stores a `uv.lock` alongside each installed tool and reuses it for reproducible installations
-    /// and upgrades.
+    /// Stores a `uv.lock` alongside each installed tool and reuses it for reproducible installations,
+    /// upgrades, and audits.
     ToolInstallLocks,
     /// Allows using `uv workspace list --scripts`.
     WorkspaceListScripts,

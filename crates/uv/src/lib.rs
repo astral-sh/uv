@@ -1745,6 +1745,30 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             .await
         }
         Commands::Tool(ToolNamespace {
+            command: ToolCommand::Audit(args),
+        }) => {
+            let args = settings::ToolAuditSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            let cache = cache.init().await?;
+
+            commands::tool_audit(
+                args.names,
+                args.output_format,
+                args.service_format,
+                args.service_url,
+                args.ignore,
+                args.ignore_until_fixed,
+                args.filesystem,
+                client_builder.subcommand(vec!["tool".to_owned(), "audit".to_owned()]),
+                globals.concurrency,
+                &cache,
+                printer,
+                globals.preview,
+            )
+            .await
+        }
+        Commands::Tool(ToolNamespace {
             command: ToolCommand::Upgrade(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.

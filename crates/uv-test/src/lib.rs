@@ -44,7 +44,7 @@ static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
-const LATEST_PYTHON_3_15: &str = "3.15.0b4";
+const LATEST_PYTHON_3_15: &str = "3.15.0rc1";
 const LATEST_PYTHON_3_14: &str = "3.14.6";
 const LATEST_PYTHON_3_13: &str = "3.13.14";
 pub const LATEST_PYTHON_3_12: &str = "3.12.13";
@@ -1576,6 +1576,14 @@ impl TestContext {
     pub fn tool_list(&self) -> Command {
         let mut command = self.new_command();
         command.arg("tool").arg("list");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv tool audit` command with options shared across scenarios.
+    pub fn tool_audit(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("tool").arg("audit");
         self.add_shared_options(&mut command, false);
         command
     }
