@@ -65,6 +65,24 @@ def tracking_id(value: str) -> str:
     return value
 
 
+def normalize_source_path(value: str) -> pathlib.Path:
+    source = pathlib.Path(value)
+    if source.is_absolute():
+        return source.resolve()
+
+    # Coverage artifacts produced on Windows can be merged on a Unix runner.
+    windows_source = pathlib.PureWindowsPath(value)
+    if windows_source.is_absolute():
+        for index, part in enumerate(windows_source.parts):
+            if part.casefold() != REPO_ROOT.name.casefold():
+                continue
+            candidate = REPO_ROOT.joinpath(*windows_source.parts[index + 1 :]).resolve()
+            if candidate.is_relative_to(REPO_ROOT) and candidate.is_file():
+                return candidate
+
+    return (REPO_ROOT / source).resolve()
+
+
 def parse_lcov(path: pathlib.Path) -> CoverageData:
     raw_data: collections.defaultdict[str, collections.defaultdict[int, int]] = (
         collections.defaultdict(lambda: collections.defaultdict(int))
@@ -91,10 +109,7 @@ def parse_lcov(path: pathlib.Path) -> CoverageData:
                     raise ValueError(
                         f"{path}:{line_number}: source record was not terminated"
                     )
-                source = pathlib.Path(suffix)
-                if not source.is_absolute():
-                    source = REPO_ROOT / source
-                source = source.resolve()
+                source = normalize_source_path(suffix)
                 if not source.is_relative_to(REPO_ROOT):
                     raise ValueError(
                         f"{path}:{line_number}: source is outside the repository: {source}"
