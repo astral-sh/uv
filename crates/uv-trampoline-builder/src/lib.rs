@@ -274,7 +274,7 @@ fn get_launcher_bin(gui: bool) -> Result<&'static [u8], Error> {
 /// This directly manipulates the PE resource section without using Windows API calls
 /// like `BeginUpdateResource`/`UpdateResource`/`EndUpdateResource`, which are unavailable
 /// on minimal Windows environments such as Nano Server.
-#[cfg(all(windows, not(target_arch = "x86")))]
+#[cfg(windows)]
 fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<Vec<u8>, Error> {
     use editpe::{
         Image, ResourceData, ResourceDirectory, ResourceEntry, ResourceEntryName, ResourceTable,
@@ -316,70 +316,6 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
     image.set_resource_directory(resource_directory)?;
 
     Ok(image.data().to_vec())
-}
-
-/// Write PE resources into a launcher binary using the Win32 resource APIs.
-///
-/// The `editpe` crate currently produces invalid PE32 output for the 32-bit trampolines,
-/// so keep the previous update path for i686 while using `editpe` for the Nano Server
-/// supported targets.
-#[cfg(all(windows, target_arch = "x86"))]
-fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<Vec<u8>, Error> {
-    let temp_dir = tempfile::TempDir::new()?;
-    let temp_file = temp_dir.path().join("uv-trampoline.exe");
-
-    fs_err::write(&temp_file, launcher_data)?;
-    write_resources_with_winapi(&temp_file, resources)?;
-
-    Ok(fs_err::read(&temp_file)?)
-}
-
-#[cfg(all(windows, target_arch = "x86"))]
-fn write_resources_with_winapi(path: &Path, resources: &[(&str, &[u8])]) -> Result<(), Error> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::System::LibraryLoader::{
-        BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW,
-    };
-
-    let path_wide = path
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-
-    // SAFETY: `path_wide` and each `name_wide` are null-terminated UTF-16 strings, and the
-    // resource buffers live for the duration of each Win32 call.
-    #[allow(unsafe_code)]
-    unsafe {
-        let map_err = |err: windows::core::Error| Error::WriteResources {
-            path: path.to_path_buf(),
-            err: io::Error::from_raw_os_error(err.code().0),
-        };
-
-        let handle = BeginUpdateResourceW(windows::core::PCWSTR(path_wide.as_ptr()), false)
-            .map_err(map_err)?;
-
-        for (name, data) in resources {
-            let name_wide = name
-                .encode_utf16()
-                .chain(std::iter::once(0))
-                .collect::<Vec<_>>();
-
-            UpdateResourceW(
-                handle,
-                windows::core::PCWSTR(RT_RCDATA as usize as *const u16),
-                windows::core::PCWSTR(name_wide.as_ptr()),
-                0,
-                Some(data.as_ptr().cast()),
-                u32::try_from(data.len()).map_err(|_| Error::ResourceTooLarge)?,
-            )
-            .map_err(&map_err)?;
-        }
-
-        EndUpdateResourceW(handle, false).map_err(map_err)?;
-    }
-
-    Ok(())
 }
 
 /// Safely read a named resource from a loaded PE image.
@@ -710,7 +646,6 @@ if __name__ == "__main__":
     }
 
     #[test]
-    #[cfg(not(target_arch = "x86"))]
     fn empty_kind_resource_is_rejected() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
         let launcher_path = temp_dir.child("launcher.console.exe");
