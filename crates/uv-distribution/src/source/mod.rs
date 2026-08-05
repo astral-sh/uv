@@ -3306,7 +3306,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
 /// Prune any unused source distributions from the cache.
 pub fn prune(cache: &Cache) -> Result<Removal, Error> {
-    let mut removal = Removal::default();
+    let mut removal = cache.removal();
 
     let bucket = cache.bucket(CacheBucket::SourceDistributions);
     if bucket.is_dir() {
@@ -3332,8 +3332,9 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                                     "Removing dangling source revision: {}",
                                     sibling.path().display()
                                 );
-                                removal +=
-                                    uv_cache::rm_rf(sibling.path()).map_err(Error::CacheWrite)?;
+                                removal += cache
+                                    .remove_path(sibling.path())
+                                    .map_err(Error::CacheWrite)?;
                             }
                         }
                     }
@@ -3355,8 +3356,9 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                                     "Removing dangling source revision: {}",
                                     sibling.path().display()
                                 );
-                                removal +=
-                                    uv_cache::rm_rf(sibling.path()).map_err(Error::CacheWrite)?;
+                                removal += cache
+                                    .remove_path(sibling.path())
+                                    .map_err(Error::CacheWrite)?;
                             }
                         }
                     }
