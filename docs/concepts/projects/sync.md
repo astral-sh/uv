@@ -1,6 +1,6 @@
 # Locking and syncing
 
-Locking is the process of resolving your project's dependencies into a
+Locking is the process of [resolving](../resolution.md) your project's dependencies into a
 [lockfile](./layout.md#the-lockfile). Syncing is the process of installing a subset of packages from
 the lockfile into the [project environment](./layout.md#the-project-environment).
 
