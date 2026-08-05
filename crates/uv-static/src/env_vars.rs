@@ -1268,6 +1268,10 @@ impl EnvVars {
     #[attr_added_in("0.7.15")]
     pub const UV_GITHUB_FAST_PATH_URL: &'static str = "UV_GITHUB_FAST_PATH_URL";
 
+    /// The root prefix path for the MSYS2 active environment (e.g., `/ucrt64`, `/mingw64`).
+    #[attr_added_in("0.11.27")]
+    pub const MINGW_PREFIX: &'static str = "MINGW_PREFIX";
+
     /// Hide progress messages with non-deterministic order in tests.
     #[attr_hidden]
     #[attr_added_in("0.5.29")]

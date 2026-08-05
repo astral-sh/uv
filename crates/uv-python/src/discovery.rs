@@ -612,7 +612,17 @@ fn python_executables_from_search_path<'a>(
     // Split and iterate over the paths instead of using `which_all` so we can
     // check multiple names per directory while respecting the search path order and python names
     // precedence.
-    let search_dirs: Vec<_> = env::split_paths(&search_path).collect();
+    let mut search_dirs: Vec<_> = env::split_paths(&search_path).collect();
+    if let Some(mingw_prefix) = env::var_os(EnvVars::MINGW_PREFIX) {
+        let mingw_bin = PathBuf::from(mingw_prefix).join("bin");
+        if mingw_bin.is_dir() && !search_dirs.contains(&mingw_bin) {
+            trace!(
+                "Adding MSYS2 environment bin directory from MINGW_PREFIX: {}",
+                mingw_bin.display()
+            );
+            search_dirs.push(mingw_bin);
+        }
+    }
     let mut seen_dirs = FxHashSet::with_capacity_and_hasher(search_dirs.len(), FxBuildHasher);
     search_dirs
         .into_iter()
