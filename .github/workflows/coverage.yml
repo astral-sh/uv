@@ -10,5 +10,6 @@ jobs:
   test:
     uses: $/.github/workflows/test.yml
     with:
+      save-rust-cache: "false"
       test-macos: "true"
       collect-coverage: true
