@@ -11,8 +11,8 @@ on:
         default: "false"
       collect-coverage:
         required: false
-        type: string
-        default: "false"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -30,7 +30,7 @@ jobs:
   # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
 
   cargo-test-linux:
-    timeout-minutes: ${{ inputs.collect-coverage == 'true' && 20 || 10 }}
+    timeout-minutes: ${{ inputs.collect-coverage && 20 || 10 }}
     runs-on: depot-ubuntu-24.04-16
     name: "cargo test on linux"
     steps:
@@ -60,7 +60,7 @@ jobs:
           version: "0.12.1"
 
       - name: "Install LLVM tools"
-        if: ${{ inputs.collect-coverage == 'true' }}
+        if: ${{ inputs.collect-coverage }}
         run: rustup component add llvm-tools
 
       - name: "Install required Python versions"
@@ -128,7 +128,7 @@ jobs:
             --workspace
             --profile ci-linux
           )
-          if ${{ inputs.collect-coverage == 'true' }}; then
+          if ${{ inputs.collect-coverage }}; then
             tracking_id="${GITHUB_SHA:0:16}"
             cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
             echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
@@ -137,7 +137,7 @@ jobs:
           fi
 
       - name: "Generate HTML coverage report"
-        if: ${{ inputs.collect-coverage == 'true' }}
+        if: ${{ inputs.collect-coverage }}
         env:
           COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
         run: |
@@ -146,7 +146,7 @@ jobs:
           test -f "target/coverage/html/$COVERAGE_ID/index.html"
 
       - name: "Upload coverage report"
-        if: ${{ inputs.collect-coverage == 'true' }}
+        if: ${{ inputs.collect-coverage }}
         id: upload-coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -181,7 +181,7 @@ jobs:
           retention-days: 14
 
   cargo-test-macos:
-    timeout-minutes: ${{ inputs.collect-coverage == 'true' && 30 || 20 }}
+    timeout-minutes: ${{ inputs.collect-coverage && 30 || 20 }}
     if: ${{ inputs.test-macos == 'true' }}
     runs-on: namespace-profile-macos-15
     name: "cargo test on macos"
@@ -205,7 +205,7 @@ jobs:
         run: touch "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Install LLVM tools"
-        if: ${{ inputs.collect-coverage == 'true' }}
+        if: ${{ inputs.collect-coverage }}
         run: rustup component add llvm-tools
 
       - name: "Create HFS+ disk image (no reflink support)"
@@ -261,7 +261,7 @@ jobs:
             --workspace
             --profile ci-macos
           )
-          if ${{ inputs.collect-coverage == 'true' }}; then
+          if ${{ inputs.collect-coverage }}; then
             tracking_id="${GITHUB_SHA:0:16}"
             cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
             echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
@@ -270,7 +270,7 @@ jobs:
           fi
 
       - name: "Generate HTML coverage report"
-        if: ${{ inputs.collect-coverage == 'true' }}
+        if: ${{ inputs.collect-coverage }}
         env:
           COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
         run: |
@@ -279,7 +279,7 @@ jobs:
           test -f "target/coverage/html/$COVERAGE_ID/index.html"
 
       - name: "Upload coverage report"
-        if: ${{ inputs.collect-coverage == 'true' }}
+        if: ${{ inputs.collect-coverage }}
         id: upload-coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -314,7 +314,7 @@ jobs:
           retention-days: 14
 
   cargo-test-windows:
-    timeout-minutes: ${{ inputs.collect-coverage == 'true' && 30 || 15 }}
+    timeout-minutes: ${{ inputs.collect-coverage && 30 || 15 }}
     runs-on: namespace-profile-windows-2022-x86-64-16x32
     name: "cargo test on windows ${{ matrix.partition }} of 3"
     strategy:
@@ -360,7 +360,7 @@ jobs:
         run: New-Item -ItemType File -Path "$env:RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Install LLVM tools"
-        if: ${{ inputs.collect-coverage == 'true' }}
+        if: ${{ inputs.collect-coverage }}
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup component add llvm-tools
 
@@ -406,7 +406,7 @@ jobs:
             --profile ci-windows
             --partition hash:${{ matrix.partition }}/3
           )
-          if ${{ inputs.collect-coverage == 'true' }}; then
+          if ${{ inputs.collect-coverage }}; then
             tracking_id="${GITHUB_SHA:0:16}"
             cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
             echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
@@ -415,7 +415,7 @@ jobs:
           fi
 
       - name: "Generate HTML coverage report"
-        if: ${{ inputs.collect-coverage == 'true' }}
+        if: ${{ inputs.collect-coverage }}
         working-directory: ${{ env.UV_WORKSPACE }}
         shell: bash
         env:
@@ -426,7 +426,7 @@ jobs:
           test -f "target/coverage/html/$COVERAGE_ID/index.html"
 
       - name: "Upload coverage report"
-        if: ${{ inputs.collect-coverage == 'true' }}
+        if: ${{ inputs.collect-coverage }}
         id: upload-coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

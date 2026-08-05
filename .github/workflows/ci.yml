@@ -81,7 +81,7 @@ jobs:
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
       test-macos: ${{ needs.plan.outputs.test-macos }}
-      collect-coverage: ${{ needs.plan.outputs.collect-coverage }}
+      collect-coverage: ${{ needs.plan.outputs.collect-coverage == 'true' }}
 
   test-windows-trampolines:
     needs: plan

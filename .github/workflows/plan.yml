@@ -102,6 +102,7 @@ jobs:
         id: plan
         shell: bash
         env:
+          GH_EVENT_NAME: ${{ github.event_name }}
           GH_REF: ${{ github.ref }}
           HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:skip') }}
           HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
@@ -109,7 +110,6 @@ jobs:
           HAS_EXTENDED_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:extended') }}
           HAS_MACOS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:macos') }}
           HAS_PUBLISH_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:publish') }}
-          HAS_COVERAGE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'coverage') }}
           HAS_BUILD_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip') }}
           HAS_BUILD_SKIP_DOCKER_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-docker') }}
           HAS_BUILD_SKIP_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
@@ -125,7 +125,6 @@ jobs:
           [[ "$HAS_EXTENDED_LABEL" == "true" ]] && has_extended_label=1
           [[ "$HAS_MACOS_LABEL" == "true" ]] && has_macos_label=1
           [[ "$HAS_PUBLISH_LABEL" == "true" ]] && has_publish_label=1
-          [[ "$HAS_COVERAGE_LABEL" == "true" ]] && has_coverage_label=1
           [[ "$HAS_BUILD_SKIP_LABEL" == "true" ]] && has_build_skip_label=1
           [[ "$HAS_BUILD_SKIP_DOCKER_LABEL" == "true" ]] && has_build_skip_docker_label=1
           [[ "$HAS_BUILD_SKIP_RELEASE_LABEL" == "true" ]] && has_build_skip_release_label=1
@@ -171,7 +170,7 @@ jobs:
 
           # Decisions
           [[ ! $has_skip_label && ($any_code_changed || $on_main_branch) ]] && test_code=1
-          [[ $on_main_branch || $has_coverage_label ]] && collect_coverage=1
+          [[ "$GH_EVENT_NAME" == "push" && $on_main_branch ]] && collect_coverage=1
           [[ $any_code_changed ]] && review_security=1
           [[ $schema_changed ]] && check_schema=1
           [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
@@ -185,7 +184,7 @@ jobs:
           [[ ! $has_skip_label ]] && test_ecosystem=1
           [[ $has_integration_label || $has_extended_label || $on_main_branch || $integration_changed ]] && test_integration=1
           [[ $has_system_label || $has_extended_label || $on_main_branch || $system_workflow_changed || $system_test_changed ]] && test_system=1
-          [[ $has_macos_label || $has_extended_label || $collect_coverage || $build_release_binaries ]] && test_macos=1
+          [[ $has_macos_label || $has_extended_label || $on_main_branch || $build_release_binaries ]] && test_macos=1
           [[ ! $has_build_skip_label && ! $has_build_skip_docker_label && ($docker_build_changed || $has_build_push_docker_label) ]] && build_docker=1
           [[ $has_build_push_docker_label ]] && push_docker=1
 
