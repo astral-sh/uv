@@ -114,6 +114,104 @@ jobs:
           path: agents/codex/sessions
           if-no-files-found: warn
 
+  retry:
+    needs: diagnose
+    if: >-
+      needs.diagnose.outputs.result != '' &&
+      fromJSON(needs.diagnose.outputs.result).failure_kind == 'flaky'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: workflow-failure-retry-${{ github.repository }}-${{ inputs.run }}
+      cancel-in-progress: false
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      - name: "Retry flaky workflow failures"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          RUN_ID: ${{ inputs.run }}
+        run: |
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]] || ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid workflow retry context; refusing to rerun the failed jobs." >&2
+            exit 1
+          fi
+
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
+            > "$RUNNER_TEMP/workflow-run.json"
+
+          run_attempt="$(jq --raw-output '.run_attempt' "$RUNNER_TEMP/workflow-run.json")"
+          if ! [[ "$run_attempt" =~ ^[12]$ ]]; then
+            echo "The workflow run has exhausted its automatic retry budget."
+            exit 0
+          fi
+
+          validate_run() {
+            jq --exit-status \
+              --arg repository "$GITHUB_REPOSITORY" \
+              --arg head_sha "$HEAD_SHA" \
+              --argjson attempt "$run_attempt" '
+                .repository.full_name == $repository
+                and (.head_repository.full_name | IN("astral-sh/uv", "astral-sh/uv-dev"))
+                and .head_sha == $head_sha
+                and .path != ".github/workflows/diagnose-workflow-failure.yml"
+                and (.event | IN("pull_request", "push", "schedule", "workflow_dispatch"))
+                and .status == "completed"
+                and (.conclusion | IN("failure", "timed_out", "startup_failure"))
+                and .run_attempt == $attempt
+              ' "$RUNNER_TEMP/workflow-run.json" > /dev/null
+          }
+
+          validate_pull_request() {
+            if [ "$(jq --raw-output '.event' "$RUNNER_TEMP/workflow-run.json")" != "pull_request" ]; then
+              return 0
+            fi
+
+            pull_request="$(jq --raw-output '
+              if (.pull_requests | length) == 1 then .pull_requests[0].number else empty end
+            ' "$RUNNER_TEMP/workflow-run.json")"
+            if ! [[ "$pull_request" =~ ^[0-9]+$ ]]; then
+              return 1
+            fi
+
+            gh pr view "$pull_request" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json state,headRefOid \
+              > "$RUNNER_TEMP/workflow-run-pull-request.json"
+            jq --exit-status --arg head_sha "$HEAD_SHA" '
+              .state == "OPEN" and .headRefOid == $head_sha
+            ' "$RUNNER_TEMP/workflow-run-pull-request.json" > /dev/null
+          }
+
+          if ! validate_run || ! validate_pull_request; then
+            echo "The workflow run or pull request is no longer eligible for an automatic retry."
+            exit 0
+          fi
+
+          delay_seconds="$((60 * (1 << (run_attempt - 1)) + RANDOM % 20))"
+          echo "Waiting ${delay_seconds}s before retrying flaky workflow jobs."
+          sleep "$delay_seconds"
+
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
+            > "$RUNNER_TEMP/workflow-run.json"
+          if ! validate_run || ! validate_pull_request; then
+            echo "The workflow run changed, was already retried, or has a stale pull request."
+            exit 0
+          fi
+
+          gh run rerun "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --failed
+
+          {
+            printf '### Retried flaky workflow failures\n\n'
+            printf -- '- Workflow run: https://github.com/%s/actions/runs/%s\n' \
+              "$GITHUB_REPOSITORY" "$RUN_ID"
+            printf -- '- Attempt: %s of 3\n' "$((run_attempt + 1))"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   report:
     needs: diagnose
     if: >-
