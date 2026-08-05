@@ -15,6 +15,10 @@
   lockfile changes
 - NEVER assume clippy warnings or test failures are pre-existing, it is very rare that `main` has
   warnings
+- ALWAYS use `.github/automations-dispatch.json` to trigger privileged workflows from GitHub webhook
+  events instead of adding `pull_request_target` workflows
+- NEVER suppress the `dangerous-triggers` security lint; extend the automation dispatcher in a
+  separate pull request if it does not support the required event
 - PREFER top-level imports over local imports or fully qualified names
 - AVOID shortening variable names, e.g., use `version` instead of `ver`, and `requires_python`
   instead of `rp`
