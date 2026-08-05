@@ -366,10 +366,9 @@ First, add a release workflow to your project:
 name: "Publish release to PyPI"
 
 on:
-  push:
-    tags:
-      # Publish on any tag starting with a `v`, e.g., v0.1.0
-      - v*
+  release:
+    types:
+      - published
 
 jobs:
   build:
