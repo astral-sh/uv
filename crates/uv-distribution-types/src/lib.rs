@@ -46,6 +46,7 @@ use std::path;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use memchr::memchr3;
 use url::Url;
 
 use uv_distribution_filename::{
@@ -1212,6 +1213,13 @@ impl RemoteSource for Url {
 
 impl RemoteSource for UrlString {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
+        let url = self.as_ref();
+        if memchr3(b'?', b'#', b'%', url.as_bytes()).is_none()
+            && let Some((_, filename)) = url.rsplit_once('/')
+        {
+            return Ok(Cow::Borrowed(filename));
+        }
+
         // Take the last segment, stripping any query or fragment.
         let last = self
             .base_str()
@@ -1779,11 +1787,13 @@ mod test {
     fn remote_source() {
         for url in [
             "https://example.com/foo-0.1.0.tar.gz",
+            "https://example.com/foo%2D0.1.0.tar.gz",
             "https://example.com/foo-0.1.0.tar.gz#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query",
             "https://example.com/foo-0.1.0.tar.gz?query#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment/3",
+            "https://example.com/foo%2D0.1.0.tar.gz?query=1/2#fragment/3",
         ] {
             let url = DisplaySafeUrl::parse(url).unwrap();
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
