@@ -372,7 +372,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     err,
                                     state.fork_urls,
                                     state.fork_indexes,
-                                    &state.known_versions,
+                                    &state.known_versions.0,
                                     state.env,
                                     self.current_environment.clone(),
                                     &visited,
@@ -1072,58 +1072,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             ))?;
         }
         Ok(())
-    }
-
-    /// Returns the sorted, deduplicated candidate universe used to widen dependency ranges.
-    ///
-    /// Every selectable version must be present: omitting one could extend a dependency
-    /// incompatibility across it, while including an unselectable version only prevents a
-    /// possible simplification. The result is therefore conservative, including yanked and
-    /// otherwise unavailable versions from every index plus installed versions missing from the
-    /// indexes. Versions past the exclude-newer cutoff are omitted because resolution treats them
-    /// as nonexistent.
-    ///
-    /// Non-blocking: Returns `None` if the version map hasn't been fetched yet, or if the
-    /// package is not a registry package.
-    fn known_versions<'a>(
-        index: &InMemoryIndex,
-        installed_packages: &InstalledPackages,
-        fork_urls: &ForkUrls,
-        fork_indexes: &ForkIndexes,
-        known_versions: &'a mut FxHashMap<PackageName, Arc<[Version]>>,
-        package: &PubGrubPackage,
-    ) -> Option<&'a [Version]> {
-        let name = package.name_no_root()?;
-        // Versions of packages from a URL or the workspace are not registry versions.
-        if fork_urls.get(name).is_some() {
-            return None;
-        }
-        if !known_versions.contains_key(name) {
-            let response = if let Some(index_metadata) = fork_indexes.get(name) {
-                index
-                    .explicit()
-                    .get(&(name.clone(), index_metadata.url().clone()))?
-            } else {
-                index.implicit().get(name)?
-            };
-            let VersionsResponse::Found(ref version_maps) = *response else {
-                return None;
-            };
-            let mut versions: Vec<Version> = version_maps
-                .iter()
-                .flat_map(|version_map| version_map.included_versions().cloned())
-                .chain(
-                    installed_packages
-                        .get_packages(name)
-                        .iter()
-                        .map(|dist| dist.version().clone()),
-                )
-                .collect();
-            versions.sort_unstable();
-            versions.dedup();
-            known_versions.insert(name.clone(), versions.into());
-        }
-        Some(&known_versions[name][..])
     }
 
     /// Given a candidate package, choose the next version in range to try.
@@ -2969,6 +2917,69 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 }
 
+/// All known versions for each package, from the version maps and the installed packages,
+/// used to keep the version sets in the partial solution minimal.
+///
+/// Per fork, since the index for a package can differ between forks.
+#[derive(Clone, Default)]
+struct KnownVersions(FxHashMap<PackageName, Arc<[Version]>>);
+
+impl KnownVersions {
+    /// Returns the sorted, deduplicated candidate universe used to widen dependency ranges.
+    ///
+    /// Results are cached on the first call per package.
+    ///
+    /// Every selectable version must be present: omitting one could extend a dependency
+    /// incompatibility across it, while including an unselectable version only prevents a
+    /// possible simplification. The result is therefore conservative, including yanked and
+    /// otherwise unavailable versions from every index plus installed versions missing from the
+    /// indexes. Versions past the exclude-newer cutoff are omitted because resolution treats them
+    /// as nonexistent.
+    ///
+    /// Non-blocking: Returns `None` if the version map hasn't been fetched yet, or if the
+    /// package is not a registry package.
+    fn get_or_update<'a, InstalledPackages: InstalledPackagesProvider>(
+        &'a mut self,
+        index: &InMemoryIndex,
+        installed_packages: &InstalledPackages,
+        fork_urls: &ForkUrls,
+        fork_indexes: &ForkIndexes,
+        package: &PubGrubPackage,
+    ) -> Option<&'a [Version]> {
+        let name = package.name_no_root()?;
+        // Versions of packages from a URL or the workspace are not registry versions.
+        if fork_urls.get(name).is_some() {
+            return None;
+        }
+        if !self.0.contains_key(name) {
+            let response = if let Some(index_metadata) = fork_indexes.get(name) {
+                index
+                    .explicit()
+                    .get(&(name.clone(), index_metadata.url().clone()))?
+            } else {
+                index.implicit().get(name)?
+            };
+            let VersionsResponse::Found(ref version_maps) = *response else {
+                return None;
+            };
+            let mut versions: Vec<Version> = version_maps
+                .iter()
+                .flat_map(|version_map| version_map.included_versions().cloned())
+                .chain(
+                    installed_packages
+                        .get_packages(name)
+                        .iter()
+                        .map(|dist| dist.version().clone()),
+                )
+                .collect();
+            versions.sort_unstable();
+            versions.dedup();
+            self.0.insert(name.clone(), versions.into());
+        }
+        Some(&self.0[name][..])
+    }
+}
+
 /// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
 pub(crate) struct ForkState {
@@ -3021,11 +3032,7 @@ pub(crate) struct ForkState {
     pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
     /// The last version selected for each package and range in a specific environment.
     selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, Version)>,
-    /// All known versions for each package, from the version maps and the installed packages,
-    /// used to keep the version sets in the partial solution minimal.
-    ///
-    /// Per fork, since the index for a package can differ between forks.
-    known_versions: FxHashMap<PackageName, Arc<[Version]>>,
+    known_versions: KnownVersions,
     /// The marker expression that created this state.
     ///
     /// The root state always corresponds to a marker expression that is always
@@ -3080,7 +3087,7 @@ impl ForkState {
             added_dependencies: FxHashMap::default(),
             pre_visited: FxHashMap::default(),
             selected_versions: FxHashMap::default(),
-            known_versions: FxHashMap::default(),
+            known_versions: KnownVersions::default(),
             env,
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
@@ -3226,13 +3233,13 @@ impl ForkState {
         // Widen across gaps so rejected adjacent versions merge into contiguous ranges rather
         // than leaving one hole per version.
         let versions = Range::singleton(for_version.clone());
-        let versions = if let Some(known_versions) =
-            ResolverState::<InstalledPackages>::known_versions(
+        let versions = if let Some(known_versions) = self
+            .known_versions
+            .get_or_update(
                 index,
                 installed_packages,
                 &self.fork_urls,
                 &self.fork_indexes,
-                &mut self.known_versions,
                 &self.pubgrub.package_store[self.next],
             )
             .filter(|versions| !versions.is_empty())
