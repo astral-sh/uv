@@ -431,7 +431,7 @@ _contents_ are not copied into the image until the final `uv sync` command.
 If you're using a [workspace](../../concepts/projects/workspaces.md), then a couple changes are
 needed:
 
-- Use `--frozen` instead of `--locked` during the initially sync.
+- Use `--frozen` instead of `--locked` during the initial sync.
 - Use the `--no-install-workspace` flag which excludes the project _and_ any workspace members.
 
 ```dockerfile title="Dockerfile"
@@ -517,7 +517,7 @@ RUN --mount=from=ghcr.io/astral-sh/uv,source=/uv,target=/bin/uv \
 
 ### Installing a package
 
-The system Python environment is safe to use this context, since a container is already isolated.
+The system Python environment is safe to use in this context, since a container is already isolated.
 The `--system` flag can be used to install in the system environment:
 
 ```dockerfile title="Dockerfile"
