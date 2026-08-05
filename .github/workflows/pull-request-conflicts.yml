@@ -119,7 +119,7 @@ jobs:
       max-parallel: 4
       matrix: ${{ fromJSON(needs.identify.outputs.matrix) }}
     uses: $/.github/workflows/rebase-conflicted-pull-request.yml
-    secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
+    secrets: inherit
     with:
       number: ${{ matrix.number }}
       base-ref: ${{ matrix.base_ref }}

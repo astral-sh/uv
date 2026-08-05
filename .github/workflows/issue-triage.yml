@@ -203,4 +203,4 @@ jobs:
       issue: ${{ inputs.issue || github.event.issue.number }}
       issue-type: ${{ fromJSON(needs.triage.outputs.result).type }}
       runner: ubuntu-latest
-    secrets: inherit # zizmor: ignore[secrets-inherit] -- protected environment secrets are needed for reproduction
+    secrets: inherit
