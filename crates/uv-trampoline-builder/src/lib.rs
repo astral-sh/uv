@@ -2,6 +2,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::Utf8Error;
 
+#[cfg(windows)]
+use editpe::{
+    Image, ResourceData, ResourceDirectory, ResourceEntry, ResourceEntryName, ResourceTable,
+};
 use fs_err::File;
 use thiserror::Error;
 
@@ -269,17 +273,9 @@ fn get_launcher_bin(gui: bool) -> Result<&'static [u8], Error> {
     })
 }
 
-/// Write PE resources into a launcher binary using the `editpe` crate.
-///
-/// This directly manipulates the PE resource section without using Windows API calls
-/// like `BeginUpdateResource`/`UpdateResource`/`EndUpdateResource`, which are unavailable
-/// on minimal Windows environments such as Nano Server.
+/// Write PE resources into a launcher binary.
 #[cfg(windows)]
 fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<Vec<u8>, Error> {
-    use editpe::{
-        Image, ResourceData, ResourceDirectory, ResourceEntry, ResourceEntryName, ResourceTable,
-    };
-
     let mut image = Image::parse(launcher_data.to_vec())?;
 
     let mut resource_directory = image
