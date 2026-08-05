@@ -102,7 +102,6 @@ jobs:
         id: plan
         shell: bash
         env:
-          GH_EVENT_NAME: ${{ github.event_name }}
           GH_REF: ${{ github.ref }}
           HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:skip') }}
           HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
@@ -169,8 +168,8 @@ jobs:
           [[ $python_config_changed || $rust_deps_changed || $rust_config_changed || $dockerfile_changed || $docker_workflow_changed ]] && docker_build_changed=1
 
           # Decisions
-          [[ ! $has_skip_label && ($any_code_changed || $on_main_branch) ]] && test_code=1
-          [[ "$GH_EVENT_NAME" == "push" && $on_main_branch ]] && collect_coverage=1
+          [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" || ("$GITHUB_EVENT_NAME" == "push" && $on_main_branch) ]] && collect_coverage=1
+          [[ ! $has_skip_label && ($any_code_changed || $on_main_branch || $collect_coverage) ]] && test_code=1
           [[ $any_code_changed ]] && review_security=1
           [[ $schema_changed ]] && check_schema=1
           [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
@@ -184,7 +183,7 @@ jobs:
           [[ ! $has_skip_label ]] && test_ecosystem=1
           [[ $has_integration_label || $has_extended_label || $on_main_branch || $integration_changed ]] && test_integration=1
           [[ $has_system_label || $has_extended_label || $on_main_branch || $system_workflow_changed || $system_test_changed ]] && test_system=1
-          [[ $has_macos_label || $has_extended_label || $on_main_branch || $build_release_binaries ]] && test_macos=1
+          [[ $has_macos_label || $has_extended_label || $on_main_branch || $collect_coverage || $build_release_binaries ]] && test_macos=1
           [[ ! $has_build_skip_label && ! $has_build_skip_docker_label && ($docker_build_changed || $has_build_push_docker_label) ]] && build_docker=1
           [[ $has_build_push_docker_label ]] && push_docker=1
 
