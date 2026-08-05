@@ -508,6 +508,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
+
+[[package]]
 name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -733,7 +739,7 @@ version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1f927b07c74ba84c7e5fe4db2baeb3e996ab2688992e39ac68ce3220a677c7e"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "encoding_rs",
 ]
 
@@ -1188,7 +1194,7 @@ version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3132b69ba8c13808bd2fa5748ac5b9816eb4f4e1f0bff6b7f9254a5940dcdeef"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "cyclonedx-bom-macros",
  "fluent-uri",
  "indexmap",
@@ -2158,7 +2164,7 @@ version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96547c2556ec9d12fb1578c4eaf448b04993e7fb79cbaad930a656880a6bdfa0"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "futures-channel",
  "futures-util",
@@ -3193,7 +3199,7 @@ version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d30c53c26bc5b31a98cd02d20f25a7c8567146caf63ed593a9d87b2775291be"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "serde_core",
 ]
 
@@ -3858,9 +3864,9 @@ dependencies = [
 
 [[package]]
 name = "reqsign"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf882d32a673b6a3d8258a3e1fd1d79aed3705062468508c63af72c847a0e58a"
+checksum = "dd5d55cedf7f33e04dcaa464b7b5684afb37f91d8f221844a41fd4337d8d7be2"
 dependencies = [
  "reqsign-aws-v4",
  "reqsign-azure-storage",
@@ -3872,12 +3878,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "reqsign-aws-v4"
-version = "3.0.2"
+name = "reqsign-aws-core"
+version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e9e1168fab3883ec6afed1c2e20c25b2a09f366cdb662ac3e0878ae0332d63e"
+checksum = "e4af084e1f3cbf3e67e0c972765399bce54ecec804cceba46b39a8331f3c1bff"
 dependencies = [
- "anyhow",
  "bytes",
  "form_urlencoded",
  "hex",
@@ -3894,13 +3899,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "reqsign-azure-storage"
+name = "reqsign-aws-v4"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dee8b9e5d0fc927551a6ac25ba5dc6518860c54ddb592fecf685523e528e77bd"
+checksum = "4ac5b3b7cefa28933792b439186459f77f19f9b6edbeab41b8b187150361a206"
+dependencies = [
+ "bytes",
+ "http",
+ "log",
+ "quick-xml",
+ "reqsign-aws-core",
+ "reqsign-core",
+ "serde",
+]
+
+[[package]]
+name = "reqsign-azure-storage"
+version = "3.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2824e7da3c2cc42ac3406c674eb57c89127fdcd97f3a73c608cfc680505ea134"
 dependencies = [
  "anyhow",
- "base64",
+ "base64 0.23.1",
  "bytes",
  "form_urlencoded",
  "http",
@@ -3916,9 +3936,9 @@ dependencies = [
 
 [[package]]
 name = "reqsign-command-execute-tokio"
-version = "3.0.2"
+version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecf28fcf0aef694448cb235d393fbec7b5543d25050eacc0ccc2118596618c52"
+checksum = "53507459e278a2574b643521d631a9c99b1111ac33975c1ad3999e3898155211"
 dependencies = [
  "reqsign-core",
  "tokio",
@@ -3926,14 +3946,13 @@ dependencies = [
 
 [[package]]
 name = "reqsign-core"
-version = "3.1.0"
+version = "3.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "514a1e0b4aa288652a3fdbda4f0a610f379cdf5374e55a37c9edd03d57ed856b"
+checksum = "c07dd510b1e1b9b241883e483358147fb2ed2d497a7b39b065ba61eb93deceb0"
 dependencies = [
  "anyhow",
- "base64",
+ "base64 0.23.1",
  "bytes",
- "form_urlencoded",
  "futures",
  "hex",
  "hmac 0.13.0",
@@ -3951,9 +3970,9 @@ dependencies = [
 
 [[package]]
 name = "reqsign-file-read-tokio"
-version = "3.0.2"
+version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b472a8d1f2e5a4be8ce13bb7bdf4b59e9bee613ce124aca23959ddb42176b39"
+checksum = "663d9d55abd0df0830ef0ae43708297cc1371cf4e8ca91f3ac813c309cca8c98"
 dependencies = [
  "anyhow",
  "reqsign-core",
@@ -3962,9 +3981,9 @@ dependencies = [
 
 [[package]]
 name = "reqsign-google"
-version = "3.0.2"
+version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "296b34f3b0b312a447e8eb7c9b21f12944b25578c84ffa105eb8d5bd10828212"
+checksum = "4080a227f82a09f68540ecd028622065d7ac4c0bcb8727a25bdcfc0526235792"
 dependencies = [
  "form_urlencoded",
  "http",
@@ -3980,9 +3999,9 @@ dependencies = [
 
 [[package]]
 name = "reqsign-http-send-reqwest"
-version = "4.0.2"
+version = "4.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90b4509b12b73289cdeed349ba494553404e33782abc09bc0ae4e09f741807cb"
+checksum = "ac9cadffa4b1f5011d396f73faadc2169ff97e280e595c959ee37ae5c1bd5ea8"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4000,7 +4019,7 @@ version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "futures-channel",
  "futures-core",
@@ -5005,7 +5024,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -5694,7 +5713,7 @@ version = "0.47.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d46cf96c5f498d36b7a9693bc6a7075c0bb9303189d61b2249b0dc3d309c07de"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "data-url",
  "flate2",
  "fontdb",
@@ -5908,7 +5927,7 @@ dependencies = [
  "arcstr",
  "astral-reqwest-middleware",
  "async-trait",
- "base64",
+ "base64 0.22.1",
  "etcetera",
  "fs-err",
  "http",
@@ -6034,7 +6053,7 @@ dependencies = [
  "astral-tokio-tar",
  "astral-version-ranges",
  "astral_async_zip",
- "base64",
+ "base64 0.22.1",
  "csv",
  "flate2",
  "fs-err",
@@ -6957,7 +6976,7 @@ dependencies = [
  "astral-reqwest-retry",
  "astral-tokio-tar",
  "async-compression",
- "base64",
+ "base64 0.22.1",
  "fastrand",
  "fs-err",
  "futures",
@@ -7352,7 +7371,7 @@ dependencies = [
  "assert_fs",
  "astral-tokio-tar",
  "astral_async_zip",
- "base64",
+ "base64 0.22.1",
  "flate2",
  "fs-err",
  "futures",
@@ -8030,7 +8049,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08db1edfb05d9b3c1542e521aea074442088292f00b5f28e435c714a98f85031"
 dependencies = [
  "assert-json-diff",
- "base64",
+ "base64 0.22.1",
  "deadpool",
  "futures",
  "http",
