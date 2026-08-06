@@ -463,3 +463,7 @@ codegen-units = 1
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
+
+[patch.crates-io]
+astral-pubgrub = { git = "https://github.com/notatallshaw/pubgrub", branch = "perf/fused-difference" }
+astral-version-ranges = { git = "https://github.com/notatallshaw/pubgrub", branch = "perf/fused-difference" }
