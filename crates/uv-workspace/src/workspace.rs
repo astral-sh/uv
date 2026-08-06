@@ -1158,11 +1158,7 @@ impl Workspace {
             );
         }
 
-        let exclusions = if matches!(options.members, MemberDiscovery::None) {
-            WorkspaceExclusions::default()
-        } else {
-            WorkspaceExclusions::new(workspace_root, workspace_definition)?
-        };
+        let mut exclusions = None;
 
         // Add all other workspace members.
         for member_glob in workspace_definition.clone().members.unwrap_or_default() {
@@ -1211,7 +1207,16 @@ impl Workspace {
                 }
 
                 // If the member is excluded, ignore it.
-                if exclusions.matches(&member_root) {
+                if exclusions.is_none() {
+                    exclusions = Some(WorkspaceExclusions::new(
+                        workspace_root,
+                        workspace_definition,
+                    )?);
+                }
+                if exclusions
+                    .as_ref()
+                    .is_some_and(|exclusions| exclusions.matches(&member_root))
+                {
                     debug!(
                         "Ignoring workspace member: `{}`",
                         member_root.simplified_display()
@@ -1956,7 +1961,7 @@ fn is_excluded_from_workspace(
 }
 
 /// Compiled workspace exclusion patterns.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct WorkspaceExclusions {
     patterns: Vec<Pattern>,
 }
