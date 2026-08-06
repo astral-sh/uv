@@ -8,7 +8,7 @@ use std::hash::BuildHasherDefault;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use glob::{GlobError, PatternError, glob};
+use glob::{GlobError, Pattern, PatternError, glob};
 use itertools::Itertools;
 use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
@@ -1158,10 +1158,10 @@ impl Workspace {
             );
         }
 
-        let exclude_patterns = if matches!(options.members, MemberDiscovery::None) {
-            Vec::new()
+        let exclusions = if matches!(options.members, MemberDiscovery::None) {
+            WorkspaceExclusions::default()
         } else {
-            workspace_exclude_patterns(workspace_root, workspace_definition)?
+            WorkspaceExclusions::new(workspace_root, workspace_definition)?
         };
 
         // Add all other workspace members.
@@ -1211,10 +1211,7 @@ impl Workspace {
                 }
 
                 // If the member is excluded, ignore it.
-                if exclude_patterns
-                    .iter()
-                    .any(|pattern| pattern.matches_path(&member_root))
-                {
+                if exclusions.matches(&member_root) {
                     debug!(
                         "Ignoring workspace member: `{}`",
                         member_root.simplified_display()
@@ -1955,42 +1952,50 @@ fn is_excluded_from_workspace(
     workspace_root: &Path,
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
-    for exclude_glob in workspace.exclude.iter().flatten() {
-        let exclude_pattern = workspace_exclude_pattern(workspace_root, exclude_glob)?;
-        if exclude_pattern.matches_path(project_path) {
-            return Ok(true);
-        }
+    Ok(WorkspaceExclusions::new(workspace_root, workspace)?.matches(project_path))
+}
+
+/// Compiled workspace exclusion patterns.
+#[derive(Debug, Default)]
+struct WorkspaceExclusions {
+    patterns: Vec<Pattern>,
+}
+
+impl WorkspaceExclusions {
+    /// Compile the normalized workspace exclusion patterns.
+    fn new(workspace_root: &Path, workspace: &ToolUvWorkspace) -> Result<Self, WorkspaceError> {
+        let patterns = workspace
+            .exclude
+            .iter()
+            .flatten()
+            .map(|exclude_glob| Self::compile_pattern(workspace_root, exclude_glob))
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self { patterns })
     }
-    Ok(false)
-}
 
-/// Compile the normalized workspace exclusion patterns.
-fn workspace_exclude_patterns(
-    workspace_root: &Path,
-    workspace: &ToolUvWorkspace,
-) -> Result<Vec<glob::Pattern>, WorkspaceError> {
-    workspace
-        .exclude
-        .iter()
-        .flatten()
-        .map(|exclude_glob| workspace_exclude_pattern(workspace_root, exclude_glob))
-        .collect()
-}
+    /// Return whether any workspace exclusion matches the project path.
+    fn matches(&self, project_path: &Path) -> bool {
+        self.patterns
+            .iter()
+            .any(|pattern| pattern.matches_path(project_path))
+    }
 
-/// Compile a normalized workspace exclusion pattern.
-fn workspace_exclude_pattern(
-    workspace_root: &Path,
-    exclude_glob: &glob::Pattern,
-) -> Result<glob::Pattern, WorkspaceError> {
-    // Normalize the exclude glob to remove leading `./` and other relative path components.
-    let normalized_glob = normalize_path(Path::new(exclude_glob.as_str()));
-    let absolute_glob = PathBuf::from(glob::Pattern::escape(
-        workspace_root.simplified().to_string_lossy().as_ref(),
-    ))
-    .join(normalized_glob.as_ref());
-    let absolute_glob = absolute_glob.to_string_lossy();
-    glob::Pattern::new(&absolute_glob)
-        .map_err(|err| WorkspaceErrorKind::Pattern(absolute_glob.to_string(), err).into())
+    /// Compile a normalized workspace exclusion pattern.
+    fn compile_pattern(
+        workspace_root: &Path,
+        exclude_glob: &Pattern,
+    ) -> Result<Pattern, WorkspaceError> {
+        // Normalize the exclude glob to remove leading `./` and other relative path components.
+        let normalized_glob = normalize_path(Path::new(exclude_glob.as_str()));
+        let absolute_glob = PathBuf::from(Pattern::escape(
+            workspace_root.simplified().to_string_lossy().as_ref(),
+        ))
+        .join(normalized_glob.as_ref());
+        let absolute_glob = absolute_glob.to_string_lossy();
+        Pattern::new(&absolute_glob)
+            .map_err(|err| WorkspaceErrorKind::Pattern(absolute_glob.to_string(), err).into())
+    }
 }
 
 /// Check if we're in the `tool.uv.workspace.members` of a workspace.
