@@ -2030,13 +2030,13 @@ enum CopyEntrypointError {
 
 #[cfg(unix)]
 const RELOCATABLE_SHEBANG: &str = r#"#!/bin/sh
-'''exec' "$(dirname -- "$(realpath "$0")")"/'python' "$0" "$@"
+'''exec' "$(dirname -- "$(if _uv_realpath_probe=$(realpath -- / 2>/dev/null) && [ "$_uv_realpath_probe" = / ]; then realpath -- "$0"; else realpath "$0"; fi)")"/'python' "$0" "$@"
 ' '''
 "#;
 
 #[cfg(unix)]
 const RELOCATABLE_PYTHON3_SHEBANG: &str = r#"#!/bin/sh
-'''exec' "$(dirname -- "$(realpath "$0")")"/'python3' "$0" "$@"
+'''exec' "$(dirname -- "$(if _uv_realpath_probe=$(realpath -- / 2>/dev/null) && [ "$_uv_realpath_probe" = / ]; then realpath -- "$0"; else realpath "$0"; fi)")"/'python3' "$0" "$@"
 ' '''
 "#;
 
@@ -2107,7 +2107,7 @@ fn copy_entrypoint(
     }
 
     let Some(contents) = contents
-        // Check for corrected relocatable shebangs.
+        // Check for current relocatable shebangs.
         .strip_prefix(RELOCATABLE_SHEBANG)
         .or_else(|| contents.strip_prefix(RELOCATABLE_PYTHON3_SHEBANG))
         // Keep recognizing launchers generated before BusyBox compatibility was fixed.

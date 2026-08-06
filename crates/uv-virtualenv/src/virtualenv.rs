@@ -482,13 +482,13 @@ pub(crate) fn create(
                 path: location.clone(),
             })?;
         let virtual_env_dir = match (relocatable, name.to_owned()) {
-            (true, "activate") => {
-                Cow::Borrowed(r#"'"$(dirname -- "$(dirname -- "$(realpath "$SCRIPT_PATH")")")"'"#)
-            }
+            (true, "activate") => Cow::Borrowed(
+                r#"'"$(dirname -- "$(dirname -- "$(if _uv_realpath_probe=$(realpath -- / 2>/dev/null) && [ "$_uv_realpath_probe" = / ]; then realpath -- "$SCRIPT_PATH"; else realpath "$SCRIPT_PATH"; fi)")")"'"#,
+            ),
             (true, "activate.bat") => Cow::Borrowed(r"%~dp0.."),
-            (true, "activate.fish") => {
-                Cow::Borrowed(r"'(dirname -- (dirname -- (realpath (status -f))))'")
-            }
+            (true, "activate.fish") => Cow::Borrowed(
+                r#"'(dirname -- (dirname -- (if set -l _uv_realpath_probe (realpath -- / 2>/dev/null); and test (count $_uv_realpath_probe) -eq 1; and test "$_uv_realpath_probe[1]" = /; realpath -- (status -f); else; realpath (status -f); end)))'"#,
+            ),
             (true, "activate.nu") => Cow::Borrowed(r"(path self | path dirname | path dirname)"),
             (false, "activate.nu") => Cow::Owned(format!(
                 "'{}'",

@@ -1699,7 +1699,7 @@ fn verify_pyvenv_cfg_relocatable() {
     let activate_sh = scripts.child("activate");
     activate_sh.assert(predicates::path::is_file());
     activate_sh.assert(predicates::str::contains(
-        r#"VIRTUAL_ENV=''"$(dirname -- "$(dirname -- "$(realpath "$SCRIPT_PATH")")")"''"#,
+        r#"VIRTUAL_ENV=''"$(dirname -- "$(dirname -- "$(if _uv_realpath_probe=$(realpath -- / 2>/dev/null) && [ "$_uv_realpath_probe" = / ]; then realpath -- "$SCRIPT_PATH"; else realpath "$SCRIPT_PATH"; fi)")")"''"#,
     ));
 
     let activate_bat = scripts.child("activate.bat");
@@ -1711,7 +1711,7 @@ fn verify_pyvenv_cfg_relocatable() {
     let activate_fish = scripts.child("activate.fish");
     activate_fish.assert(predicates::path::is_file());
     activate_fish.assert(predicates::str::contains(
-        r"set -gx VIRTUAL_ENV ''(dirname -- (dirname -- (realpath (status -f))))''",
+        r#"set -gx VIRTUAL_ENV ''(dirname -- (dirname -- (if set -l _uv_realpath_probe (realpath -- / 2>/dev/null); and test (count $_uv_realpath_probe) -eq 1; and test "$_uv_realpath_probe[1]" = /; realpath -- (status -f); else; realpath (status -f); end)))''"#,
     ));
     activate_fish.assert(predicates::str::contains(
         "if string match -qr 'CYGWIN|MSYS|MINGW' (uname); and command -s cygpath >/dev/null",
