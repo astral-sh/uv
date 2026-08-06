@@ -1,5 +1,6 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
@@ -1962,13 +1963,24 @@ fn is_excluded_from_workspace(
 
 /// Compiled workspace exclusion patterns.
 #[derive(Debug)]
-struct WorkspaceExclusions {
-    patterns: Vec<Pattern>,
+struct WorkspaceExclusions<'workspace> {
+    workspace_root: &'workspace Path,
+    patterns: Vec<WorkspaceExclusion<'workspace>>,
 }
 
-impl WorkspaceExclusions {
+/// A workspace exclusion that can reuse its parsed pattern or requires normalization.
+#[derive(Debug)]
+enum WorkspaceExclusion<'workspace> {
+    Relative(&'workspace Pattern),
+    Absolute(Pattern),
+}
+
+impl<'workspace> WorkspaceExclusions<'workspace> {
     /// Compile the normalized workspace exclusion patterns.
-    fn new(workspace_root: &Path, workspace: &ToolUvWorkspace) -> Result<Self, WorkspaceError> {
+    fn new(
+        workspace_root: &'workspace Path,
+        workspace: &'workspace ToolUvWorkspace,
+    ) -> Result<Self, WorkspaceError> {
         let patterns = workspace
             .exclude
             .iter()
@@ -1976,29 +1988,45 @@ impl WorkspaceExclusions {
             .map(|exclude_glob| Self::compile_pattern(workspace_root, exclude_glob))
             .collect::<Result<_, _>>()?;
 
-        Ok(Self { patterns })
+        Ok(Self {
+            workspace_root,
+            patterns,
+        })
     }
 
     /// Return whether any workspace exclusion matches the project path.
     fn matches(&self, project_path: &Path) -> bool {
-        self.patterns
-            .iter()
-            .any(|pattern| pattern.matches_path(project_path))
+        let relative_path = project_path
+            .simplified()
+            .strip_prefix(self.workspace_root.simplified())
+            .ok();
+
+        self.patterns.iter().any(|pattern| match pattern {
+            WorkspaceExclusion::Relative(pattern) => {
+                relative_path.is_some_and(|relative_path| pattern.matches_path(relative_path))
+            }
+            WorkspaceExclusion::Absolute(pattern) => pattern.matches_path(project_path),
+        })
     }
 
-    /// Compile a normalized workspace exclusion pattern.
+    /// Reuse an already compiled relative pattern or compile its normalized absolute equivalent.
     fn compile_pattern(
         workspace_root: &Path,
-        exclude_glob: &Pattern,
-    ) -> Result<Pattern, WorkspaceError> {
+        exclude_glob: &'workspace Pattern,
+    ) -> Result<WorkspaceExclusion<'workspace>, WorkspaceError> {
         // Normalize the exclude glob to remove leading `./` and other relative path components.
         let normalized_glob = normalize_path(Path::new(exclude_glob.as_str()));
+        if matches!(&normalized_glob, Cow::Borrowed(_)) && normalized_glob.is_relative() {
+            return Ok(WorkspaceExclusion::Relative(exclude_glob));
+        }
+
         let absolute_glob = PathBuf::from(Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
         .join(normalized_glob.as_ref());
         let absolute_glob = absolute_glob.to_string_lossy();
         Pattern::new(&absolute_glob)
+            .map(WorkspaceExclusion::Absolute)
             .map_err(|err| WorkspaceErrorKind::Pattern(absolute_glob.to_string(), err).into())
     }
 }
@@ -3341,7 +3369,8 @@ mod tests {
     #[tokio::test]
     async fn exclude_package_with_normalized_glob_and_escaped_root() -> Result<()> {
         let temp_dir = tempfile::TempDir::new()?;
-        let root = ChildPath::new(temp_dir.path()).child("workspace[glob]?");
+        let temp_dir_root = ChildPath::new(temp_dir.path());
+        let root = temp_dir_root.child("workspace[glob]?");
 
         root.child("pyproject.toml").write_str(
             r#"
@@ -3351,13 +3380,37 @@ mod tests {
             requires-python = ">=3.12"
 
             [tool.uv.workspace]
-            members = ["./packages/*"]
-            exclude = ["./ignored/../packages/excluded", "./packages/./excluded-glob-*"]
+            members = ["./packages/*", "../external-*"]
+            exclude = [
+                "packages/excluded-borrowed-*",
+                "./ignored/../packages/excluded",
+                "./packages/./excluded-glob-*",
+                "../external-excluded",
+            ]
             "#,
         )?;
 
-        for member in ["included", "excluded", "excluded-glob-one"] {
+        for member in [
+            "included",
+            "excluded",
+            "excluded-glob-one",
+            "excluded-borrowed-one",
+        ] {
             root.child("packages")
+                .child(member)
+                .child("pyproject.toml")
+                .write_str(&format!(
+                    r#"
+                    [project]
+                    name = "{member}"
+                    version = "0.1.0"
+                    requires-python = ">=3.12"
+                    "#,
+                ))?;
+        }
+
+        for member in ["external-included", "external-excluded"] {
+            temp_dir_root
                 .child(member)
                 .child("pyproject.toml")
                 .write_str(&format!(
@@ -3376,6 +3429,7 @@ mod tests {
             @r#"
         [
           "albatross",
+          "external-included",
           "included"
         ]
         "#
