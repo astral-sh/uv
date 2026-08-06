@@ -6,14 +6,14 @@ preferences, creating a resolution whose preferences lead us the other fork
 point.
 
 In the first case, we are in cleaver 2 and fork on `sys_platform`, in the
-second case, we are in foo 1 or bar 1 amd fork over `os_name`.
+second case, we are in foo 1 or bar 1 and fork over `platform_machine`.
 
 First case: We select cleaver 2, fork on `sys_platform`, we reject cleaver 2
-(missing fork `os_name`), we select cleaver 1 and don't fork on `os_name` in
-`fork-if-not-forked`, done.
-Second case: We have preference cleaver 1, fork on `os_name` in
+(missing fork `platform_machine`), we select cleaver 1 and don't fork on
+`platform_machine` in `fork-if-not-forked`, done.
+Second case: We have preference cleaver 1, fork on `platform_machine` in
 `fork-if-not-forked`, we reject cleaver 1, we select cleaver 2, we fork on
-`sys_platform`, we accept cleaver 2 since we forked on `os_name`, done.
+`sys_platform`, we accept cleaver 2 since we forked on `platform_machine`, done.
 '''
 
 [resolver_options]
@@ -30,8 +30,8 @@ requires = [
   # Provoke a fork on sys_platform.
   "fork-sys-platform==1; sys_platform == 'linux'",
   "fork-sys-platform==2; sys_platform != 'linux'",
-  # Reject cleaver 2 if we didn't fork on os_name, without forking on os_name.
-  "reject-cleaver2==1; os_name == 'posix'",
+  # Reject cleaver 2 if we didn't fork on platform_machine, without forking on it.
+  "reject-cleaver2==1; platform_machine == 'x86_64'",
   "reject-cleaver2-proxy",
 ]
 
@@ -39,14 +39,14 @@ requires = [
 [packages.fork-sys-platform.versions."2.0.0"]
 
 [packages.reject-cleaver2-proxy.versions."1.0.0"]
-requires = ["reject-cleaver2==2; os_name != 'posix'"]
+requires = ["reject-cleaver2==2; platform_machine != 'x86_64'"]
 
 [packages.reject-cleaver2.versions."1.0.0"]
 [packages.reject-cleaver2.versions."2.0.0"]
 
 [packages.cleaver.versions."1.0.0"]
 requires = [
-  # Provoke a fork on os-name, but only if we didn't fork before.
+  # Provoke a fork on platform_machine, but only if we didn't fork before.
   "fork-if-not-forked!=2; sys_platform == 'linux'",
   "fork-if-not-forked-proxy; sys_platform != 'linux'",
   # Reject cleaver 1 if we didn't fork on sys_platform, without forking on sys_platform.
@@ -69,8 +69,8 @@ requires = ["reject-cleaver1==2; sys_platform != 'linux'"]
 [packages.fork-if-not-forked.versions."1.0.0"]
 requires = [
   # Actually provoke the fork for cleaver 1.
-  "fork-os-name==1; os_name == 'posix'",
-  "fork-os-name==2; os_name != 'posix'",
+  "fork-os-name==1; platform_machine == 'x86_64'",
+  "fork-os-name==2; platform_machine != 'x86_64'",
   "reject-cleaver1-proxy",
 ]
 [packages.fork-if-not-forked.versions."2.0.0"]
