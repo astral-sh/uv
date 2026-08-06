@@ -81,6 +81,20 @@ jobs:
           echo "context-sha=$(git -C "$RUNNER_TEMP/issue-context" rev-parse HEAD)" \
             >> "$GITHUB_OUTPUT"
 
+          {
+            printf 'Issue context update for #%s: %s\n\n' \
+              "$ISSUE_NUMBER" \
+              "$(jq -r '.title | gsub("[\r\n]+"; " ")' "$RUNNER_TEMP/issue.json")"
+            cat agents/prompts/update-issue-context.md
+          } > "$RUNNER_TEMP/update-issue-context-prompt.md"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+      - name: "Find previous Codex thread"
+        id: find-thread
+        if: steps.issue.outputs.exists == 'true'
+        run: |
           artifact_name="codex-thread-issue-$ISSUE_NUMBER"
           artifacts="$(gh api \
             "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$artifact_name&per_page=20")"
@@ -117,39 +131,32 @@ jobs:
 
           if [ -z "$thread_run_id" ]; then
             echo "No trusted Codex thread exists for $GITHUB_REPOSITORY#$ISSUE_NUMBER."
-            echo "thread-found=false" >> "$GITHUB_OUTPUT"
+            echo "found=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           {
-            echo "thread-found=true"
-            echo "thread-run-id=$thread_run_id"
-            echo "thread-artifact=$artifact_name"
+            echo "found=true"
+            echo "run-id=$thread_run_id"
+            echo "artifact=$artifact_name"
           } >> "$GITHUB_OUTPUT"
-
-          {
-            printf 'Issue context update for #%s: %s\n\n' \
-              "$ISSUE_NUMBER" \
-              "$(jq -r '.title | gsub("[\r\n]+"; " ")' "$RUNNER_TEMP/issue.json")"
-            cat agents/prompts/update-issue-context.md
-          } > "$RUNNER_TEMP/update-issue-context-prompt.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
 
       - name: "Restore Codex thread"
-        if: steps.issue.outputs.thread-found == 'true'
+        if: steps.find-thread.outputs.found == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: ${{ steps.issue.outputs.thread-run-id }}
-          name: ${{ steps.issue.outputs.thread-artifact }}
+          run-id: ${{ steps.find-thread.outputs.run-id }}
+          name: ${{ steps.find-thread.outputs.artifact }}
           path: agents/codex/sessions
 
       - name: "Validate Codex thread"
         id: thread
-        if: steps.issue.outputs.thread-found == 'true'
+        if: steps.find-thread.outputs.found == 'true'
         run: |
           while IFS= read -r -d '' compressed_rollout; do
             zstd --decompress --stdout "$compressed_rollout" > "${compressed_rollout%.zst}"
@@ -188,7 +195,7 @@ jobs:
           echo "session-id=$root_session_id" >> "$GITHUB_OUTPUT"
 
       - name: "Update issue context"
-        if: steps.issue.outputs.thread-found == 'true'
+        if: steps.find-thread.outputs.found == 'true'
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -207,7 +214,7 @@ jobs:
 
       - name: "Check issue context changes"
         id: changes
-        if: steps.issue.outputs.thread-found == 'true'
+        if: steps.find-thread.outputs.found == 'true'
         run: |
           if [ -n "$(git -C "$RUNNER_TEMP/issue-context" status --porcelain -- . ':!README.md')" ]; then
             echo "Codex changed files outside the issue-context README."
@@ -234,7 +241,7 @@ jobs:
           retention-days: 1
 
       - name: "Upload Codex thread"
-        if: always() && steps.issue.outputs.thread-found == 'true'
+        if: always() && steps.find-thread.outputs.found == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codex-thread-issue-${{ steps.issue.outputs.number }}
