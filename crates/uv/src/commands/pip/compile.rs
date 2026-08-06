@@ -766,6 +766,7 @@ pub(crate) async fn pip_compile(
                 install_path,
                 tags.as_deref(),
                 &build_options,
+                &index_locations,
             )?;
             write!(writer, "{}", export.to_toml()?)?;
         }

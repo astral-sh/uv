@@ -5268,7 +5268,61 @@ fn parse_failure(name: &str, expected: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
+    use uv_auth::AuthPolicy;
+
     use super::*;
+
+    fn proxy_index(
+        name: &str,
+        proxy_for: &str,
+        url: &str,
+        artifact_base_url: &str,
+    ) -> anyhow::Result<Index> {
+        let mut index = Index::from_extra_index_url(IndexUrl::parse(url, None)?);
+        index.name = Some(name.parse()?);
+        index.proxy_for = Some(proxy_for.parse()?);
+        index.artifact_base_url = Some(DisplaySafeUrl::parse(artifact_base_url)?);
+        Ok(index)
+    }
+
+    #[test]
+    fn proxy_indexes_do_not_persist_physical_credentials_in_tool_receipts() -> anyhow::Result<()> {
+        let proxy = proxy_index(
+            "socket",
+            "pypi",
+            "https://proxy-user:proxy-secret@proxy.example.com/simple/",
+            "https://artifact-user:artifact-secret@proxy.example.com/files/",
+        )?;
+        let options = ResolverInstallerOptions {
+            indexes: IndexOptions {
+                index: Some(vec![proxy]),
+                ..IndexOptions::default()
+            },
+            ..ResolverInstallerOptions::default()
+        };
+
+        let receipt = uv_settings::ToolOptions::from(options);
+        let wire = uv_settings::ToolOptionsWire::from(receipt);
+        let encoded = toml::to_string(&wire)?;
+
+        assert!(!encoded.contains("proxy-user"));
+        assert!(!encoded.contains("proxy-secret"));
+        assert!(!encoded.contains("artifact-user"));
+        assert!(!encoded.contains("artifact-secret"));
+
+        let decoded: uv_settings::ToolOptionsWire = toml::from_str(&encoded)?;
+        let restored = ResolverInstallerOptions::from(uv_settings::ToolOptions::from(decoded));
+        let mut expected = proxy_index(
+            "socket",
+            "pypi",
+            "https://proxy.example.com/simple/",
+            "https://proxy.example.com/files/",
+        )?;
+        expected.authenticate = AuthPolicy::Always;
+
+        assert_eq!(restored.indexes.index, Some(vec![expected]));
+        Ok(())
+    }
 
     #[test]
     fn upgrade_settings_target_only_requested_package() -> anyhow::Result<()> {

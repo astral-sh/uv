@@ -1370,7 +1370,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         debug!("Searching for a compatible version of {package} ({range})");
 
         // Find a version.
-        let Some(candidate) = self.selector.select(
+        let candidate = self.selector.select(
             name,
             range,
             version_maps,
@@ -1380,7 +1380,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
-        ) else {
+        );
+
+        VersionMap::check_proxy_mapping_errors(version_maps)?;
+
+        let Some(candidate) = candidate else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
         };
@@ -1588,7 +1592,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate.version().clone().without_local(),
         ));
 
-        let Some(base_candidate) = self.selector.select(
+        let base_candidate = self.selector.select(
             name,
             &range,
             version_maps,
@@ -1598,7 +1602,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
-        ) else {
+        );
+        VersionMap::check_proxy_mapping_errors(version_maps)?;
+
+        let Some(base_candidate) = base_candidate else {
             return Ok(None);
         };
         let CandidateDist::Compatible(base_dist) = base_candidate.dist() else {
@@ -2658,7 +2665,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit.
-                let Some(candidate) = self.selector.select(
+                let candidate = self.selector.select(
                     &package_name,
                     &range,
                     version_map,
@@ -2668,7 +2675,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     &env,
                     self.tags.as_ref(),
-                ) else {
+                );
+                VersionMap::check_proxy_mapping_errors(version_map)?;
+
+                let Some(candidate) = candidate else {
                     return Ok(None);
                 };
 
