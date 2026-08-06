@@ -976,7 +976,7 @@ pub struct SizeArgs {
     #[arg(long, value_enum, default_value_t = CacheSizeOutputFormat::default())]
     pub output_format: CacheSizeOutputFormat,
 
-    /// Display the cache size in human-readable format (e.g., `1.2 GiB` instead of raw bytes).
+    /// Display the cache size in human-readable format (e.g., `1.2GiB` instead of raw bytes).
     #[arg(
         long = "human",
         short = 'H',
