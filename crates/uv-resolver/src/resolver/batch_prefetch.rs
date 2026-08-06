@@ -231,9 +231,8 @@ impl BatchPrefetcherRunner {
                     if let Some(candidate) =
                         selector.select_no_preference(name, &compatible, version_map, env)
                     {
-                        let compatible = compatible.intersection(
-                            &Range::singleton(candidate.version().clone()).complement(),
-                        );
+                        let compatible =
+                            compatible.difference(&Range::singleton(candidate.version().clone()));
                         phase = BatchPrefetchStrategy::Compatible {
                             compatible,
                             previous: candidate.version().clone(),
@@ -259,7 +258,7 @@ impl BatchPrefetcherRunner {
                         range = match unchangeable_constraints {
                             Term::Positive(constraints) => range.intersection(constraints),
                             Term::Negative(negative_constraints) => {
-                                range.intersection(&negative_constraints.complement())
+                                range.difference(negative_constraints)
                             }
                         };
                     }
