@@ -1492,7 +1492,7 @@ impl Metadata {
         self
     }
 
-    pub fn to_json(&self) -> Result<String, MetadataError> {
-        Ok(serde_json::to_string_pretty(self)?)
+    pub fn write_json(&self, writer: impl std::io::Write) -> Result<(), MetadataError> {
+        Ok(serde_json::to_writer_pretty(writer, self)?)
     }
 }

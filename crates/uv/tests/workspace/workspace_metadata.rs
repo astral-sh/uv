@@ -130,6 +130,30 @@ fn workspace_metadata_simple() {
 }
 
 #[test]
+fn workspace_metadata_quiet() {
+    let context = uv_test::test_context!("3.12");
+    context.init().arg("foo").assert().success();
+
+    let workspace = context.temp_dir.child("foo");
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace).arg("--quiet"), @r"
+    exit_code: 0 (success)
+    ");
+}
+
+#[test]
+fn workspace_metadata_extra_quiet() {
+    let context = uv_test::test_context!("3.12");
+    context.init().arg("foo").assert().success();
+
+    let workspace = context.temp_dir.child("foo");
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace).arg("--quiet").arg("--quiet"), @r"
+    exit_code: 0 (success)
+    ");
+}
+
+#[test]
 fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context.init().arg("foo").assert().success();

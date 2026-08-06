@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -22,7 +22,7 @@ use crate::commands::project::{
     ScriptInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::{ExitStatus, UvError, diagnostics};
-use crate::printer::Printer;
+use crate::printer::{Printer, Stdout};
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
 use super::module_owners::collect_module_owners;
@@ -272,7 +272,12 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
 }
 
 fn print_metadata(export: &Metadata, printer: Printer) -> Result<ExitStatus> {
-    writeln!(printer.stdout(), "{}", export.to_json()?)?;
+    if printer.stdout() == Stdout::Enabled {
+        let mut stdout = BufWriter::new(anstream::stdout().lock());
+        export.write_json(&mut stdout)?;
+        writeln!(stdout)?;
+        stdout.flush()?;
+    }
 
     Ok(ExitStatus::Success)
 }
