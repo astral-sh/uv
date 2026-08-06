@@ -423,6 +423,10 @@ jobs:
         with:
           name: dist
           path: dist/
+
+      - name: Generate PEP 740 attestations
+        uses: astral-sh/attest-action@f589a42a7efb6fe400b4f400de60b4bc90390027 # v0.0.6
+
       - name: Publish
         run: uv publish
 ```
