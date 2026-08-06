@@ -3423,7 +3423,9 @@ mod tests {
                 ))?;
         }
 
-        let (project, _) = temporary_test(root.as_ref()).await.unwrap();
+        let (project, _) = temporary_test(root.as_ref())
+            .await
+            .map_err(|(error, _)| error)?;
         assert_json_snapshot!(
             project.workspace().packages().keys().collect::<Vec<_>>(),
             @r#"
