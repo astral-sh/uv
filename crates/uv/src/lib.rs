@@ -130,9 +130,22 @@ impl uv_errors::Hint for ExternallyInstalledError {
     }
 }
 
-#[instrument(skip_all)]
 #[doc(hidden)]
 pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Result<ExitStatus> {
+    Box::pin(run_with_workspace_cache(
+        cli,
+        global_initialization,
+        WorkspaceCache::default(),
+    ))
+    .await
+}
+
+#[instrument(name = "run", skip_all)]
+async fn run_with_workspace_cache(
+    cli: Cli,
+    global_initialization: GlobalInitialization,
+    workspace_cache: WorkspaceCache,
+) -> Result<ExitStatus> {
     let config_discovery = ConfigDiscovery::from_args(cli.top_level.no_config);
 
     // Configure color before resolving settings so argument errors retain their styling.
@@ -307,7 +320,6 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         cli.top_level.cache_args.no_cache,
         cli.top_level.cache_args.cache_dir.clone(),
     )?;
-    let workspace_cache = WorkspaceCache::default();
     let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
         if config_file
             .file_name()
@@ -3067,6 +3079,12 @@ where
         cli.top_level.global_args.no_progress,
     );
 
+    // Initialize the cache before spawning `main2`. Constructing its `papaya` map initializes
+    // `seize`, which registers a process-wide memory barrier on Linux. Once multiple threads share
+    // the address space, registration waits for an RCU (read-copy-update) grace period; while the
+    // process is single-threaded, it takes the kernel's inexpensive fast path instead.
+    let workspace_cache = WorkspaceCache::default();
+
     // See `min_stack_size` doc comment about `main2`
     let min_stack_size = min_stack_size();
     let main2 = move || {
@@ -3076,7 +3094,11 @@ where
             .build()
             .expect("Failed building the Runtime");
         // Box the large main future to avoid stack overflows.
-        let result = runtime.block_on(Box::pin(run(cli, GlobalInitialization::Initialize)));
+        let result = runtime.block_on(Box::pin(run_with_workspace_cache(
+            cli,
+            GlobalInitialization::Initialize,
+            workspace_cache,
+        )));
         // Avoid waiting for pending tasks to complete.
         //
         // The resolver may have kicked off HTTP requests during resolution that
