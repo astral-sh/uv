@@ -1,5 +1,6 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
@@ -8,7 +9,7 @@ use std::hash::BuildHasherDefault;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use glob::{GlobError, PatternError, glob};
+use glob::{GlobError, Pattern, PatternError, glob};
 use itertools::Itertools;
 use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
@@ -1163,6 +1164,9 @@ impl Workspace {
             );
         }
 
+        // Prepare exclusions only after finding a member that is not explicitly ignored.
+        let mut exclusions = None;
+
         // Add all other workspace members.
         for member_glob in workspace_definition.clone().members.unwrap_or_default() {
             // Normalize the member glob to remove leading `./` and other relative path components
@@ -1210,7 +1214,14 @@ impl Workspace {
                 }
 
                 // If the member is excluded, ignore it.
-                if is_excluded_from_workspace(&member_root, workspace_root, workspace_definition)? {
+                if exclusions
+                    .get_or_insert_with(|| {
+                        WorkspaceExclusions::new(workspace_root, workspace_definition)
+                    })
+                    .as_ref()
+                    .map_err(WorkspaceError::clone)?
+                    .matches(&member_root)
+                {
                     debug!(
                         "Ignoring workspace member: `{}`",
                         member_root.simplified_display()
@@ -1951,21 +1962,77 @@ fn is_excluded_from_workspace(
     workspace_root: &Path,
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
-    for exclude_glob in workspace.exclude.iter().flatten() {
-        // Normalize the exclude glob to remove leading `./` and other relative path components
+    Ok(WorkspaceExclusions::new(workspace_root, workspace)?.matches(project_path))
+}
+
+/// Compiled workspace exclusion patterns.
+#[derive(Debug)]
+struct WorkspaceExclusions<'workspace> {
+    workspace_root: &'workspace Path,
+    patterns: Vec<WorkspaceExclusion<'workspace>>,
+}
+
+/// A workspace exclusion that can reuse its parsed pattern or requires normalization.
+#[derive(Debug)]
+enum WorkspaceExclusion<'workspace> {
+    Relative(&'workspace Pattern),
+    Absolute(Pattern),
+}
+
+impl<'workspace> WorkspaceExclusions<'workspace> {
+    /// Compile the normalized workspace exclusion patterns.
+    fn new(
+        workspace_root: &'workspace Path,
+        workspace: &'workspace ToolUvWorkspace,
+    ) -> Result<Self, WorkspaceError> {
+        let patterns = workspace
+            .exclude
+            .iter()
+            .flatten()
+            .map(|exclude_glob| Self::compile_pattern(workspace_root, exclude_glob))
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self {
+            workspace_root,
+            patterns,
+        })
+    }
+
+    /// Return whether any workspace exclusion matches the project path.
+    fn matches(&self, project_path: &Path) -> bool {
+        let relative_path = project_path
+            .simplified()
+            .strip_prefix(self.workspace_root.simplified())
+            .ok();
+
+        self.patterns.iter().any(|pattern| match pattern {
+            WorkspaceExclusion::Relative(pattern) => {
+                relative_path.is_some_and(|relative_path| pattern.matches_path(relative_path))
+            }
+            WorkspaceExclusion::Absolute(pattern) => pattern.matches_path(project_path),
+        })
+    }
+
+    /// Reuse an already compiled relative pattern or compile its normalized absolute equivalent.
+    fn compile_pattern(
+        workspace_root: &Path,
+        exclude_glob: &'workspace Pattern,
+    ) -> Result<WorkspaceExclusion<'workspace>, WorkspaceError> {
+        // Normalize the exclude glob to remove leading `./` and other relative path components.
         let normalized_glob = normalize_path(Path::new(exclude_glob.as_str()));
-        let absolute_glob = PathBuf::from(glob::Pattern::escape(
+        if matches!(&normalized_glob, Cow::Borrowed(_)) && normalized_glob.is_relative() {
+            return Ok(WorkspaceExclusion::Relative(exclude_glob));
+        }
+
+        let absolute_glob = PathBuf::from(Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
         .join(normalized_glob.as_ref());
         let absolute_glob = absolute_glob.to_string_lossy();
-        let exclude_pattern = glob::Pattern::new(&absolute_glob)
-            .map_err(|err| WorkspaceErrorKind::Pattern(absolute_glob.to_string(), err))?;
-        if exclude_pattern.matches_path(project_path) {
-            return Ok(true);
-        }
+        Pattern::new(&absolute_glob)
+            .map(WorkspaceExclusion::Absolute)
+            .map_err(|err| WorkspaceErrorKind::Pattern(absolute_glob.to_string(), err).into())
     }
-    Ok(false)
 }
 
 /// Check if we're in the `tool.uv.workspace.members` of a workspace.
@@ -3299,6 +3366,80 @@ mod tests {
             }
             "#);
         });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn exclude_package_with_normalized_glob_and_escaped_root() -> Result<()> {
+        let temp_dir = tempfile::TempDir::new()?;
+        let temp_dir_root = ChildPath::new(temp_dir.path());
+        let root = temp_dir_root.child("workspace[glob]?");
+
+        root.child("pyproject.toml").write_str(
+            r#"
+            [project]
+            name = "albatross"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.workspace]
+            members = ["./packages/*", "../external-*"]
+            exclude = [
+                "packages/excluded-borrowed-*",
+                "./ignored/../packages/excluded",
+                "./packages/./excluded-glob-*",
+                "../external-excluded",
+            ]
+            "#,
+        )?;
+
+        for member in [
+            "included",
+            "excluded",
+            "excluded-glob-one",
+            "excluded-borrowed-one",
+        ] {
+            root.child("packages")
+                .child(member)
+                .child("pyproject.toml")
+                .write_str(&format!(
+                    r#"
+                    [project]
+                    name = "{member}"
+                    version = "0.1.0"
+                    requires-python = ">=3.12"
+                    "#,
+                ))?;
+        }
+
+        for member in ["external-included", "external-excluded"] {
+            temp_dir_root
+                .child(member)
+                .child("pyproject.toml")
+                .write_str(&format!(
+                    r#"
+                    [project]
+                    name = "{member}"
+                    version = "0.1.0"
+                    requires-python = ">=3.12"
+                    "#,
+                ))?;
+        }
+
+        let (project, _) = temporary_test(root.as_ref())
+            .await
+            .map_err(|(error, _)| error)?;
+        assert_json_snapshot!(
+            project.workspace().packages().keys().collect::<Vec<_>>(),
+            @r#"
+        [
+          "albatross",
+          "external-included",
+          "included"
+        ]
+        "#
+        );
 
         Ok(())
     }

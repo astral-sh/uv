@@ -21,6 +21,7 @@ const EXCLUDE_NEWER: &str = "2024-08-08";
 
 /// Mirroring the airflow workspace size at time of writing.
 const MEMBER_COUNT: usize = 127;
+const EXCLUDE_COUNT: usize = 128;
 const OPTIONAL_DEPENDENCY_GROUP_COUNT: usize = 122;
 const DEPENDENCY_GROUP_COUNT: usize = 64;
 const UNUSED_ROOT_TABLE_COUNT: usize = 128;
@@ -36,7 +37,7 @@ fn provider_requirement(member_index: usize) -> String {
 
 /// Create a synthetic workspace with a root and many members, returning the directories to run
 /// discovery from.
-fn create_workspace(root: &Path) -> Vec<PathBuf> {
+fn create_workspace(root: &Path, exclude_count: usize) -> Vec<PathBuf> {
     let mut discovery_roots = Vec::with_capacity(MEMBER_COUNT + 1);
     discovery_roots.push(root.to_path_buf());
 
@@ -53,13 +54,13 @@ fn create_workspace(root: &Path) -> Vec<PathBuf> {
         discovery_roots.push(member_root);
     }
 
-    fs_err::write(root.join("pyproject.toml"), root_pyproject())
+    fs_err::write(root.join("pyproject.toml"), root_pyproject(exclude_count))
         .expect("Failed to write workspace root pyproject.toml");
 
     discovery_roots
 }
 
-fn root_pyproject() -> String {
+fn root_pyproject(exclude_count: usize) -> String {
     let dependencies: Vec<String> = (0..MEMBER_COUNT).map(provider_requirement).collect();
 
     let optional_dependencies: toml::Table = (0..OPTIONAL_DEPENDENCY_GROUP_COUNT)
@@ -103,6 +104,16 @@ fn root_pyproject() -> String {
             )
         })
         .collect();
+
+    let mut workspace = toml::toml! {
+        members = ["packages/*"]
+    };
+    if exclude_count > 0 {
+        let excludes: Vec<String> = (0..exclude_count)
+            .map(|exclude_index| format!("packages/excluded-{exclude_index:03}"))
+            .collect();
+        workspace.insert("exclude".to_string(), toml::Value::from(excludes));
+    }
 
     // Generate some unrelated work for the toml parser, mimicking real tool configuration.
     let generated: toml::Table = (0..UNUSED_ROOT_TABLE_COUNT)
@@ -168,9 +179,7 @@ fn root_pyproject() -> String {
         [tool.uv]
         package = false
         sources = (sources)
-
-        [tool.uv.workspace]
-        members = ["packages/*"]
+        workspace = (workspace)
 
         [tool.linter]
         generated = (generated)
@@ -258,8 +267,20 @@ fn member_pyproject(member_index: usize) -> String {
 }
 
 fn discover_workspace_from_all_members(c: &mut Criterion<WallTime>) {
+    discover_workspace(c, "discover_workspace_from_all_members", 0);
+}
+
+fn discover_workspace_from_all_members_with_excludes(c: &mut Criterion<WallTime>) {
+    discover_workspace(
+        c,
+        "discover_workspace_from_all_members_with_excludes",
+        EXCLUDE_COUNT,
+    );
+}
+
+fn discover_workspace(c: &mut Criterion<WallTime>, name: &str, exclude_count: usize) {
     let dir = tempfile::tempdir().expect("Failed to create temporary directory");
-    let discovery_roots = create_workspace(dir.path());
+    let discovery_roots = create_workspace(dir.path(), exclude_count);
     let cache = Cache::from_path(dir.path().join(".uv-cache"));
     let options = DiscoveryOptions::default();
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -267,7 +288,7 @@ fn discover_workspace_from_all_members(c: &mut Criterion<WallTime>) {
         .build()
         .expect("Failed to create Tokio runtime");
 
-    c.bench_function("discover_workspace_from_all_members", |b| {
+    c.bench_function(name, |b| {
         b.iter(|| {
             let workspace_cache = WorkspaceCache::default();
             for root in &discovery_roots {
@@ -287,7 +308,7 @@ fn discover_workspace_from_all_members(c: &mut Criterion<WallTime>) {
 
 fn run_python_version_synthetic_workspace(c: &mut Criterion<WallTime>) {
     let workspace_dir = tempfile::tempdir().expect("Failed to create temporary directory");
-    create_workspace(workspace_dir.path());
+    create_workspace(workspace_dir.path(), 0);
 
     let cache_dir = workspace_dir.path().join(".uv-cache");
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -365,6 +386,7 @@ fn run_cli(
 criterion_group!(
     workspace_discovery,
     discover_workspace_from_all_members,
+    discover_workspace_from_all_members_with_excludes,
     run_python_version_synthetic_workspace
 );
 criterion_main!(workspace_discovery);
