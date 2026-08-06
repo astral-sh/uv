@@ -1159,6 +1159,7 @@ impl Workspace {
             );
         }
 
+        // Prepare exclusions only after finding a member that is not explicitly ignored.
         let mut exclusions = None;
 
         // Add all other workspace members.
@@ -1208,15 +1209,13 @@ impl Workspace {
                 }
 
                 // If the member is excluded, ignore it.
-                if exclusions.is_none() {
-                    exclusions = Some(WorkspaceExclusions::new(
-                        workspace_root,
-                        workspace_definition,
-                    )?);
-                }
                 if exclusions
+                    .get_or_insert_with(|| {
+                        WorkspaceExclusions::new(workspace_root, workspace_definition)
+                    })
                     .as_ref()
-                    .is_some_and(|exclusions| exclusions.matches(&member_root))
+                    .map_err(WorkspaceError::clone)?
+                    .matches(&member_root)
                 {
                     debug!(
                         "Ignoring workspace member: `{}`",
