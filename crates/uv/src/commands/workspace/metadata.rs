@@ -272,7 +272,7 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
 }
 
 fn print_metadata(export: &Metadata, printer: Printer) -> Result<ExitStatus> {
-    if printer.stdout() == Stdout::Enabled {
+    if printer.stdout_important() == Stdout::Enabled {
         let mut stdout = BufWriter::new(anstream::stdout().lock());
         export.write_json(&mut stdout)?;
         writeln!(stdout)?;

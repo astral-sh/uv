@@ -136,9 +136,47 @@ fn workspace_metadata_quiet() {
 
     let workspace = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace).arg("--quiet"), @r"
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace).arg("--quiet"), @r#"
     exit_code: 0 (success)
-    ");
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/foo",
+      "workspace": {
+        "path": "[TEMP_DIR]/foo",
+        "id": "workspace+[TEMP_DIR]/foo"
+      },
+      "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
+      "members": [
+        {
+          "name": "foo",
+          "path": "[TEMP_DIR]/foo",
+          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo/"
+        }
+      ],
+      "resolution": {
+        "foo==0.1.0@editable+[TEMP_DIR]/foo/": {
+          "name": "foo",
+          "version": "0.1.0",
+          "source": {
+            "editable": "[TEMP_DIR]/foo/"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/foo": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/foo",
+          "dependencies": []
+        }
+      }
+    }
+    "#);
 }
 
 #[test]
