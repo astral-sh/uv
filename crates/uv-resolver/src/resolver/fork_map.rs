@@ -6,7 +6,7 @@ use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKind};
 
 use crate::ResolverEnvironment;
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
+use crate::universal_marker::UniversalMarker;
 
 /// A set of package names associated with a given fork.
 pub(crate) type ForkSet = ForkMap<()>;
@@ -40,11 +40,9 @@ impl ForkScope {
             .as_ref()
             .filter(|conflict_item| matches!(conflict_item.kind(), ConflictKind::Group(_)))
             .map_or(requirement.marker, |conflict_item| {
-                UniversalMarker::new(
-                    requirement.marker.without_extras(),
-                    ConflictMarker::from_conflict_item(conflict_item),
-                )
-                .combined()
+                requirement
+                    .marker
+                    .and(UniversalMarker::from_conflict_item(conflict_item).combined())
             });
         Self { marker, conflict }
     }
@@ -72,7 +70,7 @@ impl ForkScope {
     }
 
     fn matches(&self, env: &ResolverEnvironment) -> bool {
-        env.included_by_marker(self.marker)
+        env.included_by_scoped_marker(self.marker)
             && self
                 .conflict()
                 .is_none_or(|conflict| env.included_by_group(conflict))

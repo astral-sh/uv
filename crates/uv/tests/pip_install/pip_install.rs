@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -18,6 +19,7 @@ use futures::io::AllowStdIo;
 use indoc::{formatdoc, indoc};
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
+use sha2::{Digest, Sha256};
 #[cfg(unix)]
 use tokio::io::AsyncWriteExt;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
@@ -34,6 +36,7 @@ use uv_static::EnvVars;
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::PackseServer;
+use uv_test::packse::scenario::{Package, PackageMetadata, Scenario};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
     venv_bin_path,
@@ -10580,6 +10583,230 @@ fn direct_url_hash_source_tree_dependency() -> Result<()> {
     hint: `protobug` (v0.3.0) was included because `pylock` (v0.1.0) depends on `protobug`
     "
     );
+
+    Ok(())
+}
+
+/// Verify archive hashes discovered through an extra activated on an existing direct source.
+#[test]
+fn direct_url_hash_transitively_activated_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::empty();
+    let bridge = context.temp_dir.child("bridge");
+    let target = context.temp_dir.child("target");
+    let leaf = context.temp_dir.child("leaf");
+
+    let bridge_url = Url::from_directory_path(bridge.path())
+        .map_err(|()| anyhow!("failed to construct bridge URL"))?;
+    let target_url = Url::from_directory_path(target.path())
+        .map_err(|()| anyhow!("failed to construct target URL"))?;
+    let leaf_url = Url::from_directory_path(leaf.path())
+        .map_err(|()| anyhow!("failed to construct leaf URL"))?;
+    let wheel_url = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links/tqdm-1000.0.0-py3-none-any.whl"),
+    )
+    .map_err(|()| anyhow!("failed to construct wheel URL"))?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["bridge[feature] @ {bridge_url}", "target @ {target_url}"]
+
+            [build-system]
+            requires = ["uv_build>=0.7,<10000"]
+            build-backend = "uv_build"
+        "#})?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    bridge
+        .child("src")
+        .child("bridge")
+        .child("__init__.py")
+        .touch()?;
+
+    target.child("pyproject.toml").write_str(&formatdoc! {r#"
+            [project]
+            name = "target"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = ["leaf @ {leaf_url}"]
+
+            [build-system]
+            requires = ["uv_build>=0.7,<10000"]
+            build-backend = "uv_build"
+        "#})?;
+    target
+        .child("src")
+        .child("target")
+        .child("__init__.py")
+        .touch()?;
+
+    leaf.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["tqdm @ {wheel_url}#sha256=0000000000000000000000000000000000000000000000000000000000000000"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    leaf.child("src")
+        .child("leaf")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(".")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+      × Failed to read `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
+
+    hint: `tqdm` (v1000.0.0) was included because `project` (v0.1.0) depends on `target[feature]` (v0.1.0) which depends on `leaf` (v0.1.0) which depends on `tqdm`
+    ");
+
+    Ok(())
+}
+
+/// Admit correctly hashed URL dependencies discovered after replaying an activated extra.
+#[test]
+fn require_hashes_transitively_activated_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel_url = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links/tqdm-1000.0.0-py3-none-any.whl"),
+    )
+    .map_err(|()| anyhow!("failed to construct wheel URL"))?;
+
+    let mut leaf_scenario = Scenario::empty();
+    leaf_scenario.packages.insert(
+        "leaf".parse()?,
+        Package {
+            versions: BTreeMap::from([(
+                "0.1.0".parse()?,
+                PackageMetadata {
+                    requires: vec![
+                        format!(
+                            "tqdm @ {wheel_url}#sha256=a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13"
+                        )
+                        .parse()?,
+                    ],
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    let leaf_server = PackseServer::from_scenario(&leaf_scenario);
+    let leaf_url = leaf_server.file_url("leaf-0.1.0-py3-none-any.whl");
+    let leaf_archive = context.temp_dir.child("leaf-0.1.0-py3-none-any.whl");
+    download_to_disk(&leaf_url, leaf_archive.path());
+    let leaf_hash = format!("{:x}", Sha256::digest(fs_err::read(leaf_archive.path())?));
+
+    let mut scenario = Scenario::empty();
+    scenario.packages.insert(
+        "bridge".parse()?,
+        Package {
+            versions: BTreeMap::from([(
+                "0.1.0".parse()?,
+                PackageMetadata {
+                    extras: BTreeMap::from([(
+                        "feature".parse()?,
+                        vec!["target[feature]".parse()?],
+                    )]),
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    scenario.packages.insert(
+        "target".parse()?,
+        Package {
+            versions: BTreeMap::from([(
+                "0.1.0".parse()?,
+                PackageMetadata {
+                    extras: BTreeMap::from([(
+                        "feature".parse()?,
+                        vec![format!("leaf @ {leaf_url}#sha256={leaf_hash}").parse()?],
+                    )]),
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    let server = PackseServer::from_scenario(&scenario);
+
+    let bridge_url = server.file_url("bridge-0.1.0-py3-none-any.whl");
+    let bridge_archive = context.temp_dir.child("bridge-0.1.0-py3-none-any.whl");
+    download_to_disk(&bridge_url, bridge_archive.path());
+    let bridge_hash = format!("{:x}", Sha256::digest(fs_err::read(bridge_archive.path())?));
+    let target_url = server.file_url("target-0.1.0-py3-none-any.whl");
+    let target_archive = context.temp_dir.child("target-0.1.0-py3-none-any.whl");
+    download_to_disk(&target_url, target_archive.path());
+    let target_hash = format!("{:x}", Sha256::digest(fs_err::read(target_archive.path())?));
+
+    let mut filters = context.filters();
+    filters.push((r"sha256=[0-9a-f]{64}", "sha256=[HASH]"));
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg(format!("bridge[feature] @ {bridge_url}#sha256={bridge_hash}"))
+        .arg(format!("target @ {target_url}#sha256={target_hash}"))
+        .arg("--require-hashes")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + bridge==0.1.0 (from http://[LOCALHOST]/files/bridge-0.1.0-py3-none-any.whl#sha256=[HASH])
+     + leaf==0.1.0 (from http://[LOCALHOST]/files/leaf-0.1.0-py3-none-any.whl#sha256=[HASH])
+     + target==0.1.0 (from http://[LOCALHOST]/files/target-0.1.0-py3-none-any.whl#sha256=[HASH])
+     + tqdm==1000.0.0 (from file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl#sha256=[HASH])
+    ");
 
     Ok(())
 }

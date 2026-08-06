@@ -45,6 +45,8 @@ pub struct RequestedRequirements {
     extras: Box<[ExtraName]>,
     /// The set of requirements that were requested by the originating requirement.
     requirements: Box<[Requirement]>,
+    /// The requirement that activated this source tree, including its inherited fork scope.
+    activation: Requirement,
     /// Whether the dependencies were direct or transitive.
     direct: bool,
 }
@@ -56,6 +58,7 @@ impl RequestedRequirements {
         version: Version,
         extras: Box<[ExtraName]>,
         requirements: Box<[Requirement]>,
+        activation: Requirement,
         direct: bool,
     ) -> Self {
         Self {
@@ -63,6 +66,7 @@ impl RequestedRequirements {
             version,
             extras,
             requirements,
+            activation,
             direct,
         }
     }
@@ -85,6 +89,11 @@ impl RequestedRequirements {
     /// Return the requirements that were included on the originating requirement.
     pub fn requirements(&self) -> &[Requirement] {
         &self.requirements
+    }
+
+    /// Return the activating source, including its inherited environment and conflict markers.
+    pub fn activation(&self) -> &Requirement {
+        &self.activation
     }
 
     /// Return whether the dependencies were direct or transitive.

@@ -23,7 +23,7 @@ use uv_test::uv_snapshot;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 #[cfg(feature = "test-universal")]
-use uv_test::{download_to_disk, venv_bin_path};
+use uv_test::{TestContext, download_to_disk, venv_bin_path};
 
 /// Generate the preview lock without package metadata.
 #[cfg(feature = "test-universal")]
@@ -15183,6 +15183,1325 @@ fn lock_transitive_extra() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+/// An extra activated transitively on an already-known path dependency should enable its
+/// extra-gated path dependencies, even when the extra arrives via a registry-form requirement
+/// (i.e., one without an explicit URL).
+///
+/// See <https://github.com/astral-sh/uv/issues/20672>
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    let target = context.temp_dir.child("packages").child("target");
+    target.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+    "#})?;
+
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "bridge"
+        version = "0.1.0"
+        source = { directory = "packages/bridge" }
+        dependencies = [
+            { name = "target" },
+        ]
+
+        [package.optional-dependencies]
+        feature = [
+            { name = "target", extra = ["feature"] },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "target" },
+            { name = "target", extras = ["feature"], marker = "extra == 'feature'" },
+        ]
+        provides-extras = ["feature"]
+
+        [[package]]
+        name = "leaf"
+        version = "0.1.0"
+        source = { directory = "packages/leaf" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "bridge", extra = ["feature"] },
+            { name = "target" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "bridge", extras = ["feature"], directory = "packages/bridge" },
+            { name = "target", directory = "packages/target" },
+        ]
+
+        [[package]]
+        name = "target"
+        version = "0.1.0"
+        source = { directory = "packages/target" }
+
+        [package.optional-dependencies]
+        feature = [
+            { name = "leaf" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "leaf", marker = "extra == 'feature'", directory = "packages/leaf" }]
+        provides-extras = ["feature"]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Prepare a local source whose nested URL sits behind contradictory ancestor markers.
+#[cfg(feature = "test-universal")]
+fn write_disjoint_ancestor_source_project(
+    context: &TestContext,
+    alpha_marker: &str,
+    charlie_marker: &str,
+) -> Result<()> {
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["alpha ; {alpha_marker}"]
+
+            [tool.uv]
+            package = false
+
+            [tool.uv.sources]
+            alpha = {{ path = "packages/alpha" }}
+        "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("alpha")
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "alpha"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["charlie ; {charlie_marker}"]
+
+            [tool.uv.sources]
+            charlie = {{ path = "../charlie" }}
+        "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("charlie")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "charlie"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["delta"]
+
+            [tool.uv.sources]
+            delta = { path = "../delta" }
+        "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("delta")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "delta"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+
+    Ok(())
+}
+
+/// Register nested URLs even when contradictory platform markers make their parent unreachable.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_disjoint_platform_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_disjoint_ancestor_source_project(
+        &context,
+        "sys_platform != 'linux'",
+        "sys_platform == 'linux'",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Register nested URLs even when contradictory Python markers make their parent unreachable.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_disjoint_python_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_disjoint_ancestor_source_project(
+        &context,
+        "python_version < '3.13'",
+        "python_version >= '3.13'",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Shared local dependencies should be traversed once, including across distinct ancestor markers.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_shared_source_graph() -> Result<()> {
+    const LEVELS: usize = 8;
+
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["node-0-left", "node-0-right"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        node-0-left = { path = "packages/node-0-left" }
+        node-0-right = { path = "packages/node-0-right" }
+    "#})?;
+
+    for level in 0..LEVELS {
+        for side in ["left", "right"] {
+            let name = format!("node-{level}-{side}");
+            let (dependencies, sources) = if level + 1 < LEVELS {
+                let next = level + 1;
+                (
+                    format!(
+                        r#"["node-{next}-left ; python_full_version != '3.12.{next}'", "node-{next}-right ; python_full_version != '3.13.{next}'"]"#
+                    ),
+                    formatdoc! {r#"
+                        [tool.uv.sources]
+                        node-{next}-left = {{ path = "../node-{next}-left" }}
+                        node-{next}-right = {{ path = "../node-{next}-right" }}
+                    "#},
+                )
+            } else {
+                ("[]".to_string(), String::new())
+            };
+
+            context
+                .temp_dir
+                .child("packages")
+                .child(&name)
+                .child("pyproject.toml")
+                .write_str(&formatdoc! {r#"
+                    [project]
+                    name = "{name}"
+                    version = "0.1.0"
+                    requires-python = ">=3.12"
+                    dependencies = {dependencies}
+
+                    {sources}
+                "#})?;
+        }
+    }
+
+    let mut filters = context.filters();
+    filters.push((r"(?m)^.*Performing lookahead for [^\n]*\n", ""));
+
+    let output = uv_snapshot!(filters, context.lock()
+        .arg("--offline")
+        .env(EnvVars::RUST_LOG, "uv_requirements::lookahead=trace"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 17 packages in [TIME]
+    ");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(
+        stderr.matches("Performing lookahead for ").count(),
+        LEVELS * 2 + 1,
+        "each local source should be traversed once"
+    );
+
+    Ok(())
+}
+
+/// Preserve the source fork when an activated extra selects different transitive indexes.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_scoped_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .workspace_root
+        .join("test/links/tqdm-1000.0.0-py3-none-any.whl");
+
+    for index in ["linux", "other"] {
+        let directory = context.temp_dir.join("indexes").join(index);
+        fs_err::create_dir_all(&directory)?;
+        fs_err::copy(&wheel, directory.join("tqdm-1000.0.0-py3-none-any.whl"))?;
+    }
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = {{ path = "packages/bridge" }}
+        target = [
+            {{ path = "packages/target-linux", marker = "sys_platform == 'linux'" }},
+            {{ path = "packages/target-other", marker = "sys_platform != 'linux'" }},
+        ]
+
+        [[tool.uv.index]]
+        name = "linux"
+        url = "{linux_index}"
+        format = "flat"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "other"
+        url = "{other_index}"
+        format = "flat"
+        explicit = true
+    "#,
+            linux_index = context.temp_dir.join("indexes/linux").portable_display(),
+            other_index = context.temp_dir.join("indexes/other").portable_display(),
+        })?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    for index in ["linux", "other"] {
+        let directory = context.temp_dir.join("indexes").join(index);
+        context
+            .temp_dir
+            .child("packages")
+            .child(format!("target-{index}"))
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+                [project]
+                name = "target"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = []
+
+                [project.optional-dependencies]
+                feature = ["tqdm"]
+
+                [tool.uv.sources]
+                tqdm = {{ index = "{index}" }}
+
+                [[tool.uv.index]]
+                name = "{index}"
+                url = "{directory}"
+                format = "flat"
+                explicit = true
+            "#,
+                directory = directory.portable_display(),
+            })?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Preserve conflicting project-extra scopes on source-specific index requirements.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_conflicting_extra_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .workspace_root
+        .join("test/links/tqdm-1000.0.0-py3-none-any.whl");
+
+    for extra in ["foo", "bar"] {
+        let directory = context.temp_dir.join("indexes").join(extra);
+        fs_err::create_dir_all(&directory)?;
+        fs_err::copy(&wheel, directory.join("tqdm-1000.0.0-py3-none-any.whl"))?;
+    }
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["bridge[feature]", "target"]
+        bar = ["target"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{{ extra = "foo" }}, {{ extra = "bar" }}]]
+
+        [tool.uv.sources]
+        bridge = {{ path = "packages/bridge", extra = "foo" }}
+        target = [
+            {{ path = "packages/target-foo", extra = "foo" }},
+            {{ path = "packages/target-bar", extra = "bar" }},
+        ]
+
+        [[tool.uv.index]]
+        name = "foo"
+        url = "{foo_index}"
+        format = "flat"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "bar"
+        url = "{bar_index}"
+        format = "flat"
+        explicit = true
+    "#,
+            foo_index = context.temp_dir.join("indexes/foo").portable_display(),
+            bar_index = context.temp_dir.join("indexes/bar").portable_display(),
+        })?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("bridge")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "bridge"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = ["target[feature]"]
+        "#})?;
+
+    for extra in ["foo", "bar"] {
+        let directory = context.temp_dir.join("indexes").join(extra);
+        context
+            .temp_dir
+            .child("packages")
+            .child(format!("target-{extra}"))
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+                [project]
+                name = "target"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = ["tqdm"]
+
+                [project.optional-dependencies]
+                feature = []
+
+                [tool.uv.sources]
+                tqdm = {{ index = "{extra}" }}
+
+                [[tool.uv.index]]
+                name = "{extra}"
+                url = "{directory}"
+                format = "flat"
+                explicit = true
+            "#,
+                directory = directory.portable_display(),
+            })?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Canonicalize symlinked direct sources discovered through a transitively activated extra.
+#[cfg(all(unix, feature = "test-universal"))]
+#[test]
+fn lock_transitive_extra_path_dependency_symlinked_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("bridge")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "bridge"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = ["target[feature]"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("target")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "target"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = ["left", "right"]
+
+            [tool.uv.sources]
+            left = { path = "../left" }
+            right = { path = "../right" }
+        "#})?;
+
+    for (name, source) in [("left", "../shared"), ("right", "../shared-alias")] {
+        context
+            .temp_dir
+            .child("packages")
+            .child(name)
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+                [project]
+                name = "{name}"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = ["shared"]
+
+                [tool.uv.sources]
+                shared = {{ path = "{source}" }}
+            "#})?;
+    }
+
+    let shared = context.temp_dir.child("packages").child("shared");
+    shared.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "shared"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    fs_err::os::unix::fs::symlink(
+        shared.path(),
+        context.temp_dir.child("packages").child("shared-alias"),
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Create a source tree whose extra is activated only by replaying a registry-form requirement.
+#[cfg(feature = "test-universal")]
+fn write_transitively_activated_source(context: &TestContext, dependency: &str) -> Result<()> {
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("bridge")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "bridge"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = ["target[feature]"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("target")
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "target"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = ["{dependency}"]
+        "#})?;
+
+    Ok(())
+}
+
+/// Include pins discovered by activated source extras before initializing yanked candidates.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_yanked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("yanked/package-only-yanked.toml");
+    write_transitively_activated_source(&context, "a==1.0.0")?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    warning: `a==1.0.0` is yanked
+    ");
+
+    Ok(())
+}
+
+/// Include explicit pre-release pins from activated source extras in candidate selection.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_prerelease() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new(
+        "prereleases/package-prerelease-specified-only-prerelease-available.toml",
+    );
+    write_transitively_activated_source(&context, "a==0.3.0a1")?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=explicit"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Resolve mixed extra and platform markers using the extras selected in the active fork.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_mixed_extra_platform_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["target[foo]"]
+    "#})?;
+
+    let target = context.temp_dir.child("packages").child("target");
+    target.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "leaf ; (sys_platform == 'linux' and extra == 'foo') or (sys_platform != 'linux' and extra == 'bar')",
+        ]
+
+        [project.optional-dependencies]
+        foo = []
+        bar = []
+
+        [tool.uv.sources]
+        leaf = [
+            { path = "../leaf", marker = "sys_platform == 'linux'" },
+            { path = "../missing-leaf", marker = "sys_platform != 'linux'" },
+        ]
+    "#})?;
+
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Replay registry extras only against direct sources from compatible dependency groups.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_conflicting_group_scoped_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        foo = ["bridge[feature]", "target"]
+        bar = ["target"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ group = "foo" }, { group = "bar" }]]
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge", group = "foo" }
+        target = [
+            { path = "packages/target-foo", group = "foo" },
+            { path = "packages/target-bar", group = "bar" },
+        ]
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    let target_foo = context.temp_dir.child("packages").child("target-foo");
+    target_foo.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+    "#})?;
+
+    let target_bar = context.temp_dir.child("packages").child("target-bar");
+    target_bar.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["missing-leaf"]
+
+        [tool.uv.sources]
+        missing-leaf = { path = "../missing-leaf" }
+    "#})?;
+
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Preserve conflicting source scopes belonging to different workspace members.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_conflicting_workspace_scoped_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        package = false
+        conflicts = [[
+            { package = "member-one", extra = "foo" },
+            { package = "member-two", extra = "bar" },
+        ]]
+
+        [tool.uv.workspace]
+        members = ["member-one", "member-two"]
+    "#})?;
+
+    let member_one = context.temp_dir.child("member-one");
+    member_one.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member-one"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["bridge[feature]", "target"]
+
+        [tool.uv.sources]
+        bridge = { path = "../packages/bridge", extra = "foo" }
+        target = { path = "../packages/target-one", extra = "foo" }
+    "#})?;
+
+    let member_two = context.temp_dir.child("member-two");
+    member_two.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member-two"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        bar = ["target"]
+
+        [tool.uv.sources]
+        target = { path = "../packages/target-two", extra = "bar" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    let target_one = context.temp_dir.child("packages").child("target-one");
+    target_one.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+    "#})?;
+
+    let target_two = context.temp_dir.child("packages").child("target-two");
+    target_two.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["missing-leaf"]
+
+        [tool.uv.sources]
+        missing-leaf = { path = "../missing-leaf" }
+    "#})?;
+
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Do not replay a group requirement against a source from its conflicting project branch.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_conflicting_project_scope() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["tqdm"]
+
+        [dependency-groups]
+        foo = ["bridge[feature]"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ package = "project" }, { group = "foo" }]]
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge", group = "foo" }
+        tqdm = { path = "packages/tqdm" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["tqdm[feature]"]
+    "#})?;
+
+    let tqdm = context.temp_dir.child("packages").child("tqdm");
+    tqdm.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "tqdm"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["missing-leaf"]
+
+        [tool.uv.sources]
+        missing-leaf = { path = "../missing-leaf" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--offline")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    warning: The package `tqdm==1000.0.0` does not have an extra named `feature`
+    ");
+
+    Ok(())
+}
+
+/// Ignore path dependencies whose accumulated markers exclude the project's Python versions.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_transitive_outside_requires_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    let target = context.temp_dir.child("packages").child("target");
+    target.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["missing-leaf ; python_version < '3.12'"]
+
+        [tool.uv.sources]
+        missing-leaf = { path = "../missing-leaf" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A registry-form extra should be replayed if the matching path source is discovered later.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_source_discovered_later() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "provider"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        provider = { path = "packages/provider" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    let provider = context.temp_dir.child("packages").child("provider");
+    provider.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [tool.uv.sources]
+        target = { path = "../target" }
+    "#})?;
+
+    let target = context.temp_dir.child("packages").child("target");
+    target.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+    "#})?;
+
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Mapping a registry-form extra back to a known path source must not hide a conflicting path
+/// source for the same package.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_transitive_extra_path_dependency_conflicting_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[feature]", "target", "other"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target-a" }
+        other = { path = "packages/other" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages").child("bridge");
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [project.optional-dependencies]
+        feature = ["target[feature]"]
+    "#})?;
+
+    let other = context.temp_dir.child("packages").child("other");
+    other.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "other"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [tool.uv.sources]
+        target = { path = "../target-b" }
+    "#})?;
+
+    for directory in ["target-a", "target-b"] {
+        let target = context.temp_dir.child("packages").child(directory);
+        target.child("pyproject.toml").write_str(indoc! {r#"
+            [project]
+            name = "target"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [project.optional-dependencies]
+            feature = []
+        "#})?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to resolve dependencies for `other` (v0.1.0)
+      ╰─▶ Requirements contain conflicting URLs for package `target` in all marker environments:
+          - file://[TEMP_DIR]/packages/target-a
+          - file://[TEMP_DIR]/packages/target-b
+
+    hint: `other` (v0.1.0) was included because `project` (v0.1.0) depends on `other`
     ");
 
     Ok(())
