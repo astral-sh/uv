@@ -110,7 +110,7 @@ fn root_pyproject(exclude_count: usize) -> String {
     };
     if exclude_count > 0 {
         let excludes: Vec<String> = (0..exclude_count)
-            .map(|exclude_index| format!("./packages/excluded-{exclude_index:03}"))
+            .map(|exclude_index| format!("packages/excluded-{exclude_index:03}"))
             .collect();
         workspace.insert("exclude".to_string(), toml::Value::from(excludes));
     }
