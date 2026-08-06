@@ -15,6 +15,9 @@ on:
 
 permissions: {}
 
+env:
+  MAX_FLAKE_RERUN_ATTEMPTS: "3"
+
 jobs:
   diagnose:
     if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
@@ -113,6 +116,97 @@ jobs:
           name: codex-thread-workflow-failure-${{ github.run_id }}-${{ github.run_attempt }}
           path: agents/codex/sessions
           if-no-files-found: warn
+
+  retry:
+    needs: diagnose
+    if: >-
+      needs.diagnose.outputs.result != '' &&
+      fromJSON(needs.diagnose.outputs.result).failure_kind == 'flaky'
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 5
+    concurrency:
+      group: workflow-failure-retry-${{ github.repository }}-${{ inputs.run }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write # for the workflow retry credential broker
+    steps:
+      - name: "Get workflow retry token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: ${{ github.repository }}
+          permissions: |
+            actions: write
+            pull_requests: read
+
+      - name: "Retry flaky workflow failures"
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          RUN_ID: ${{ inputs.run }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
+            > "$RUNNER_TEMP/workflow-run.json"
+
+          run_attempt="$(jq --raw-output '.run_attempt' "$RUNNER_TEMP/workflow-run.json")"
+          if [ "$run_attempt" -ge "$MAX_FLAKE_RERUN_ATTEMPTS" ]; then
+            echo "The workflow run has exhausted its automatic retry budget."
+            exit 0
+          fi
+
+          delay_seconds="$((60 * (1 << (run_attempt - 1)) + RANDOM % 20))"
+          echo "Waiting ${delay_seconds}s before retrying flaky workflow jobs."
+          sleep "$delay_seconds"
+
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
+            > "$RUNNER_TEMP/workflow-run.json"
+
+          if ! jq --exit-status \
+            --arg head_sha "$HEAD_SHA" \
+            --argjson attempt "$run_attempt" '
+              .head_sha == $head_sha
+              and .status == "completed"
+              and (.conclusion | IN("failure", "timed_out", "startup_failure"))
+              and .run_attempt == $attempt
+            ' "$RUNNER_TEMP/workflow-run.json" > /dev/null; then
+            echo "The workflow run changed or was already retried."
+            exit 0
+          fi
+
+          if [ "$(jq --raw-output '.event' "$RUNNER_TEMP/workflow-run.json")" = "pull_request" ]; then
+            pull_request="$(jq --raw-output '
+              if (.pull_requests | length) == 1 then .pull_requests[0].number else empty end
+            ' "$RUNNER_TEMP/workflow-run.json")"
+            if [ -z "$pull_request" ]; then
+              echo "The workflow run has no unique pull request to retry."
+              exit 0
+            fi
+
+            gh pr view "$pull_request" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json state,headRefOid \
+              > "$RUNNER_TEMP/workflow-run-pull-request.json"
+            if ! jq --exit-status --arg head_sha "$HEAD_SHA" '
+              .state == "OPEN" and .headRefOid == $head_sha
+            ' "$RUNNER_TEMP/workflow-run-pull-request.json" > /dev/null; then
+              echo "The pull request is closed or its head changed."
+              exit 0
+            fi
+          fi
+
+          gh run rerun "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --failed
+
+          {
+            printf '### Retried flaky workflow failures\n\n'
+            printf -- '- Workflow run: https://github.com/%s/actions/runs/%s\n' \
+              "$GITHUB_REPOSITORY" "$RUN_ID"
+            printf -- '- Attempt: %s of %s\n' "$((run_attempt + 1))" "$MAX_FLAKE_RERUN_ATTEMPTS"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   report:
     needs: diagnose

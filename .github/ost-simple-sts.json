@@ -122,7 +122,11 @@
       "environment": "automations",
       "caller_workflow": "diagnose-workflow-failure.yml",
       "on": ["workflow_dispatch"],
-      "permissions": { "issues": "write" },
+      "permissions": {
+        "actions": "write",
+        "issues": "write",
+        "pull_requests": "read"
+      },
       "target": "uv-dev"
     },
     {
@@ -146,8 +150,13 @@
       "environment": "automations",
       "caller_workflow": "diagnose-workflow-failure.yml",
       "on": ["workflow_dispatch"],
-      "permissions": { "issues": "write" },
-      "target": "uv-dev"
+      "permissions": {
+        "actions": "write",
+        "issues": "write",
+        "pull_requests": "read"
+      },
+      "targets": ["uv", "uv-dev"],
+      "installation": "automations"
     }
   ]
 }

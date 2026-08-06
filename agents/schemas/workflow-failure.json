@@ -36,6 +36,10 @@
       "type": "string",
       "enum": ["create", "duplicate", "ignore"]
     },
+    "failure_kind": {
+      "type": "string",
+      "enum": ["flaky", "deterministic"]
+    },
     "decision_reason": { "type": "string" },
     "comment_note": { "type": "string" },
     "issue": {
@@ -55,6 +59,7 @@
   "required": [
     "related",
     "decision",
+    "failure_kind",
     "decision_reason",
     "comment_note",
     "issue"
