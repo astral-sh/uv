@@ -8,7 +8,9 @@ use crate::metadata::MetadataError;
 use uv_cache::Error as CacheError;
 use uv_client::WrappedReqwestError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
-use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
+use uv_distribution_types::{
+    InstalledDist, InstalledDistError, IsBuildBackendError, RequiresPython,
+};
 use uv_fs::Simplified;
 use uv_git::GitError;
 use uv_normalize::PackageName;
@@ -29,6 +31,69 @@ impl fmt::Display for PythonVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (major, minor) = self.version;
         write!(f, "{major}.{minor}{}", self.variant.executable_suffix())
+    }
+}
+
+/// A source distribution build failure and its Python compatibility context.
+#[derive(Debug)]
+pub struct BuildError {
+    error: AnyErrorBuild,
+    requires_python: Option<RequiresPython>,
+    python_version: Version,
+}
+
+impl BuildError {
+    pub(crate) fn new(
+        error: AnyErrorBuild,
+        requires_python: Option<RequiresPython>,
+        python_version: Version,
+    ) -> Self {
+        Self {
+            error,
+            requires_python,
+            python_version,
+        }
+    }
+}
+
+impl fmt::Display for BuildError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.error, formatter)
+    }
+}
+
+impl std::error::Error for BuildError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        std::error::Error::source(&self.error)
+    }
+}
+
+impl uv_errors::Hint for BuildError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        let Some(requires_python) = &self.requires_python else {
+            return self.error.hints();
+        };
+
+        if requires_python.contains(&self.python_version) {
+            return self.error.hints();
+        }
+
+        // The patch component is irrelevant for `requires-python` and varies by environment.
+        let python_version = self
+            .python_version
+            .only_release_at_precision(2)
+            .unwrap_or_else(|| self.python_version.clone());
+        let mut hints = uv_errors::Hints::from(format!(
+            "The build requires Python {requires_python}, but Python {python_version} is used."
+        ));
+        hints.extend(self.error.hints());
+        hints
+    }
+}
+
+impl IsBuildBackendError for BuildError {
+    fn is_build_backend_error(&self) -> bool {
+        self.error.is_build_backend_error()
     }
 }
 
@@ -71,7 +136,7 @@ pub enum Error {
 
     // Build error
     #[error(transparent)]
-    Build(AnyErrorBuild),
+    Build(BuildError),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]

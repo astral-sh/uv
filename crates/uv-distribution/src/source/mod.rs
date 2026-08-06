@@ -41,7 +41,7 @@ use uv_git::{Fetch, GIT_LFS, GitError, GitHttpSettings, GitResolver};
 use uv_git_types::{GitHubRepository, GitOid, GitUrl};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
-use uv_pep440::{Version, release_specifiers_to_ranges};
+use uv_pep440::{Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_redacted::DisplaySafeUrl;
@@ -49,7 +49,7 @@ use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
 use crate::distribution_database::ManagedClient;
-use crate::error::Error;
+use crate::error::{BuildError, Error};
 use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
@@ -3014,6 +3014,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        let requires_python = self
+            .build_requires_python(source, source_root, subdirectory)
+            .await
+            .map(RequiresPython::from_specifiers);
+        let python_version = self.build_context.interpreter().await.python_version();
+        let build_error = |error| {
+            Error::Build(BuildError::new(
+                error,
+                requires_python.clone(),
+                python_version.clone(),
+            ))
+        };
+
         // Build into a temporary directory, to prevent partial builds.
         let temp_dir = self
             .build_context
@@ -3042,7 +3055,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Some(&source.to_string()),
             )
             .await
-            .map_err(|err| Error::Build(err.into()))?
+            .map_err(|error| build_error(error.into()))?
         {
             // In the uv build backend, the normalized filename and the disk filename are the same.
             name.to_string()
@@ -3087,7 +3100,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
             if let Some(builder) = self.build_context.build_arena().remove(&build_key) {
                 debug!("Reusing existing build environment for: {source}");
-                let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
+                let wheel = builder.wheel(temp_dir.path()).await.map_err(&build_error)?;
 
                 // Store the build context.
                 self.build_context.build_arena().insert(build_key, builder);
@@ -3119,10 +3132,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         self.build_stack.cloned().unwrap_or_default(),
                     )
                     .await
-                    .map_err(|err| Error::Build(err.into()))?;
+                    .map_err(|error| build_error(error.into()))?;
 
                 // Build the wheel.
-                let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
+                let wheel = builder.wheel(temp_dir.path()).await.map_err(&build_error)?;
 
                 // Store the build context.
                 self.build_context.build_arena().insert(build_key, builder);
@@ -3149,6 +3162,35 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         debug!("Built `{source}` into `{disk_filename}`");
         Ok((disk_filename, filename, metadata))
+    }
+
+    /// Resolve the `requires-python` specifier for a buildable source, for all distribution types.
+    ///
+    /// Returns `None` only for source trees, since registry distributions always carry
+    /// `requires-python` in their file metadata. A source tree yields `None` when it has no
+    /// readable `pyproject.toml`, when it declares no `requires-python` or a dynamic one, or when
+    /// the specifier is malformed.
+    async fn build_requires_python(
+        &self,
+        source: &BuildableSource<'_>,
+        source_root: &Path,
+        subdirectory: Option<&Path>,
+    ) -> Option<VersionSpecifiers> {
+        // Registry distributions carry `requires-python` in their file metadata.
+        if let Some(requires_python) = source.requires_python() {
+            return Some(requires_python.clone());
+        }
+
+        // Source trees (path, Git, directory, direct URL) don't, so read it statically from the
+        // `pyproject.toml` at `source_root` instead.
+        let pyproject_toml = read_pyproject_toml(source_root, subdirectory).await.ok()?;
+        match pyproject_toml.requires_python() {
+            Ok(requires_python) => requires_python,
+            Err(err) => {
+                debug!("Ignoring `requires-python` in `{source}`: {err}");
+                None
+            }
+        }
     }
 
     /// Build the metadata for a source distribution.
@@ -3179,25 +3221,38 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Ensure that the _installed_ Python version is compatible with the `requires-python`
-        // specifier.
-        if let Some(requires_python) = source.requires_python() {
-            let installed = self.build_context.interpreter().await.python_version();
-            let target = release_specifiers_to_ranges(requires_python.clone())
+        // specifier. This applies to all distribution types: registry distributions carry
+        // `requires-python` in their file metadata, while source trees declare it in
+        // `pyproject.toml`.
+        let requires_python = self
+            .build_requires_python(source, source_root, subdirectory)
+            .await
+            .map(RequiresPython::from_specifiers);
+        let python_version = self.build_context.interpreter().await.python_version();
+        if let Some(requires_python) = &requires_python {
+            let target = release_specifiers_to_ranges(requires_python.specifiers().clone())
                 .bounding_range()
                 .map(|bounding_range| bounding_range.0.cloned())
                 .unwrap_or(Bound::Unbounded);
             let is_compatible = match target {
-                Bound::Included(target) => *installed >= target,
-                Bound::Excluded(target) => *installed > target,
+                Bound::Included(target) => *python_version >= target,
+                Bound::Excluded(target) => *python_version > target,
                 Bound::Unbounded => true,
             };
             if !is_compatible {
                 return Err(Error::RequiresPython(
-                    requires_python.clone(),
-                    installed.clone(),
+                    requires_python.specifiers().clone(),
+                    python_version.clone(),
                 ));
             }
         }
+        let build_error = |error| {
+            Error::Build(BuildError::new(
+                error,
+                requires_python.clone(),
+                python_version.clone(),
+            ))
+        };
 
         // Identify the base Python interpreter to use in the cache key.
         let base_python = if cfg!(unix) {
@@ -3249,10 +3304,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_stack.cloned().unwrap_or_default(),
             )
             .await
-            .map_err(|err| Error::Build(err.into()))?;
+            .map_err(|error| build_error(error.into()))?;
 
         // Build the metadata.
-        let dist_info = builder.metadata().await.map_err(Error::Build)?;
+        let dist_info = builder.metadata().await.map_err(build_error)?;
 
         // Store the build context.
         self.build_context.build_arena().insert(
