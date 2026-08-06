@@ -12,7 +12,6 @@ use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, LockedFileMode};
 use uv_redacted::DisplaySafeUrl;
 use uv_state::{StateBucket, StateStore};
-use uv_static::EnvVars;
 
 use super::Error;
 use crate::{Credentials, Realm, Service, Username, matching, persistent::PersistentCredential};
@@ -335,15 +334,8 @@ pub(super) fn ensure_service_realm(realm: &Realm, service: &Service) -> Result<(
     }
 }
 
-/// Return the configured directory containing native credential lock files.
+/// Return the shared user-state directory containing native credential lock files.
 fn native_lock_directory() -> Result<PathBuf, Error> {
-    if let Some(directory) = std::env::var_os(EnvVars::UV_CREDENTIALS_DIR)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-    {
-        return Ok(directory.join("native"));
-    }
-
     Ok(StateStore::from_settings(None)
         .map_err(Error::NativeLockDirectory)?
         .bucket(StateBucket::Credentials)

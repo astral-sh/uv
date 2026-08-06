@@ -1753,6 +1753,29 @@ fn logout_text_store_multiple_usernames() {
 
 #[test]
 #[cfg(feature = "native-auth")]
+fn native_auth_lock_directory_ignores_credentials_override() {
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let service = "native-lock-directory.example.com";
+    let username = "native-lock-user";
+    let _cleanup = NativeCredentialCleanup::new(&context, &[(service, username)]);
+
+    context
+        .auth_login()
+        .arg(service)
+        .arg("--username")
+        .arg(username)
+        .arg("--password")
+        .arg("lock-password")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str())
+        .assert()
+        .success();
+
+    assert!(!context.temp_dir.child("native").exists());
+}
+
+#[test]
+#[cfg(feature = "native-auth")]
 fn native_auth_prefix_match() {
     let context = uv_test::test_context_with_versions!(&[]).with_real_home();
     let service = "https://native-prefix.example.com/api";
