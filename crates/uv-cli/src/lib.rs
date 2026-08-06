@@ -79,6 +79,17 @@ pub enum AuditOutputFormat {
     Sarif,
 }
 
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum CacheSizeOutputFormat {
+    /// Display a human-readable size in terminals and raw bytes otherwise.
+    #[default]
+    Auto,
+    /// Display the cache size in a human-readable format.
+    Human,
+    /// Display the cache size in raw bytes.
+    Machine,
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum TreeFormat {
     /// Display the dependency graph as a human-readable tree.
@@ -914,8 +925,8 @@ pub enum CacheCommand {
     /// Show the cache size.
     ///
     /// Displays the total size of the cache directory. This includes all downloaded and built
-    /// wheels, source distributions, and other cached data. By default, outputs the size in raw
-    /// bytes; use `--human` for human-readable output.
+    /// wheels, source distributions, and other cached data. By default, displays a human-readable
+    /// size when the output is a terminal and raw bytes otherwise.
     Size(SizeArgs),
 }
 
@@ -961,8 +972,17 @@ pub struct PruneArgs {
 
 #[derive(Args, Debug)]
 pub struct SizeArgs {
-    /// Display the cache size in human-readable format (e.g., `1.2 GiB` instead of raw bytes).
-    #[arg(long = "human", short = 'H', alias = "human-readable")]
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = CacheSizeOutputFormat::default())]
+    pub output_format: CacheSizeOutputFormat,
+
+    /// Display the cache size in human-readable format (e.g., `1.2GiB` instead of raw bytes).
+    #[arg(
+        long = "human",
+        short = 'H',
+        alias = "human-readable",
+        conflicts_with = "output_format"
+    )]
     pub human: bool,
 }
 

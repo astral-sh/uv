@@ -1,18 +1,20 @@
 use std::fmt::Write;
 
+use anstream::stream::IsTerminal;
 use anyhow::Result;
 use diskus::DiskUsage;
 
 use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 use uv_cache::Cache;
+use uv_cli::CacheSizeOutputFormat;
 use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 
 /// Display the total size of the cache.
 pub(crate) fn cache_size(
     cache: &Cache,
-    human_readable: bool,
+    output_format: CacheSizeOutputFormat,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -22,6 +24,12 @@ pub(crate) fn cache_size(
             PreviewFeature::CacheSize
         );
     }
+
+    let human_readable = match output_format {
+        CacheSizeOutputFormat::Auto => std::io::stdout().is_terminal(),
+        CacheSizeOutputFormat::Human => true,
+        CacheSizeOutputFormat::Machine => false,
+    };
 
     if !cache.root().exists() {
         if human_readable {

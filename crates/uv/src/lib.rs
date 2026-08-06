@@ -28,9 +28,9 @@ use uv_cache_info::Timestamp;
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
     AuthCommand, AuthHelperCommand, AuthNamespace, BuildBackendCommand, CacheCommand,
-    CacheNamespace, Cli, Commands, PipCommand, PipNamespace, ProjectCommand, PythonCommand,
-    PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
-    WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
+    CacheNamespace, CacheSizeOutputFormat, Cli, Commands, PipCommand, PipNamespace, ProjectCommand,
+    PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace,
+    TopLevelArgs, WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
@@ -1304,7 +1304,14 @@ async fn run_with_workspace_cache(
         }) => commands::cache_dir(&cache, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Size(args),
-        }) => commands::cache_size(&cache, args.human, printer, globals.preview),
+        }) => {
+            let output_format = if args.human {
+                CacheSizeOutputFormat::Human
+            } else {
+                args.output_format
+            };
+            commands::cache_size(&cache, output_format, printer, globals.preview)
+        }
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::BuildSettings::resolve(args, filesystem, environment)?;
