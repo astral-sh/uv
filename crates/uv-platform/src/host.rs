@@ -7,7 +7,7 @@ use std::str::FromStr;
 /// The operating system type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OsType {
-    /// Linux, with the kernel type from `/proc/sys/kernel/ostype` (typically `"Linux"`).
+    /// Linux, with the kernel type from `uname` (typically `"Linux"`).
     Linux(String),
     /// macOS / Darwin.
     Darwin,
@@ -22,9 +22,9 @@ impl OsType {
     pub fn from_env() -> Option<Self> {
         cfg_select! {
             target_os = "linux" => {
-                fs_err::read_to_string("/proc/sys/kernel/ostype")
-                    .ok()
-                    .map(|s| Self::Linux(s.trim().to_string()))
+                let uname = rustix::system::uname();
+                let os_type = uname.sysname().to_str().ok()?;
+                Some(Self::Linux(os_type.to_string()))
             },
             target_os = "macos" => Some(Self::Darwin),
             target_os = "windows" => Some(Self::Windows),
