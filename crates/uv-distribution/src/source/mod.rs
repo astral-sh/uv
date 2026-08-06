@@ -49,7 +49,7 @@ use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
 use crate::distribution_database::ManagedClient;
-use crate::error::Error;
+use crate::error::{BuildError, Error};
 use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
@@ -2964,21 +2964,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         no_sources: NoSources,
     ) -> Result<(String, WheelFilename, ResolutionMetadata), Error> {
-        let result = self
-            .build_distribution_inner(source, source_root, subdirectory, cache_shard, no_sources)
-            .await;
-        self.annotate_build_failure(result, source, source_root, subdirectory)
-            .await
-    }
-
-    async fn build_distribution_inner(
-        &self,
-        source: &BuildableSource<'_>,
-        source_root: &Path,
-        subdirectory: Option<&Path>,
-        cache_shard: &CacheShard,
-        no_sources: NoSources,
-    ) -> Result<(String, WheelFilename, ResolutionMetadata), Error> {
         debug!("Building: {source}");
 
         // Guard against build of source distributions when disabled.
@@ -2993,6 +2978,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 return Err(Error::NoBuild);
             }
         }
+
+        let requires_python = self
+            .build_requires_python(source, source_root, subdirectory)
+            .await
+            .map(RequiresPython::from_specifiers);
+        let python_version = self.build_context.interpreter().await.python_version();
+        let build_error = |error| {
+            Error::Build(BuildError::new(
+                error,
+                requires_python.clone(),
+                python_version.clone(),
+            ))
+        };
 
         // Build into a temporary directory, to prevent partial builds.
         let temp_dir = self
@@ -3022,7 +3020,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Some(&source.to_string()),
             )
             .await
-            .map_err(|err| Error::Build(err.into()))?
+            .map_err(|error| build_error(error.into()))?
         {
             // In the uv build backend, the normalized filename and the disk filename are the same.
             name.to_string()
@@ -3067,7 +3065,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
             if let Some(builder) = self.build_context.build_arena().remove(&build_key) {
                 debug!("Reusing existing build environment for: {source}");
-                let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
+                let wheel = builder.wheel(temp_dir.path()).await.map_err(&build_error)?;
 
                 // Store the build context.
                 self.build_context.build_arena().insert(build_key, builder);
@@ -3099,10 +3097,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         self.build_stack.cloned().unwrap_or_default(),
                     )
                     .await
-                    .map_err(|err| Error::Build(err.into()))?;
+                    .map_err(|error| build_error(error.into()))?;
 
                 // Build the wheel.
-                let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
+                let wheel = builder.wheel(temp_dir.path()).await.map_err(&build_error)?;
 
                 // Store the build context.
                 self.build_context.build_arena().insert(build_key, builder);
@@ -3157,58 +3155,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
     }
 
-    /// If `result` is a build failure and the source's `requires-python` doesn't include the build
-    /// environment's interpreter, attach a hint pointing at the mismatch as a likely cause. Other
-    /// errors and successes pass through unchanged.
-    async fn annotate_build_failure<R>(
-        &self,
-        result: Result<R, Error>,
-        source: &BuildableSource<'_>,
-        source_root: &Path,
-        subdirectory: Option<&Path>,
-    ) -> Result<R, Error> {
-        let Err(Error::Build(err)) = result else {
-            return result;
-        };
-        let Some(requires_python) = self
-            .build_requires_python(source, source_root, subdirectory)
-            .await
-        else {
-            return Err(Error::Build(err));
-        };
-        let python_version = self.build_context.interpreter().await.python_version();
-        if requires_python.contains(python_version) {
-            return Err(Error::Build(err));
-        }
-        // Report the minor version (e.g. `3.12`), since `requires-python` is expressed in minor
-        // versions and the patch component is both irrelevant here and unstable across
-        // environments (which would make snapshot tests depend on the exact patch release).
-        let python_version = python_version
-            .only_release_at_precision(2)
-            .unwrap_or_else(|| python_version.clone());
-        let hint = format!(
-            "The build requires Python {requires_python}, but Python {python_version} is used."
-        );
-        Err(Error::Build(err.with_requires_python_hint(hint)))
-    }
-
     /// Build the metadata for a source distribution.
     #[instrument(skip_all, fields(dist = %source))]
     async fn build_metadata(
-        &self,
-        source: &BuildableSource<'_>,
-        source_root: &Path,
-        subdirectory: Option<&Path>,
-        no_sources: NoSources,
-    ) -> Result<Option<ResolutionMetadata>, Error> {
-        let result = self
-            .build_metadata_inner(source, source_root, subdirectory, no_sources)
-            .await;
-        self.annotate_build_failure(result, source, source_root, subdirectory)
-            .await
-    }
-
-    async fn build_metadata_inner(
         &self,
         source: &BuildableSource<'_>,
         source_root: &Path,
@@ -3237,24 +3186,35 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // specifier. This applies to all distribution types: registry distributions carry
         // `requires-python` in their file metadata, while source trees declare it in
         // `pyproject.toml`.
-        if let Some(requires_python) = self
+        let requires_python = self
             .build_requires_python(source, source_root, subdirectory)
             .await
-        {
-            let installed = self.build_context.interpreter().await.python_version();
-            let target = release_specifiers_to_ranges(requires_python.clone())
+            .map(RequiresPython::from_specifiers);
+        let python_version = self.build_context.interpreter().await.python_version();
+        if let Some(requires_python) = &requires_python {
+            let target = release_specifiers_to_ranges(requires_python.specifiers().clone())
                 .bounding_range()
                 .map(|bounding_range| bounding_range.0.cloned())
                 .unwrap_or(Bound::Unbounded);
             let is_compatible = match target {
-                Bound::Included(target) => *installed >= target,
-                Bound::Excluded(target) => *installed > target,
+                Bound::Included(target) => *python_version >= target,
+                Bound::Excluded(target) => *python_version > target,
                 Bound::Unbounded => true,
             };
             if !is_compatible {
-                return Err(Error::RequiresPython(requires_python, installed.clone()));
+                return Err(Error::RequiresPython(
+                    requires_python.specifiers().clone(),
+                    python_version.clone(),
+                ));
             }
         }
+        let build_error = |error| {
+            Error::Build(BuildError::new(
+                error,
+                requires_python.clone(),
+                python_version.clone(),
+            ))
+        };
 
         // Identify the base Python interpreter to use in the cache key.
         let base_python = if cfg!(unix) {
@@ -3306,10 +3266,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_stack.cloned().unwrap_or_default(),
             )
             .await
-            .map_err(|err| Error::Build(err.into()))?;
+            .map_err(|error| build_error(error.into()))?;
 
         // Build the metadata.
-        let dist_info = builder.metadata().await.map_err(Error::Build)?;
+        let dist_info = builder.metadata().await.map_err(build_error)?;
 
         // Store the build context.
         self.build_context.build_arena().insert(

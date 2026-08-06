@@ -271,7 +271,7 @@ impl InstalledPackagesProvider for EmptyInstalledPackages {
 /// `Box<dyn std::error::Error + IsBuildFrontendError + Send + Sync + 'static>`, but [`thiserror`]
 /// complains about the internal `AsDynError` not being implemented when being used as `#[source]`.
 /// This struct is an otherwise transparent error wrapper that thiserror recognizes.
-pub struct AnyErrorBuild(Box<dyn IsBuildBackendError>, Option<String>);
+pub struct AnyErrorBuild(Box<dyn IsBuildBackendError>);
 
 impl Debug for AnyErrorBuild {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -301,30 +301,15 @@ impl std::error::Error for AnyErrorBuild {
     }
 }
 
-impl AnyErrorBuild {
-    /// Attach a hint describing a `requires-python` mismatch that likely caused this build
-    /// failure. The hint is surfaced by [`uv_errors::Hint`] without changing how the error
-    /// itself is displayed.
-    #[must_use]
-    pub fn with_requires_python_hint(mut self, hint: String) -> Self {
-        self.1 = Some(hint);
-        self
-    }
-}
-
 impl uv_errors::Hint for AnyErrorBuild {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        let mut hints = self.0.hints().into_owned();
-        if let Some(hint) = &self.1 {
-            hints.prepend(hint.clone());
-        }
-        hints
+        self.0.hints()
     }
 }
 
 impl<T: IsBuildBackendError> From<T> for AnyErrorBuild {
     fn from(err: T) -> Self {
-        Self(Box::new(err), None)
+        Self(Box::new(err))
     }
 }
 
