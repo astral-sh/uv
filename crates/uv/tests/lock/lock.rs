@@ -5210,9 +5210,11 @@ fn lock_check_refresh_workspace_conflicts() -> Result<()> {
 
         [package.optional-dependencies]
         non-prod = [
+            { name = "package-a", marker = "extra == 'extra-14-workspace-demo-non-prod' or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
             { name = "package-a", extra = ["non-prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-9-package-a-non-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
         ]
         prod = [
+            { name = "package-a", marker = "extra == 'extra-14-workspace-demo-prod' or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
             { name = "package-a", extra = ["prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-prod' and extra == 'extra-9-package-a-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
         ]
 
