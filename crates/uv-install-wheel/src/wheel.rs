@@ -1230,10 +1230,11 @@ mod test {
     use assert_fs::prelude::*;
     use indoc::{formatdoc, indoc};
 
+    #[cfg(unix)]
+    use super::RELOCATABLE_REALPATH;
     use super::{
-        Error, RELOCATABLE_REALPATH, RecordEntry, Script, WheelFile, format_shebang,
-        get_script_executable, parse_email_message_file, parse_scripts, read_record,
-        write_installer_metadata,
+        Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
+        parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
     };
 
     #[test]
