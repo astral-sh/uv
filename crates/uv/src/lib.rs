@@ -3079,8 +3079,10 @@ where
         cli.top_level.global_args.no_progress,
     );
 
-    // Initialize the cache before spawning another thread. Its concurrent map registers a
-    // process-wide memory barrier, which can be expensive once multiple threads exist.
+    // Initialize the cache before spawning `main2`. Constructing its `papaya` map initializes
+    // `seize`, which registers a process-wide memory barrier on Linux. Once multiple threads share
+    // the address space, registration waits for an RCU (read-copy-update) grace period; while the
+    // process is single-threaded, it takes the kernel's inexpensive fast path instead.
     let workspace_cache = WorkspaceCache::default();
 
     // See `min_stack_size` doc comment about `main2`
