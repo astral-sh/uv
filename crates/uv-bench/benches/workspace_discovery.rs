@@ -105,9 +105,15 @@ fn root_pyproject(exclude_count: usize) -> String {
         })
         .collect();
 
-    let excludes: Vec<String> = (0..exclude_count)
-        .map(|exclude_index| format!("./packages/excluded-{exclude_index:03}"))
-        .collect();
+    let mut workspace = toml::toml! {
+        members = ["packages/*"]
+    };
+    if exclude_count > 0 {
+        let excludes: Vec<String> = (0..exclude_count)
+            .map(|exclude_index| format!("./packages/excluded-{exclude_index:03}"))
+            .collect();
+        workspace.insert("exclude".to_string(), toml::Value::from(excludes));
+    }
 
     // Generate some unrelated work for the toml parser, mimicking real tool configuration.
     let generated: toml::Table = (0..UNUSED_ROOT_TABLE_COUNT)
@@ -173,10 +179,7 @@ fn root_pyproject(exclude_count: usize) -> String {
         [tool.uv]
         package = false
         sources = (sources)
-
-        [tool.uv.workspace]
-        members = ["packages/*"]
-        exclude = (excludes)
+        workspace = (workspace)
 
         [tool.linter]
         generated = (generated)
