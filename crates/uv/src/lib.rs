@@ -2387,6 +2387,7 @@ async fn run_project(
                 args.malware_settings,
                 #[cfg(unix)]
                 args.run_rlimit_nofile,
+                args.no_wait,
             ))
             .await
         }
