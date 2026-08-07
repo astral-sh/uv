@@ -22825,6 +22825,35 @@ fn lock_named_index_cli() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn lock_named_index_marker_disjoint_source_requires_declared_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["jinja2 ; sys_platform == 'linux'"]
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch", marker = "sys_platform == 'win32'" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `jinja2`
+      ╰─▶ Package `jinja2` references an undeclared index: `pytorch`
+    ");
+
+    Ok(())
+}
+
 /// If a named index is referenced in `tool.uv.sources` but only defined in `uv.toml`, we should
 /// provide a hint that the index was found in a configuration file.
 #[cfg(feature = "test-universal")]
@@ -28001,20 +28030,14 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `project` has malformed dependency groups
-      Caused by: Failed to parse entry in group `foo`: `invalid!`
-      Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
-        invalid!
-               ^
+      Caused by: Failed to parse entry in group `foo`: no such comparison operator "!", must be one of ~= == != <= >= < > ===
     "#);
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `project` has malformed dependency groups
-      Caused by: Failed to parse entry in group `foo`: `invalid!`
-      Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
-        invalid!
-               ^
+      Caused by: Failed to parse entry in group `foo`: no such comparison operator "!", must be one of ~= == != <= >= < > ===
     "#);
 
     Ok(())
