@@ -255,3 +255,11 @@ modifications */
 .md-source-file__fact {
   visibility: hidden;
 }
+
+/* Fix reflow of benchmark images on index page when they load
+   See: https://github.com/astral-sh/uv/issues/6264 */
+.md-content img[src*="github.com/astral-sh/uv/assets"] {
+  height: 400px;
+  width: auto;
+  max-width: 100%;
+}
