@@ -7,30 +7,28 @@
 
 Released on 2026-08-07.
 
+### Python
+
+- Add CPython 3.13.15 ([#20997](https://github.com/astral-sh/uv/pull/20997))
+
 ### Preview features
 
-- Add `--output-format` to `uv cache size` ([#20992](https://github.com/astral-sh/uv/pull/20992))
-- Preserve workspace metadata output in quiet mode ([#20991](https://github.com/astral-sh/uv/pull/20991))
-- Stream workspace metadata JSON serialization ([#20990](https://github.com/astral-sh/uv/pull/20990))
+- Add `--output-format` to select automatic, human-readable, or raw-byte output for `uv cache size` ([#20992](https://github.com/astral-sh/uv/pull/20992))
+- Preserve JSON output from `uv workspace metadata --quiet` while suppressing diagnostics ([#20991](https://github.com/astral-sh/uv/pull/20991))
+- Reduce memory usage for large workspaces by streaming `uv workspace metadata` JSON output ([#20990](https://github.com/astral-sh/uv/pull/20990))
 
 ### Performance
 
-- Avoid materializing complements during resolution ([#20982](https://github.com/astral-sh/uv/pull/20982))
-- Avoid reading procfs to detect the Linux OS type ([#20987](https://github.com/astral-sh/uv/pull/20987))
-- Initialize the workspace cache before spawning the main thread ([#20989](https://github.com/astral-sh/uv/pull/20989))
-- Reuse compiled workspace exclusion patterns ([#20988](https://github.com/astral-sh/uv/pull/20988))
+- Reduce Linux startup latency by initializing the workspace cache before spawning another thread ([#20989](https://github.com/astral-sh/uv/pull/20989))
+- Reuse compiled workspace exclusion patterns during workspace discovery ([#20988](https://github.com/astral-sh/uv/pull/20988))
+- Speed up conflict-heavy resolutions by avoiding materialized range complements ([#20982](https://github.com/astral-sh/uv/pull/20982))
+- Avoid slow procfs reads during Python interpreter discovery on Linux ([#20987](https://github.com/astral-sh/uv/pull/20987))
 
 ### Documentation
 
-- Document secure automation dispatch guidance ([#20976](https://github.com/astral-sh/uv/pull/20976))
-- docs: add attest-action to GHA publishing example ([#20986](https://github.com/astral-sh/uv/pull/20986))
-- docs: tighten tag pattern for GH publish example ([#20973](https://github.com/astral-sh/uv/pull/20973))
-
-### Other changes
-
-- Draft maintainer responses during issue triage ([#20872](https://github.com/astral-sh/uv/pull/20872))
-- Sync latest Python releases: Include 3.13.15 ([#20997](https://github.com/astral-sh/uv/pull/20997))
-- docs: fix --python-pin flag typo in uv init example (should be --pin-python) ([#20876](https://github.com/astral-sh/uv/pull/20876))
+- Add PEP 740 attestations to the GitHub Actions publishing example ([#20986](https://github.com/astral-sh/uv/pull/20986))
+- Restrict the GitHub Actions publishing example to Python version tags ([#20973](https://github.com/astral-sh/uv/pull/20973))
+- Correct `--python-pin` to `--pin-python` in the `uv init --bare` example ([#20876](https://github.com/astral-sh/uv/pull/20876))
 
 ## 0.12.2
 
