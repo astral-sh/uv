@@ -78,7 +78,7 @@ pub(crate) enum Error {
     #[error(transparent)]
     BuildFrontend(#[from] uv_build_frontend::Error),
     #[error(transparent)]
-    Project(#[from] ProjectError),
+    Project(Box<ProjectError>),
     #[error("Failed to write message")]
     Fmt(#[from] fmt::Error),
     #[error("Can't use `--force-pep517` with `--list`")]
@@ -562,7 +562,8 @@ async fn build_package(
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
             let groups = DependencyGroupsWithDefaults::none();
-            interpreter_request = find_requires_python(workspace, &groups)?
+            interpreter_request = find_requires_python(workspace, &groups)
+                .map_err(|err| Error::Project(err.into()))?
                 .as_ref()
                 .and_then(PythonRequest::from_requires_python);
         }
