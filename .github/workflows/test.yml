@@ -121,18 +121,18 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           test_args=(
-            --cargo-profile fast-build-nightly
-            -Z panic-abort-tests
             -Z checksum-freshness
             --features test-python-patch,test-universal,native-auth,secret-service
             --workspace
             --profile ci-linux
           )
           if ${{ inputs.collect-coverage }}; then
+            test_args+=(--cargo-profile fast-build)
             tracking_id="${GITHUB_SHA:0:16}"
             cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
             echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
           else
+            test_args+=(--cargo-profile fast-build-nightly -Z panic-abort-tests)
             cargo nextest run "${test_args[@]}"
           fi
 
@@ -242,8 +242,6 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           test_args=(
-            --cargo-profile fast-build-nightly
-            -Z panic-abort-tests
             -Z checksum-freshness
             --no-default-features
             --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native
@@ -251,10 +249,12 @@ jobs:
             --profile ci-macos
           )
           if ${{ inputs.collect-coverage }}; then
+            test_args+=(--cargo-profile fast-build)
             tracking_id="${GITHUB_SHA:0:16}"
             cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
             echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
           else
+            test_args+=(--cargo-profile fast-build-nightly -Z panic-abort-tests)
             cargo nextest run "${test_args[@]}"
           fi
 
