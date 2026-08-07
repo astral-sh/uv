@@ -85,6 +85,7 @@ Write-Output `
 	"DEV_DRIVE=$($Drive)" `
 	"TMP=$($Tmp)" `
 	"TEMP=$($Tmp)" `
+	"LOCALAPPDATA=$($Tmp)" `
 	"RUSTUP_HOME=$($Drive)/.rustup" `
 	"CARGO_HOME=$($Drive)/.cargo" `
 	"UV_WORKSPACE=$($Drive)/uv" `
