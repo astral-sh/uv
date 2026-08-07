@@ -71,7 +71,7 @@ def main():
                 "dirhash": dirhash(case).hex(),
             }
         )
-    print(json.dumps(output, indent=4))
+    print(json.dumps(output, indent=2))
 
 
 if __name__ == "__main__":
