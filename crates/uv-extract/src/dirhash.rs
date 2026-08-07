@@ -343,6 +343,9 @@ impl DirhashTree {
 
     /// Add a pre-hashed file to the tree. It's an error if the filepath already exists.
     ///
+    /// `path` is a Unix-style, `/`-separated relative path. This is the format used in ZIP
+    /// archives. Trailing slashes are ignored.
+    ///
     /// This function creates parent directories as needed.
     ///
     /// The `hash` of a file is the standard [`blake3::hash`] of its contents. If the file is
@@ -366,6 +369,9 @@ impl DirhashTree {
 
     /// Update the hash of a file in the tree. It's an error if the filepath doesn't exist or if it
     /// refers to a directory.
+    ///
+    /// `path` is a Unix-style, `/`-separated relative path. This is the format used in ZIP
+    /// archives. Trailing slashes are ignored.
     ///
     /// The separation between [`add_file`](Self::add_file) and `update_file` is intended to catch
     /// cases where an archive has duplicate entries for the same filepath. Those cases should
@@ -393,6 +399,9 @@ impl DirhashTree {
 
     /// Add an empty directory to the tree. This succeeds if the directory already exists, but it's
     /// an error if the path refers to a file.
+    ///
+    /// `path` is a Unix-style, `/`-separated relative path. This is the format used in ZIP
+    /// archives. Trailing slashes are ignored.
     ///
     /// This function creates parent directories as needed.
     pub fn add_empty_dir(&mut self, path: &str) -> Result<(), DirhashError> {
@@ -711,32 +720,34 @@ mod tests {
         input_dir: &serde_json::Map<String, serde_json::Value>,
         dirhash_tree: &mut DirhashTree,
         tempdir: &tempfile::TempDir,
-        // The relative path starts empty and grows as we descend recursively into the input tree.
-        relative_path: &Path,
+        // The relative path starts as `None` and grows as we descend recursively into the input tree.
+        relative_path: Option<&str>,
     ) -> anyhow::Result<()> {
         for (name, file_or_dir) in input_dir {
-            let entry_path = Path::new(relative_path).join(name);
+            // Use Unix-style forward slashes for the relative path, because that's what
+            // `DirhashTree` expects. `Path::join` can handle these, even on Windows.
+            let entry_path = match relative_path {
+                Some(parent) => &format!("{parent}/{name}"),
+                None => name,
+            };
             match file_or_dir {
                 // a file
                 serde_json::Value::String(file_text) => {
                     // Write this file under the temp dir.
-                    fs_err::write(tempdir.path().join(&entry_path), file_text)?;
+                    fs_err::write(tempdir.path().join(entry_path), file_text)?;
                     // Add this file as an entry in the `DirhashTree`.
-                    dirhash_tree.add_file(
-                        entry_path.to_str().unwrap(),
-                        blake3::hash(file_text.as_bytes()),
-                    )?;
+                    dirhash_tree.add_file(entry_path, blake3::hash(file_text.as_bytes()))?;
                 }
                 // a subdirectory
                 serde_json::Value::Object(input_subdir) => {
                     // Create this directory under the temp dir.
-                    fs_err::create_dir(tempdir.path().join(&entry_path))?;
+                    fs_err::create_dir(tempdir.path().join(entry_path))?;
                     // Non-empty subdirs get added to the `DirhashTree` automatically when we
                     // populate their contents, but there's no harm in calling `add_empty_dir` for
                     // every directory.
-                    dirhash_tree.add_empty_dir(entry_path.to_str().unwrap())?;
+                    dirhash_tree.add_empty_dir(entry_path)?;
                     // Recurse!
-                    walk_test_vector_input(input_subdir, dirhash_tree, tempdir, &entry_path)?;
+                    walk_test_vector_input(input_subdir, dirhash_tree, tempdir, Some(entry_path))?;
                 }
                 _ => panic!("unexpected JSON type"),
             }
@@ -767,10 +778,7 @@ mod tests {
             let tempdir = tempfile::tempdir()?;
             // `walk_test_vector_input` populates both the `DirhashTree` and the temp dir on disk.
             walk_test_vector_input(
-                input,
-                &mut tree,
-                &tempdir,
-                Path::new(""), // The relative path starts empty.
+                input, &mut tree, &tempdir, None, /* the relative path starts empty */
             )?;
             assert_eq!(dirhash.as_str(), tree.hash().to_hex().as_str());
             assert_eq!(
