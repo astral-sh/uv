@@ -3,6 +3,35 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.3
+
+Released on 2026-08-07.
+
+### Preview features
+
+- Add `--output-format` to `uv cache size` ([#20992](https://github.com/astral-sh/uv/pull/20992))
+- Preserve workspace metadata output in quiet mode ([#20991](https://github.com/astral-sh/uv/pull/20991))
+- Stream workspace metadata JSON serialization ([#20990](https://github.com/astral-sh/uv/pull/20990))
+
+### Performance
+
+- Avoid materializing complements during resolution ([#20982](https://github.com/astral-sh/uv/pull/20982))
+- Avoid reading procfs to detect the Linux OS type ([#20987](https://github.com/astral-sh/uv/pull/20987))
+- Initialize the workspace cache before spawning the main thread ([#20989](https://github.com/astral-sh/uv/pull/20989))
+- Reuse compiled workspace exclusion patterns ([#20988](https://github.com/astral-sh/uv/pull/20988))
+
+### Documentation
+
+- Document secure automation dispatch guidance ([#20976](https://github.com/astral-sh/uv/pull/20976))
+- docs: add attest-action to GHA publishing example ([#20986](https://github.com/astral-sh/uv/pull/20986))
+- docs: tighten tag pattern for GH publish example ([#20973](https://github.com/astral-sh/uv/pull/20973))
+
+### Other changes
+
+- Draft maintainer responses during issue triage ([#20872](https://github.com/astral-sh/uv/pull/20872))
+- Sync latest Python releases: Include 3.13.15 ([#20997](https://github.com/astral-sh/uv/pull/20997))
+- docs: fix --python-pin flag typo in uv init example (should be --pin-python) ([#20876](https://github.com/astral-sh/uv/pull/20876))
+
 ## 0.12.2
 
 Released on 2026-08-05.
