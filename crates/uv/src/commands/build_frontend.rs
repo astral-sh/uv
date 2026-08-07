@@ -24,7 +24,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    PackageConfigSettings, Requirement, RequirementSource, SourceDist,
+    PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
