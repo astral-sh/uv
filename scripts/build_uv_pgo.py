@@ -913,7 +913,8 @@ def run_workloads(
             )
         )
 
-    if launcher.is_file():
+    # The Windows trampoline calls process::exit, bypassing LLVM's profile flush.
+    if launcher.is_file() and launcher.suffix != ".exe":
         commands.append(("launcher", [str(launcher), "--version"]))
 
     for label, command in commands:
