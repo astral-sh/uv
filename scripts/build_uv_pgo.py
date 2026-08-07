@@ -1,9 +1,15 @@
 """Build uv with profile-guided optimization using offline release workloads."""
 
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+
 from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -19,7 +25,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOT_DIRECTORY = REPOSITORY_ROOT / "crates" / "uv" / "tests" / "it" / "snapshots"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CorpusDefinition:
     name: str
     prefix: str
@@ -60,7 +66,7 @@ EVALUATION_CORPUS = CorpusDefinition(
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LockedGraph:
     name: str
     project: Path
@@ -83,7 +89,7 @@ REAL_PROJECT_ROOTS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PreparedCorpus:
     root: Path
     project: Path
@@ -112,12 +118,12 @@ def main() -> None:
         type=Path,
         help="Override the active Rust toolchain's llvm-profdata executable",
     )
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--train-only",
         action="store_true",
         help="Only produce <target-dir>/uv.profdata for a subsequent release build",
     )
-    modes = parser.add_mutually_exclusive_group()
     modes.add_argument(
         "--prepare-corpus",
         action="store_true",
@@ -134,11 +140,6 @@ def main() -> None:
         help="Run the training workloads using an existing, uninstrumented uv binary",
     )
     args = parser.parse_args()
-
-    if args.train_only and (
-        args.prepare_corpus or args.prepare_evaluation or args.exercise_binary
-    ):
-        parser.error("--train-only cannot be combined with another execution mode")
 
     target_dir = Path(
         args.target_dir
@@ -159,7 +160,8 @@ def main() -> None:
     environment = os.environ.copy()
     if args.exercise_binary is not None:
         binary = args.exercise_binary.resolve()
-        run_workloads(binary, binary.with_name("uvx"), corpus, environment)
+        launcher = binary.with_name("uvx.exe" if binary.suffix == ".exe" else "uvx")
+        run_workloads(binary, launcher, corpus, environment)
         return
 
     host = rustc_host()
@@ -175,48 +177,105 @@ def main() -> None:
     for profile in profile_dir.glob("uv-*.profraw"):
         profile.unlink()
 
+    environment["CARGO_INCREMENTAL"] = "0"
+    if target.endswith("-apple-darwin"):
+        for variable in ("CFLAGS", "CXXFLAGS"):
+            environment[variable] = append_flags(
+                environment.get(variable), "-fno-profile-generate -fno-profile-use"
+            )
+    if target.endswith("-pc-windows-msvc") and "+crt-static" not in environment.get(
+        "RUSTFLAGS", ""
+    ):
+        environment["RUSTFLAGS"] = append_flags(
+            environment.get("RUSTFLAGS"), "-C target-feature=+crt-static"
+        )
+
     instrumented_target_dir = target_dir / "instrumented"
-    instrumented_environment = environment.copy()
-    instrumented_environment.update(
-        {
-            "CARGO_INCREMENTAL": "0",
-            "CARGO_TARGET_DIR": str(instrumented_target_dir),
-            "RUSTFLAGS": append_flags(
-                environment.get("RUSTFLAGS"), f"-Cprofile-generate={profile_dir}"
-            ),
-        }
-    )
+    instrumented_environment = environment | {
+        "CARGO_TARGET_DIR": str(instrumented_target_dir),
+        "RUSTFLAGS": append_flags(
+            environment.get("RUSTFLAGS"), f"-Cprofile-generate={profile_dir}"
+        ),
+    }
     print("Building instrumented release uv and uvx", flush=True)
     run(cargo_command(target), environment=instrumented_environment)
 
     binary_directory = instrumented_target_dir / target / "release"
-    binary = binary_directory / "uv"
-    launcher = binary_directory / "uvx"
+    executable_suffix = ".exe" if "windows" in target else ""
+    binary = binary_directory / f"uv{executable_suffix}"
+    launcher = binary_directory / f"uvx{executable_suffix}"
     if not binary.is_file() or not launcher.is_file():
         raise RuntimeError(
             f"Instrumented uv or uvx binary missing from {binary_directory}"
         )
 
+    profiles, workload_count = train_uv(
+        binary,
+        launcher,
+        corpus,
+        profile_dir,
+        environment=instrumented_environment,
+    )
+    merged_profile = target_dir / "uv.profdata"
+    merge_profiles(
+        profiler,
+        profiles,
+        merged_profile,
+        workload_count=workload_count,
+        environment=environment,
+    )
+    if args.train_only:
+        return
+
+    optimized_environment = environment | {
+        "CARGO_TARGET_DIR": str(target_dir),
+        "RUSTFLAGS": append_flags(
+            environment.get("RUSTFLAGS"), f"-Cprofile-use={merged_profile}"
+        ),
+    }
+    print("Building optimized release uv and uvx", flush=True)
+    run(cargo_command(target), environment=optimized_environment)
+    print(f"Optimized uv: {target_dir / target / 'release' / binary.name}", flush=True)
+
+
+def train_uv(
+    binary: Path,
+    launcher: Path,
+    corpus: PreparedCorpus,
+    profile_directory: Path,
+    *,
+    environment: dict[str, str],
+) -> tuple[list[Path], int]:
     labels = run_workloads(
         binary,
         launcher,
         corpus,
-        instrumented_environment,
-        profile_dir=profile_dir,
+        environment,
+        profile_dir=profile_directory,
     )
-    profiles = sorted(profile_dir.glob("uv-*.profraw"))
-    for label in {profile_group(label) for label in labels}:
-        if not any(profile_dir.glob(f"uv-{label}-*.profraw")):
-            raise RuntimeError(f"No uv profiling data found for workload {label!r}")
-    if not profiles or any(profile.stat().st_size == 0 for profile in profiles):
-        raise RuntimeError(f"No complete uv profiling data found in {profile_dir}")
+    profiles = sorted(profile_directory.glob("uv-*.profraw"))
+    for group in {profile_group(label) for label in labels}:
+        workload_profiles = list(profile_directory.glob(f"uv-{group}-*.profraw"))
+        if not workload_profiles or any(
+            profile.stat().st_size == 0 for profile in workload_profiles
+        ):
+            raise RuntimeError(f"No complete uv profiling data for workload {group!r}")
+    if not profiles:
+        raise RuntimeError(f"No uv profiling data found in {profile_directory}")
+    return profiles, len(labels)
 
-    merged_profile = target_dir / "uv.profdata"
+
+def merge_profiles(
+    profiler: Path,
+    profiles: list[Path],
+    destination: Path,
+    *,
+    workload_count: int,
+    environment: dict[str, str],
+) -> None:
+    profile_size = sum(profile.stat().st_size for profile in profiles)
     with tempfile.NamedTemporaryFile(
-        dir=target_dir,
-        prefix="uv-",
-        suffix=".profdata",
-        delete=False,
+        dir=destination.parent, prefix="uv-", suffix=".profdata", delete=False
     ) as temporary_file:
         temporary_profile = Path(temporary_file.name)
     try:
@@ -230,30 +289,15 @@ def main() -> None:
             ],
             environment=environment,
         )
-        temporary_profile.replace(merged_profile)
+        temporary_profile.replace(destination)
     finally:
         temporary_profile.unlink(missing_ok=True)
 
     print(
-        f"Merged {len(profiles)} profiles from {len(labels)} workloads: {merged_profile}",
+        f"Merged {len(profiles)} PGO profiles ({profile_size:,} bytes) "
+        f"from {workload_count} workloads: {destination}",
         flush=True,
     )
-    if args.train_only:
-        return
-
-    optimized_environment = environment.copy()
-    optimized_environment.update(
-        {
-            "CARGO_INCREMENTAL": "0",
-            "CARGO_TARGET_DIR": str(target_dir),
-            "RUSTFLAGS": append_flags(
-                environment.get("RUSTFLAGS"), f"-Cprofile-use={merged_profile}"
-            ),
-        }
-    )
-    print("Building optimized release uv and uvx", flush=True)
-    run(cargo_command(target), environment=optimized_environment)
-    print(f"Optimized uv: {target_dir / target / 'release' / 'uv'}", flush=True)
 
 
 def prepare_corpus(root: Path, definition: CorpusDefinition) -> PreparedCorpus:
@@ -891,6 +935,7 @@ def profile_group(label: str) -> str:
 
 
 def cargo_command(target: str) -> list[str]:
+    windows = target.endswith("-pc-windows-msvc")
     return [
         os.environ.get("CARGO", "cargo"),
         "build",
@@ -900,10 +945,11 @@ def cargo_command(target: str) -> list[str]:
         "uv",
         "--bin",
         "uvx",
+        *(("--bin", "uvw") if windows else ()),
         "--release",
         "--locked",
         "--features",
-        "self-update",
+        "self-update,windows-gui-bin" if windows else "self-update",
         "--target",
         target,
     ]
@@ -934,7 +980,8 @@ def find_llvm_profdata(host: str, override: Path | None) -> Path:
             capture_output=True,
             text=True,
         ).stdout.strip()
-        profiler = Path(sysroot) / "lib" / "rustlib" / host / "bin" / "llvm-profdata"
+        binary = "llvm-profdata.exe" if "windows" in host else "llvm-profdata"
+        profiler = Path(sysroot) / "lib" / "rustlib" / host / "bin" / binary
 
     if not profiler.is_file() or not os.access(profiler, os.X_OK):
         raise RuntimeError(
@@ -944,12 +991,17 @@ def find_llvm_profdata(host: str, override: Path | None) -> Path:
 
 
 def append_flags(existing: str | None, addition: str) -> str:
-    return f"{existing} {addition}" if existing else addition
+    return " ".join(flag for flag in (existing, addition) if flag)
 
 
 def run(command: list[str], *, environment: dict[str, str]) -> None:
+    print(f"> {shlex.join(command)}", flush=True)
     subprocess.run(command, cwd=REPOSITORY_ROOT, env=environment, check=True)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
