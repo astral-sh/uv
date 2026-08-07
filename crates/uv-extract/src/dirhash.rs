@@ -720,10 +720,10 @@ mod tests {
                 // a file
                 serde_json::Value::String(file_text) => {
                     // Write this file under the temp dir.
-                    fs_err::write(tempdir.path().join(&entry_path), &file_text)?;
+                    fs_err::write(tempdir.path().join(&entry_path), file_text)?;
                     // Add this file as an entry in the `DirhashTree`.
                     dirhash_tree.add_file(
-                        &entry_path.to_str().unwrap(),
+                        entry_path.to_str().unwrap(),
                         blake3::hash(file_text.as_bytes()),
                     )?;
                 }
