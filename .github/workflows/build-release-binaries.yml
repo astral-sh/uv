@@ -293,8 +293,25 @@ jobs:
         run: |
           winget install NASM.NASM --accept-source-agreements --accept-package-agreements
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: "Install LLVM profiling tools"
+        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
+        run: rustup component add llvm-tools-preview
+      - name: "Train PGO uv"
+        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
+        shell: bash
+        run: |
+          export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C target-feature=+crt-static"
+
+          python scripts/build_uv_pgo.py \
+            --target "${{ matrix.platform.target }}" \
+            --target-dir "${{ github.workspace }}/target/uv-pgo" \
+            --train-only
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.cmd
+          AWS_LC_SYS_PREBUILT_NASM: "0"
       # uv
       - name: "Build wheels"
+        if: ${{ matrix.platform.target != 'x86_64-pc-windows-msvc' }}
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.14.1
@@ -304,6 +321,32 @@ jobs:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
           # Disable prebuilt NASM objects so we always compile assembly from source.
           AWS_LC_SYS_PREBUILT_NASM: "0"
+      - name: "Build PGO wheels"
+        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v1.14.1
+          target: ${{ matrix.platform.target }}
+          args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.cmd
+          AWS_LC_SYS_PREBUILT_NASM: "0"
+          RUSTFLAGS: "-C target-feature=+crt-static -Cprofile-use=${{ github.workspace }}/target/uv-pgo/uv.profdata"
+      - name: "Verify static Windows runtime"
+        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
+        shell: bash
+        run: |
+          LLVM_READOBJ="$(rustc --print sysroot)/lib/rustlib/${{ matrix.platform.target }}/bin/llvm-readobj.exe"
+
+          for binary in uv uvx uvw; do
+            IMPORTS_FILE="$RUNNER_TEMP/${binary}-coff-imports.txt"
+            "$LLVM_READOBJ" --coff-imports "target/${{ matrix.platform.target }}/release/${binary}.exe" > "$IMPORTS_FILE"
+
+            if grep -Eiq 'vcruntime[[:digit:]_]*\.dll|ucrtbase\.dll|api-ms-win-crt-' "$IMPORTS_FILE"; then
+              echo "$binary must not dynamically link the Visual C++ runtime" >&2
+              exit 1
+            fi
+          done
       - name: "Test wheel"
         shell: bash
         run: |
