@@ -2253,21 +2253,20 @@ fn build_fast_path_backend_build_constraints() -> Result<()> {
         ])
         .collect::<Vec<_>>();
     let project = context.temp_dir.child("project");
-    let uv_version = uv_version::version();
 
-    project.child("pyproject.toml").write_str(&formatdoc! {r#"
+    project.child("pyproject.toml").write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["uv_build=={uv_version}"]
+        requires = ["uv_build>=0.5.15,<10000"]
         build-backend = "uv_build"
     "#})?;
     project.child("src/project/__init__.py").touch()?;
-    project.child("constraints.txt").write_str(&formatdoc! {r"
-        uv_build=={uv_version} \
+    project.child("constraints.txt").write_str(indoc! {r"
+        uv_build==0.12.0 \
             --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
     "})?;
 
@@ -2298,33 +2297,28 @@ fn build_fast_path_backend_build_constraints() -> Result<()> {
 #[test]
 fn build_fast_path_require_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2026-08-01T00:00:00Z");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"uv-build==\d+\.\d+\.\d+", "uv-build==[VERSION]")])
-        .collect::<Vec<_>>();
+    let filters = context.filters();
     let project = context.temp_dir.child("project");
-    let uv_version = uv_version::version();
 
-    project.child("pyproject.toml").write_str(&formatdoc! {r#"
+    project.child("pyproject.toml").write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["uv_build=={uv_version}"]
+        requires = ["uv_build>=0.5.15,<10000"]
         build-backend = "uv_build"
     "#})?;
     project.child("src/project/__init__.py").touch()?;
 
-    uv_snapshot!(&filters, context.build().arg("--wheel").arg("--require-hashes").current_dir(&project), @"
+    uv_snapshot!(filters, context.build().arg("--wheel").arg("--require-hashes").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
       Caused by: Failed to resolve requirements from `build-system.requires`
-      Caused by: No solution found when resolving: `uv-build==[VERSION]`
+      Caused by: No solution found when resolving: `uv-build>=0.5.15, <10000`
       Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `uv-build`
     ");
 
