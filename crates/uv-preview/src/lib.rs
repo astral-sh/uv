@@ -329,6 +329,8 @@ pub enum PreviewFeature {
     LockfileFormatCheck,
     /// Omit `package.metadata` from `uv.lock`.
     LockWithoutMetadata,
+    /// Allows selecting configured package indexes by name with `--index` and `--default-index`.
+    IndexByName,
 }
 
 impl Display for PreviewFeature {

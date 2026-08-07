@@ -1824,7 +1824,8 @@
             "no-distutils-patch",
             "index-hash-algorithm",
             "lockfile-format-check",
-            "lock-without-metadata"
+            "lock-without-metadata",
+            "index-by-name"
           ]
         },
         {

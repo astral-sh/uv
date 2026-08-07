@@ -50,6 +50,10 @@ $ uv lock --index pytorch=https://download.pytorch.org/whl/cpu
 $ UV_INDEX=pytorch=https://download.pytorch.org/whl/cpu uv lock
 ```
 
+With `--preview-features index-by-name`, configured indexes can be selected by name using `--index`
+or `--default-index`. Named indexes take precedence over matching paths and retain their configured
+settings, while taking the role of the selected option.
+
 ## Pinning a package to an index
 
 A package can be pinned to a specific index by specifying the index in its `tool.uv.sources` entry.
