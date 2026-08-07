@@ -24076,8 +24076,8 @@ fn lock_split_python_environment() -> Result<()> {
         revision = 3
         requires-python = ">=3.7"
         resolution-markers = [
-            "python_full_version < '3.8'",
             "python_full_version >= '3.8'",
+            "python_full_version < '3.8'",
         ]
         supported-markers = [
             "python_full_version < '3.8'",
@@ -24139,6 +24139,117 @@ fn lock_split_python_environment() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Initial environment forks with distinct lower Python bounds should follow the effective fork
+/// scheduling policy, including the precedence of lowest resolution over the fork strategy.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_fork_strategy_with_python_environments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requires_python = context.temp_dir.child("requires-python");
+    requires_python.create_dir_all()?;
+    requires_python
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = [
+            "iniconfig<=1.1.1 ; python_version < '3.12'",
+            "iniconfig<=2.0.0 ; python_version >= '3.12'",
+        ]
+
+        [tool.uv]
+        fork-strategy = "requires-python"
+        environments = [
+            "python_version == '3.11'",
+            "python_version == '3.12'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&requires_python), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    ");
+
+    let fewest = context.temp_dir.child("fewest");
+    fewest.create_dir_all()?;
+    fewest.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = [
+            "iniconfig<=1.1.1 ; python_version < '3.12'",
+            "iniconfig<=2.0.0 ; python_version >= '3.12'",
+        ]
+
+        [tool.uv]
+        fork-strategy = "fewest"
+        environments = [
+            "python_version == '3.12'",
+            "python_version == '3.11'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&fewest), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lowest = context.temp_dir.child("lowest");
+    lowest.create_dir_all()?;
+    lowest.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = [
+            "iniconfig==2.0.0 ; python_version < '3.12'",
+            "iniconfig>=1.1.1,<=2.0.0 ; python_version >= '3.12'",
+        ]
+
+        [tool.uv]
+        resolution = "lowest"
+        fork-strategy = "requires-python"
+        environments = [
+            "python_version == '3.12'",
+            "python_version == '3.11'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&lowest), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    for (project, expected) in [
+        (&requires_python, &["1.1.1", "2.0.0"][..]),
+        (&fewest, &["1.1.1"][..]),
+        (&lowest, &["2.0.0"][..]),
+    ] {
+        let lock =
+            fs_err::read_to_string(project.join("uv.lock"))?.parse::<toml_edit::DocumentMut>()?;
+        let versions = lock["package"]
+            .as_array_of_tables()
+            .unwrap()
+            .iter()
+            .filter(|package| package["name"].as_str() == Some("iniconfig"))
+            .map(|package| package["version"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(versions, expected);
+    }
 
     Ok(())
 }
