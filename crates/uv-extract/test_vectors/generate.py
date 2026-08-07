@@ -11,8 +11,9 @@
 # directory: `./generate.py > test_vectors.json`. If you change this script,
 # rerun that. We test for mismatches in CI.
 
-from blake3 import blake3
 import json
+
+from blake3 import blake3
 
 type Dir = dict[str, FileOrDir]
 type FileOrDir = str | Dir
