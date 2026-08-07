@@ -55,7 +55,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{
-    UvError, diagnostics, project::environment::CachedEnvironment, read_env_files,
+    UvError, diagnostics, project::environment::CachedEnvironment, read_env_files, spawn,
 };
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -353,9 +353,14 @@ pub(crate) async fn run(
     process.args(args);
     process.envs(env_file_environment);
 
+    // The directory uv itself installs this tool's entry points into, as opposed to the ambient
+    // `PATH` appended below — used to scope the dangling-shebang diagnostic in `spawn_error` to
+    // scripts uv actually manages.
+    let managed_scripts_dirs = [environment.scripts().to_path_buf()];
+
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
-        std::iter::once(environment.scripts().to_path_buf()).chain(
+        managed_scripts_dirs.iter().cloned().chain(
             std::env::var_os(EnvVars::PATH)
                 .as_ref()
                 .iter()
@@ -363,7 +368,7 @@ pub(crate) async fn run(
         ),
     )
     .context("Failed to build new PATH variable")?;
-    process.env(EnvVars::PATH, new_path);
+    process.env(EnvVars::PATH, &new_path);
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
@@ -374,6 +379,7 @@ pub(crate) async fn run(
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
 
+    let program = process.as_std().get_program().to_os_string();
     let handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -390,7 +396,16 @@ pub(crate) async fn run(
         }
         Err(err) => Err(err),
     }
-    .with_context(|| format!("Failed to spawn: `{executable}`"))?;
+    .map_err(|err| {
+        spawn::spawn_error(
+            executable,
+            &program,
+            Some(new_path.as_os_str()),
+            &managed_scripts_dirs,
+            None,
+            err,
+        )
+    })?;
 
     run_to_completion(handle).await
 }
