@@ -6602,6 +6602,8 @@ dependencies = [
  "regex",
  "reqwest",
  "rustc-hash",
+ "serde",
+ "serde_json",
  "sha2 0.11.0",
  "tempfile",
  "thiserror",

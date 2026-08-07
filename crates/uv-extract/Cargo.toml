@@ -43,6 +43,8 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
