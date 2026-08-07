@@ -33,15 +33,18 @@ jobs:
           path: target/coverage/artifacts
           merge-multiple: false
 
-      - name: "Generate combined HTML coverage report"
+      - name: "Generate combined coverage reports"
         run: |
           uv run --script scripts/coverage-html-report.py combined --lcov-dir target/coverage/artifacts
           test -f target/coverage/html/combined/index.html
+          test -f target/coverage/lcov/combined.lcov
 
       - name: "Upload combined coverage report"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-combined-${{ github.sha }}
-          path: target/coverage/html/combined/
+          path: |
+            target/coverage/html/combined/
+            target/coverage/lcov/combined.lcov
           if-no-files-found: error
           retention-days: 14

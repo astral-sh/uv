@@ -161,6 +161,19 @@ def merge_lcov(paths: collections.abc.Iterable[pathlib.Path]) -> CoverageData:
     return merged_data
 
 
+def write_lcov(path: pathlib.Path, coverage_data: CoverageData) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as file:
+        for filename, lines in sorted(coverage_data.items()):
+            source = pathlib.Path(filename).relative_to(REPO_ROOT).as_posix()
+            file.write(f"SF:{source}\n")
+            for line_number, count in sorted(lines.items()):
+                file.write(f"DA:{line_number},{count}\n")
+            file.write(f"LF:{len(lines)}\n")
+            file.write(f"LH:{sum(count > 0 for count in lines.values())}\n")
+            file.write("end_of_record\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate terminal and HTML reports from a Rust coverage run."
@@ -192,6 +205,11 @@ def main() -> None:
         print(f"Merging {len(lcov_paths)} LCOV reports from {args.lcov_dir}")
 
     raw_data = merge_lcov(lcov_paths)
+    if args.lcov_dir is not None:
+        lcov_path = REPO_ROOT / "target" / "coverage" / "lcov" / f"{args.id}.lcov"
+        write_lcov(lcov_path, raw_data)
+        print(f"LCOV report: {lcov_path}")
+
     covered_lines = {
         filename: {line for line, count in lines.items() if count > 0}
         for filename, lines in raw_data.items()
