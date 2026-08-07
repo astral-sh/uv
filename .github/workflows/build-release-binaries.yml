@@ -526,7 +526,7 @@ jobs:
 
   linux-arm:
     name: ${{ matrix.platform.target }}
-    runs-on: ${{ matrix.platform.target == 'aarch64-unknown-linux-gnu' && 'ubuntu-24.04-arm' || 'depot-ubuntu-24.04-8' }}
+    runs-on: ${{ matrix.platform.target == 'aarch64-unknown-linux-gnu' && 'depot-ubuntu-24.04-arm-8' || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: ${{ matrix.platform.target == 'aarch64-unknown-linux-gnu' && 60 || 30 }}
     strategy:
       matrix:
