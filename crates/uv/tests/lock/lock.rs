@@ -24149,7 +24149,10 @@ fn lock_split_python_environment() -> Result<()> {
 #[test]
 fn lock_fork_strategy_with_python_environments() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-strategy-environments.toml");
 
+    // The `requires-python` strategy solves the `3.12` fork first, so each fork gets its own
+    // highest version.
     let requires_python = context.temp_dir.child("requires-python");
     requires_python.create_dir_all()?;
     requires_python
@@ -24160,8 +24163,8 @@ fn lock_fork_strategy_with_python_environments() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.11,<3.13"
         dependencies = [
-            "iniconfig<=1.1.1 ; python_version < '3.12'",
-            "iniconfig<=2.0.0 ; python_version >= '3.12'",
+            "a<=1.0.0 ; python_version < '3.12'",
+            "a<=2.0.0 ; python_version >= '3.12'",
         ]
 
         [tool.uv]
@@ -24172,13 +24175,75 @@ fn lock_fork_strategy_with_python_environments() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&requires_python), @"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&requires_python).arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
     ");
 
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("requires-python/uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11, <3.13"
+        resolution-markers = [
+            "python_full_version >= '3.12'",
+            "python_full_version < '3.12'",
+        ]
+        supported-markers = [
+            "python_full_version < '3.12'",
+            "python_full_version >= '3.12'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version < '3.12'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:4816d803f3b4985959b41da3ae6da7ae3951b56465a53602dedc92c0c12ca685", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:3569209a9ecaea7636fa3b0ed97d6a9d50fccad1399a7dcf45caad2cbe59ae50", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.12'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:0818a47dd4fc0083f2e9dfc1486f9663e79b3c1ec8308803472c32d46a9dfa1c", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:498db1c24445774dde1dddcb558593590642d426a15b384c9f870fa89ddd24b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.12'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.12'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "python_full_version < '3.12'", specifier = "<=1.0.0" },
+            { name = "a", marker = "python_full_version >= '3.12'", specifier = "<=2.0.0" },
+        ]
+        "#);
+    });
+
+    // The `fewest` strategy solves the `3.11` fork first, and its version carries over to the
+    // `3.12` fork.
     let fewest = context.temp_dir.child("fewest");
     fewest.create_dir_all()?;
     fewest.child("pyproject.toml").write_str(indoc! {r#"
@@ -24187,8 +24252,8 @@ fn lock_fork_strategy_with_python_environments() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.11,<3.13"
         dependencies = [
-            "iniconfig<=1.1.1 ; python_version < '3.12'",
-            "iniconfig<=2.0.0 ; python_version >= '3.12'",
+            "a<=1.0.0 ; python_version < '3.12'",
+            "a<=2.0.0 ; python_version >= '3.12'",
         ]
 
         [tool.uv]
@@ -24199,13 +24264,60 @@ fn lock_fork_strategy_with_python_environments() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&fewest), @"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&fewest).arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
     ");
 
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("fewest/uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11, <3.13"
+        resolution-markers = [
+            "python_full_version < '3.12'",
+            "python_full_version >= '3.12'",
+        ]
+        supported-markers = [
+            "python_full_version >= '3.12'",
+            "python_full_version < '3.12'",
+        ]
+
+        [options]
+        fork-strategy = "fewest"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:4816d803f3b4985959b41da3ae6da7ae3951b56465a53602dedc92c0c12ca685", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:3569209a9ecaea7636fa3b0ed97d6a9d50fccad1399a7dcf45caad2cbe59ae50", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "python_full_version < '3.12'", specifier = "<=1.0.0" },
+            { name = "a", marker = "python_full_version >= '3.12'", specifier = "<=2.0.0" },
+        ]
+        "#);
+    });
+
+    // The lowest resolution mode takes precedence over the `requires-python` strategy, so the
+    // `3.11` fork is solved first here too.
     let lowest = context.temp_dir.child("lowest");
     lowest.create_dir_all()?;
     lowest.child("pyproject.toml").write_str(indoc! {r#"
@@ -24214,8 +24326,8 @@ fn lock_fork_strategy_with_python_environments() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.11,<3.13"
         dependencies = [
-            "iniconfig==2.0.0 ; python_version < '3.12'",
-            "iniconfig>=1.1.1,<=2.0.0 ; python_version >= '3.12'",
+            "a==2.0.0 ; python_version < '3.12'",
+            "a>=1.0.0,<=2.0.0 ; python_version >= '3.12'",
         ]
 
         [tool.uv]
@@ -24227,29 +24339,57 @@ fn lock_fork_strategy_with_python_environments() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&lowest), @"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&lowest).arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
     ");
 
-    for (project, expected) in [
-        (&requires_python, &["1.1.1", "2.0.0"][..]),
-        (&fewest, &["1.1.1"][..]),
-        (&lowest, &["2.0.0"][..]),
-    ] {
-        let lock =
-            fs_err::read_to_string(project.join("uv.lock"))?.parse::<toml_edit::DocumentMut>()?;
-        let versions = lock["package"]
-            .as_array_of_tables()
-            .unwrap()
-            .iter()
-            .filter(|package| package["name"].as_str() == Some("iniconfig"))
-            .map(|package| package["version"].as_str().unwrap())
-            .collect::<Vec<_>>();
-        assert_eq!(versions, expected);
-    }
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("lowest/uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11, <3.13"
+        resolution-markers = [
+            "python_full_version < '3.12'",
+            "python_full_version >= '3.12'",
+        ]
+        supported-markers = [
+            "python_full_version >= '3.12'",
+            "python_full_version < '3.12'",
+        ]
+
+        [options]
+        resolution-mode = "lowest"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:0818a47dd4fc0083f2e9dfc1486f9663e79b3c1ec8308803472c32d46a9dfa1c", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:498db1c24445774dde1dddcb558593590642d426a15b384c9f870fa89ddd24b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "python_full_version < '3.12'", specifier = "==2.0.0" },
+            { name = "a", marker = "python_full_version >= '3.12'", specifier = ">=1.0.0,<=2.0.0" },
+        ]
+        "#);
+    });
 
     Ok(())
 }
