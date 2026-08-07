@@ -71,7 +71,7 @@ pub(super) enum RealmGuardRef<'a> {
 
 impl RealmGuardRef<'_> {
     /// Return the realm protected by this guard.
-    pub(super) fn realm(&self) -> &Realm {
+    fn realm(&self) -> &Realm {
         match self {
             Self::Read(guard) => &guard.realm,
             Self::Write(guard) => &guard.realm,
@@ -81,7 +81,7 @@ impl RealmGuardRef<'_> {
 
 impl RealmWriteGuard {
     /// Return the realm protected by this guard.
-    pub(super) fn realm(&self) -> &Realm {
+    fn realm(&self) -> &Realm {
         &self.realm
     }
 }
@@ -127,7 +127,7 @@ pub(super) enum LegacyGuardRef<'a> {
 
 impl LegacyGuardRef<'_> {
     /// Return the exact legacy service name protected by this guard.
-    pub(super) fn service_name(&self) -> &str {
+    fn service_name(&self) -> &str {
         match self {
             Self::Read(guard) => &guard.service_name,
             Self::Write(guard) => &guard.service_name,
@@ -468,7 +468,7 @@ fn legacy_lock_key(service_name: &str) -> String {
 }
 
 /// Fetch a legacy password from the system keyring.
-pub(super) async fn system_fetch_legacy(
+async fn system_fetch_legacy(
     guard: LegacyGuardRef<'_>,
     username: &str,
 ) -> Result<Option<String>, Error> {
@@ -484,10 +484,7 @@ pub(super) async fn system_fetch_legacy(
 }
 
 /// Remove a legacy password from the system keyring.
-pub(super) async fn system_remove_legacy(
-    guard: &LegacyWriteGuard,
-    username: &str,
-) -> Result<bool, Error> {
+async fn system_remove_legacy(guard: &LegacyWriteGuard, username: &str) -> Result<bool, Error> {
     let entry =
         uv_keyring::Entry::new(&format!("{SERVICE_PREFIX}{}", guard.service_name), username)?;
     match entry.delete_credential().await {

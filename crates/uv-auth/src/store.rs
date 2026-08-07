@@ -17,8 +17,6 @@ use crate::persistent::PersistentCredential;
 use crate::service::Service;
 use crate::{Credentials, KeyringProvider};
 
-pub use crate::persistent::AuthScheme;
-
 /// The storage backend to use in `uv auth` commands.
 #[derive(Debug)]
 pub enum AuthBackend {

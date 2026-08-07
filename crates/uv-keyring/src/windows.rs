@@ -62,7 +62,7 @@ use zeroize::Zeroize;
 ///
 /// See the module header for the meanings of these fields.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct WinCredential {
+pub struct WinCredential {
     username: String,
     target_name: String,
     target_alias: String,
@@ -274,6 +274,30 @@ impl CredentialApi for WinCredential {
 }
 
 impl WinCredential {
+    /// Create a credential for an explicit target with the given comment.
+    pub fn new(target_name: impl Into<String>, comment: impl Into<String>) -> Result<Self> {
+        let credential = Self {
+            username: String::new(),
+            target_name: target_name.into(),
+            target_alias: String::new(),
+            comment: comment.into(),
+        };
+        credential.validate_attributes(None, None)?;
+        Ok(credential)
+    }
+
+    /// Return the target identifying this credential in Windows Credential Manager.
+    pub fn target_name(&self) -> &str {
+        &self.target_name
+    }
+
+    /// Wrap this Windows credential in a platform-independent keyring entry.
+    pub fn into_entry(self) -> crate::Entry {
+        crate::Entry {
+            inner: Box::new(self),
+        }
+    }
+
     /// Return all Windows Generic credentials with target names matching `target_prefix`.
     ///
     /// Windows credential enumeration accepts a single trailing wildcard, so this method treats

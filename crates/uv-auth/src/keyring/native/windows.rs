@@ -1,5 +1,6 @@
 use sha2::{Digest, Sha256};
 use tracing::warn;
+use uv_keyring::{Entry, WinCredential};
 use zeroize::Zeroizing;
 
 use super::{
@@ -26,7 +27,7 @@ fn target(realm: &Realm, service: &Service, username: &Username) -> String {
     let service_url = service.url().as_str();
     let username = username.as_deref().unwrap_or_default();
     let identity = format!("{}:{service_url}{username}", service_url.len());
-    let digest = format!("{:x}", Sha256::digest(identity.as_bytes()));
+    let digest = hex::encode(Sha256::digest(identity.as_bytes()));
     format!("{}{digest}", target_prefix(realm))
 }
 
@@ -63,20 +64,12 @@ fn credential_matches_target(
 }
 
 /// Return a Windows keyring entry for one service and username.
-fn entry(
-    guard: &RealmWriteGuard,
-    service: &Service,
-    username: &Username,
-) -> Result<uv_keyring::Entry, Error> {
+fn entry(guard: &RealmWriteGuard, service: &Service, username: &Username) -> Result<Entry, Error> {
     ensure_service_realm(guard.realm(), service)?;
-    Ok(uv_keyring::Entry::new_with_credential(Box::new(
-        uv_keyring::windows::WinCredential {
-            username: String::new(),
-            target_name: target(guard.realm(), service, username),
-            target_alias: String::new(),
-            comment: CREDENTIAL_COMMENT.to_string(),
-        },
-    )))
+    Ok(
+        WinCredential::new(target(guard.realm(), service, username), CREDENTIAL_COMMENT)?
+            .into_entry(),
+    )
 }
 
 /// Load the persisted credentials in the locked realm.
@@ -85,10 +78,10 @@ pub(super) async fn load_persisted_credentials(
 ) -> Result<PersistedCredentials, Error> {
     let realm = guard.realm();
     let prefix = target_prefix(realm);
-    let entries = uv_keyring::windows::WinCredential::enumerate(&prefix).await?;
+    let entries = WinCredential::enumerate(&prefix).await?;
     let mut credentials = Vec::with_capacity(entries.len());
     for enumerated in entries {
-        let target_name = &enumerated.credential().target_name;
+        let target_name = enumerated.credential().target_name();
         if !target_has_valid_shape(target_name, &prefix) {
             warn!("Ignoring native credential with an invalid target in realm {realm}");
             continue;

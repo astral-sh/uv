@@ -5936,6 +5936,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "fs-err",
+ "hex",
  "http",
  "insta",
  "percent-encoding",
