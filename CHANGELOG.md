@@ -3,6 +3,33 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.3
+
+Released on 2026-08-07.
+
+### Python
+
+- Add CPython 3.13.15 ([#20997](https://github.com/astral-sh/uv/pull/20997))
+
+### Preview features
+
+- Add `--output-format` to select automatic, human-readable, or raw-byte output for `uv cache size` ([#20992](https://github.com/astral-sh/uv/pull/20992))
+- Preserve JSON output from `uv workspace metadata --quiet` while suppressing diagnostics ([#20991](https://github.com/astral-sh/uv/pull/20991))
+- Reduce memory usage for large workspaces by streaming `uv workspace metadata` JSON output ([#20990](https://github.com/astral-sh/uv/pull/20990))
+
+### Performance
+
+- Reduce Linux startup latency by initializing the workspace cache before spawning another thread ([#20989](https://github.com/astral-sh/uv/pull/20989))
+- Reuse compiled workspace exclusion patterns during workspace discovery ([#20988](https://github.com/astral-sh/uv/pull/20988))
+- Speed up conflict-heavy resolutions by avoiding materialized range complements ([#20982](https://github.com/astral-sh/uv/pull/20982))
+- Avoid slow procfs reads during Python interpreter discovery on Linux ([#20987](https://github.com/astral-sh/uv/pull/20987))
+
+### Documentation
+
+- Add PEP 740 attestations to the GitHub Actions publishing example ([#20986](https://github.com/astral-sh/uv/pull/20986))
+- Restrict the GitHub Actions publishing example to Python version tags ([#20973](https://github.com/astral-sh/uv/pull/20973))
+- Correct `--python-pin` to `--pin-python` in the `uv init --bare` example ([#20876](https://github.com/astral-sh/uv/pull/20876))
+
 ## 0.12.2
 
 Released on 2026-08-05.
