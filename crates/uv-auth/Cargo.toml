@@ -52,6 +52,7 @@ url = { workspace = true }
 zeroize = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
+hex = { workspace = true }
 sha2 = { workspace = true }
 
 [dev-dependencies]

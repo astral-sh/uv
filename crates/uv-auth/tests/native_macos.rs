@@ -3,12 +3,14 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use uv_auth::{AuthBackend, Credentials};
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 
 /// Return the native provider used by the preview authentication backend.
 async fn native_provider() -> Result<uv_auth::KeyringProvider, Box<dyn std::error::Error>> {
-    match AuthBackend::from_settings(Preview::new(&[PreviewFeature::NativeAuth])).await? {
+    let preview =
+        Preview::from_feature_names(&[MaybePreviewFeature::Known(PreviewFeature::NativeAuth)]);
+    match AuthBackend::from_settings(preview).await? {
         AuthBackend::System(provider) => Ok(provider),
         AuthBackend::TextStore(..) => {
             Err(std::io::Error::other("expected native authentication backend").into())

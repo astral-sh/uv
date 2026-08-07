@@ -9,7 +9,7 @@ use crate::{Credentials, Service};
 /// Authentication scheme used by a persisted credential.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum AuthScheme {
+enum AuthScheme {
     /// HTTP Basic authentication with a username and password.
     #[default]
     Basic,

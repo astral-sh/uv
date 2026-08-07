@@ -118,6 +118,8 @@ use std::collections::HashMap;
 pub use credential::Credential;
 use credential::CredentialBuilder;
 pub use error::{Error, Result};
+#[cfg(all(target_os = "windows", feature = "windows-native"))]
+pub use windows::{EnumeratedCredential, WinCredential};
 
 #[cfg(any(
     all(target_os = "macos", feature = "apple-native"),

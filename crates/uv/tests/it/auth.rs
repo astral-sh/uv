@@ -334,10 +334,7 @@ async fn native_auth_uses_path_specific_credentials_in_one_client() -> Result<()
 
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
@@ -1784,10 +1781,7 @@ fn native_auth_prefix_match() {
         .arg("--username")
         .arg(username)
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch credentials for native-prefix-user@https://native-prefix.example.com/apiv1
     "
@@ -1873,12 +1867,9 @@ fn native_auth_multiple_users() {
         .arg("--username")
         .arg("user1")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pass1
-
-    ----- stderr -----
     "
     );
 
@@ -1887,12 +1878,9 @@ fn native_auth_multiple_users() {
         .arg("--username")
         .arg("user2")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pass2
-
-    ----- stderr -----
     "
     );
 
@@ -1902,10 +1890,7 @@ fn native_auth_multiple_users() {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth,auth-helper"),
         input=r#"{"uri":"https://native-users.example.com/path"}"#,
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Multiple credentials found for URL 'https://native-users.example.com/path', specify which username to use
     "
@@ -1925,10 +1910,7 @@ fn native_auth_multiple_users() {
         .arg("--username")
         .arg("user1")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch credentials for user1@https://native-users.example.com/
     "
@@ -1939,12 +1921,9 @@ fn native_auth_multiple_users() {
         .arg("--username")
         .arg("user2")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pass2
-
-    ----- stderr -----
     "
     );
 }
@@ -1997,10 +1976,7 @@ fn native_auth_logout_is_service_scoped() {
         .arg("--username")
         .arg(username)
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch credentials for native-scoped-user@https://native-scoped.example.com/first
     "
@@ -2011,12 +1987,9 @@ fn native_auth_logout_is_service_scoped() {
         .arg("--username")
         .arg(username)
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pass-second
-
-    ----- stderr -----
     "
     );
 
