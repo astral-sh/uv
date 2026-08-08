@@ -21,8 +21,8 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
-    ExtrasSpecificationWithDefaults, InstallTarget, Override, PackageOverride,
+    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, Excludes,
+    ExtrasSpecificationWithDefaults, InstallTarget, Override, Overrides, PackageOverride,
     ScopedOverrideSourceError,
 };
 use uv_distribution::{
@@ -1829,6 +1829,9 @@ impl Lock {
         requires_dist: Box<[Requirement]>,
         provides_extra: &[ExtraName],
         dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
+        overrides: &Overrides,
+        excludes: &Excludes,
+        package_version: Option<&Version>,
         package: &'lock Package,
         remotes: &mut Option<BTreeSet<UrlString>>,
         locals: &mut Option<BTreeSet<Box<Path>>>,
@@ -1839,6 +1842,9 @@ impl Lock {
             return Ok(self.satisfied_no_metadata(
                 package,
                 Some((&requires_dist, provides_extra, &dependency_groups)),
+                overrides,
+                excludes,
+                package_version,
             ));
         }
 
@@ -1951,6 +1957,9 @@ impl Lock {
         &self,
         package: &'lock Package,
         declarations: Option<(&[Requirement], &[ExtraName], &DeclaredDependencyGroups)>,
+        overrides: &Overrides,
+        excludes: &Excludes,
+        package_version: Option<&Version>,
     ) -> SatisfiesResult<'lock> {
         let mismatch = |expected, actual| {
             SatisfiesResult::MismatchedPackageDependencies(
@@ -1967,8 +1976,6 @@ impl Lock {
         if !self.conflicts.is_empty()
             || !self.fork_markers.is_empty()
             || !self.manifest.constraints.is_empty()
-            || !self.manifest.overrides.is_empty()
-            || !self.manifest.excludes.is_empty()
             || self
                 .manifest
                 .dependency_groups
@@ -2029,6 +2036,34 @@ impl Lock {
             );
         }
 
+        let package_context = package_version.map(|version| (&package.id.name, version));
+        let requirements = overrides
+            .apply_for_package(package_context, requirements)
+            .filter(|requirement| {
+                !excludes.contains_for_package(package_context, &requirement.name)
+            })
+            .map(Cow::into_owned)
+            .collect::<Box<[_]>>();
+        // Overrides and exclusions must be applied before recursive extras are flattened.
+        let requirements = FlatRequiresDist::from_requirements(requirements, &package.id.name)
+            .into_iter()
+            .collect::<Vec<_>>();
+        let dependency_groups = dependency_groups
+            .iter()
+            .map(|(group, requirements)| {
+                // Groups inherit global overrides but are not distribution dependencies, so
+                // overrides scoped to the owning package must not rewrite their requirements.
+                let requirements = overrides
+                    .apply_for_package(None, requirements)
+                    .filter(|requirement| {
+                        !excludes.contains_for_package(package_context, &requirement.name)
+                    })
+                    .map(Cow::into_owned)
+                    .collect::<Vec<_>>();
+                (group.clone(), requirements)
+            })
+            .collect::<BTreeMap<_, _>>();
+
         let parent_marker = UniversalMarker::from_combined(self.fork_markers_union());
         let environment =
             SimplifiedMarkerTree::new(&self.requires_python, self.fork_markers_union());
@@ -2051,10 +2086,10 @@ impl Lock {
         for context in contexts {
             let actual = context.dependencies(package);
             let context_requirements: &[Requirement] = match context {
-                DependencyContext::Production | DependencyContext::Extra(_) => requirements,
+                DependencyContext::Production | DependencyContext::Extra(_) => &requirements,
                 DependencyContext::Group(group) => dependency_groups
                     .get(group)
-                    .map(Box::as_ref)
+                    .map(Vec::as_slice)
                     .unwrap_or_default(),
             };
             let mut expected = Vec::new();
@@ -2282,7 +2317,7 @@ impl Lock {
         }
 
         // Validate that the lockfile was generated with the same overrides.
-        {
+        let normalized_overrides = {
             let normalize = |entry: Override<Requirement>| -> Result<_, LockError> {
                 match entry {
                     Override::Requirement(requirement) => Ok(Override::Requirement(
@@ -2317,7 +2352,8 @@ impl Lock {
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
             }
-        }
+            expected
+        };
 
         // Validate that the lockfile was generated with the same excludes.
         {
@@ -2405,6 +2441,18 @@ impl Lock {
                 return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
             }
         }
+
+        let dependency_overrides = if allow_missing_package_metadata {
+            Overrides::from_entries(normalized_overrides.into_iter().collect())
+                .map_err(LockErrorKind::InvalidScopedOverride)?
+        } else {
+            Overrides::default()
+        };
+        let dependency_excludes = if allow_missing_package_metadata {
+            Excludes::from_entries(excludes.iter().cloned())
+        } else {
+            Excludes::default()
+        };
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let mut remotes = indexes.map(|locations| {
@@ -2549,7 +2597,13 @@ impl Lock {
                 && !package.has_metadata()
                 && matches!(package.id.source, Source::Direct(..))
             {
-                return Ok(self.satisfied_no_metadata(package, None));
+                return Ok(self.satisfied_no_metadata(
+                    package,
+                    None,
+                    &dependency_overrides,
+                    &dependency_excludes,
+                    package.id.version.as_ref(),
+                ));
             }
 
             // Validating a direct URL package requires retrieving metadata from the remote
@@ -2612,6 +2666,9 @@ impl Lock {
                             metadata.requires_dist,
                             &metadata.provides_extra,
                             metadata.dependency_groups,
+                            &dependency_overrides,
+                            &dependency_excludes,
+                            Some(version),
                             package,
                             &mut remotes,
                             &mut locals,
@@ -2673,6 +2730,9 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &dependency_overrides,
+                        &dependency_excludes,
+                        Some(&metadata.version),
                         package,
                         &mut remotes,
                         &mut locals,
@@ -2693,14 +2753,21 @@ impl Lock {
                 // even if the version is dynamic, we can still extract the requirements without
                 // performing a build, unlike in the database where we typically construct a "complete"
                 // metadata object.
-                let metadata = Self::source_tree_requires_dist_cached(
-                    source_tree,
-                    root,
-                    package,
-                    database,
-                    &mut source_tree_metadata,
-                )
-                .await?;
+                let metadata = if dependency_overrides.has_scoped_package(&package.id.name)
+                    || dependency_excludes.has_scoped_package(&package.id.name)
+                {
+                    // Scoped rules require the actual dynamic version from built metadata.
+                    None
+                } else {
+                    Self::source_tree_requires_dist_cached(
+                        source_tree,
+                        root,
+                        package,
+                        database,
+                        &mut source_tree_metadata,
+                    )
+                    .await?
+                };
 
                 let satisfied = metadata.is_some_and(|SourceTreeRequiresDist {
                     requires_python: _requires_python,
@@ -2730,6 +2797,9 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &dependency_overrides,
+                        &dependency_excludes,
+                        None,
                         package,
                         &mut remotes,
                         &mut locals,
@@ -2790,6 +2860,9 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &dependency_overrides,
+                        &dependency_excludes,
+                        Some(&metadata.version),
                         package,
                         &mut remotes,
                         &mut locals,
