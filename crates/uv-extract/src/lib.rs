@@ -3,6 +3,7 @@ use regex::regex;
 pub use sync::*;
 use uv_static::EnvVars;
 
+pub mod dirhash;
 mod error;
 pub mod hash;
 pub mod stream;
