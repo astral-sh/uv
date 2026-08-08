@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
+use std::iter;
 use std::path::{Path, PathBuf};
+use std::slice;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
@@ -434,6 +436,36 @@ enum DependencyContext<'a> {
 }
 
 impl DependencyContext<'_> {
+    /// Specialize a requirement to the dependency section that can activate it.
+    fn requirement_marker(self, marker: MarkerTree) -> MarkerTree {
+        let production_marker = marker.simplify_not_extras_with(|_| true);
+        match self {
+            Self::Production | Self::Group(_) => production_marker,
+            Self::Extra(extra) => marker
+                .simplify_extras(slice::from_ref(extra))
+                .simplify_not_extras_with(|candidate| candidate != extra)
+                // Production requirements already belong to the base distribution.
+                .and(production_marker.negate()),
+        }
+    }
+
+    /// Returns the resolved dependencies recorded for this context.
+    fn dependencies(self, package: &Package) -> &[Dependency] {
+        match self {
+            Self::Production => &package.dependencies,
+            Self::Extra(extra) => package
+                .optional_dependencies
+                .get(extra)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+            Self::Group(group) => package
+                .dependency_groups
+                .get(group)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+        }
+    }
+
     /// Returns the resolved dependencies for this context, creating its section if needed.
     fn dependencies_mut(self, package: &mut Package) -> &mut Vec<Dependency> {
         match self {
@@ -882,10 +914,25 @@ impl Lock {
         root: &Path,
     ) -> Result<Self, LockError> {
         self.revision = METADATA_FREE_REVISION;
+        let workspace_root = self.root().map(|package| package.id.clone());
         for package in &mut self.packages {
-            if !matches!(package.id.source, Source::Direct(..) | Source::Git(..)) {
-                package.metadata = PackageMetadata::default();
+            if matches!(package.id.source, Source::Direct(..) | Source::Git(..)) {
+                continue;
             }
+            for extra in &package.metadata.provides_extra {
+                package
+                    .optional_dependencies
+                    .entry(extra.clone())
+                    .or_default();
+            }
+            if self.manifest.members.contains(&package.id.name)
+                || workspace_root.as_ref().is_some_and(|id| id == &package.id)
+            {
+                for group in package.metadata.dependency_groups.keys() {
+                    package.dependency_groups.entry(group.clone()).or_default();
+                }
+            }
+            package.metadata = PackageMetadata::default();
         }
 
         // Git packages normally omit declaration metadata because their revisions are immutable.
@@ -1701,6 +1748,7 @@ impl Lock {
     fn satisfies_requires_dist<'lock>(
         &self,
         requires_dist: Box<[Requirement]>,
+        provides_extra: &[ExtraName],
         dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
         package: &'lock Package,
         remotes: &mut Option<BTreeSet<UrlString>>,
@@ -1709,9 +1757,10 @@ impl Lock {
         allow_missing_package_metadata: bool,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
         if allow_missing_package_metadata && !package.has_metadata() {
-            return Ok(
-                self.satisfied_no_metadata(package, Some((&requires_dist, &dependency_groups)))
-            );
+            return Ok(self.satisfied_no_metadata(
+                package,
+                Some((&requires_dist, provides_extra, &dependency_groups)),
+            ));
         }
 
         let indexes = requires_dist
@@ -1822,18 +1871,18 @@ impl Lock {
     fn satisfied_no_metadata<'lock>(
         &self,
         package: &'lock Package,
-        declarations: Option<(&[Requirement], &DeclaredDependencyGroups)>,
+        declarations: Option<(&[Requirement], &[ExtraName], &DeclaredDependencyGroups)>,
     ) -> SatisfiesResult<'lock> {
-        let mismatch = |expected| {
+        let mismatch = |expected, actual| {
             SatisfiesResult::MismatchedPackageDependencies(
                 &package.id.name,
                 package.id.version.as_ref(),
                 expected,
-                &package.dependencies,
+                actual,
             )
         };
-        let Some((requirements, dependency_groups)) = declarations else {
-            return mismatch(Vec::new());
+        let Some((requirements, provides_extra, dependency_groups)) = declarations else {
+            return mismatch(Vec::new(), &package.dependencies);
         };
 
         if !self.conflicts.is_empty()
@@ -1846,23 +1895,58 @@ impl Lock {
                 .dependency_groups
                 .values()
                 .any(|requirements| !requirements.is_empty())
-            || dependency_groups.values().any(|group| !group.is_empty())
-            || package
-                .optional_dependencies
-                .values()
-                .any(|dependencies| !dependencies.is_empty())
-            || package
-                .dependency_groups
-                .values()
-                .any(|dependencies| !dependencies.is_empty())
         {
-            return mismatch(Vec::new());
+            return mismatch(Vec::new(), &package.dependencies);
         }
 
         let is_workspace_package = self.members().contains(&package.id.name)
             || self.members().is_empty() && self.root().is_some_and(|root| root.id == package.id);
         if !is_workspace_package {
-            return mismatch(Vec::new());
+            return mismatch(Vec::new(), &package.dependencies);
+        }
+
+        let expected_extras = provides_extra.iter().cloned().collect::<BTreeSet<_>>();
+        let actual_extras = package
+            .optional_dependencies
+            .keys()
+            .collect::<BTreeSet<_>>();
+        if expected_extras.iter().collect::<BTreeSet<_>>() != actual_extras {
+            return SatisfiesResult::MismatchedPackageProvidesExtra(
+                &package.id.name,
+                package.id.version.as_ref(),
+                expected_extras,
+                actual_extras,
+            );
+        }
+
+        let expected_groups = dependency_groups.keys().collect::<BTreeSet<_>>();
+        let actual_groups = package.dependency_groups.keys().collect::<BTreeSet<_>>();
+        if expected_groups != actual_groups {
+            let expected = dependency_groups
+                .iter()
+                .map(|(group, requirements)| {
+                    (
+                        group.clone(),
+                        requirements.iter().cloned().collect::<BTreeSet<_>>(),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>();
+            let actual = package
+                .dependency_groups
+                .keys()
+                .map(|group| {
+                    (
+                        group.clone(),
+                        expected.get(group).cloned().unwrap_or_default(),
+                    )
+                })
+                .collect();
+            return SatisfiesResult::MismatchedPackageDependencyGroups(
+                &package.id.name,
+                package.id.version.as_ref(),
+                expected,
+                actual,
+            );
         }
 
         let parent_marker = UniversalMarker::from_combined(self.fork_markers_union());
@@ -1870,51 +1954,93 @@ impl Lock {
             SimplifiedMarkerTree::new(&self.requires_python, self.fork_markers_union());
         let builder =
             LockedDependencyBuilder::new(&self.requires_python, environment, parent_marker);
-        let mut expected = Vec::new();
 
-        for requirement in requirements {
-            let RequirementSource::Registry {
-                specifier,
-                index,
-                conflict,
-            } = &requirement.source
-            else {
-                return mismatch(expected);
+        // Include sections that exist only in the old lock so removed extras and groups go stale.
+        let extras = provides_extra
+            .iter()
+            .chain(package.optional_dependencies.keys())
+            .collect::<BTreeSet<_>>();
+        let groups = dependency_groups
+            .keys()
+            .chain(package.dependency_groups.keys())
+            .collect::<BTreeSet<_>>();
+        let contexts = iter::once(DependencyContext::Production)
+            .chain(extras.into_iter().map(DependencyContext::Extra))
+            .chain(groups.into_iter().map(DependencyContext::Group));
+
+        for context in contexts {
+            let actual = context.dependencies(package);
+            let context_requirements: &[Requirement] = match context {
+                DependencyContext::Production | DependencyContext::Extra(_) => requirements,
+                DependencyContext::Group(group) => dependency_groups
+                    .get(group)
+                    .map(Box::as_ref)
+                    .unwrap_or_default(),
             };
-            if !specifier.is_empty()
-                || index.is_some()
-                || conflict.is_some()
-                || !requirement.extras.is_empty()
-                || !requirement.marker.is_true()
-            {
-                return mismatch(expected);
+            let mut expected = Vec::new();
+
+            for requirement in context_requirements {
+                let RequirementSource::Registry {
+                    specifier,
+                    index,
+                    conflict,
+                } = &requirement.source
+                else {
+                    return mismatch(expected, actual);
+                };
+                if !specifier.is_empty()
+                    || index.is_some()
+                    || conflict.is_some()
+                    || !requirement.marker.without_extras().is_true()
+                {
+                    return mismatch(expected, actual);
+                }
+
+                let requirement_marker = context.requirement_marker(requirement.marker);
+                if requirement_marker.is_false() {
+                    continue;
+                }
+                if !requirement_marker.is_true() {
+                    return mismatch(expected, actual);
+                }
+
+                let mut candidates = self
+                    .packages
+                    .iter()
+                    .filter(|candidate| candidate.id.name == requirement.name);
+                let Some(candidate) = candidates.next() else {
+                    return mismatch(expected, actual);
+                };
+                if candidates.next().is_some()
+                    || !matches!(candidate.id.source, Source::Registry(..))
+                    || !candidate.fork_markers.is_empty()
+                {
+                    return mismatch(expected, actual);
+                }
+
+                let extras = requirement
+                    .extras
+                    .iter()
+                    .filter(|extra| candidate.optional_dependencies.contains_key(*extra))
+                    .cloned()
+                    .collect::<BTreeSet<_>>();
+
+                // An extra selects its base distribution; canonical edge merging records both.
+                if !extras.is_empty() {
+                    builder.add(
+                        &mut expected,
+                        candidate.id.clone(),
+                        BTreeSet::new(),
+                        parent_marker,
+                    );
+                }
+                builder.add(&mut expected, candidate.id.clone(), extras, parent_marker);
             }
 
-            let mut candidates = self
-                .packages
-                .iter()
-                .filter(|candidate| candidate.id.name == requirement.name);
-            let Some(candidate) = candidates.next() else {
-                return mismatch(expected);
-            };
-            if candidates.next().is_some()
-                || !matches!(candidate.id.source, Source::Registry(..))
-                || !candidate.fork_markers.is_empty()
-            {
-                return mismatch(expected);
+            expected.sort();
+            if expected != actual {
+                return mismatch(expected, actual);
             }
-
-            builder.add(
-                &mut expected,
-                candidate.id.clone(),
-                BTreeSet::new(),
-                parent_marker,
-            );
-        }
-
-        expected.sort();
-        if expected != package.dependencies {
-            return mismatch(expected);
         }
 
         SatisfiesResult::Satisfied
@@ -2378,6 +2504,7 @@ impl Lock {
                         // Validate that the static requirements are unchanged.
                         match self.satisfies_requires_dist(
                             metadata.requires_dist,
+                            &metadata.provides_extra,
                             metadata.dependency_groups,
                             package,
                             &mut remotes,
@@ -2438,6 +2565,7 @@ impl Lock {
                     // Validate that the requirements are unchanged.
                     match self.satisfies_requires_dist(
                         metadata.requires_dist,
+                        &metadata.provides_extra,
                         metadata.dependency_groups,
                         package,
                         &mut remotes,
@@ -2494,6 +2622,7 @@ impl Lock {
                     // Validate that the requirements are unchanged.
                     match self.satisfies_requires_dist(
                         metadata.requires_dist,
+                        &metadata.provides_extra,
                         metadata.dependency_groups,
                         package,
                         &mut remotes,
@@ -2553,6 +2682,7 @@ impl Lock {
                     // Validate that the requirements are unchanged.
                     match self.satisfies_requires_dist(
                         metadata.requires_dist,
+                        &metadata.provides_extra,
                         metadata.dependency_groups,
                         package,
                         &mut remotes,
@@ -3902,7 +4032,7 @@ impl Package {
     }
 
     /// Returns `true` if the package contains the validation-only package metadata.
-    pub fn has_metadata(&self) -> bool {
+    fn has_metadata(&self) -> bool {
         self.metadata != PackageMetadata::default()
     }
 

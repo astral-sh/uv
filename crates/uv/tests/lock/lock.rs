@@ -33,6 +33,28 @@ fn lock_without_package_metadata(lock: &str) -> Result<toml_edit::DocumentMut> {
         anyhow::bail!("lockfile did not contain a package array");
     };
     for package in packages.iter_mut() {
+        let extras = package
+            .get("metadata")
+            .and_then(|metadata| metadata.get("provides-extras"))
+            .and_then(toml_edit::Item::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(toml_edit::Value::as_str)
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        if !extras.is_empty() {
+            let optional_dependencies = package
+                .entry("optional-dependencies")
+                .or_insert(toml_edit::table());
+            let Some(optional_dependencies) = optional_dependencies.as_table_like_mut() else {
+                anyhow::bail!("package optional dependencies were not a table");
+            };
+            for extra in extras {
+                optional_dependencies
+                    .entry(&extra)
+                    .or_insert(toml_edit::value(toml_edit::Array::new()));
+            }
+        }
         package.remove("metadata");
     }
     lock["revision"] = toml_edit::value(4);
@@ -17799,6 +17821,12 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     name = "project"
     version = "0.1.0"
     source = { virtual = "." }
+
+    [package.optional-dependencies]
+    feature = []
+
+    [package.dev-dependencies]
+    dev = []
     "#);
 
     uv_snapshot!(context.filters(), context.lock()
@@ -17877,6 +17905,124 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     Added h2 v1.0.0
     Added httpx v1.0.0
     ");
+
+    Ok(())
+}
+
+/// An empty extra remains selectable when its lockfile omits package metadata.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        empty = []
+
+        [dependency-groups]
+        empty = []
+
+        [tool.uv.workspace]
+        members = ["provider"]
+
+        [tool.uv.sources]
+        provider = { workspace = true }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        empty = []
+
+        [dependency-groups]
+        empty = []
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--extra")
+        .arg("empty")
+        .arg("--group")
+        .arg("empty"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--package")
+        .arg("provider")
+        .arg("--extra")
+        .arg("empty")
+        .arg("--group")
+        .arg("empty")
+        .arg("--offline")
+        .arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./provider
+    ");
+
+    let original_lock = context.read("uv.lock");
+    insta::allow_duplicates! {
+        for section in ["optional-dependencies", "dev-dependencies"] {
+            let mut lock = original_lock.parse::<toml_edit::DocumentMut>()?;
+            let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+                anyhow::bail!("lockfile did not contain a package array");
+            };
+            let Some(provider) = packages
+                .iter_mut()
+                .find(|package| package["name"].as_str() == Some("provider"))
+            else {
+                anyhow::bail!("lockfile did not contain the provider");
+            };
+            let Some(selections) = provider[section].as_table_mut() else {
+                anyhow::bail!("provider did not contain {section}");
+            };
+            selections.remove("empty");
+            context
+                .temp_dir
+                .child("uv.lock")
+                .write_str(&lock.to_string())?;
+
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--preview-features")
+                .arg("lock-without-metadata")
+                .arg("--locked")
+                .arg("--offline"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            Resolved 2 packages in [TIME]
+            error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+            hint: To update the lockfile, run `uv lock`.
+            ");
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
 
     Ok(())
 }
@@ -17971,6 +18117,14 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["six", "urllib3"]
+
+        [project.optional-dependencies]
+        empty = []
+        feature = ["six", "httpx[http2]"]
+
+        [dependency-groups]
+        empty = []
+        dev = ["six", "httpx[http2]"]
         "#};
     pyproject_toml.write_str(original_pyproject)?;
 
@@ -17981,7 +18135,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -17994,12 +18148,49 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     pyproject_toml.write_str(
-        &original_pyproject.replace("dependencies = [\"six\", \"urllib3\"]", "dependencies = []"),
+        &original_pyproject.replace("feature = [\"six\", \"httpx[http2]\"]", "feature = []"),
     )?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    pyproject_toml
+        .write_str(&original_pyproject.replace("dev = [\"six\", \"httpx[http2]\"]", "dev = []"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#})?;
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
@@ -18049,18 +18240,15 @@ fn lock_metadata_free_frozen_filtered_dependency_selections() -> Result<()> {
         exclude-dependencies = ["excluded-dependency"]
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     ");
-
-    let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(&lock.to_string())?;
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
@@ -18105,10 +18293,10 @@ fn lock_metadata_free_frozen_preserves_recorded_selections() -> Result<()> {
         dependencies = ["dependency"]
 
         [project.optional-dependencies]
-        original = ["dependency"]
+        original = []
 
         [dependency-groups]
-        original = ["dependency"]
+        original = []
 
         [tool.uv.sources]
         dependency = { path = "dependency" }
@@ -18166,6 +18354,41 @@ fn lock_metadata_free_frozen_preserves_recorded_selections() -> Result<()> {
         .arg("--frozen")
         .arg("--group")
         .arg("original"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("added"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `added` is not defined in the project's `dependency-groups` table
+    ");
+
+    // Locks without package metadata must likewise preserve the recorded empty selections.
+    pyproject_toml.write_str(original_pyproject)?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--upgrade")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    pyproject_toml.write_str(&original_pyproject.replace("original =", "added ="))?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("original"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("added"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Extra `added` is not defined in the `optional-dependencies` table for `project`
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("original"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
@@ -26362,6 +26585,22 @@ fn lock_group_include() -> Result<()> {
         "#
         );
     });
+
+    let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    ");
 
     Ok(())
 }
