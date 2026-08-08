@@ -820,10 +820,9 @@ impl<'a> LockedDependencyBuilder<'a> {
             match &requirement.source {
                 RequirementSource::Registry { .. }
                 | RequirementSource::Url { .. }
-                | RequirementSource::Directory { .. } => {}
-                RequirementSource::GitDirectory { .. }
-                | RequirementSource::GitPath { .. }
-                | RequirementSource::Path { .. } => {
+                | RequirementSource::Directory { .. }
+                | RequirementSource::Path { .. } => {}
+                RequirementSource::GitDirectory { .. } | RequirementSource::GitPath { .. } => {
                     complete = false;
                     continue;
                 }
@@ -4094,6 +4093,11 @@ impl Lock {
                 &dependency_overrides,
                 &dependency_excludes,
                 root,
+                tags,
+                markers,
+                build_options,
+                hasher,
+                index,
                 database,
                 &mut source_tree_metadata,
             ))
@@ -4656,12 +4660,14 @@ impl Lock {
                 requirement_marker
             };
 
-            // This phase may discover only HTTP leaves and exact local source trees.
-            // Archives, Git, and remote providers require separate trust checks.
+            // This phase may discover HTTP leaves, exact local trees, and local archives.
+            // Git and remote providers require separate trust checks.
             if requirement_marker.is_false()
                 || !matches!(
                     requirement.source,
-                    RequirementSource::Url { .. } | RequirementSource::Directory { .. }
+                    RequirementSource::Url { .. }
+                        | RequirementSource::Directory { .. }
+                        | RequirementSource::Path { .. }
                 )
             {
                 continue;
@@ -4683,6 +4689,11 @@ impl Lock {
         dependency_overrides: &Overrides,
         dependency_excludes: &Excludes,
         root: &Path,
+        tags: &Tags,
+        markers: &MarkerEnvironment,
+        build_options: &BuildOptions,
+        hasher: &HashStrategy,
+        index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
         source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
     ) -> Result<DependencySources, LockError> {
@@ -4717,26 +4728,30 @@ impl Lock {
                 package_queue.push_back((package, None, marker));
             }
 
-            // A local source tree is inspected only after a refreshed parent declaration
-            // selected its exact locked path; registry and remote nodes stop traversal.
-            let Some(source_tree) = package.id.source.as_source_tree() else {
+            // Refresh source trees only after their exact path becomes reachable. Archives
+            // remain opaque in this phase; their locked edges merely preserve reachability
+            // until an exact refreshed declaration permits metadata inspection below.
+            let refreshed_source_tree =
+                if let Some(source_tree) = package.id.source.as_source_tree() {
+                    Self::source_tree_requires_dist_cached(
+                        source_tree,
+                        root,
+                        package,
+                        database,
+                        source_tree_metadata,
+                    )
+                    .await?
+                } else if matches!(package.id.source, Source::Path(..)) {
+                    None
+                } else {
+                    continue;
+                };
+            if package.id.source.is_source_tree() && refreshed_source_tree.is_none() {
                 continue;
-            };
-            let Some(SourceTreeRequiresDist {
-                version, metadata, ..
-            }) = Self::source_tree_requires_dist_cached(
-                source_tree,
-                root,
-                package,
-                database,
-                source_tree_metadata,
-            )
-            .await?
-            else {
-                continue;
-            };
-            if version
+            }
+            if refreshed_source_tree
                 .as_ref()
+                .and_then(|metadata| metadata.version.as_ref())
                 .zip(package.id.version.as_ref())
                 .is_some_and(|(version, locked_version)| version != locked_version)
             {
@@ -4746,80 +4761,87 @@ impl Lock {
             let context = extra
                 .map(DependencyContext::Extra)
                 .unwrap_or(DependencyContext::Production);
-            let package_context = version
-                .as_ref()
-                .or(package.id.version.as_ref())
-                .map(|version| (&package.id.name, version));
-            let requirements =
-                FlatRequiresDist::from_requirements(metadata.requires_dist, &package.id.name)
-                    .into_iter()
-                    .collect::<Vec<_>>();
-            let mut refreshed_dependencies = FxHashMap::default();
-            for (group, requirements) in iter::once((None, requirements)).chain(
-                metadata
-                    .dependency_groups
-                    .into_iter()
-                    .filter(|(group, _)| {
-                        extra.is_none()
-                            && (self.is_workspace_package(package)
-                                || package.dependency_groups.contains_key(group))
-                    })
-                    .map(|(group, requirements)| {
-                        (Some(group), <[Requirement]>::into_vec(requirements))
-                    }),
-            ) {
-                let override_context = if group.is_some() {
-                    None
-                } else {
-                    package_context
-                };
-                let requirement_context = group
+            let refreshed_dependencies = if let Some(SourceTreeRequiresDist {
+                version,
+                metadata,
+                ..
+            }) = refreshed_source_tree
+            {
+                let package_context = version
                     .as_ref()
-                    .map(DependencyContext::Group)
-                    .unwrap_or(context);
-                for requirement in dependency_overrides
-                    .apply_for_package(override_context, &requirements)
-                    .filter(|requirement| {
-                        !dependency_excludes
-                            .contains_for_package(package_context, &requirement.name)
-                    })
-                {
-                    let requirement_marker =
-                        requirement_context.requirement_marker(requirement.marker);
-                    for dependency in self.packages_for_name(&requirement.name) {
-                        if !Self::package_satisfies_requirement(dependency, &requirement, root)?
-                            // A bare registry declaration cannot authorize reading a stale
-                            // external tree merely because an inherited lock edge points there.
-                            || dependency.id.source.is_source_tree()
-                                && !self.is_workspace_package(dependency)
-                                && !dependency
-                                    .id
-                                    .source
-                                    .satisfies_requirement_source(&requirement.source, root)?
-                            || !matches!(
-                                dependency.id.source,
-                                Source::Registry(..)
-                                    | Source::Direct(..)
-                                    | Source::Directory(..)
-                                    | Source::Editable(..)
-                                    | Source::Virtual(..)
-                            )
-                        {
-                            continue;
-                        }
-                        for requested_extra in
-                            iter::once(None).chain(requirement.extras.iter().map(Some))
-                        {
-                            refreshed_dependencies
-                                .entry((&dependency.id, requested_extra.cloned(), group.clone()))
-                                .and_modify(|marker: &mut MarkerTree| {
-                                    *marker = marker.or(requirement_marker);
-                                })
-                                .or_insert(requirement_marker);
+                    .or(package.id.version.as_ref())
+                    .map(|version| (&package.id.name, version));
+                let requirements =
+                    FlatRequiresDist::from_requirements(metadata.requires_dist, &package.id.name)
+                        .into_iter()
+                        .collect::<Vec<_>>();
+                let mut refreshed_dependencies = FxHashMap::default();
+                for (group, requirements) in iter::once((None, requirements)).chain(
+                    metadata
+                        .dependency_groups
+                        .into_iter()
+                        .filter(|(group, _)| {
+                            extra.is_none()
+                                && (self.is_workspace_package(package)
+                                    || package.dependency_groups.contains_key(group))
+                        })
+                        .map(|(group, requirements)| {
+                            (Some(group), <[Requirement]>::into_vec(requirements))
+                        }),
+                ) {
+                    let override_context = if group.is_some() {
+                        None
+                    } else {
+                        package_context
+                    };
+                    let requirement_context = group
+                        .as_ref()
+                        .map(DependencyContext::Group)
+                        .unwrap_or(context);
+                    for requirement in dependency_overrides
+                        .apply_for_package(override_context, &requirements)
+                        .filter(|requirement| {
+                            !dependency_excludes
+                                .contains_for_package(package_context, &requirement.name)
+                        })
+                    {
+                        let requirement_marker =
+                            requirement_context.requirement_marker(requirement.marker);
+                        for dependency in self.packages_for_name(&requirement.name) {
+                            if !Self::package_satisfies_requirement(dependency, &requirement, root)?
+                                // A bare registry declaration cannot authorize a stale external
+                                // tree or archive merely because an inherited edge points there.
+                                || (dependency.id.source.is_source_tree()
+                                    && !self.is_workspace_package(dependency)
+                                    || matches!(dependency.id.source, Source::Path(..)))
+                                    && !dependency
+                                        .id
+                                        .source
+                                        .satisfies_requirement_source(&requirement.source, root)?
+                            {
+                                continue;
+                            }
+                            for requested_extra in
+                                iter::once(None).chain(requirement.extras.iter().map(Some))
+                            {
+                                refreshed_dependencies
+                                    .entry((
+                                        &dependency.id,
+                                        requested_extra.cloned(),
+                                        group.clone(),
+                                    ))
+                                    .and_modify(|marker: &mut MarkerTree| {
+                                        *marker = marker.or(requirement_marker);
+                                    })
+                                    .or_insert(requirement_marker);
+                            }
                         }
                     }
                 }
-            }
+                Some(refreshed_dependencies)
+            } else {
+                None
+            };
 
             for dependency_context in iter::once(context).chain(
                 package
@@ -4836,20 +4858,34 @@ impl Lock {
                     for dependency_extra in
                         iter::once(None).chain(dependency.extra.iter().map(Some))
                     {
-                        let group = match dependency_context {
-                            DependencyContext::Group(group) => Some(group.clone()),
-                            DependencyContext::Production | DependencyContext::Extra(_) => None,
+                        let marker = if let Some(refreshed_dependencies) =
+                            refreshed_dependencies.as_ref()
+                        {
+                            let group = match dependency_context {
+                                DependencyContext::Group(group) => Some(group.clone()),
+                                DependencyContext::Production | DependencyContext::Extra(_) => None,
+                            };
+                            // A tree edge is traversable only when its refreshed declaration
+                            // still selects the exact package, requested extra, and group.
+                            let Some(requirement_marker) = refreshed_dependencies.get(&(
+                                &dependency.package_id,
+                                dependency_extra.cloned(),
+                                group,
+                            )) else {
+                                continue;
+                            };
+                            marker.and(*requirement_marker)
+                        } else {
+                            // Archive declarations are unavailable until their exact source
+                            // is authorized in phase two. An inherited edge cannot authorize
+                            // reading an external tree before those declarations are refreshed.
+                            if dependency_package.id.source.is_source_tree()
+                                && !self.is_workspace_package(dependency_package)
+                            {
+                                continue;
+                            }
+                            marker
                         };
-                        // An old lock edge is traversable only when a refreshed declaration
-                        // still selects its exact package, requested extra, and group.
-                        let Some(requirement_marker) = refreshed_dependencies.get(&(
-                            &dependency.package_id,
-                            dependency_extra.cloned(),
-                            group,
-                        )) else {
-                            continue;
-                        };
-                        let marker = marker.and(*requirement_marker);
                         if marker.is_false() {
                             continue;
                         }
@@ -4879,8 +4915,8 @@ impl Lock {
             }
         }
 
-        // Refresh declarations only after an exact source selection proves a local tree
-        // reachable. Matching HTTP leaves need no artifact, archive, or backend access.
+        // Open an archive only after an active declaration selects its exact reachable path.
+        // HTTP leaves still need no artifact access, and source trees use static metadata.
         let mut source_requirements = BTreeSet::new();
         let mut pending_sources = Vec::<Requirement>::new();
         let mut pending_packages = self
@@ -4902,6 +4938,7 @@ impl Lock {
                             .source
                             .satisfies_requirement_source(&requirement.source, root)?
                         && (package.id.source.is_source_tree()
+                            || matches!(package.id.source, Source::Path(..))
                             || matches!(package.id.source, Source::Direct(..))
                                 && package.all_dependencies().next().is_none())
                     {
@@ -4914,25 +4951,44 @@ impl Lock {
             if !visited_packages.insert(&package.id) {
                 continue;
             }
-            let Some(source_tree) = package.id.source.as_source_tree() else {
-                continue;
-            };
-            let Some(SourceTreeRequiresDist { metadata, .. }) =
-                Self::source_tree_requires_dist_cached(
-                    source_tree,
-                    root,
-                    package,
-                    database,
-                    source_tree_metadata,
-                )
-                .await?
-            else {
-                continue;
-            };
+            let (direct_requirements, dependency_groups) =
+                if let Some(source_tree) = package.id.source.as_source_tree() {
+                    let Some(SourceTreeRequiresDist { metadata, .. }) =
+                        Self::source_tree_requires_dist_cached(
+                            source_tree,
+                            root,
+                            package,
+                            database,
+                            source_tree_metadata,
+                        )
+                        .await?
+                    else {
+                        // Backend-only and dynamic metadata are handled in a later stage.
+                        continue;
+                    };
+                    (metadata.requires_dist, metadata.dependency_groups)
+                } else if matches!(package.id.source, Source::Path(..)) {
+                    // `pending_sources` established exact source identity and reachability
+                    // before this archive was queued, so inspecting its metadata is now safe.
+                    let metadata = Self::package_metadata(
+                        package,
+                        root,
+                        tags,
+                        markers,
+                        build_options,
+                        hasher,
+                        index,
+                        database,
+                    )
+                    .await?;
+                    (metadata.requires_dist, metadata.dependency_groups)
+                } else {
+                    continue;
+                };
 
             self.add_source_requirements(
                 package,
-                metadata.requires_dist.into_vec(),
+                direct_requirements.into_vec(),
                 None,
                 &package_markers,
                 dependency_overrides,
@@ -4941,12 +4997,9 @@ impl Lock {
                 &mut source_requirements,
                 &mut pending_sources,
             )?;
-            for (group, requirements) in
-                metadata.dependency_groups.into_iter().filter(|(group, _)| {
-                    self.is_workspace_package(package)
-                        || package.dependency_groups.contains_key(group)
-                })
-            {
+            for (group, requirements) in dependency_groups.into_iter().filter(|(group, _)| {
+                self.is_workspace_package(package) || package.dependency_groups.contains_key(group)
+            }) {
                 self.add_source_requirements(
                     package,
                     requirements.into_vec(),
@@ -6911,6 +6964,9 @@ impl Source {
                 expected.remove_credentials();
                 normalize_url(actual) == normalize_url(expected)
                     && source.subdirectory == *subdirectory
+            }
+            (Self::Path(path), RequirementSource::Path { install_path, .. }) => {
+                normalize_path(root.join(path)).as_ref() == install_path.as_ref()
             }
             (
                 Self::Directory(path) | Self::Editable(path) | Self::Virtual(path),
