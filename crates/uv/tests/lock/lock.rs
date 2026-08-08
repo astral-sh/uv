@@ -10970,13 +10970,17 @@ async fn lock_index_workspace_member() -> Result<()> {
         proxy_uri = proxy.uri()
     ))?;
 
-    // Locking without the necessary credentials should fail.
+    // Locking without the necessary credentials should fail. The member's own index is now
+    // consulted (that's the fix), so the failure comes from a 401 against it rather than the
+    // index being silently skipped.
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and child depends on iniconfig>=2, we can conclude that child's requirements are unsatisfiable.
           And because your workspace requires child, we can conclude that your workspace's requirements are unsatisfiable.
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -11046,6 +11050,72 @@ async fn lock_index_workspace_member() -> Result<()> {
         .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
         .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron")
         .arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Lock a workspace in which a member defines an extra index that isn't referenced by name from
+/// `tool.uv.sources`. The index still needs to be searched during resolution, not just kept around
+/// for named lookups and credential extraction.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_index_workspace_member_without_source_pin() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    // The root defines an unreachable default index, so the lock can only succeed if the
+    // member's own index is actually searched.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [[tool.uv.index]]
+        url = "https://index.invalid/simple"
+        default = true
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "{proxy_uri}/basic-auth/simple"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
+        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
