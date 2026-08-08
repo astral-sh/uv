@@ -1,3 +1,6 @@
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+use std::process::Command;
+
 use anyhow::Result;
 #[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
@@ -18,7 +21,7 @@ use uv_fs::Simplified;
 #[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
-use uv_test::packse::PackseServer;
+use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::uv_snapshot;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
@@ -17848,11 +17851,14 @@ fn lock_writes_without_package_metadata() -> Result<()> {
 #[test]
 fn lock_metadata_free_many_conflicts() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let extra_declarations = (1..=12)
+    let provider_url = "http://127.0.0.1:9/provider-1.0.0-py3-none-any.whl";
+    let direct_url = "http://127.0.0.1:9/direct-1.0.0-py3-none-any.whl";
+    let wheel_hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    let extra_declarations = (1..=11)
         .map(|conflict_number| format!("a{conflict_number} = []\nb{conflict_number} = []"))
         .collect::<Vec<_>>()
         .join("\n");
-    let project_conflicts = (1..=12)
+    let project_conflicts = (1..=11)
         .map(|conflict_number| {
             format!(
                 "  [{{ extra = \"a{conflict_number}\" }}, {{ extra = \"b{conflict_number}\" }}],"
@@ -17860,7 +17866,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let lock_conflicts = (1..=12)
+    let lock_conflicts = (1..=11)
         .map(|conflict_number| {
             format!(
                 "[{{ package = \"project\", extra = \"a{conflict_number}\" }}, {{ package = \"project\", extra = \"b{conflict_number}\" }}]"
@@ -17882,8 +17888,13 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         [project.optional-dependencies]
         {extra_declarations}
 
+        [dependency-groups]
+        cpu = ["direct", "provider @ {provider_url}"]
+        gpu = []
+
         [tool.uv]
         conflicts = [
+          [{{ group = "cpu" }}, {{ group = "gpu" }}],
         {project_conflicts}
         ]
 
@@ -17909,6 +17920,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         revision = 4
         requires-python = ">=3.12"
         conflicts = [
+        [{{ package = "project", group = "cpu" }}, {{ package = "project", group = "gpu" }}],
         {lock_conflicts}
         ]
 
@@ -17924,16 +17936,35 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         source = {{ editable = "dep" }}
 
         [[package]]
+        name = "direct"
+        version = "1.0.0"
+        source = {{ url = "{direct_url}" }}
+        wheels = [{{ url = "{direct_url}", hash = "{wheel_hash}" }}]
+
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = {{ virtual = "." }}
         dependencies = [{{ name = "dep" }}]
+
+        [package.dev-dependencies]
+        cpu = [{{ name = "direct" }}, {{ name = "provider" }}]
+
+        [[package]]
+        name = "provider"
+        version = "1.0.0"
+        source = {{ url = "{provider_url}" }}
+        dependencies = [{{ name = "direct" }}]
+        wheels = [{{ url = "{provider_url}", hash = "{wheel_hash}" }}]
+
+        [package.metadata]
+        requires-dist = [{{ name = "direct", url = "{direct_url}" }}]
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked").arg("--offline").arg("--no-cache"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
@@ -18754,6 +18785,7 @@ fn lock_metadata_free_direct_url_constraint() -> Result<()> {
 fn lock_metadata_free_disjoint_marker_direct_url_constraint() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("extras/lock-without-metadata.toml");
+    let httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl");
 
     context
         .temp_dir
@@ -18773,9 +18805,7 @@ fn lock_metadata_free_disjoint_marker_direct_url_constraint() -> Result<()> {
 
         [tool.uv.sources]
         member = {{ workspace = true }}
-        "#,
-            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
-        })?;
+        "#})?;
     context
         .temp_dir
         .child("member/pyproject.toml")
@@ -18808,6 +18838,48 @@ fn lock_metadata_free_disjoint_marker_direct_url_constraint() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    ");
+
+    let root_pyproject = context.temp_dir.child("pyproject.toml");
+    root_pyproject.write_str(&context.read("pyproject.toml").replace(
+        r#""httpx[http2] ; sys_platform == 'win32'""#,
+        r#""httpx ; sys_platform != 'darwin'""#,
+    ))?;
+
+    let member_pyproject = context.temp_dir.child("member/pyproject.toml");
+    member_pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx @ {httpx_url} ; sys_platform != 'win32'"]
+        "#})?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    let member_metadata = context.read("member/pyproject.toml");
+    member_pyproject
+        .write_str(&member_metadata.replace(&format!("httpx @ {httpx_url}"), "httpx"))?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -18944,38 +19016,360 @@ fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
     Ok(())
 }
 
-/// Direct sources selected by a non-workspace local dependency are shared across the resolution.
+/// Direct sources selected by local and remote dependencies are shared across the resolution.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_shared_transitive_direct_source() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    #[derive(Clone, Copy)]
+    enum ProviderSource {
+        Remote,
+        Local,
+        #[cfg(feature = "test-git")]
+        Git,
+    }
+
     let server = PackseServer::new("extras/lock-without-metadata.toml");
+    let httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl");
+    let six_url = server.file_url("six-1.0.0-py3-none-any.whl");
+
+    let scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+        name = "direct-url-archive-sources"
+
+        [root]
+        requires = ["provider"]
+
+        [expected]
+        satisfiable = true
+
+        [packages.provider.versions."1.0.0"]
+        requires = ["httpx @ {httpx_url}"]
+
+        [packages.provider.versions."1.0.0".extras]
+        fancy = [
+            "six ; sys_platform == 'darwin'",
+            "six @ {six_url} ; sys_platform == 'linux'",
+        ]
+        "#})?;
+    let provider_server = PackseServer::from_scenario(&scenario);
+    let filename = "provider-1.0.0-py3-none-any.whl";
+
+    for source in [
+        ProviderSource::Remote,
+        ProviderSource::Local,
+        #[cfg(feature = "test-git")]
+        ProviderSource::Git,
+    ] {
+        let context = uv_test::test_context!("3.12");
+        let provider_url = match source {
+            ProviderSource::Remote => {
+                provider_server
+                    .file_url(filename)
+                    .replacen("http://", "http://user:password@", 1)
+            }
+            ProviderSource::Local => {
+                let archive = context.temp_dir.child(filename);
+                download_to_disk(&provider_server.file_url(filename), archive.path());
+                Url::from_file_path(archive.path())
+                    .map_err(|()| anyhow::anyhow!("invalid provider archive path"))?
+                    .to_string()
+            }
+            #[cfg(feature = "test-git")]
+            ProviderSource::Git => {
+                let repository = context.temp_dir.child("provider");
+                repository
+                    .child("pyproject.toml")
+                    .write_str(&formatdoc! {r#"
+                    [project]
+                    name = "provider"
+                    version = "1.0.0"
+                    requires-python = ">=3.12"
+                    dependencies = [
+                        "httpx @ {httpx_url}",
+                        "six ; sys_platform == 'darwin'",
+                        "six @ {six_url} ; sys_platform == 'linux'",
+                    ]
+
+                    [dependency-groups]
+                    dev = ["six @ {six_url}"]
+                    "#})?;
+                Command::new("git")
+                    .args(["init", "-q"])
+                    .arg(repository.path())
+                    .assert()
+                    .success();
+                Command::new("git")
+                    .arg("-C")
+                    .arg(repository.path())
+                    .args(["add", "."])
+                    .assert()
+                    .success();
+                Command::new("git")
+                    .arg("-C")
+                    .arg(repository.path())
+                    .args([
+                        "-c",
+                        "user.name=ferris",
+                        "-c",
+                        "user.email=ferris@example.com",
+                        "commit",
+                        "-qm",
+                        "Git dep initial commit",
+                    ])
+                    .assert()
+                    .success();
+                let repository_url = Url::from_directory_path(repository.path())
+                    .map_err(|()| anyhow::anyhow!("invalid provider repository path"))?;
+                format!("git+{}", repository_url.as_str().trim_end_matches('/'))
+            }
+        };
+        let (requirements, source_overrides, provider_constraint, _bridge_server) = match source {
+            ProviderSource::Remote => (
+                format!(
+                    r#""httpx[http2]", "provider @ {provider_url}", "six", "provider[fancy] @ {provider_url} ; sys_platform == 'darwin'""#
+                ),
+                format!(r#"six = {{ url = "{six_url}" }}"#),
+                String::new(),
+                None,
+            ),
+            ProviderSource::Local => {
+                let scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+                    name = "removed-archive-bridge"
+
+                    [root]
+                    requires = ["bridge"]
+
+                    [expected]
+                    satisfiable = true
+
+                    [packages.bridge.versions."1.0.0"]
+
+                    [packages.bridge.versions."1.0.0".extras]
+                    fancy = ["provider @ {provider_url}"]
+                    "#})?;
+                let bridge_server = PackseServer::from_scenario(&scenario);
+                let bridge_url = bridge_server.file_url("bridge-1.0.0-py3-none-any.whl");
+                context
+                    .temp_dir
+                    .child("local/pyproject.toml")
+                    .write_str(&formatdoc! {r#"
+                    [project]
+                    name = "local"
+                    version = "1.0.0"
+                    requires-python = ">=3.12"
+                    dependencies = ["bridge[fancy] @ {bridge_url}", "httpx @ {httpx_url}"]
+                    "#})?;
+                (
+                    r#""httpx", "local""#.to_string(),
+                    r#"local = { path = "local" }"#.to_string(),
+                    formatdoc! {r#"
+
+                    [tool.uv]
+                    constraint-dependencies = ["provider @ {provider_url}"]
+                    "#},
+                    Some(bridge_server),
+                )
+            }
+            #[cfg(feature = "test-git")]
+            ProviderSource::Git => (
+                format!(
+                    r#""httpx[http2] ; sys_platform == 'darwin'", "provider @ {provider_url} ; sys_platform == 'darwin'", "six""#
+                ),
+                format!(r#"six = {{ url = "{six_url}" }}"#),
+                String::new(),
+                None,
+            ),
+        };
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = [{requirements}]
+
+            [tool.uv.sources]
+            {source_overrides}
+            {provider_constraint}
+            "#})?;
+
+        context
+            .lock()
+            .arg("--preview-features")
+            .arg("lock-without-metadata")
+            .arg("--index-url")
+            .arg(server.index_url())
+            .assert()
+            .success();
+
+        let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+        let packages = lock["package"]
+            .as_array_of_tables()
+            .ok_or_else(|| anyhow::anyhow!("lockfile did not contain a package array"))?;
+        let provider = packages
+            .iter()
+            .find(|package| package.get("name").and_then(|name| name.as_str()) == Some("provider"))
+            .ok_or_else(|| anyhow::anyhow!("lockfile did not contain the provider package"))?;
+        assert_eq!(
+            provider.get("metadata").is_some(),
+            !matches!(source, ProviderSource::Local)
+        );
+
+        #[cfg(feature = "test-git")]
+        if matches!(source, ProviderSource::Git) {
+            fs_err::rename(
+                context.temp_dir.child("provider").path(),
+                context.temp_dir.child("provider-unavailable").path(),
+            )?;
+        }
+
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--preview-features")
+                .arg("lock-without-metadata")
+                .arg("--locked")
+                .arg("--offline")
+                .arg("--no-cache")
+                .arg("--index-url")
+                .arg(server.index_url()), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 5 packages in [TIME]
+            ");
+        }
+
+        #[cfg(feature = "test-git")]
+        if matches!(source, ProviderSource::Git) {
+            fs_err::rename(
+                context.temp_dir.child("provider-unavailable").path(),
+                context.temp_dir.child("provider").path(),
+            )?;
+        }
+
+        if !matches!(source, ProviderSource::Local) {
+            // Inactive extra and dependency-group declarations cannot replace a removed source.
+            let pyproject = context.read("pyproject.toml");
+            context
+                .temp_dir
+                .child("pyproject.toml")
+                .write_str(&pyproject.replace(&source_overrides, ""))?;
+
+            insta::allow_duplicates! {
+                uv_snapshot!(context.filters(), context.lock()
+                    .arg("--preview-features")
+                    .arg("lock-without-metadata")
+                    .arg("--locked")
+                    .arg("--index-url")
+                    .arg(server.index_url()), @"
+                exit_code: 1 (failure)
+                ----- stderr -----
+                Resolved 5 packages in [TIME]
+                error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+                hint: To update the lockfile, run `uv lock`.
+                ");
+            }
+        }
+
+        if matches!(source, ProviderSource::Local) {
+            let local_pyproject = context.temp_dir.child("local/pyproject.toml");
+            let local_metadata = context.read("local/pyproject.toml");
+            local_pyproject.write_str(&local_metadata.replace("bridge[fancy] @", "bridge @"))?;
+            fs_err::remove_file(context.temp_dir.child(filename).path())?;
+
+            // Dropping an extra invalidates the lock without fetching its now-unreachable archive.
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--preview-features")
+                .arg("lock-without-metadata")
+                .arg("--locked")
+                .arg("--index-url")
+                .arg(server.index_url()), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            Resolved 4 packages in [TIME]
+            error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+            hint: To update the lockfile, run `uv lock`.
+            ");
+            local_pyproject.write_str(&local_metadata)?;
+
+            context
+                .temp_dir
+                .child("pyproject.toml")
+                .write_str(&formatdoc! {r#"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+
+                [tool.uv]
+                constraint-dependencies = ["provider @ {provider_url}"]
+                "#})?;
+
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--preview-features")
+                .arg("lock-without-metadata")
+                .arg("--offline")
+                .arg("--no-cache")
+                .arg("--index-url")
+                .arg(server.index_url()), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Removed bridge v1.0.0
+            Removed httpx v1.0.0
+            Removed local v1.0.0
+            Removed provider v1.0.0
+            ");
+        }
+    }
+
+    let alternate_server = PackseServer::new("extras/lock-without-metadata.toml");
+    let alternate_six_url = alternate_server.file_url("six-1.0.0-py3-none-any.whl");
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(indoc! {r#"
+        .write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["httpx[http2]", "local"]
+
+        [project.optional-dependencies]
+        a = [
+            "provider[fancy] ; sys_platform == 'darwin'",
+            "six @ {six_url} ; sys_platform == 'darwin'",
+        ]
+        b = [
+            "provider[fancy] ; sys_platform == 'linux'",
+            "six @ {alternate_six_url} ; sys_platform == 'linux'",
+        ]
+        c = [
+            "provider[fancy] ; sys_platform == 'linux'",
+            "six ; sys_platform == 'linux'",
+        ]
+
+        [tool.uv]
+        conflicts = [[{{ extra = "a" }}, {{ extra = "b" }}, {{ extra = "c" }}]]
 
         [tool.uv.sources]
-        local = { path = "local" }
+        provider = {{ path = "provider" }}
         "#})?;
     context
         .temp_dir
-        .child("local/pyproject.toml")
-        .write_str(&formatdoc! {r#"
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
         [project]
-        name = "local"
-        version = "0.1.0"
+        name = "provider"
+        version = "1.0.0"
         requires-python = ">=3.12"
-        dependencies = ["httpx @ {httpx_url}"]
-        "#,
-            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
-        })?;
+
+        [project.optional-dependencies]
+        fancy = ["six"]
+        "#})?;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
@@ -18984,7 +19378,7 @@ fn lock_metadata_free_shared_transitive_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -18997,7 +19391,7 @@ fn lock_metadata_free_shared_transitive_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     Ok(())
@@ -19319,24 +19713,34 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
     Ok(())
 }
 
-/// Projectless workspace root groups can select direct sources for workspace-member requirements.
+/// Projectless root-group overrides can select direct sources across disjoint platform markers.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_shared_root_group_direct_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("extras/lock-without-metadata.toml");
+    let httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl");
+    let provider = context.temp_dir.child("provider");
+    let provider_url = Url::from_directory_path(provider.path())
+        .map_err(|()| anyhow::anyhow!("invalid provider source path"))?;
 
     context
         .temp_dir
         .child("pyproject.toml")
         .write_str(&formatdoc! {r#"
+        [tool.uv]
+        override-dependencies = ["provider[fancy] @ {provider_url} ; sys_platform == 'linux'"]
+
         [tool.uv.workspace]
         members = ["member"]
 
         [dependency-groups]
-        dev = ["httpx @ {httpx_url}"]
+        dev = [
+            "provider[fancy] ; sys_platform == 'darwin'",
+            "h2 @ {h2_url}",
+        ]
         "#,
-            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+            h2_url = server.file_url("h2-1.0.0-py3-none-any.whl"),
         })?;
     context
         .temp_dir
@@ -19348,6 +19752,15 @@ fn lock_metadata_free_shared_root_group_direct_source() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["httpx[http2]"]
         "#})?;
+    provider.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        fancy = ["httpx @ {httpx_url} ; sys_platform == 'linux'"]
+        "#})?;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
@@ -19356,7 +19769,7 @@ fn lock_metadata_free_shared_root_group_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -19369,7 +19782,67 @@ fn lock_metadata_free_shared_root_group_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [tool.uv]
+        environments = ["sys_platform == 'linux'"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [dependency-groups]
+        dormant = ["httpx @ {httpx_url} ; sys_platform == 'darwin'"]
+        "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider @ {provider_url}"]
+        "#})?;
+
+    let provider_pyproject = provider.child("pyproject.toml");
+    provider_pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx @ {httpx_url}"]
+        "#})?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    let provider_metadata = context.read("provider/pyproject.toml");
+    provider_pyproject
+        .write_str(&provider_metadata.replace(&format!("httpx @ {httpx_url}"), "httpx"))?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
     Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
