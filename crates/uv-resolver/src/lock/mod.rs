@@ -864,11 +864,6 @@ impl<'a> LockedDependencyBuilder<'a> {
                 else {
                     continue;
                 };
-                if matches!(dependency.id.source, Source::Direct(..))
-                    && dependency.all_dependencies().next().is_some()
-                {
-                    continue;
-                }
                 if !source_marker.is_true()
                     && let Some(selected) = selected_conflict.as_ref()
                 {
@@ -4675,8 +4670,8 @@ impl Lock {
                 requirement_marker
             };
 
-            // This phase may discover HTTP leaves, exact local trees, and local archives.
-            // Git and remote providers require separate trust checks.
+            // This phase may discover HTTP providers, exact local trees, and archives.
+            // Git providers require separate trust checks.
             if requirement_marker.is_false()
                 || !matches!(
                     requirement.source,
@@ -4726,9 +4721,9 @@ impl Lock {
                     .push_back((package, None, marker));
             }
 
-            // Refresh source trees only after their exact path becomes reachable. Archives
-            // and backend-only trees remain opaque until an exact refreshed declaration
-            // permits their metadata to be inspected in the second phase.
+            // Refresh source trees only after their exact path becomes reachable. Archives,
+            // backend-only trees, and remote providers remain opaque until a refreshed
+            // declaration selects their exact source in the second phase.
             let refreshed_source_tree =
                 if let Some(source_tree) = package.id.source.as_source_tree() {
                     Self::source_tree_requires_dist_cached(
@@ -4739,7 +4734,7 @@ impl Lock {
                         source_tree_metadata,
                     )
                     .await?
-                } else if matches!(package.id.source, Source::Path(..)) {
+                } else if matches!(package.id.source, Source::Path(..) | Source::Direct(..)) {
                     None
                 } else {
                     continue;
@@ -4903,9 +4898,9 @@ impl Lock {
                             && dependency_package.id.source.is_source_tree()
                             && !self.is_workspace_package(dependency_package)
                         {
-                            // Opaque archives and backends cannot authorize inspecting an
-                            // inherited local edge. Preserve its candidate contexts so a
-                            // refreshed, exact path may activate them in the second phase.
+                            // Opaque providers cannot authorize inspecting an inherited
+                            // local edge. Preserve its candidate contexts so a refreshed,
+                            // exact path may activate them in the second phase.
                             let existing = reachability
                                 .deferred_package_markers
                                 .entry((&dependency_package.id, dependency_extra))
@@ -4976,7 +4971,7 @@ impl Lock {
         .await?;
 
         // Inspect archives or invoke local backends only after an active declaration selects
-        // their exact reachable path. Static source trees still avoid backend execution.
+        // their exact reachable path. Remote providers use only their retained lock metadata.
         let mut source_requirements = BTreeSet::<Requirement>::new();
         let mut pending_sources = Vec::<Requirement>::new();
         let mut pending_packages = self
@@ -4997,9 +4992,7 @@ impl Lock {
                         .source
                         .satisfies_requirement_source(&requirement.source, root)?
                         || !(package.id.source.is_source_tree()
-                            || matches!(package.id.source, Source::Path(..))
-                            || matches!(package.id.source, Source::Direct(..))
-                                && package.all_dependencies().next().is_none())
+                            || matches!(package.id.source, Source::Path(..) | Source::Direct(..)))
                     {
                         continue;
                     }
@@ -5082,8 +5075,25 @@ impl Lock {
             if !visited_packages.insert(&package.id) {
                 continue;
             }
-            let (direct_requirements, dependency_groups) = if let Some(source_tree) =
-                package.id.source.as_source_tree()
+            let (direct_requirements, dependency_groups): (
+                Vec<Requirement>,
+                BTreeMap<GroupName, Vec<Requirement>>,
+            ) = if matches!(package.id.source, Source::Direct(..)) {
+                // HTTP artifacts cannot be retrieved during an offline, cache-free check.
+                // Their declaration metadata is retained in the lock for this purpose.
+                (
+                    package.metadata.requires_dist.iter().cloned().collect(),
+                    package
+                        .metadata
+                        .dependency_groups
+                        .iter()
+                        .filter(|(group, _)| package.dependency_groups.contains_key(*group))
+                        .map(|(group, requirements)| {
+                            (group.clone(), requirements.iter().cloned().collect())
+                        })
+                        .collect(),
+                )
+            } else if let Some(source_tree) = package.id.source.as_source_tree()
                 && let Some(SourceTreeRequiresDist { metadata, .. }) =
                     Self::source_tree_requires_dist_cached(
                         source_tree,
@@ -5094,7 +5104,14 @@ impl Lock {
                     )
                     .await?
             {
-                (metadata.requires_dist, metadata.dependency_groups)
+                (
+                    metadata.requires_dist.into_vec(),
+                    metadata
+                        .dependency_groups
+                        .into_iter()
+                        .map(|(group, requirements)| (group, requirements.into_vec()))
+                        .collect(),
+                )
             } else if matches!(package.id.source, Source::Path(..))
                 || package.id.source.is_source_tree()
             {
@@ -5111,14 +5128,21 @@ impl Lock {
                     database,
                 )
                 .await?;
-                (metadata.requires_dist, metadata.dependency_groups)
+                (
+                    metadata.requires_dist.into_vec(),
+                    metadata
+                        .dependency_groups
+                        .into_iter()
+                        .map(|(group, requirements)| (group, requirements.into_vec()))
+                        .collect(),
+                )
             } else {
                 continue;
             };
 
             self.add_source_requirements(
                 package,
-                direct_requirements.into_vec(),
+                direct_requirements,
                 None,
                 &reachability.package_markers,
                 dependency_overrides,
@@ -5132,7 +5156,7 @@ impl Lock {
             }) {
                 self.add_source_requirements(
                     package,
-                    requirements.into_vec(),
+                    requirements,
                     Some(&group),
                     &reachability.package_markers,
                     dependency_overrides,
