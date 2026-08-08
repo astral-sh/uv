@@ -160,7 +160,11 @@ fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
 
     // Generate the fields.
     for (name, field) in &fields {
-        emit_field(output, name, field, parents.as_slice());
+        let section = parents.iter().find_map(|parent| match parent {
+            Set::Global { option_type, .. } => Some(option_type),
+            Set::Named { .. } => None,
+        });
+        emit_field(output, name, field, parents.as_slice(), section);
         output.push_str("---\n\n");
     }
 
@@ -207,17 +211,31 @@ impl Set {
 }
 
 #[expect(clippy::format_push_string)]
-fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[Set]) {
+fn emit_field(
+    output: &mut String,
+    name: &str,
+    field: &OptionField,
+    parents: &[Set],
+    section: Option<&OptionType>,
+) {
     let header_level = if parents.len() > 1 { "####" } else { "###" };
     let parents_anchor = parents.iter().filter_map(|parent| parent.name()).join("_");
 
+    let anchor = if parents_anchor.is_empty() {
+        match section {
+            Some(OptionType::Configuration) => format!("configuration_{name}"),
+            _ => name.to_string(),
+        }
+    } else {
+        format!("{parents_anchor}_{name}")
+    };
     if parents_anchor.is_empty() {
         output.push_str(&format!(
-            "{header_level} [`{name}`](#{name}) {{: #{name} }}\n"
+            "{header_level} [`{name}`](#{anchor}) {{: #{anchor} }}\n"
         ));
     } else {
         output.push_str(&format!(
-            "{header_level} [`{name}`](#{parents_anchor}_{name}) {{: #{parents_anchor}_{name} }}\n"
+            "{header_level} [`{name}`](#{anchor}) {{: #{anchor} }}\n"
         ));
 
         // the anchor used to just be the name, but now it's the group name
