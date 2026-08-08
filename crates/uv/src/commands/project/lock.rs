@@ -1112,6 +1112,7 @@ async fn do_lock(
                 target.install_path(),
                 lock_supported_environments.clone().into_markers(),
                 index_locations,
+                preview.is_enabled(PreviewFeature::LockWithoutMetadata),
             )?
             .with_conflicts(conflicts)
             .with_required_environments(lock_required_environments.into_markers());
