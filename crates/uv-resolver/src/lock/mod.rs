@@ -868,14 +868,44 @@ impl Lock {
         self
     }
 
-    /// Omit package declaration metadata using the revision that supports metadata-free locks.
-    #[must_use]
-    pub fn without_package_metadata(mut self) -> Self {
+    /// Omit package metadata except for remote URL dependencies.
+    ///
+    /// Local declarations can be reread from disk. Remote URL declarations remain in the lockfile
+    /// so freshness checks can determine offline whether a URL is requested or the URL dependency
+    /// is stale.
+    pub fn without_package_metadata(
+        mut self,
+        resolution: &ResolverOutput,
+        root: &Path,
+    ) -> Result<Self, LockError> {
         self.revision = METADATA_FREE_REVISION;
         for package in &mut self.packages {
-            package.metadata = PackageMetadata::default();
+            if !matches!(package.id.source, Source::Direct(..) | Source::Git(..)) {
+                package.metadata = PackageMetadata::default();
+            }
         }
-        self
+
+        // Git packages normally omit declaration metadata because their revisions are immutable.
+        // Recover it from the resolution before its direct sources become unavailable offline.
+        for (_, distribution) in resolution.base_dists() {
+            if distribution.index().is_some() {
+                continue;
+            }
+
+            let package_id = PackageId::from_annotated_dist(distribution, root)?;
+            if !matches!(package_id.source, Source::Git(..)) {
+                continue;
+            }
+
+            if let Some(metadata) = distribution.metadata.as_ref()
+                && let Some(index) = self.by_id.get(&package_id)
+                && let Some(package) = self.packages.get_mut(*index)
+            {
+                package.metadata = PackageMetadata::from_distribution(metadata, root)?;
+            }
+        }
+
+        Ok(self)
     }
 
     /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
@@ -1676,6 +1706,15 @@ impl Lock {
         allow_missing_package_metadata: bool,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
         if allow_missing_package_metadata && !package.has_metadata() {
+            if requires_dist.is_empty()
+                && dependency_groups.values().all(|group| group.is_empty())
+                && package.dependencies.is_empty()
+                && package.optional_dependencies.values().all(Vec::is_empty)
+                && package.dependency_groups.values().all(Vec::is_empty)
+            {
+                return Ok(SatisfiesResult::Satisfied);
+            }
+
             return Ok(Self::satisfied_no_metadata(package));
         }
 
