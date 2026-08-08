@@ -883,27 +883,75 @@ fn executable_path_from_base(
     }
 }
 
+/// The Windows launcher subsystem to generate when linking to a Python executable.
+///
+/// On Windows, a generated trampoline must declare itself as either a console or windowed
+/// subsystem binary. Console launchers (e.g. `python.exe`) attach to a terminal; windowed
+/// launchers (e.g. `pythonw.exe`) do not.
+///
+/// The variant is ignored on non-Windows platforms, where [`create_link_to_executable`] and
+/// [`replace_link_to_executable`] use a symlink and the subsystem is irrelevant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LauncherSubsystem {
+    /// A console subsystem launcher, e.g. `python.exe`.
+    Console,
+    /// A windowed subsystem launcher, e.g. `pythonw.exe`.
+    Windowed,
+}
+
+/// A target for [`create_link_to_executable`] and [`replace_link_to_executable`].
+///
+/// Bundles the path of the executable to link to with the [`LauncherSubsystem`] the caller
+/// wants the resulting Windows trampoline to use. The caller is the source of truth for
+/// the subsystem because it knows which logical executable is being created (e.g. `python`
+/// vs `pythonw`); the subsystem is ignored on non-Windows.
+#[derive(Debug, Clone)]
+pub struct LauncherTarget {
+    pub path: PathBuf,
+    pub subsystem: LauncherSubsystem,
+}
+
+impl LauncherTarget {
+    /// Create a console-subsystem launcher target (e.g. for `python.exe`).
+    pub fn console(path: impl Into<PathBuf>) -> Self {
+        Self {
+            path: path.into(),
+            subsystem: LauncherSubsystem::Console,
+        }
+    }
+
+    /// Create a windowed-subsystem launcher target (e.g. for `pythonw.exe`).
+    pub fn windowed(path: impl Into<PathBuf>) -> Self {
+        Self {
+            path: path.into(),
+            subsystem: LauncherSubsystem::Windowed,
+        }
+    }
+}
+
 /// Create a link to a managed Python executable.
 ///
 /// If the file already exists at the link path, an error will be returned.
-pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
+pub fn create_link_to_executable(link: &Path, executable: &LauncherTarget) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
     fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
         // Note this will never copy on Unix — we use it here to allow compilation on Windows
-        match symlink_or_copy_file(executable, link) {
+        match symlink_or_copy_file(&executable.path, link) {
             Ok(()) => Ok(()),
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                Err(Error::MissingExecutable(executable.to_path_buf()))
+                Err(Error::MissingExecutable(executable.path.clone()))
             }
             Err(err) => Err(Error::LinkExecutable(err)),
         }
     } else if cfg!(windows) {
         use uv_trampoline_builder::windows_python_launcher;
 
-        // TODO(zanieb): Install GUI launchers as well
-        let launcher = windows_python_launcher(executable, false)?;
+        let launcher = windows_python_launcher(
+            &executable.path,
+            matches!(executable.subsystem, LauncherSubsystem::Windowed),
+        )?;
 
         // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
         // error context anyway
@@ -923,16 +971,19 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
 /// If a file already exists at the link path, it will be atomically replaced.
 ///
 /// See [`create_link_to_executable`] for a variant that errors if the link already exists.
-pub fn replace_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
+pub fn replace_link_to_executable(link: &Path, executable: &LauncherTarget) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
     fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
-        replace_symlink(executable, link).map_err(Error::LinkExecutable)
+        replace_symlink(&executable.path, link).map_err(Error::LinkExecutable)
     } else if cfg!(windows) {
         use uv_trampoline_builder::windows_python_launcher;
 
-        let launcher = windows_python_launcher(executable, false)?;
+        let launcher = windows_python_launcher(
+            &executable.path,
+            matches!(executable.subsystem, LauncherSubsystem::Windowed),
+        )?;
 
         uv_fs::write_atomic_sync(link, &*launcher).map_err(Error::LinkExecutable)
     } else {
