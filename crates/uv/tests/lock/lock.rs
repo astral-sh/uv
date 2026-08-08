@@ -8525,6 +8525,27 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
         );
     });
 
+    #[cfg(feature = "test-universal")]
+    {
+        let preview_lock = lock_without_package_metadata(&lock)?;
+        fs_err::write(
+            context.temp_dir.join("project/uv.lock"),
+            preview_lock.to_string(),
+        )?;
+        uv_snapshot!(context.filters(), context.lock()
+            .current_dir(context.temp_dir.join("project"))
+            .arg("--preview-features")
+            .arg("lock-without-metadata")
+            .arg("--check")
+            .arg("--offline")
+            .arg("--no-cache"), @"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+        Resolved 4 packages in [TIME]
+        ");
+    }
+
     Ok(())
 }
 
@@ -19336,6 +19357,136 @@ fn lock_regenerates_marker_specific_local_extra() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A direct URL constraint must satisfy an unqualified workspace-member dependency.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_direct_url_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv]
+        constraint-dependencies = ["httpx @ {httpx_url}"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = {{ workspace = true }}
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx[http2]"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A direct URL constraint can select a source across disjoint platform markers.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_disjoint_marker_direct_url_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx[http2] ; sys_platform == 'win32'", "member"]
+
+        [tool.uv]
+        constraint-dependencies = ["httpx @ {httpx_url} ; sys_platform == 'darwin'"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = {{ workspace = true }}
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx ; sys_platform == 'darwin'"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
