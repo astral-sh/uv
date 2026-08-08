@@ -1192,6 +1192,7 @@ async fn lock_and_sync(
                     .expect("project root is a valid URL");
                 let distribution_id = url.distribution_id();
                 let existing = lock_state.index().distributions().remove(&distribution_id);
+                // TODO: Allow an absent entry after reusing a metadata-free lock.
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
 
