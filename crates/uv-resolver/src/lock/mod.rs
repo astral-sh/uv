@@ -422,6 +422,9 @@ impl<'lock> DependencySelectionContext<'lock> {
     }
 }
 
+/// Dependency-group declarations used to validate a metadata-free lock.
+type DeclaredDependencyGroups = BTreeMap<GroupName, Box<[Requirement]>>;
+
 /// The dependency section in which a locked edge is stored.
 #[derive(Clone, Copy, Debug)]
 enum DependencyContext<'a> {
@@ -1706,16 +1709,9 @@ impl Lock {
         allow_missing_package_metadata: bool,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
         if allow_missing_package_metadata && !package.has_metadata() {
-            if requires_dist.is_empty()
-                && dependency_groups.values().all(|group| group.is_empty())
-                && package.dependencies.is_empty()
-                && package.optional_dependencies.values().all(Vec::is_empty)
-                && package.dependency_groups.values().all(Vec::is_empty)
-            {
-                return Ok(SatisfiesResult::Satisfied);
-            }
-
-            return Ok(Self::satisfied_no_metadata(package));
+            return Ok(
+                self.satisfied_no_metadata(package, Some((&requires_dist, &dependency_groups)))
+            );
         }
 
         let indexes = requires_dist
@@ -1823,13 +1819,105 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
-    fn satisfied_no_metadata(package: &Package) -> SatisfiesResult<'_> {
-        SatisfiesResult::MismatchedPackageDependencies(
-            &package.id.name,
-            package.id.version.as_ref(),
-            Vec::new(),
-            &package.dependencies,
-        )
+    fn satisfied_no_metadata<'lock>(
+        &self,
+        package: &'lock Package,
+        declarations: Option<(&[Requirement], &DeclaredDependencyGroups)>,
+    ) -> SatisfiesResult<'lock> {
+        let mismatch = |expected| {
+            SatisfiesResult::MismatchedPackageDependencies(
+                &package.id.name,
+                package.id.version.as_ref(),
+                expected,
+                &package.dependencies,
+            )
+        };
+        let Some((requirements, dependency_groups)) = declarations else {
+            return mismatch(Vec::new());
+        };
+
+        if !self.conflicts.is_empty()
+            || !self.fork_markers.is_empty()
+            || !self.manifest.constraints.is_empty()
+            || !self.manifest.overrides.is_empty()
+            || !self.manifest.excludes.is_empty()
+            || self
+                .manifest
+                .dependency_groups
+                .values()
+                .any(|requirements| !requirements.is_empty())
+            || dependency_groups.values().any(|group| !group.is_empty())
+            || package
+                .optional_dependencies
+                .values()
+                .any(|dependencies| !dependencies.is_empty())
+            || package
+                .dependency_groups
+                .values()
+                .any(|dependencies| !dependencies.is_empty())
+        {
+            return mismatch(Vec::new());
+        }
+
+        let is_workspace_package = self.members().contains(&package.id.name)
+            || self.members().is_empty() && self.root().is_some_and(|root| root.id == package.id);
+        if !is_workspace_package {
+            return mismatch(Vec::new());
+        }
+
+        let parent_marker = UniversalMarker::from_combined(self.fork_markers_union());
+        let environment =
+            SimplifiedMarkerTree::new(&self.requires_python, self.fork_markers_union());
+        let builder =
+            LockedDependencyBuilder::new(&self.requires_python, environment, parent_marker);
+        let mut expected = Vec::new();
+
+        for requirement in requirements {
+            let RequirementSource::Registry {
+                specifier,
+                index,
+                conflict,
+            } = &requirement.source
+            else {
+                return mismatch(expected);
+            };
+            if !specifier.is_empty()
+                || index.is_some()
+                || conflict.is_some()
+                || !requirement.extras.is_empty()
+                || !requirement.marker.is_true()
+            {
+                return mismatch(expected);
+            }
+
+            let mut candidates = self
+                .packages
+                .iter()
+                .filter(|candidate| candidate.id.name == requirement.name);
+            let Some(candidate) = candidates.next() else {
+                return mismatch(expected);
+            };
+            if candidates.next().is_some()
+                || !matches!(candidate.id.source, Source::Registry(..))
+                || !candidate.fork_markers.is_empty()
+            {
+                return mismatch(expected);
+            }
+
+            builder.add(
+                &mut expected,
+                candidate.id.clone(),
+                BTreeSet::new(),
+                parent_marker,
+            );
+        }
+
+        expected.sort();
+        if expected != package.dependencies {
+            return mismatch(expected);
+        }
+
+        SatisfiesResult::Satisfied
     }
 
     fn record_index(
@@ -2229,7 +2317,7 @@ impl Lock {
                 && !package.has_metadata()
                 && matches!(package.id.source, Source::Direct(..))
             {
-                return Ok(Self::satisfied_no_metadata(package));
+                return Ok(self.satisfied_no_metadata(package, None));
             }
 
             // Validating a direct URL package requires retrieving metadata from the remote
