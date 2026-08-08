@@ -5930,6 +5930,7 @@ dependencies = [
  "base64 0.22.1",
  "etcetera",
  "fs-err",
+ "hex",
  "http",
  "insta",
  "jiff",
@@ -5940,6 +5941,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "tempfile",
  "test-log",
  "thiserror",
@@ -5959,6 +5961,7 @@ dependencies = [
  "uv-static",
  "uv-warnings",
  "wiremock",
+ "zeroize",
 ]
 
 [[package]]
