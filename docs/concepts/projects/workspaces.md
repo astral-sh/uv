@@ -48,9 +48,17 @@ contain a `pyproject.toml` file. However, workspace members can be _either_
 [applications](./init.md#applications) or [libraries](./init.md#libraries); both are supported in
 the workspace context.
 
-Every workspace needs a root, which is _also_ a workspace member. In the above example, `albatross`
-is the workspace root, and the workspace members include all projects under the `packages`
-directory, except `seeds`.
+A workspace always has a root directory. If the root contains a `[project]` table, the root package
+is automatically a workspace member. In the above example, `albatross` is the workspace root, and
+the workspace members include all projects under the `packages` directory, except `seeds`.
+
+A workspace root does not need to be a project itself. For example, the root `pyproject.toml` can
+contain only the workspace configuration:
+
+```toml
+[tool.uv.workspace]
+members = ["packages/*"]
+```
 
 By default, `uv run` and `uv sync` operates on the workspace root. For example, in the above
 example, `uv run` and `uv run --package albatross` would be equivalent, while
