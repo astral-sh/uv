@@ -149,8 +149,43 @@ impl Removal {
         }
 
         for entry in walkdir::WalkDir::new(&path).contents_first(true) {
-            // If we hit a directory that lacks read permissions, try to make it readable.
+            // Capture file metadata up front so overlong files share the directory error handling.
+            let mut metadata = None;
+            let entry = match entry {
+                Ok(entry) if !entry.file_type().is_dir() => match entry.metadata() {
+                    Ok(entry_metadata) => {
+                        metadata = Some(entry_metadata);
+                        Ok(entry)
+                    }
+                    #[cfg(target_os = "macos")]
+                    Err(error)
+                        if error.io_error().is_some_and(|error| {
+                            error.kind() == io::ErrorKind::InvalidFilename
+                        }) =>
+                    {
+                        Err(error)
+                    }
+                    Err(_) => Ok(entry),
+                },
+                entry => entry,
+            };
+
             if let Err(ref err) = entry {
+                // On Unix, `ENAMETOOLONG` is the only OS error mapped to `InvalidFilename`.
+                // NOTE: In the future, we may want to extend this to Linux and other targets,
+                // although it's less likely there given that Linux's `MAX_PATH` is 4096 instead
+                // of macOS's 1024.
+                #[cfg(target_os = "macos")]
+                if err
+                    .io_error()
+                    .is_some_and(|error| error.kind() == io::ErrorKind::InvalidFilename)
+                    && let Some(parent) = err.path().and_then(Path::parent)
+                    && parent != path.as_ref()
+                {
+                    return self.rm_rf_overlong_subtree(&path, parent, reporter, skip_locked_file);
+                }
+
+                // If we hit a directory that lacks read permissions, try to make it readable.
                 if err
                     .io_error()
                     .is_some_and(|err| err.kind() == io::ErrorKind::PermissionDenied)
@@ -189,30 +224,29 @@ impl Removal {
                     false
                 }
             } {
-                self.num_files += 1;
                 remove_dir(entry.path())?;
+                self.num_files += 1;
             } else if entry.file_type().is_dir() {
                 // Remove the directory with the exclusive lock last.
                 if skip_locked_file && entry.path() == path.as_ref() {
                     continue;
                 }
 
-                self.num_dirs += 1;
-
                 // The contents should have been removed by now, but sometimes a race condition is
                 // hit where other files have been added by the OS. Fall back to `remove_dir_all`,
                 // which will remove the directory robustly across platforms.
                 remove_dir_all(entry.path())?;
+                self.num_dirs += 1;
             } else {
-                self.num_files += 1;
-
                 // Remove the file.
-                if let Ok(metadata) = entry.metadata() {
-                    self.add_file(entry.path(), &metadata);
+                if let Some(metadata) = &metadata {
+                    self.add_file(entry.path(), metadata);
                 } else if self.physical_bytes.is_some() {
                     self.physical_bytes_incomplete = true;
                 }
+
                 remove_file(entry.path())?;
+                self.num_files += 1;
             }
 
             reporter.map(CleanReporter::on_clean);
@@ -221,6 +255,29 @@ impl Removal {
         reporter.map(CleanReporter::on_complete);
 
         Ok(())
+    }
+
+    /// Remove an overlong subtree with descriptor-relative operations, then restart the walker.
+    #[cfg(target_os = "macos")]
+    fn rm_rf_overlong_subtree(
+        &mut self,
+        root: &Path,
+        directory: &Path,
+        reporter: Option<&dyn CleanReporter>,
+        skip_locked_file: bool,
+    ) -> io::Result<()> {
+        // `remove_dir_all` uses `openat` and `unlinkat`, so it can remove descendants whose
+        // complete paths exceed `PATH_MAX`. It does not report its contents, so only count the
+        // directory passed to it.
+        remove_dir_all(directory)?;
+        self.num_dirs += 1;
+        if self.physical_bytes.is_some() {
+            self.physical_bytes_incomplete = true;
+        }
+        reporter.map(CleanReporter::on_clean);
+
+        // Restart because `walkdir` may otherwise yield entries from the removed directory.
+        self.rm_rf(root, reporter, skip_locked_file)
     }
 }
 
