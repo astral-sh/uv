@@ -817,16 +817,6 @@ impl<'a> LockedDependencyBuilder<'a> {
             if required_marker.is_false() {
                 continue;
             }
-            match &requirement.source {
-                RequirementSource::Registry { .. }
-                | RequirementSource::Url { .. }
-                | RequirementSource::Directory { .. }
-                | RequirementSource::Path { .. } => {}
-                RequirementSource::GitDirectory { .. } | RequirementSource::GitPath { .. } => {
-                    complete = false;
-                    continue;
-                }
-            }
             let requirement_environment =
                 SimplifiedMarkerTree::new(self.requires_python, required_marker.pep508())
                     .as_simplified_marker_tree();
@@ -4682,15 +4672,9 @@ impl Lock {
                 requirement_marker
             };
 
-            // This phase may discover HTTP providers, exact local trees, and archives.
-            // Git providers require separate trust checks.
+            // Registry requirements do not select a reusable direct source.
             if requirement_marker.is_false()
-                || !matches!(
-                    requirement.source,
-                    RequirementSource::Url { .. }
-                        | RequirementSource::Directory { .. }
-                        | RequirementSource::Path { .. }
-                )
+                || matches!(requirement.source, RequirementSource::Registry { .. })
             {
                 continue;
             }
@@ -4746,7 +4730,10 @@ impl Lock {
                         source_tree_metadata,
                     )
                     .await?
-                } else if matches!(package.id.source, Source::Path(..) | Source::Direct(..)) {
+                } else if matches!(
+                    package.id.source,
+                    Source::Path(..) | Source::Direct(..) | Source::Git(..)
+                ) {
                     None
                 } else {
                     continue;
@@ -4983,7 +4970,7 @@ impl Lock {
         .await?;
 
         // Inspect archives or invoke local backends only after an active declaration selects
-        // their exact reachable path. Remote providers use only their retained lock metadata.
+        // their exact reachable path. URL and Git providers use only retained lock metadata.
         let mut source_requirements = BTreeSet::<Requirement>::new();
         let mut pending_sources = Vec::<Requirement>::new();
         let mut pending_packages = self
@@ -5003,8 +4990,6 @@ impl Lock {
                         .id
                         .source
                         .satisfies_requirement_source(&requirement.source, root)?
-                        || !(package.id.source.is_source_tree()
-                            || matches!(package.id.source, Source::Path(..) | Source::Direct(..)))
                     {
                         continue;
                     }
@@ -5088,9 +5073,9 @@ impl Lock {
                 continue;
             }
             let (direct_requirements, dependency_groups) =
-                if matches!(package.id.source, Source::Direct(..)) {
-                    // HTTP artifacts cannot be retrieved during an offline, cache-free check.
-                    // Their declaration metadata is retained in the lock for this purpose.
+                if matches!(package.id.source, Source::Direct(..) | Source::Git(..)) {
+                    // Remote artifacts and Git checkouts may be unavailable during an offline,
+                    // cache-free check. Their declaration metadata is retained in the lock.
                     (
                         package.metadata.requires_dist.iter().cloned().collect(),
                         package
@@ -7133,6 +7118,40 @@ impl Source {
                     && (matches!(self, Self::Virtual(_)) == r#virtual.unwrap_or(false)
                         || matches!(self, Self::Virtual(_))
                             && install_path.as_ref() == normalize_path(root).as_ref())
+            }
+            (
+                Self::Git(url, source),
+                RequirementSource::GitDirectory {
+                    git, subdirectory, ..
+                },
+            ) => {
+                let mut expected = locked_git_url(git, subdirectory.as_deref(), None);
+                expected.set_fragment(None);
+                let mut actual = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                actual.set_fragment(None);
+                expected == actual
+                    && source.path.is_none()
+                    && git
+                        .precise()
+                        .as_ref()
+                        .is_none_or(|precise| precise == &source.precise)
+            }
+            (
+                Self::Git(url, source),
+                RequirementSource::GitPath {
+                    git, install_path, ..
+                },
+            ) => {
+                let mut expected = locked_git_url(git, None, Some(install_path));
+                expected.set_fragment(None);
+                let mut actual = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                actual.set_fragment(None);
+                expected == actual
+                    && source.path.is_some()
+                    && git
+                        .precise()
+                        .as_ref()
+                        .is_none_or(|precise| precise == &source.precise)
             }
             _ => false,
         };
