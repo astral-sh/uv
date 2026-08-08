@@ -5061,6 +5061,26 @@ impl Lock {
         database: &DistributionDatabase<'_, Context>,
         source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
     ) -> Result<DependencySources, LockError> {
+        // Global URL overrides authorize sources and replace competing URL constraints.
+        // Scoped overrides cannot grant this privilege, and excluded packages stay inactive.
+        let global_source_overrides = dependency_overrides
+            .global_requirements()
+            .filter(|requirement| {
+                !matches!(requirement.source, RequirementSource::Registry { .. })
+                    && !dependency_excludes.contains(&requirement.name)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if !global_source_overrides.is_empty() {
+            source_requirements.retain(|requirement| {
+                matches!(requirement.source, RequirementSource::Registry { .. })
+                    || global_source_overrides
+                        .iter()
+                        .all(|override_requirement| override_requirement.name != requirement.name)
+            });
+            source_requirements.extend(global_source_overrides);
+        }
+
         // Keep inactive constraints as candidates: a newly authorized source tree may
         // expose a current dependency that selects one later in the traversal.
         let mut source_candidates = source_requirements.clone();
@@ -5098,8 +5118,8 @@ impl Lock {
         )
         .await?;
 
-        // Constraints may select an already-reachable source, but cannot introduce packages.
-        // Drop inactive entries before a deleted archive or stale local tree could be inspected.
+        // Constraints and global overrides may select reachable sources without adding packages.
+        // Drop inactive sources before inspecting a deleted archive or stale local tree.
         let mut pending_sources = Vec::<Requirement>::new();
         let mut inactive_constraints = Vec::new();
         for constraint in source_requirements
@@ -5119,7 +5139,7 @@ impl Lock {
         // Inspect archives or invoke local backends only after an active declaration selects
         // their exact reachable path. URL and Git providers use only retained lock metadata.
         // Registry packages stay out of this phase: their metadata cannot introduce direct
-        // sources or widen URLs already authorized by first-party declarations and constraints.
+        // sources or widen URLs authorized by first-party declarations, overrides, or constraints.
         let mut pending_packages = self
             .packages
             .iter()
