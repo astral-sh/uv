@@ -526,8 +526,8 @@ jobs:
 
   linux-arm:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 30
+    runs-on: ${{ matrix.platform.target == 'aarch64-unknown-linux-gnu' && 'depot-ubuntu-24.04-arm-8' || 'depot-ubuntu-24.04-8' }}
+    timeout-minutes: ${{ matrix.platform.target == 'aarch64-unknown-linux-gnu' && 60 || 30 }}
     strategy:
       matrix:
         platform:
@@ -569,6 +569,16 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
+
+            if [[ "${{ matrix.platform.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+                rustup component add llvm-tools-preview
+                /opt/python/cp311-cp311/bin/python scripts/build_uv_pgo.py \
+                    --target "${{ matrix.platform.target }}" \
+                    --target-dir "$PWD/target/uv-pgo" \
+                    --train-only
+
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-Cprofile-use=$PWD/target/uv-pgo/uv.profdata"
+            fi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
