@@ -5844,7 +5844,7 @@ fn tool_install_find_links() {
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving tool dependencies:
-      ╰─▶ Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
+      ╰─▶ Because basic-app==0.1 needs to be downloaded from a registry and only basic-app==0.1 is available, we can conclude that all versions of basic-app cannot be used.
           And because you require basic-app, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.

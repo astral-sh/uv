@@ -760,6 +760,8 @@ impl PubGrubReportFormatter<'_> {
             }
         }
 
+        let requested_ranges = requested_ranges(derivation_tree);
+
         let mut pending = vec![(derivation_tree, inherited_exclude_newer_ranges.clone())];
         while let Some((derivation_tree, inherited_exclude_newer_ranges)) = pending.pop() {
             match derivation_tree {
@@ -774,13 +776,22 @@ impl PubGrubReportFormatter<'_> {
                     if let Some(name) = package.name_no_root() {
                         // Check for no versions due to pre-release options.
                         if !fork_urls.contains_key(name) {
-                            self.prerelease_hint(name, set, selector, env, options, output_hints);
+                            self.prerelease_hint(
+                                name,
+                                set,
+                                requested_ranges.get(name).map(Vec::as_slice),
+                                selector,
+                                env,
+                                options,
+                                output_hints,
+                            );
                         }
 
                         // Check for no versions due to no `--find-links` flat index.
                         Self::index_hints(
                             name,
                             set,
+                            self.included_versions.get(name),
                             selector,
                             index_locations,
                             index_capabilities,
@@ -832,13 +843,22 @@ impl PubGrubReportFormatter<'_> {
                     if let Some(name) = package.name_no_root() {
                         // Check for no versions due to pre-release options.
                         if !fork_urls.contains_key(name) {
-                            self.prerelease_hint(name, set, selector, env, options, output_hints);
+                            self.prerelease_hint(
+                                name,
+                                set,
+                                requested_ranges.get(name).map(Vec::as_slice),
+                                selector,
+                                env,
+                                options,
+                                output_hints,
+                            );
                         }
 
                         // Check for no versions due to no `--find-links` flat index.
                         Self::index_hints(
                             name,
                             set,
+                            self.included_versions.get(name),
                             selector,
                             index_locations,
                             index_capabilities,
@@ -1176,6 +1196,7 @@ impl PubGrubReportFormatter<'_> {
     fn index_hints(
         name: &PackageName,
         set: &Range<Version>,
+        listed: Option<&BTreeSet<Version>>,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
         index_capabilities: &IndexCapabilities,
@@ -1270,13 +1291,11 @@ impl PubGrubReportFormatter<'_> {
         // Add hints due to the package being available on an index, but not at the correct version,
         // with subsequent indexes that were _not_ queried.
         if matches!(selector.index_strategy(), IndexStrategy::FirstIndex) {
-            // Do not include the hint if the set is "all versions". This is an unusual but valid
-            // case in which a package returns a 200 response, but without any versions or
-            // distributions for the package.
-            if !set
-                .iter()
-                .all(|range| matches!(range, (Bound::Unbounded, Bound::Unbounded)))
-            {
+            // Do not include the hint when the index listed no version at all. This is an
+            // unusual but valid case in which a package returns a 200 response, but without any
+            // versions or distributions for the package. A package that listed versions and had
+            // none of them work is the case the hint exists for, and its set covers them all.
+            if listed.is_some_and(|listed| !listed.is_empty()) {
                 if let Some(found_index) = available_indexes.get(name).and_then(BTreeSet::first) {
                     // Determine whether the index is the last-available index. If not, then some
                     // indexes were not queried, and could contain a compatible version.
@@ -1315,10 +1334,17 @@ impl PubGrubReportFormatter<'_> {
         }
     }
 
+    /// Generate a [`PubGrubHint`] for a package whose pre-releases were not considered.
+    ///
+    /// A pre-release marker is only visible in `requested`, the ranges the package was requested
+    /// with. The bounds of the derived `set` land on whichever versions the registry lists next,
+    /// pre-release or not, since the resolver widens version sets across the gaps between the
+    /// known versions of a package.
     fn prerelease_hint(
         &self,
         name: &PackageName,
         set: &Range<Version>,
+        requested: Option<&[&Range<Version>]>,
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
         options: &Options,
@@ -1328,49 +1354,26 @@ impl PubGrubReportFormatter<'_> {
             return;
         }
 
-        let any_prerelease = set.iter().any(|(start, end)| {
-            // Ignore, e.g., `>=2.4.dev0,<2.5.dev0`, which is the desugared form of `==2.4.*`.
-            if PrefixMatch::from_range(start, end).is_some() {
-                return false;
-            }
+        let prerelease_request = requested
+            .unwrap_or_default()
+            .iter()
+            .copied()
+            .find(|range| requests_prerelease(range));
 
-            let is_pre1 = match start {
-                Bound::Included(version) => version.any_prerelease(),
-                Bound::Excluded(version) => version.any_prerelease(),
-                Bound::Unbounded => false,
-            };
-            if is_pre1 {
-                return true;
-            }
-
-            let is_pre2 = match end {
-                Bound::Included(version) => version.any_prerelease(),
-                Bound::Excluded(version) => {
-                    version.any_prerelease() && !is_compatible_release_upper_bound(version)
-                }
-                Bound::Unbounded => false,
-            };
-            if is_pre2 {
-                return true;
-            }
-
-            false
-        });
-
-        if any_prerelease {
+        if let Some(range) = prerelease_request {
             // A pre-release marker appeared in the version requirements.
             match options.flexibility {
                 Flexibility::Configurable => {
                     hints.insert(PubGrubHint::PrereleaseRequested {
                         name: name.clone(),
-                        range: set.clone(),
+                        range: range.clone(),
                         package_override: options.prerelease.package.contains_key(name),
                     });
                 }
                 Flexibility::Fixed => {
                     hints.insert(PubGrubHint::BuildPrereleaseRequested {
                         name: name.clone(),
-                        range: set.clone(),
+                        range: range.clone(),
                     });
                 }
             }
@@ -1399,6 +1402,62 @@ impl PubGrubReportFormatter<'_> {
             }
         }
     }
+}
+
+/// Collect the version ranges each package was requested with anywhere in the derivation tree.
+///
+/// The depended-on side of a dependency incompatibility is the range as written in the
+/// requirement, unlike the sets the resolver derives from it.
+fn requested_ranges(derivation_tree: &ErrorTree) -> FxHashMap<&PackageName, Vec<&Range<Version>>> {
+    let mut requested: FxHashMap<&PackageName, Vec<&Range<Version>>> = FxHashMap::default();
+    let mut pending = vec![derivation_tree];
+    while let Some(derivation_tree) = pending.pop() {
+        match derivation_tree {
+            DerivationTree::External(External::FromDependencyOf(_, _, dependency, versions)) => {
+                if let Some(name) = dependency.name_no_root() {
+                    requested.entry(name).or_default().push(versions);
+                }
+            }
+            DerivationTree::External(_) => {}
+            DerivationTree::Derived(derived) => {
+                pending.push(&derived.cause1);
+                pending.push(&derived.cause2);
+            }
+        }
+    }
+    requested
+}
+
+/// Return `true` if a requested range includes a pre-release version explicitly.
+fn requests_prerelease(range: &Range<Version>) -> bool {
+    range.iter().any(|(start, end)| {
+        // Ignore, e.g., `>=2.4.dev0,<2.5.dev0`, which is the desugared form of `==2.4.*`.
+        if PrefixMatch::from_range(start, end).is_some() {
+            return false;
+        }
+
+        let is_pre1 = match start {
+            Bound::Included(version) => version.any_prerelease(),
+            Bound::Excluded(version) => version.any_prerelease(),
+            Bound::Unbounded => false,
+        };
+        if is_pre1 {
+            return true;
+        }
+
+        let is_pre2 = match end {
+            Bound::Included(version) => version.any_prerelease(),
+            Bound::Excluded(version) => {
+                version.any_prerelease() && !is_compatible_release_upper_bound(version)
+            }
+            Bound::Unbounded => false,
+        };
+        if is_pre2 {
+            return true;
+        }
+
+        false
+    })
 }
 
 /// Return `true` for the excluded `.dev0` upper bounds used to desugar compatible releases.
@@ -1963,16 +2022,19 @@ impl std::fmt::Display for PubGrubHint {
                 package_set,
                 package_requires_python,
             } => {
+                let package = PubGrubPackage::base(name.clone());
+                let package_range = PackageRange::compatibility(&package, package_set, None);
+                let supports = if package_range.plural() {
+                    "support"
+                } else {
+                    "supports"
+                };
                 write!(
                     f,
-                    "The `requires-python` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `requires-python` value (like {}).",
+                    "The `requires-python` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only {} {}). Consider using a more restrictive `requires-python` value (like {}).",
                     requires_python.cyan(),
-                    PackageRange::compatibility(
-                        &PubGrubPackage::base(name.clone()),
-                        package_set,
-                        None,
-                    )
-                    .cyan(),
+                    package_range.cyan(),
+                    supports,
                     package_requires_python.cyan(),
                     package_requires_python.cyan(),
                 )
@@ -1984,16 +2046,19 @@ impl std::fmt::Display for PubGrubHint {
                 package_set,
                 package_requires_python,
             } => {
+                let package = PubGrubPackage::base(name.clone());
+                let package_range = PackageRange::compatibility(&package, package_set, None);
+                let supports = if package_range.plural() {
+                    "support"
+                } else {
+                    "supports"
+                };
                 write!(
                     f,
-                    "The `--python-version` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a higher `--python-version` value.",
+                    "The `--python-version` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only {} {}). Consider using a higher `--python-version` value.",
                     requires_python.cyan(),
-                    PackageRange::compatibility(
-                        &PubGrubPackage::base(name.clone()),
-                        package_set,
-                        None,
-                    )
-                    .cyan(),
+                    package_range.cyan(),
+                    supports,
                     package_requires_python.cyan(),
                 )
             }
@@ -2004,15 +2069,18 @@ impl std::fmt::Display for PubGrubHint {
                 package_set,
                 package_requires_python,
             } => {
+                let package = PubGrubPackage::base(name.clone());
+                let package_range = PackageRange::compatibility(&package, package_set, None);
+                let supports = if package_range.plural() {
+                    "support"
+                } else {
+                    "supports"
+                };
                 write!(
                     f,
-                    "The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
-                    PackageRange::compatibility(
-                        &PubGrubPackage::base(name.clone()),
-                        package_set,
-                        None,
-                    )
-                    .cyan(),
+                    "The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only {} {}). Consider passing a `--python-version` value to raise the minimum supported version.",
+                    package_range.cyan(),
+                    supports,
                     package_requires_python.cyan(),
                 )
             }
