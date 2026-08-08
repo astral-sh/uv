@@ -587,6 +587,10 @@ async fn build_package(
     // Read build constraints.
     let build_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
+    let has_backend_build_constraint_hashes = hash_checking.is_some()
+        && build_constraints.iter().any(|constraint| {
+            constraint.requirement.name.as_str() == "uv-build" && !constraint.hashes.is_empty()
+        });
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -696,6 +700,18 @@ async fn build_package(
 
         BuildAction::List
     } else if force_pep517 {
+        BuildAction::Pep517
+    } else if hash_checking.is_some_and(|mode| mode.is_require()) {
+        debug!(
+            "Not using `uv_build` direct build for `{}` because hashes are required",
+            source.path().user_display()
+        );
+        BuildAction::Pep517
+    } else if has_backend_build_constraint_hashes {
+        debug!(
+            "Not using `uv_build` direct build for `{}` because `uv_build` has build constraint hashes",
+            source.path().user_display()
+        );
         BuildAction::Pep517
     } else {
         match check_direct_build(source.path(), uv_version::version()) {
