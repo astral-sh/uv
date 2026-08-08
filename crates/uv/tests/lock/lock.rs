@@ -18103,7 +18103,7 @@ fn lock_removed_empty_extra() -> Result<()> {
     Ok(())
 }
 
-/// Regenerate name-only production dependencies when package metadata is omitted.
+/// Regenerate registry dependencies and dependency policies when package metadata is omitted.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
@@ -18115,15 +18115,25 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["six>=1", "urllib3==1.0.0"]
+        dependencies = ["six>=2", "urllib3==1.0.0", "excluded", "scoped-excluded"]
 
         [project.optional-dependencies]
         empty = []
-        feature = ["six<2", "httpx[http2]>=1"]
+        feature = ["six<2", "httpx[http2]>=1", "excluded", "scoped-excluded"]
 
         [dependency-groups]
         empty = []
-        dev = ["six>=1", "httpx[http2]==1.0.0"]
+        dev = ["six>=2", "httpx[http2]==1.0.0", "excluded", "scoped-excluded"]
+
+        [tool.uv]
+        override-dependencies = [
+            "six>=0",
+            { package = { name = "project", version = "0.1.0" }, dependencies = ["six==1.0.0"] },
+        ]
+        exclude-dependencies = [
+            "excluded",
+            { package = { name = "project", version = "0.1.0" }, dependencies = ["scoped-excluded"] },
+        ]
         "#};
     pyproject_toml.write_str(original_pyproject)?;
 
@@ -18150,7 +18160,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    pyproject_toml.write_str(&original_pyproject.replace("six>=1", "six>=0"))?;
+    pyproject_toml.write_str(&original_pyproject.replace("six>=2", "six>=3"))?;
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
@@ -18178,9 +18188,10 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
           And because your project requires project[empty], we can conclude that your project's requirements are unsatisfiable.
     ");
 
-    pyproject_toml.write_str(
-        &original_pyproject.replace("feature = [\"six<2\", \"httpx[http2]>=1\"]", "feature = []"),
-    )?;
+    pyproject_toml.write_str(&original_pyproject.replace(
+        "feature = [\"six<2\", \"httpx[http2]>=1\", \"excluded\", \"scoped-excluded\"]",
+        "feature = []",
+    ))?;
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
@@ -18195,9 +18206,10 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     hint: To update the lockfile, run `uv lock`.
     ");
 
-    pyproject_toml.write_str(
-        &original_pyproject.replace("dev = [\"six>=1\", \"httpx[http2]==1.0.0\"]", "dev = []"),
-    )?;
+    pyproject_toml.write_str(&original_pyproject.replace(
+        "dev = [\"six>=2\", \"httpx[http2]==1.0.0\", \"excluded\", \"scoped-excluded\"]",
+        "dev = []",
+    ))?;
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
@@ -18212,25 +18224,110 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     hint: To update the lockfile, run `uv lock`.
     ");
 
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-        "#})?;
+    pyproject_toml.write_str(&original_pyproject.replace("\"urllib3==1.0.0\",", ""))?;
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
         .arg("--check")
-        .arg("--offline")
-        .arg("--no-cache")
         .arg("--index-url")
         .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Scoped dependency rules use the resolved version even when a dynamic package omits it.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_regenerates_dynamic_version_scoped_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "provider" }, dependencies = ["anyio==4.3.0"] },
+            { package = { name = "provider", version = "1.0.0" }, dependencies = ["anyio==4.4.0"] },
+        ]
+        exclude-dependencies = [
+            { package = { name = "provider", version = "2.0.0.post1" }, dependencies = ["anyio"] },
+        ]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==4.3.0"]
+        dynamic = ["version"]
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "backend.py" }]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend"
+        "#})?;
+    let backend = context.temp_dir.child("provider/backend.py");
+    let backend_contents = indoc! {r#"
+        import pathlib
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = pathlib.Path(metadata_directory, "provider-1.0.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                "Metadata-Version: 2.1\n"
+                "Name: provider\n"
+                "Version: 1.0.0\n"
+                "Requires-Python: >=3.12\n"
+                "Requires-Dist: anyio==4.3.0\n"
+            )
+            return dist_info.name
+        "#};
+    backend.write_str(backend_contents)?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    // Changing the dynamic version selects the exact exclusion instead of the exact override.
+    backend.write_str(&backend_contents.replace("1.0.0", "2.0.0.post1"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
     hint: To update the lockfile, run `uv lock`.
     ");
