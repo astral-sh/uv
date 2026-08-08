@@ -1989,8 +1989,7 @@ impl Lock {
                 else {
                     return mismatch(expected, actual);
                 };
-                if !specifier.is_empty()
-                    || index.is_some()
+                if index.is_some()
                     || conflict.is_some()
                     || !requirement.marker.without_extras().is_true()
                 {
@@ -2005,11 +2004,32 @@ impl Lock {
                     return mismatch(expected, actual);
                 }
 
+                if requirement.name == package.id.name
+                    && !matches!(context, DependencyContext::Group(_))
+                {
+                    // A project requirement selects itself without adding a dependency edge.
+                    // Dynamic projects have no locked version against which to check specifiers.
+                    if package
+                        .id
+                        .version
+                        .as_ref()
+                        .is_some_and(|version| !specifier.contains(version))
+                    {
+                        return mismatch(expected, actual);
+                    }
+                    continue;
+                }
+
                 let [candidate] = self.packages_for_name(&requirement.name) else {
                     return mismatch(expected, actual);
                 };
                 if !matches!(candidate.id.source, Source::Registry(..))
                     || !candidate.fork_markers.is_empty()
+                    || candidate
+                        .id
+                        .version
+                        .as_ref()
+                        .is_some_and(|version| !specifier.contains(version))
                 {
                     return mismatch(expected, actual);
                 }
