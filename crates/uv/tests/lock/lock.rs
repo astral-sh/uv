@@ -36494,6 +36494,24 @@ async fn lock_path_dependency_explicit_index() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
+    let lock = lock_without_package_metadata(&fs_err::read_to_string(pkg_b.join("uv.lock"))?)?;
+    fs_err::write(pkg_b.join("uv.lock"), lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--default-index")
+        .arg("https://example.invalid/simple")
+        .current_dir(&pkg_b), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    ");
+
     Ok(())
 }
 
