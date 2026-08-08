@@ -3619,6 +3619,43 @@ fn lock_conflicting_project_basic1() -> Result<()> {
      + sortedcontainers==2.4.0
     ");
 
+    let lock_without_metadata = lock_without_package_metadata(&lock)?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock_without_metadata.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let missing_conflict_marker = lock_without_metadata
+        .to_string()
+        .replace(r#", marker = "extra == 'project-7-project'""#, "");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&missing_conflict_marker)?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
     Ok(())
 }
 
@@ -4711,6 +4748,22 @@ fn lock_conflicting_mixed() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Extra `project2` and group `project1` are incompatible with the declared conflicts: {`project[project2]`, `project:project1`}
+    ");
+
+    let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())
