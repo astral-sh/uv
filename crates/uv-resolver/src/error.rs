@@ -10,6 +10,7 @@ use pubgrub::{DerivationTree, Derived, External, Map, Ranges, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
 
+use uv_configuration::Constraints;
 use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
@@ -429,6 +430,7 @@ pub struct NoSolutionError {
     tags: Option<Tags>,
     workspace_members: BTreeSet<PackageName>,
     options: Options,
+    constraints: Constraints,
     /// Cached report and hints, computed once on first access.
     cached: OnceLock<(String, IndexSet<PubGrubHint>)>,
 }
@@ -454,6 +456,7 @@ impl NoSolutionError {
         tags: Option<Tags>,
         workspace_members: BTreeSet<PackageName>,
         options: Options,
+        constraints: Constraints,
     ) -> Self {
         Self {
             error: StackSafeErrorTree::new(error),
@@ -474,6 +477,7 @@ impl NoSolutionError {
             tags,
             workspace_members,
             options,
+            constraints,
             cached: OnceLock::new(),
         }
     }
@@ -691,6 +695,7 @@ impl NoSolutionError {
             available_versions: &self.available_versions,
             python_requirement: &self.python_requirement,
             workspace_members: &self.workspace_members,
+            constraints: &self.constraints,
             tags: self.tags.as_ref(),
         };
 
@@ -789,6 +794,7 @@ impl std::fmt::Debug for NoSolutionError {
             tags,
             workspace_members,
             options,
+            constraints,
             cached: _,
         } = self;
         f.debug_struct("NoSolutionError")
@@ -809,6 +815,7 @@ impl std::fmt::Debug for NoSolutionError {
             .field("tags", tags)
             .field("workspace_members", workspace_members)
             .field("options", options)
+            .field("constraints", constraints)
             .finish()
     }
 }
