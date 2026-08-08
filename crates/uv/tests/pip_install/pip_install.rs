@@ -14237,6 +14237,29 @@ fn config_settings_package() -> Result<()> {
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
 
+    // Package-specific settings can also be supplied directly in the requirements file.
+    requirements_txt.write_str(&format!(
+        "-e {} --config-settings editable_mode=compat",
+        context
+            .workspace_root
+            .join("test/packages/setuptools_editable")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+    "
+    );
+
+    assert!(!finder.exists());
+
     Ok(())
 }
 

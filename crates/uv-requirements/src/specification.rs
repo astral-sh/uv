@@ -30,7 +30,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
 use url::Url;
@@ -40,20 +40,61 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{
     DependencyGroups, ExcludeDependency, NoBinary, NoBuild, Override, PackageOverride,
 };
-use uv_distribution_types::{Index, Requirement};
+use uv_distribution_types::{ConfigSettings, Index, PackageConfigSettings, Requirement};
 use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
-use uv_pypi_types::PyProjectToml;
+use uv_pep508::{MarkerEnvironment, MarkerTree};
+use uv_pypi_types::{ParsedUrl, PyProjectToml};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
 use uv_scripts::{OverrideDependency, Pep723Metadata};
 use uv_warnings::warn_user;
 
 use crate::{RequirementsSource, SourceTree};
+
+/// Package-specific build settings that retain the marker from their originating requirement.
+#[derive(Debug, Default, Clone)]
+pub struct MarkedPackageConfigSettings(Vec<MarkedPackageConfigSetting>);
+
+#[derive(Debug, Clone)]
+struct MarkedPackageConfigSetting {
+    package: PackageName,
+    marker: MarkerTree,
+    settings: ConfigSettings,
+}
+
+impl MarkedPackageConfigSettings {
+    fn insert(&mut self, package: PackageName, marker: MarkerTree, settings: ConfigSettings) {
+        self.0.push(MarkedPackageConfigSetting {
+            package,
+            marker,
+            settings,
+        });
+    }
+
+    fn extend(&mut self, other: Self) {
+        self.0.extend(other.0);
+    }
+
+    /// Return settings whose originating requirements apply to the given environment.
+    ///
+    /// Without a concrete environment, retain all settings.
+    #[must_use]
+    pub fn evaluate(self, environment: Option<&MarkerEnvironment>) -> PackageConfigSettings {
+        let mut settings = PackageConfigSettings::default();
+        for entry in self.0 {
+            if environment.is_none() || entry.marker.evaluate_optional_environment(environment, &[])
+            {
+                settings.insert(entry.package, entry.settings);
+            }
+        }
+        settings
+    }
+}
 
 #[derive(Debug, Default, Clone)]
 pub struct RequirementsSpecification {
@@ -91,6 +132,8 @@ pub struct RequirementsSpecification {
     pub no_binary: NoBinary,
     /// The `--no-build` flags to enforce when selecting distributions.
     pub no_build: NoBuild,
+    /// Package-specific build settings from requirements files.
+    pub config_settings_package: MarkedPackageConfigSettings,
 }
 
 impl RequirementsSpecification {
@@ -209,19 +252,67 @@ impl RequirementsSpecification {
     }
 
     /// Create a [`RequirementsSpecification`] from a parsed `requirements.txt` file.
-    fn from_requirements_txt(requirements_txt: RequirementsTxt) -> Self {
-        Self {
-            requirements: requirements_txt
-                .requirements
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from)
-                .chain(
-                    requirements_txt
-                        .editables
-                        .into_iter()
-                        .map(UnresolvedRequirementSpecification::from),
-                )
-                .collect(),
+    fn from_requirements_txt(requirements_txt: RequirementsTxt) -> Result<Self> {
+        let mut requirements = Vec::new();
+        let mut config_settings_package = MarkedPackageConfigSettings::default();
+        for entry in requirements_txt
+            .requirements
+            .into_iter()
+            .chain(requirements_txt.editables)
+        {
+            if let Some(config_settings) = entry.config_settings.clone() {
+                let (package, marker) = match &entry.requirement {
+                    RequirementsTxtRequirement::Named(requirement) => {
+                        (requirement.name.clone(), requirement.marker)
+                    }
+                    RequirementsTxtRequirement::Unnamed(requirement) => {
+                        // Settings are currently keyed by package name, so we need a static name
+                        // before invoking the build backend. Supporting dynamically named projects
+                        // would require carrying these settings on the unresolved requirement and
+                        // passing them directly to its metadata and build hooks.
+                        let ParsedUrl::Directory(directory) = &requirement.url.parsed_url else {
+                            return Err(anyhow!(
+                                "Cannot apply `--config-settings` to unnamed requirement `{requirement}`; specify the package name explicitly"
+                            ));
+                        };
+
+                        let pyproject_path = directory.install_path.join("pyproject.toml");
+                        let pyproject =
+                            fs_err::read_to_string(&pyproject_path)
+                                .ok()
+                                .and_then(|contents| {
+                                    PyProjectToml::from_toml(
+                                        &contents,
+                                        pyproject_path.user_display(),
+                                    )
+                                    .ok()
+                                });
+                        let package = pyproject.and_then(|pyproject| {
+                            pyproject.project.map(|project| project.name).or_else(|| {
+                                pyproject
+                                    .tool
+                                    .and_then(|tool| tool.poetry)
+                                    .and_then(|poetry| poetry.name)
+                            })
+                        });
+
+                        (
+                            package.ok_or_else(|| {
+                                anyhow!(
+                                    "Cannot apply `--config-settings` to unnamed requirement `{requirement}`; specify the package name explicitly"
+                                )
+                            })?,
+                            requirement.marker,
+                        )
+                    }
+                };
+                config_settings_package.insert(package, marker, config_settings);
+            }
+            requirements.push(UnresolvedRequirementSpecification::from(entry));
+        }
+
+        Ok(Self {
+            requirements,
             constraints: requirements_txt
                 .constraints
                 .into_iter()
@@ -243,8 +334,9 @@ impl RequirementsSpecification {
             no_binary: requirements_txt.no_binary,
             no_build: requirements_txt.only_binary,
             require_hashes: requirements_txt.require_hashes,
+            config_settings_package,
             ..Self::default()
-        }
+        })
     }
 
     /// Read the requirements and constraints from a source, using a cache for file contents.
@@ -282,7 +374,7 @@ impl RequirementsSpecification {
                     );
                 }
 
-                Self::from_requirements_txt(requirements_txt)
+                Self::from_requirements_txt(requirements_txt)?
             }
             RequirementsSource::PyprojectToml(path) => {
                 let content = match fs_err::tokio::read_to_string(&path).await {
@@ -393,7 +485,7 @@ impl RequirementsSpecification {
                         }
                     }
 
-                    Self::from_requirements_txt(requirements_txt)
+                    Self::from_requirements_txt(requirements_txt)?
                 }
             }
         })
@@ -588,6 +680,8 @@ impl RequirementsSpecification {
             spec.no_binary.extend(source.no_binary);
             spec.no_build.extend(source.no_build);
             spec.require_hashes |= source.require_hashes;
+            spec.config_settings_package
+                .extend(source.config_settings_package);
         }
 
         // Read all constraints, treating both requirements _and_ constraints as constraints.

@@ -250,7 +250,7 @@ pub(crate) async fn run(
         python_platform,
         install_mirrors,
         options,
-        &settings,
+        settings,
         &client_builder,
         isolated,
         lfs,
@@ -679,7 +679,7 @@ async fn get_or_create_environment(
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     options: ResolverInstallerOptions,
-    settings: &ResolverInstallerSettings,
+    settings: ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
     isolated: bool,
     lfs: GitLfsSetting,
@@ -799,7 +799,7 @@ async fn get_or_create_environment(
                     let requirement = resolve_names(
                         vec![spec],
                         &interpreter,
-                        settings,
+                        &settings,
                         client_builder,
                         &state,
                         concurrency,
@@ -948,6 +948,20 @@ async fn get_or_create_environment(
     )
     .await?;
     let exclusions = uv_configuration::Excludes::from_entries(spec.excludes.iter().cloned());
+
+    let marker_environment = pip::resolution_markers(None, python_platform.as_ref(), &interpreter);
+    let settings = ResolverInstallerSettings {
+        resolver: ResolverSettings {
+            config_settings_package: settings.resolver.config_settings_package.merge(
+                spec.config_settings_package
+                    .clone()
+                    .evaluate(Some(&marker_environment)),
+            ),
+            ..settings.resolver
+        },
+        ..settings
+    };
+    let settings = &settings;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {

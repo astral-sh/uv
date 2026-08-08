@@ -2961,6 +2961,46 @@ fn run_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+/// Apply per-requirement build settings to ephemeral `uv run` environments.
+#[test]
+fn run_requirements_txt_config_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "-e {} --config-settings=editable_mode=compat",
+        context
+            .workspace_root
+            .join("test/packages/setuptools_editable")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with-requirements")
+        .arg("requirements.txt")
+        .arg("python")
+        .arg("-c")
+        .arg(concat!(
+            "from importlib.metadata import distribution; ",
+            "from pathlib import Path; ",
+            "print(Path(distribution('setuptools-editable').locate_file(",
+            "'__editable___setuptools_editable_0_1_0_finder.py')).exists())"
+        )), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    False
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+    ");
+
+    Ok(())
+}
+
 /// Ignore and warn when (e.g.) the `--index-url` argument is a provided `requirements.txt`.
 #[test]
 fn run_requirements_txt_arguments() -> Result<()> {
