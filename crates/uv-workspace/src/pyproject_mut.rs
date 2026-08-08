@@ -1894,6 +1894,19 @@ fn reformat_array_multiline(deps: &mut Array) {
         Box::new(iter)
     }
 
+    // Without a trailing comma, `toml_edit` stores comments after the final item in its
+    // suffix. Once we add a trailing comma, those comments must follow the comma instead.
+    if !deps.trailing_comma()
+        && let Some(last) = deps.iter_mut().last()
+        && let Some(suffix) = last.decor().suffix().and_then(RawString::as_str)
+        && suffix.contains('#')
+    {
+        let suffix = suffix.to_string();
+        last.decor_mut().set_suffix("");
+        let trailing = deps.trailing().as_str().unwrap_or_default();
+        deps.set_trailing(format!("{suffix}{trailing}"));
+    }
+
     let mut indentation_prefix = None;
 
     // Calculate the indentation prefix based on the indentation of the first dependency entry.
