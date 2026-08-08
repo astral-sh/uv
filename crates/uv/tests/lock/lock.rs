@@ -17756,6 +17756,141 @@ fn lock_rename_project() -> Result<()> {
     Ok(())
 }
 
+/// Write metadata-free revision 1.4 locks without invalidating fresh revision 1.3 locks.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_writes_without_package_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = []
+
+        [dependency-groups]
+        dev = []
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let preview_lock = context.read("uv.lock");
+    assert_snapshot!(preview_lock, @r#"
+    version = 1
+    revision = 4
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    "#);
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Re-lock without the preview feature, causing the lockfile to be invalid and be reverted to
+    // 1.3.
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let standard_lock = context.read("uv.lock");
+    assert_snapshot!(standard_lock, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+
+    [package.metadata]
+    provides-extras = ["feature"]
+
+    [package.metadata.requires-dev]
+    dev = []
+    "#);
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), standard_lock);
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), standard_lock);
+
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx[http2] @ {httpx_url}"]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Added h2 v1.0.0
+    Added httpx v1.0.0
+    ");
+
+    Ok(())
+}
+
 /// Removing an empty extra invalidates the lockfile that recorded it.
 #[cfg(feature = "test-universal")]
 #[test]

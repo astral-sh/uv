@@ -327,7 +327,7 @@ pub enum PreviewFeature {
     IndexHashAlgorithm,
     /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
     LockfileFormatCheck,
-    /// Omit `package.metadata` from `uv.lock`.
+    /// Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
     LockWithoutMetadata,
     /// Uses the new `tar-codec` encoding/decoding backend, instead of `astral-tokio-tar`.
     TarCodec,
