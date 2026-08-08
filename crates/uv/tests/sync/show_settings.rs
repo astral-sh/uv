@@ -640,6 +640,7 @@ fn lock_baseline() {
     LockSettings {
         lock_check: Disabled,
         frozen: None,
+        active: None,
         dry_run: Disabled,
         script: None,
         python: None,
