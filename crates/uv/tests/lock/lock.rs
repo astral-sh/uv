@@ -20005,6 +20005,98 @@ fn lock_metadata_free_shared_dynamic_group_direct_sources() -> Result<()> {
     Ok(())
 }
 
+/// Configured static dependency metadata can select a source for another first-party dependency.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx[http2]", "local", "anyio", "six"]
+
+        [tool.uv.sources]
+        local = {{ path = "local" }}
+        six = {{ url = "{six_url}" }}
+
+        [[tool.uv.dependency-metadata]]
+        name = "local"
+        version = "0.1.0"
+        requires-dist = ["httpx @ {httpx_url}"]
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "4.4.0"
+        requires-dist = ["six @ {six_url}"]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+            six_url = server.file_url("six-1.0.0-py3-none-any.whl"),
+    })?;
+    context
+        .temp_dir
+        .child("local/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "local"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    let pyproject = fs_err::read_to_string(pyproject_toml.path())?;
+    pyproject_toml.write_str(&pyproject.replace(
+        &format!(
+            r#"six = {{ url = "{}" }}
+"#,
+            server.file_url("six-1.0.0-py3-none-any.whl")
+        ),
+        "",
+    ))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to resolve dependencies for `anyio` (v4.4.0)
+      ╰─▶ Package `six` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `six @ http://[LOCALHOST]/files/six-1.0.0-py3-none-any.whl` to your dependencies or constraints file.
+
+    hint: `anyio` (v4.4.0) was included because `project` (v0.1.0) depends on `anyio`
+    ");
+
+    Ok(())
+}
+
 /// Requested target extras must cover the same marker environments as their declarations.
 #[cfg(feature = "test-universal")]
 #[test]
