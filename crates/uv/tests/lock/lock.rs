@@ -20158,6 +20158,127 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
     Ok(())
 }
 
+/// Projectless workspace root groups can select direct sources for workspace-member requirements.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_shared_root_group_direct_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [dependency-groups]
+        dev = ["httpx @ {httpx_url}"]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx[http2]"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// PEP 723 script requirements can select direct sources for local-package requirements.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_shared_script_direct_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context
+        .temp_dir
+        .child("script.py")
+        .write_str(&formatdoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "httpx @ {httpx_url}",
+        #     "local",
+        # ]
+        #
+        # [tool.uv.sources]
+        # local = {{ path = "local" }}
+        # ///
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+    context
+        .temp_dir
+        .child("local/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "local"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx[http2]"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Requested target extras must cover the same marker environments as their declarations.
 #[cfg(feature = "test-universal")]
 #[test]
