@@ -4091,6 +4091,7 @@ impl Lock {
         let dependency_sources = if allow_missing_package_metadata {
             Box::pin(self.collect_dependency_sources(
                 normalized_constraints,
+                dependency_metadata,
                 &dependency_overrides,
                 &dependency_excludes,
                 root,
@@ -4727,6 +4728,7 @@ impl Lock {
         &'lock self,
         reachability: &mut DependencySourceReachability<'lock>,
         source_requirements: &BTreeSet<Requirement>,
+        dependency_metadata: &DependencyMetadata,
         dependency_overrides: &Overrides,
         dependency_excludes: &Excludes,
         root: &Path,
@@ -4751,6 +4753,8 @@ impl Lock {
                     .push_back((package, None, marker));
             }
 
+            let configured_metadata =
+                dependency_metadata.get(&package.id.name, package.id.version.as_ref());
             // Refresh source trees only after their exact path becomes reachable. Archives,
             // backend-only trees, and remote providers remain opaque until a refreshed
             // declaration selects their exact source in the second phase.
@@ -4768,9 +4772,10 @@ impl Lock {
                     package.id.source,
                     Source::Path(..) | Source::Direct(..) | Source::Git(..)
                 ) || matches!(package.id.source, Source::Registry(..))
-                    && source_requirements.iter().any(|constraint| {
-                        !matches!(constraint.source, RequirementSource::Registry { .. })
-                    })
+                    && (configured_metadata.is_some()
+                        || source_requirements.iter().any(|constraint| {
+                            !matches!(constraint.source, RequirementSource::Registry { .. })
+                        }))
                 {
                     None
                 } else {
@@ -4788,24 +4793,40 @@ impl Lock {
             let context = extra
                 .map(DependencyContext::Extra)
                 .unwrap_or(DependencyContext::Production);
-            let refreshed_dependencies = if let Some(SourceTreeRequiresDist {
-                version,
-                metadata,
-                ..
+            // Configured declarations supersede source-tree and immutable package metadata.
+            let refreshed_declarations = if let Some(metadata) = configured_metadata {
+                Some((
+                    Some(metadata.version),
+                    Box::into_iter(metadata.requires_dist)
+                        .map(Requirement::from)
+                        .collect::<Vec<_>>(),
+                    BTreeMap::<GroupName, Box<[Requirement]>>::new(),
+                ))
+            } else if let Some(SourceTreeRequiresDist {
+                version, metadata, ..
             }) = refreshed_source_tree
             {
-                let package_context = version
-                    .as_ref()
-                    .or(package.id.version.as_ref())
-                    .map(|version| (&package.id.name, version));
-                let requirements =
-                    FlatRequiresDist::from_requirements(metadata.requires_dist, &package.id.name)
-                        .into_iter()
-                        .collect::<Vec<_>>();
+                Some((
+                    version.or_else(|| package.id.version.clone()),
+                    metadata.requires_dist.into_vec(),
+                    metadata.dependency_groups,
+                ))
+            } else {
+                None
+            };
+            let refreshed_dependencies = if let Some((version, requirements, dependency_groups)) =
+                refreshed_declarations
+            {
+                let package_context = version.as_ref().map(|version| (&package.id.name, version));
+                let requirements = FlatRequiresDist::from_requirements(
+                    requirements.into_boxed_slice(),
+                    &package.id.name,
+                )
+                .into_iter()
+                .collect::<Vec<_>>();
                 let mut refreshed_dependencies = FxHashMap::default();
                 for (group, requirements) in iter::once((None, requirements)).chain(
-                    metadata
-                        .dependency_groups
+                    dependency_groups
                         .into_iter()
                         .filter(|(group, _)| {
                             extra.is_none()
@@ -4840,7 +4861,9 @@ impl Lock {
                                 // tree or archive merely because an inherited edge points there.
                                 || (dependency.id.source.is_source_tree()
                                     && !self.is_workspace_package(dependency)
-                                    || matches!(dependency.id.source, Source::Path(..)))
+                                    || matches!(dependency.id.source, Source::Path(..))
+                                    || matches!(package.id.source, Source::Registry(..))
+                                        && !matches!(dependency.id.source, Source::Registry(..)))
                                     && !dependency
                                         .id
                                         .source
@@ -4991,6 +5014,7 @@ impl Lock {
     async fn collect_dependency_sources<Context: BuildContext>(
         &self,
         mut source_requirements: BTreeSet<Requirement>,
+        dependency_metadata: &DependencyMetadata,
         dependency_overrides: &Overrides,
         dependency_excludes: &Excludes,
         root: &Path,
@@ -5030,6 +5054,7 @@ impl Lock {
         self.extend_dependency_source_reachability(
             &mut reachability,
             &source_candidates,
+            dependency_metadata,
             dependency_overrides,
             dependency_excludes,
             root,
@@ -5058,6 +5083,8 @@ impl Lock {
 
         // Inspect archives or invoke local backends only after an active declaration selects
         // their exact reachable path. URL and Git providers use only retained lock metadata.
+        // Registry packages stay out of this phase: their metadata cannot introduce direct
+        // sources or widen URLs already authorized by first-party declarations and constraints.
         let mut pending_packages = self
             .packages
             .iter()
@@ -5126,6 +5153,7 @@ impl Lock {
                     .extend_dependency_source_reachability(
                         &mut reachability,
                         &source_candidates,
+                        dependency_metadata,
                         dependency_overrides,
                         dependency_excludes,
                         root,
@@ -5178,7 +5206,16 @@ impl Lock {
             let (direct_requirements, dependency_groups): (
                 Vec<Requirement>,
                 BTreeMap<GroupName, Vec<Requirement>>,
-            ) = if matches!(package.id.source, Source::Direct(..) | Source::Git(..)) {
+            ) = if let Some(metadata) =
+                dependency_metadata.get(&package.id.name, package.id.version.as_ref())
+            {
+                (
+                    Box::into_iter(metadata.requires_dist)
+                        .map(Requirement::from)
+                        .collect(),
+                    BTreeMap::new(),
+                )
+            } else if matches!(package.id.source, Source::Direct(..) | Source::Git(..)) {
                 // Remote artifacts and Git checkouts may be unavailable during an offline,
                 // cache-free check. Their declaration metadata is retained in the lock.
                 (
