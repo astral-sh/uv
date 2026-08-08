@@ -18206,7 +18206,7 @@ fn lock_writes_without_package_metadata() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["httpx @ {httpx_url}"]
+        dependencies = ["httpx[http2] @ {httpx_url}"]
         "#,
             httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
         })?;
@@ -18218,7 +18218,8 @@ fn lock_writes_without_package_metadata() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
+    Added h2 v1.0.0
     Added httpx v1.0.0
     ");
 
@@ -18232,7 +18233,133 @@ fn lock_writes_without_package_metadata() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Validate an unrelated requested extra without expanding independent conflict sets.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_many_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let extra_declarations = (1..=24)
+        .map(|conflict_number| format!("a{conflict_number} = []\nb{conflict_number} = []"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let project_conflicts = (1..=24)
+        .map(|conflict_number| {
+            format!(
+                r#"  [{{ extra = "a{conflict_number}" }}, {{ extra = "b{conflict_number}" }}],"#
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let lock_conflicts = (1..=24)
+        .map(|conflict_number| {
+            format!(
+                r#"[{{ package = "project", extra = "a{conflict_number}" }}, {{ package = "project", extra = "b{conflict_number}" }}]"#
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep[ordinary] ; sys_platform == 'linux'"]
+
+        [project.optional-dependencies]
+        {extra_declarations}
+
+        [tool.uv]
+        conflicts = [
+        {project_conflicts}
+        ]
+
+        [tool.uv.workspace]
+        members = ["dep", "leaf"]
+
+        [tool.uv.sources]
+        dep = {{ workspace = true }}
+        "#})?;
+    let dependency = context.temp_dir.child("dep");
+    dependency.create_dir_all()?;
+    dependency.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        ordinary = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { workspace = true }
+        "#})?;
+    let leaf = context.temp_dir.child("leaf");
+    leaf.create_dir_all()?;
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+        conflicts = [
+        {lock_conflicts}
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = ["dep", "leaf", "project"]
+
+        [[package]]
+        name = "dep"
+        version = "1.0.0"
+        source = {{ editable = "dep" }}
+
+        [package.optional-dependencies]
+        ordinary = [{{ name = "leaf" }}]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = {{ editable = "leaf" }}
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [{{ name = "dep", extra = ["ordinary"], marker = "sys_platform == 'linux'" }}]
+
+        [package.optional-dependencies]
+        {extra_declarations}
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())
@@ -19249,6 +19376,72 @@ fn lock_regenerates_marker_specific_local_extra() -> Result<()> {
     Ok(())
 }
 
+/// First-party direct sources can satisfy unqualified dependencies throughout the workspace.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_shared_direct_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx[http2]", "six", "member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx @ {httpx_url}", "six"]
+
+        [tool.uv.sources]
+        six = {{ url = "{six_url}" }}
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+            six_url = server.file_url("six-1.0.0-py3-none-any.whl"),
+        })?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// First-party direct sources apply globally, even across disjoint platform markers.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -19329,7 +19522,7 @@ fn lock_metadata_free_shared_transitive_direct_source() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["httpx", "local"]
+        dependencies = ["httpx[http2]", "local"]
 
         [tool.uv.sources]
         local = { path = "local" }
@@ -19354,7 +19547,7 @@ fn lock_metadata_free_shared_transitive_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -19367,7 +19560,7 @@ fn lock_metadata_free_shared_transitive_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
@@ -19388,7 +19581,7 @@ fn lock_metadata_free_shared_dynamic_direct_source() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["httpx", "member"]
+        dependencies = ["httpx[http2]", "member"]
 
         [tool.uv.workspace]
         members = ["member"]
@@ -19439,7 +19632,7 @@ fn lock_metadata_free_shared_dynamic_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -19452,7 +19645,7 @@ fn lock_metadata_free_shared_dynamic_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
@@ -19473,7 +19666,7 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["httpx", "provider"]
+        dependencies = ["httpx[http2]", "provider"]
 
         [tool.uv]
         override-dependencies = [
@@ -19551,7 +19744,7 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -19564,7 +19757,7 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
     Ok(())
