@@ -128,6 +128,7 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             &lock.requires_python,
             simplified_environment,
             &dist_count_by_name,
+            lock.supports_missing_package_metadata(),
         )?;
     }
 
@@ -274,6 +275,7 @@ fn write_package(
     requires_python: &RequiresPython,
     simplified_environment: MarkerTree,
     dist_count_by_name: &FxHashMap<PackageName, u64>,
+    preserve_empty_contexts: bool,
 ) -> Result<(), WriteError> {
     writer.array_of_tables(&["package"])?;
     write_package_id(writer, &package.id, None, PackageIdLocation::Table)?;
@@ -315,11 +317,15 @@ fn write_package(
     if package
         .optional_dependencies
         .values()
-        .any(|dependencies| !dependencies.is_empty())
+        .any(|dependencies| preserve_empty_contexts || !dependencies.is_empty())
     {
         writer.table(&["package", "optional-dependencies"])?;
         for (extra, dependencies) in &package.optional_dependencies {
             if dependencies.is_empty() {
+                if preserve_empty_contexts {
+                    writer.key_start(extra.as_ref())?;
+                    writer.raw("[]\n");
+                }
                 continue;
             }
             writer.key_multiline_array(extra.as_ref(), dependencies, |writer, dependency| {
@@ -336,11 +342,15 @@ fn write_package(
     if package
         .dependency_groups
         .values()
-        .any(|dependencies| !dependencies.is_empty())
+        .any(|dependencies| preserve_empty_contexts || !dependencies.is_empty())
     {
         writer.table(&["package", "dev-dependencies"])?;
         for (group, dependencies) in &package.dependency_groups {
             if dependencies.is_empty() {
+                if preserve_empty_contexts {
+                    writer.key_start(group.as_ref())?;
+                    writer.raw("[]\n");
+                }
                 continue;
             }
             writer.key_multiline_array(group.as_ref(), dependencies, |writer, dependency| {
