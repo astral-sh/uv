@@ -1,12 +1,13 @@
 use std::env::consts::EXE_SUFFIX;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use fs_err as fs;
 use indoc::{formatdoc, indoc};
 use predicates::Predicate;
+use sha2::{Digest, Sha256};
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -3693,6 +3694,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
+        .arg("--offline")
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -4877,6 +4879,117 @@ fn require_hashes_url() -> Result<()> {
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374)
     "
     );
+
+    Ok(())
+}
+
+/// Changed hashes or sizes must refresh a direct wheel even when its HTTP cache is still fresh.
+#[tokio::test]
+async fn require_hashes_url_changed_content() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel_filename = "ok-1.0.0-py3-none-any.whl";
+    let wheel = fs::read(
+        context
+            .workspace_root
+            .join("test/links")
+            .join(wheel_filename),
+    )?;
+    let original_size = wheel.len();
+
+    // Give the valid fixture a ZIP comment, changing its hash without changing its contents.
+    let Some(prefix) = wheel.strip_suffix(&[0, 0]) else {
+        bail!("expected a wheel fixture without a ZIP comment");
+    };
+    let comment = b"replacement archive";
+    let mut replacement = prefix.to_vec();
+    replacement.extend_from_slice(&u16::try_from(comment.len())?.to_le_bytes());
+    replacement.extend_from_slice(comment);
+    let original_hash = hex::encode(Sha256::digest(&wheel));
+    let replacement_hash = hex::encode(Sha256::digest(&replacement));
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (original_hash.as_str(), "[ORIGINAL_HASH]"),
+            (replacement_hash.as_str(), "[REPLACEMENT_HASH]"),
+        ])
+        .collect::<Vec<_>>();
+
+    let server = MockServer::start().await;
+    let response = |wheel| {
+        ResponseTemplate::new(200)
+            .insert_header("Cache-Control", "public, max-age=31536000, immutable")
+            .set_body_bytes(wheel)
+    };
+    Mock::given(path(format!("/{wheel_filename}")))
+        .respond_with(response(wheel.clone()))
+        .mount(&server)
+        .await;
+    let wheel_url = format!("{}/{wheel_filename}", server.uri());
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("ok @ {wheel_url}#sha256={original_hash}\n"))?;
+
+    uv_snapshot!(filters.clone(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha256=[ORIGINAL_HASH])
+    ");
+
+    server.reset().await;
+    Mock::given(path(format!("/{wheel_filename}")))
+        .respond_with(response(replacement))
+        .mount(&server)
+        .await;
+    requirements_txt.write_str(&format!("ok @ {wheel_url}#sha256={replacement_hash}\n"))?;
+
+    uv_snapshot!(filters.clone(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha256=[REPLACEMENT_HASH])
+    ");
+
+    // A pylock archive can also supply an authoritative size for the same URL.
+    server.reset().await;
+    Mock::given(path(format!("/{wheel_filename}")))
+        .respond_with(response(wheel))
+        .mount(&server)
+        .await;
+    context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "ok"
+        version = "1.0.0"
+        archive = {{ url = "{wheel_url}", size = {original_size}, hashes = {{ sha256 = "{original_hash}" }} }}
+        "#,
+    })?;
+
+    uv_snapshot!(filters, context.pip_sync()
+        .arg("--preview")
+        .arg("--reinstall")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
 
     Ok(())
 }
