@@ -1651,6 +1651,44 @@ async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
 }
 
 #[test]
+fn build_sha_uv_build_fast_path() -> Result<()> {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+    let project = context.temp_dir.child("project");
+    let version = uv_version::version();
+
+    project.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build=={version}"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+    project.child("constraints.txt").write_str(&formatdoc! {r"
+        uv_build=={version} \
+            --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    "})?;
+
+    // This should reject the invalid hash, but the bundled backend ignores it; see astral-sh/uv#20860.
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--sdist")
+        .arg("--build-constraint")
+        .arg("constraints.txt")
+        .arg("--require-hashes")
+        .current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building source distribution...
+    Successfully built dist/project-0.1.0.tar.gz
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn build_quiet() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
