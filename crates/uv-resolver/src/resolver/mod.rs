@@ -347,6 +347,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         );
         let mut preferences = self.preferences.clone();
         let mut forked_states = self.env.initial_forked_states(state)?;
+
+        // Apply the same Python-bound scheduling used for dependency-created forks. Since states
+        // are popped from the end of the stack, sort lower Python bounds last for `fewest` and
+        // higher Python bounds last for `requires-python`. There's no `cmp_upper_bounds` tiebreak
+        // here: it counts upper-bounded specifiers among a fork's dependencies, which an initial
+        // state doesn't have yet.
+        match (self.options.fork_strategy, self.options.resolution_mode) {
+            (ForkStrategy::Fewest, _) | (_, ResolutionMode::Lowest) => {
+                forked_states.sort_by(|a, b| cmp_requires_python(&a.env, &b.env).reverse());
+            }
+            (ForkStrategy::RequiresPython, _) => {
+                forked_states.sort_by(|a, b| cmp_requires_python(&a.env, &b.env));
+            }
+        }
         let mut resolutions = vec![];
 
         'FORK: while let Some(mut state) = forked_states.pop() {
@@ -4248,20 +4262,9 @@ impl Fork {
         Some(self)
     }
 
-    /// Compare forks, preferring forks with g `requires-python` requirements.
+    /// Compare forks by their lower `requires-python` bounds.
     fn cmp_requires_python(&self, other: &Self) -> Ordering {
-        // A higher `requires-python` requirement indicates a _higher-priority_ fork.
-        //
-        // This ordering ensures that we prefer choosing the highest version for each fork based on
-        // its `requires-python` requirement.
-        //
-        // The reverse would prefer choosing fewer versions, at the cost of using older package
-        // versions on newer Python versions. For example, if reversed, we'd prefer to solve `<3.7
-        // before solving `>=3.7`, since the resolution produced by the former might work for the
-        // latter, but the inverse is unlikely to be true.
-        let self_bound = self.env.requires_python().unwrap_or_default();
-        let other_bound = other.env.requires_python().unwrap_or_default();
-        self_bound.lower().cmp(other_bound.lower())
+        cmp_requires_python(&self.env, &other.env)
     }
 
     /// Compare forks, preferring forks with upper bounds.
@@ -4291,6 +4294,25 @@ impl Fork {
 
         self_upper_bounds.cmp(&other_upper_bounds)
     }
+}
+
+/// Compare resolver environments by their lower Python bounds.
+fn cmp_requires_python(
+    self_env: &ResolverEnvironment,
+    other_env: &ResolverEnvironment,
+) -> Ordering {
+    // A higher `requires-python` requirement indicates a _higher-priority_ fork.
+    //
+    // This ordering ensures that we prefer choosing the highest version for each fork based on
+    // its `requires-python` requirement.
+    //
+    // The reverse would prefer choosing fewer versions, at the cost of using older package
+    // versions on newer Python versions. For example, if reversed, we'd prefer to solve `<3.7
+    // before solving `>=3.7`, since the resolution produced by the former might work for the
+    // latter, but the inverse is unlikely to be true.
+    let self_bound = self_env.requires_python().unwrap_or_default();
+    let other_bound = other_env.requires_python().unwrap_or_default();
+    self_bound.lower().cmp(other_bound.lower())
 }
 
 impl Eq for Fork {}

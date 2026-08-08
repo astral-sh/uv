@@ -148,11 +148,12 @@ impl ResolverEnvironment {
     /// conflicting dependency specifications across distinct marker
     /// environments.
     ///
-    /// The order of the initial forks is significant, although we don't
-    /// guarantee any specific treatment (similar to, at time of writing, how
-    /// the order of dependencies specified is also significant but has no
-    /// specific guarantees around it). Changing the ordering can help when our
-    /// custom fork prioritization fails.
+    /// Initial forks with distinct lower Python bounds are ordered by the fork
+    /// strategy and resolution mode, the same way forks created during
+    /// resolution are. The given order still decides between forks that tie,
+    /// although we don't guarantee any specific treatment (similar to, at time
+    /// of writing, how the order of dependencies specified is also significant
+    /// but has no specific guarantees around it).
     pub fn universal(initial_forks: Vec<MarkerTree>) -> Self {
         let kind = Kind::Universal {
             initial_forks: initial_forks.into(),
