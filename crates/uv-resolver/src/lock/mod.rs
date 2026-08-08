@@ -558,13 +558,13 @@ impl<'a> LockedDependencyBuilder<'a> {
         }
     }
 
-    /// Add the registry requirements that can activate this dependency section.
+    /// Add the registry and directly declared HTTP requirements active in this section.
     fn add_requirements(
         &self,
         dependencies: &mut Vec<Dependency>,
         expected: &ExpectedPackageDependencies<'_>,
         context: DependencyContext<'_>,
-    ) -> bool {
+    ) -> Result<bool, LockError> {
         let empty_requirements = BTreeSet::new();
         let requirements = match context {
             DependencyContext::Production | DependencyContext::Extra(_) => &expected.declarations,
@@ -578,18 +578,17 @@ impl<'a> LockedDependencyBuilder<'a> {
         let mut complete = true;
 
         for requirement in requirements {
-            let RequirementSource::Registry {
-                specifier,
-                index,
-                conflict: _,
-            } = &requirement.source
-            else {
-                complete = false;
-                continue;
-            };
-            if index.is_some() {
-                complete = false;
-                continue;
+            match &requirement.source {
+                RequirementSource::Registry { index: None, .. } | RequirementSource::Url { .. } => {
+                }
+                RequirementSource::Registry { index: Some(_), .. }
+                | RequirementSource::GitDirectory { .. }
+                | RequirementSource::GitPath { .. }
+                | RequirementSource::Path { .. }
+                | RequirementSource::Directory { .. } => {
+                    complete = false;
+                    continue;
+                }
             }
 
             let requirement_marker = context.requirement_marker(requirement.marker);
@@ -607,14 +606,9 @@ impl<'a> LockedDependencyBuilder<'a> {
             if requirement.name == expected.package.id.name
                 && !matches!(context, DependencyContext::Group(_))
             {
-                // Self requirements do not add graph edges. Dynamic projects intentionally
-                // omit their locked version, so only known versions can reject a specifier.
                 if expected
-                    .package
-                    .id
-                    .version
-                    .as_ref()
-                    .is_some_and(|version| !specifier.contains(version))
+                    .package_requirement_marker(expected.package, requirement)?
+                    .is_none()
                 {
                     complete = false;
                 }
@@ -624,17 +618,19 @@ impl<'a> LockedDependencyBuilder<'a> {
             let required_marker = required_marker.combined();
             let mut covered_marker = MarkerTree::FALSE;
             for dependency in expected.lock.packages_for_name(&requirement.name) {
-                if !matches!(dependency.id.source, Source::Registry(..))
-                    || dependency
-                        .id
-                        .version
-                        .as_ref()
-                        .is_some_and(|version| !specifier.contains(version))
+                let Some(source_marker) =
+                    expected.package_requirement_marker(dependency, requirement)?
+                else {
+                    continue;
+                };
+                if matches!(dependency.id.source, Source::Direct(..))
+                    && dependency.all_dependencies().next().is_some()
                 {
                     continue;
                 }
 
                 let mut marker = UniversalMarker::from_combined(required_marker);
+                marker.and(UniversalMarker::from_combined(source_marker));
                 if !dependency.fork_markers.is_empty() {
                     let dependency_marker = dependency
                         .fork_markers
@@ -680,7 +676,7 @@ impl<'a> LockedDependencyBuilder<'a> {
         for ((package_id, extras), marker) in edges {
             self.add(dependencies, package_id, extras, marker);
         }
-        complete
+        Ok(complete)
     }
 
     fn add(
@@ -751,6 +747,8 @@ struct ExpectedPackageDependencies<'lock> {
     package_marker: UniversalMarker,
     /// The lockfile-wide environment used to simplify dependency markers.
     lock_marker: SimplifiedMarkerTree,
+    /// Workspace root used to normalize and compare locked source identities.
+    workspace_root: &'lock Path,
 }
 
 impl<'lock> ExpectedPackageDependencies<'lock> {
@@ -764,6 +762,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         package_requires_python: Option<&VersionSpecifiers>,
         package_version: Option<&Version>,
         package: &'lock Package,
+        workspace_root: &'lock Path,
     ) -> Self {
         let package_context = package_version.map(|version| (&package.id.name, version));
         let declarations = overrides
@@ -820,7 +819,46 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                 &lock.requires_python,
                 lock.fork_markers_union(),
             ),
+            workspace_root,
         }
+    }
+
+    /// Return the source environment if a locked package matches this exact declaration.
+    fn package_requirement_marker(
+        &self,
+        package: &Package,
+        requirement: &Requirement,
+    ) -> Result<Option<MarkerTree>, LockError> {
+        let mut source_marker = if package
+            .id
+            .source
+            .satisfies_requirement_source(&requirement.source, self.workspace_root)?
+        {
+            MarkerTree::TRUE
+        } else {
+            MarkerTree::FALSE
+        };
+
+        // Workspace packages may reference themselves using ordinary registry syntax.
+        if package.id == self.package.id
+            && matches!(
+                requirement.source,
+                RequirementSource::Registry { index: None, .. }
+            )
+        {
+            source_marker = MarkerTree::TRUE;
+        }
+        let version_matches = requirement
+            .source
+            .version_specifiers()
+            .zip(package.id.version.as_ref())
+            // Projects with dynamic version omit this check.
+            .is_none_or(|(specifiers, version)| specifiers.contains(version));
+
+        if source_marker.is_false() || !version_matches {
+            return Ok(None);
+        }
+        Ok(Some(source_marker))
     }
 
     /// Include recorded sections so removing their dependency edges invalidates the lock.
@@ -2555,14 +2593,15 @@ impl Lock {
         allow_missing_package_metadata: bool,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
         if allow_missing_package_metadata && !package.has_metadata() {
-            return Ok(self.satisfied_no_metadata(
+            return self.satisfied_no_metadata(
                 package,
                 Some((&requires_dist, provides_extra, &dependency_groups)),
                 overrides,
                 excludes,
                 package_requires_python,
                 package_version,
-            ));
+                root,
+            );
         }
 
         let indexes = requires_dist
@@ -2678,7 +2717,8 @@ impl Lock {
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
         package_version: Option<&Version>,
-    ) -> SatisfiesResult<'lock> {
+        workspace_root: &Path,
+    ) -> Result<SatisfiesResult<'lock>, LockError> {
         let mismatch = |expected, actual| {
             SatisfiesResult::MismatchedPackageDependencies(
                 &package.id.name,
@@ -2688,7 +2728,7 @@ impl Lock {
             )
         };
         let Some((requirements, provides_extra, dependency_groups)) = declarations else {
-            return mismatch(Vec::new(), &package.dependencies);
+            return Ok(mismatch(Vec::new(), &package.dependencies));
         };
 
         if !self.manifest.constraints.is_empty()
@@ -2698,13 +2738,13 @@ impl Lock {
                 .values()
                 .any(|requirements| !requirements.is_empty())
         {
-            return mismatch(Vec::new(), &package.dependencies);
+            return Ok(mismatch(Vec::new(), &package.dependencies));
         }
 
         let is_workspace_package = self.members().contains(&package.id.name)
             || self.members().is_empty() && self.root().is_some_and(|root| root.id == package.id);
         if !is_workspace_package {
-            return mismatch(Vec::new(), &package.dependencies);
+            return Ok(mismatch(Vec::new(), &package.dependencies));
         }
 
         let expected_extras = provides_extra.iter().collect::<BTreeSet<_>>();
@@ -2713,12 +2753,12 @@ impl Lock {
             .copied()
             .eq(package.optional_dependencies.keys())
         {
-            return SatisfiesResult::MismatchedPackageProvidesExtra(
+            return Ok(SatisfiesResult::MismatchedPackageProvidesExtra(
                 &package.id.name,
                 package.id.version.as_ref(),
                 expected_extras.into_iter().cloned().collect(),
                 package.optional_dependencies.keys().collect(),
-            );
+            ));
         }
 
         if !dependency_groups
@@ -2744,12 +2784,12 @@ impl Lock {
                     )
                 })
                 .collect();
-            return SatisfiesResult::MismatchedPackageDependencyGroups(
+            return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
                 &package.id.name,
                 package.id.version.as_ref(),
                 expected,
                 actual,
-            );
+            ));
         }
 
         let expected = ExpectedPackageDependencies::new(
@@ -2762,6 +2802,7 @@ impl Lock {
             package_requires_python,
             package_version,
             package,
+            workspace_root,
         );
 
         for context in expected.contexts() {
@@ -2772,16 +2813,21 @@ impl Lock {
                 expected.lock_marker,
                 parent_marker,
             );
-            let complete = builder.add_requirements(&mut generated, &expected, context);
+            let complete = builder.add_requirements(&mut generated, &expected, context)?;
             generated.sort();
             let actual = context.dependencies(package);
             if !complete || !expected.dependencies_match(&generated, actual, parent_marker, context)
             {
-                return mismatch(generated, actual);
+                return Ok(SatisfiesResult::MismatchedPackageDependencies(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    generated,
+                    actual,
+                ));
             }
         }
 
-        SatisfiesResult::Satisfied
+        Ok(SatisfiesResult::Satisfied)
     }
 
     fn record_index(
@@ -3194,14 +3240,18 @@ impl Lock {
                 && !package.has_metadata()
                 && matches!(package.id.source, Source::Direct(..))
             {
-                return Ok(self.satisfied_no_metadata(
-                    package,
-                    None,
-                    &dependency_overrides,
-                    &dependency_excludes,
-                    None,
-                    package.id.version.as_ref(),
-                ));
+                if package.all_dependencies().next().is_some() {
+                    return Ok(SatisfiesResult::MismatchedPackageDependencies(
+                        &package.id.name,
+                        package.id.version.as_ref(),
+                        Vec::new(),
+                        &package.dependencies,
+                    ));
+                }
+
+                // Its parent already matched the exact refreshed URL. A metadata-free
+                // leaf has no declarations to refresh, and other queued packages still do.
+                continue;
             }
 
             // Validating a direct URL package requires retrieving metadata from the remote
@@ -5365,6 +5415,34 @@ impl Source {
             self,
             Self::Registry(RegistrySource::Url(url)) if url.as_ref() == PYPI_URL.as_str()
         )
+    }
+
+    /// Return whether this locked source exactly matches a refreshed declaration.
+    fn satisfies_requirement_source(
+        &self,
+        requirement: &RequirementSource,
+        _root: &Path,
+    ) -> Result<bool, LockError> {
+        let result = match (self, requirement) {
+            (Self::Registry(_), RequirementSource::Registry { index: None, .. }) => true,
+            (
+                Self::Direct(url, source),
+                RequirementSource::Url {
+                    location,
+                    subdirectory,
+                    ..
+                },
+            ) => {
+                let mut actual = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                actual.remove_credentials();
+                let mut expected = location.clone();
+                expected.remove_credentials();
+                normalize_url(actual) == normalize_url(expected)
+                    && source.subdirectory == *subdirectory
+            }
+            _ => false,
+        };
+        Ok(result)
     }
 
     /// Returns `true` if the source should be considered immutable.
