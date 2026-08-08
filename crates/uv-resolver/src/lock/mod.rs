@@ -818,11 +818,10 @@ impl<'a> LockedDependencyBuilder<'a> {
                 continue;
             }
             match &requirement.source {
-                RequirementSource::Registry { index: None, .. }
+                RequirementSource::Registry { .. }
                 | RequirementSource::Url { .. }
                 | RequirementSource::Directory { .. } => {}
-                RequirementSource::Registry { index: Some(_), .. }
-                | RequirementSource::GitDirectory { .. }
+                RequirementSource::GitDirectory { .. }
                 | RequirementSource::GitPath { .. }
                 | RequirementSource::Path { .. } => {
                     complete = false;
@@ -6874,6 +6873,30 @@ impl Source {
     ) -> Result<bool, LockError> {
         let result = match (self, requirement) {
             (Self::Registry(_), RequirementSource::Registry { index: None, .. }) => true,
+            (
+                Self::Registry(RegistrySource::Path(actual)),
+                RequirementSource::Registry {
+                    index:
+                        Some(IndexMetadata {
+                            url: IndexUrl::Path(expected),
+                            ..
+                        }),
+                    ..
+                },
+            ) => {
+                let expected = expected
+                    .to_file_path()
+                    .map_err(|()| LockErrorKind::UrlToPath {
+                        url: expected.to_url(),
+                    })?;
+                normalize_path(root.join(actual)).as_ref() == normalize_path(expected).as_ref()
+            }
+            (
+                Self::Registry(_),
+                RequirementSource::Registry {
+                    index: Some(index), ..
+                },
+            ) => Self::from_index_url(&index.url, root)? == *self,
             (
                 Self::Direct(url, source),
                 RequirementSource::Url {
