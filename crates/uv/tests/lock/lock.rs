@@ -18115,15 +18115,15 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["six", "urllib3"]
+        dependencies = ["six>=1", "urllib3==1.0.0"]
 
         [project.optional-dependencies]
         empty = []
-        feature = ["six", "httpx[http2]"]
+        feature = ["six<2", "httpx[http2]>=1"]
 
         [dependency-groups]
         empty = []
-        dev = ["six", "httpx[http2]"]
+        dev = ["six>=1", "httpx[http2]==1.0.0"]
         "#};
     pyproject_toml.write_str(original_pyproject)?;
 
@@ -18150,8 +18150,36 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
+    pyproject_toml.write_str(&original_pyproject.replace("six>=1", "six>=0"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(&original_pyproject.replace("urllib3==1.0.0", "urllib3>=2"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only urllib3==1.0.0 is available and your project depends on urllib3>=2, we can conclude that your project's requirements are unsatisfiable.
+          And because your project requires project[empty], we can conclude that your project's requirements are unsatisfiable.
+    ");
+
     pyproject_toml.write_str(
-        &original_pyproject.replace("feature = [\"six\", \"httpx[http2]\"]", "feature = []"),
+        &original_pyproject.replace("feature = [\"six<2\", \"httpx[http2]>=1\"]", "feature = []"),
     )?;
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
@@ -18167,8 +18195,9 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     hint: To update the lockfile, run `uv lock`.
     ");
 
-    pyproject_toml
-        .write_str(&original_pyproject.replace("dev = [\"six\", \"httpx[http2]\"]", "dev = []"))?;
+    pyproject_toml.write_str(
+        &original_pyproject.replace("dev = [\"six>=1\", \"httpx[http2]==1.0.0\"]", "dev = []"),
+    )?;
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
@@ -18204,6 +18233,113 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
 
     hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// A metadata-free lock must not hide a newly incompatible self-requirement.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let original_pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#};
+    pyproject_toml.write_str(original_pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let lock_without_feature = context.read("uv.lock");
+
+    pyproject_toml.write_str(&formatdoc! {r#"
+        {original_pyproject}
+        dependencies = ["project>=0.1.0"]
+        "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    pyproject_toml.write_str(&formatdoc! {r#"
+        {original_pyproject}
+
+        [project.optional-dependencies]
+        feature = ["project>=0.1.0"]
+        "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock_without_feature)?;
+
+    pyproject_toml.write_str(&formatdoc! {r#"
+        {original_pyproject}
+        dependencies = ["project>=2.0.0"]
+        "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because your project depends on itself at an incompatible version (project>=2.0.0), we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    ");
+
+    pyproject_toml.write_str(&formatdoc! {r#"
+        {original_pyproject}
+
+        [project.optional-dependencies]
+        feature = ["project>=2.0.0"]
+        "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because project[feature] depends on itself at an incompatible version (project>=2.0.0) and your project requires project[feature], we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
