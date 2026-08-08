@@ -579,13 +579,13 @@ impl<'a> LockedDependencyBuilder<'a> {
 
         for requirement in requirements {
             match &requirement.source {
-                RequirementSource::Registry { index: None, .. } | RequirementSource::Url { .. } => {
-                }
+                RequirementSource::Registry { index: None, .. }
+                | RequirementSource::Url { .. }
+                | RequirementSource::Directory { .. } => {}
                 RequirementSource::Registry { index: Some(_), .. }
                 | RequirementSource::GitDirectory { .. }
                 | RequirementSource::GitPath { .. }
-                | RequirementSource::Path { .. }
-                | RequirementSource::Directory { .. } => {
+                | RequirementSource::Path { .. } => {
                     complete = false;
                     continue;
                 }
@@ -602,12 +602,19 @@ impl<'a> LockedDependencyBuilder<'a> {
             if required_marker.is_false() {
                 continue;
             }
+            let requirement_environment =
+                SimplifiedMarkerTree::new(self.requires_python, required_marker.pep508())
+                    .as_simplified_marker_tree();
 
             if requirement.name == expected.package.id.name
                 && !matches!(context, DependencyContext::Group(_))
             {
                 if expected
-                    .package_requirement_marker(expected.package, requirement)?
+                    .package_requirement_marker(
+                        expected.package,
+                        requirement,
+                        requirement_environment,
+                    )?
                     .is_none()
                 {
                     complete = false;
@@ -616,17 +623,51 @@ impl<'a> LockedDependencyBuilder<'a> {
             }
 
             let required_marker = required_marker.combined();
+            let selected_conflict =
+                context.conflict_item(&expected.package.id.name, &expected.lock.conflicts);
             let mut covered_marker = MarkerTree::FALSE;
             for dependency in expected.lock.packages_for_name(&requirement.name) {
-                let Some(source_marker) =
-                    expected.package_requirement_marker(dependency, requirement)?
+                let Some(mut source_marker) = expected.package_requirement_marker(
+                    dependency,
+                    requirement,
+                    requirement_environment,
+                )?
                 else {
                     continue;
                 };
+                if dependency.id.source.is_source_tree()
+                    && !expected.lock.is_workspace_package(dependency)
+                {
+                    continue;
+                }
                 if matches!(dependency.id.source, Source::Direct(..))
                     && dependency.all_dependencies().next().is_some()
                 {
                     continue;
+                }
+
+                if !source_marker.is_true()
+                    && let Some(selected) = selected_conflict.as_ref()
+                {
+                    // Source authorization may be narrowed by this context without
+                    // removing conflict predicates from the generated dependency edge.
+                    let mut source_context = UniversalMarker::from_combined(source_marker);
+                    source_context.assume_conflict_item(selected);
+                    expected.exclude_conflicting_items(&mut source_context, selected);
+                    if source_context.is_false() {
+                        continue;
+                    }
+                    source_marker = source_context.pep508();
+                }
+
+                if selected_conflict.is_none()
+                    && matches!(dependency.id.source, Source::Registry(..))
+                    && let Some(package_marker) = expected
+                        .source_requirements
+                        .package_markers
+                        .get(&dependency.id)
+                {
+                    source_marker = source_marker.and(package_marker.only_extras());
                 }
 
                 let mut marker = UniversalMarker::from_combined(required_marker);
@@ -729,6 +770,14 @@ impl<'a> LockedDependencyBuilder<'a> {
     }
 }
 
+/// Refreshed direct sources and the environments where locked selections remain reachable.
+#[derive(Default)]
+struct DependencySources {
+    requirements: Constraints,
+    package_markers: FxHashMap<PackageId, MarkerTree>,
+    extra_markers: FxHashMap<PackageId, FxHashMap<ExtraName, MarkerTree>>,
+}
+
 /// Marker environments compared for each locked dependency identity.
 struct DependencyMarkers {
     marker: MarkerTree,
@@ -743,6 +792,7 @@ struct ExpectedPackageDependencies<'lock> {
     declarations: BTreeSet<Requirement>,
     provides_extra: &'lock [ExtraName],
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
+    source_requirements: &'lock DependencySources,
     /// Environments where the workspace package itself can be selected.
     package_marker: UniversalMarker,
     /// The lockfile-wide environment used to simplify dependency markers.
@@ -757,6 +807,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         declarations: &[Requirement],
         provides_extra: &'lock [ExtraName],
         dependency_groups: &BTreeMap<GroupName, Box<[Requirement]>>,
+        source_requirements: &'lock DependencySources,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -792,7 +843,13 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             })
             .collect::<BTreeMap<_, _>>();
 
-        let mut package_marker = UniversalMarker::from_combined(lock.fork_markers_union());
+        let mut package_marker = UniversalMarker::from_combined(
+            source_requirements
+                .package_markers
+                .get(&package.id)
+                .copied()
+                .unwrap_or_else(|| lock.fork_markers_union()),
+        );
         if !package.fork_markers.is_empty() {
             let fork_marker = package
                 .fork_markers
@@ -814,6 +871,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             declarations,
             provides_extra,
             dependency_groups,
+            source_requirements,
             package_marker,
             lock_marker: SimplifiedMarkerTree::new(
                 &lock.requires_python,
@@ -828,6 +886,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         &self,
         package: &Package,
         requirement: &Requirement,
+        requirement_environment: MarkerTree,
     ) -> Result<Option<MarkerTree>, LockError> {
         let mut source_marker = if package
             .id
@@ -838,6 +897,38 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         } else {
             MarkerTree::FALSE
         };
+
+        // An authorized declaration selects its direct source throughout the resolution.
+        // Preserve its full environment when the consumer overlaps only part of the source
+        // marker; disjoint consumers may share the source but retain conflict predicates.
+        if source_marker.is_false()
+            && matches!(
+                requirement.source,
+                RequirementSource::Registry { index: None, .. }
+            )
+            && let Some(source_requirements) =
+                self.source_requirements.requirements.get(&requirement.name)
+        {
+            for source_requirement in source_requirements {
+                if package
+                    .id
+                    .source
+                    .satisfies_requirement_source(&source_requirement.source, self.workspace_root)?
+                {
+                    let source_environment = source_requirement.marker.without_extras();
+                    let marker = if !requirement_environment.is_disjoint(source_environment)
+                        && !requirement_environment
+                            .implies(source_environment)
+                            .is_true()
+                    {
+                        source_requirement.marker
+                    } else {
+                        source_requirement.marker.only_extras()
+                    };
+                    source_marker = source_marker.or(marker);
+                }
+            }
+        }
 
         // Workspace packages may reference themselves using ordinary registry syntax.
         if package.id == self.package.id
@@ -923,6 +1014,16 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
     /// Restore only this package's reachable project-conflict context.
     fn context_parent_marker(&self, context: DependencyContext<'_>) -> UniversalMarker {
         let mut package_marker = self.package_marker;
+        if let DependencyContext::Extra(extra) = context
+            && !self.lock.is_workspace_package(self.package)
+            && let Some(marker) = self
+                .source_requirements
+                .extra_markers
+                .get(&self.package.id)
+                .and_then(|extras| extras.get(extra))
+        {
+            package_marker.and(UniversalMarker::from_combined(marker.without_extras()));
+        }
         if !self
             .lock
             .conflicts
@@ -2491,6 +2592,15 @@ impl Lock {
         &candidates[..candidates.partition_point(|package| &package.id.name == name)]
     }
 
+    /// Return whether a source tree belongs to the workspace or represents its root.
+    fn is_workspace_package(&self, package: &Package) -> bool {
+        self.members().contains(&package.id.name)
+            || matches!(
+                &package.id.source,
+                Source::Editable(path) | Source::Virtual(path) if path.as_ref() == Path::new("")
+            )
+    }
+
     /// Returns the package with the given name. If there are multiple
     /// matching packages, then an error is returned. If there are no
     /// matching packages, then `Ok(None)` is returned.
@@ -2581,6 +2691,7 @@ impl Lock {
         requires_dist: Box<[Requirement]>,
         provides_extra: &[ExtraName],
         dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
+        source_requirements: &DependencySources,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -2595,6 +2706,7 @@ impl Lock {
             return self.satisfied_no_metadata(
                 package,
                 Some((&requires_dist, provides_extra, &dependency_groups)),
+                source_requirements,
                 overrides,
                 excludes,
                 package_requires_python,
@@ -2712,6 +2824,7 @@ impl Lock {
         &self,
         package: &'lock Package,
         declarations: Option<(&[Requirement], &[ExtraName], &DeclaredDependencyGroups)>,
+        source_requirements: &DependencySources,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -2740,9 +2853,7 @@ impl Lock {
             return Ok(mismatch(Vec::new(), &package.dependencies));
         }
 
-        let is_workspace_package = self.members().contains(&package.id.name)
-            || self.members().is_empty() && self.root().is_some_and(|root| root.id == package.id);
-        if !is_workspace_package {
+        if !self.is_workspace_package(package) {
             return Ok(mismatch(Vec::new(), &package.dependencies));
         }
 
@@ -2796,6 +2907,7 @@ impl Lock {
             requirements,
             provides_extra,
             dependency_groups,
+            source_requirements,
             overrides,
             excludes,
             package_requires_python,
@@ -3098,6 +3210,18 @@ impl Lock {
         } else {
             Excludes::default()
         };
+        let dependency_sources = if allow_missing_package_metadata {
+            Box::pin(self.collect_dependency_sources(
+                &dependency_overrides,
+                &dependency_excludes,
+                root,
+                database,
+                &mut source_tree_metadata,
+            ))
+            .await?
+        } else {
+            DependencySources::default()
+        };
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let mut remotes = indexes.map(|locations| {
@@ -3308,6 +3432,7 @@ impl Lock {
                             metadata.requires_dist,
                             &metadata.provides_extra,
                             metadata.dependency_groups,
+                            &dependency_sources,
                             &dependency_overrides,
                             &dependency_excludes,
                             requires_python.as_ref(),
@@ -3373,6 +3498,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &dependency_sources,
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
@@ -3441,6 +3567,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &dependency_sources,
                         &dependency_overrides,
                         &dependency_excludes,
                         requires_python.as_ref(),
@@ -3505,6 +3632,7 @@ impl Lock {
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
+                        &dependency_sources,
                         &dependency_overrides,
                         &dependency_excludes,
                         metadata.requires_python.as_ref(),
@@ -3532,6 +3660,409 @@ impl Lock {
         }
 
         Ok(SatisfiesResult::Satisfied)
+    }
+
+    /// Match a requirement's version and any explicitly declared source.
+    fn package_satisfies_requirement(
+        package: &Package,
+        requirement: &Requirement,
+        root: &Path,
+    ) -> Result<bool, LockError> {
+        let source_matches = matches!(
+            requirement.source,
+            RequirementSource::Registry { index: None, .. }
+        ) || package
+            .id
+            .source
+            .satisfies_requirement_source(&requirement.source, root)?;
+        let version_matches = requirement
+            .source
+            .version_specifiers()
+            .zip(package.id.version.as_ref())
+            .is_none_or(|(specifiers, version)| specifiers.contains(version));
+        Ok(source_matches && version_matches)
+    }
+
+    /// Collect direct declarations from reachable source-bearing packages.
+    fn add_source_requirements(
+        &self,
+        package: &Package,
+        requirements: Vec<Requirement>,
+        group: Option<&GroupName>,
+        package_markers: &FxHashMap<(&PackageId, Option<&ExtraName>), MarkerTree>,
+        dependency_overrides: &Overrides,
+        dependency_excludes: &Excludes,
+        root: &Path,
+        source_requirements: &mut BTreeSet<Requirement>,
+        pending_sources: &mut Vec<Requirement>,
+    ) -> Result<(), LockError> {
+        let Some(package_marker) = package_markers.get(&(&package.id, None)).copied() else {
+            return Ok(());
+        };
+        let package_context = package
+            .id
+            .version
+            .as_ref()
+            .map(|version| (&package.id.name, version));
+        let requirements = if group.is_some() {
+            requirements
+        } else {
+            FlatRequiresDist::from_requirements(requirements.into_boxed_slice(), &package.id.name)
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+
+        for requirement in dependency_overrides
+            .apply_for_package(
+                if group.is_some() {
+                    None
+                } else {
+                    package_context
+                },
+                &requirements,
+            )
+            .filter(|requirement| {
+                !dependency_excludes.contains_for_package(package_context, &requirement.name)
+            })
+        {
+            let requirement_marker = if let Some(group) = group {
+                let context = DependencyContext::Group(group);
+                package_marker
+                    .and(context.conflict_marker(&package.id.name, &self.conflicts))
+                    .and(context.requirement_marker(requirement.marker))
+            } else {
+                let production_marker =
+                    DependencyContext::Production.requirement_marker(requirement.marker);
+                let mut requirement_marker = package_marker
+                    .and(
+                        DependencyContext::Production
+                            .conflict_marker(&package.id.name, &self.conflicts),
+                    )
+                    .and(production_marker);
+                for extra in package.optional_dependencies.keys() {
+                    let Some(extra_marker) = package_markers.get(&(&package.id, Some(extra)))
+                    else {
+                        continue;
+                    };
+                    let marker =
+                        DependencyContext::Extra(extra).requirement_marker(requirement.marker);
+                    requirement_marker = requirement_marker.or(extra_marker.and(marker));
+                }
+                requirement_marker
+            };
+
+            // This phase may discover only HTTP leaves and first-party workspace trees.
+            // Archives, Git, and non-workspace providers require separate trust checks.
+            if requirement_marker.is_false()
+                || !matches!(
+                    requirement.source,
+                    RequirementSource::Url { .. } | RequirementSource::Directory { .. }
+                )
+            {
+                continue;
+            }
+
+            let mut requirement =
+                normalize_requirement(requirement.into_owned(), root, &self.requires_python)?;
+            requirement.marker = requirement_marker.only_extras();
+            pending_sources.push(requirement.clone());
+            source_requirements.insert(requirement);
+        }
+
+        Ok(())
+    }
+
+    /// Collect first-party direct sources without trusting removed locked dependency edges.
+    async fn collect_dependency_sources<Context: BuildContext>(
+        &self,
+        dependency_overrides: &Overrides,
+        dependency_excludes: &Excludes,
+        root: &Path,
+        database: &DistributionDatabase<'_, Context>,
+        source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
+    ) -> Result<DependencySources, LockError> {
+        // Locked edge markers are parent-relative. Compute standalone package and extra
+        // reachability before deciding which declarations may authorize a direct source.
+        let root_marker = self.fork_markers_union();
+        let mut package_markers = FxHashMap::default();
+        let mut package_queue = VecDeque::new();
+        for package in &self.packages {
+            if self.is_workspace_package(package) {
+                package_queue.push_back((package, None, root_marker));
+                for extra in package.optional_dependencies.keys() {
+                    let marker = root_marker.and(
+                        DependencyContext::Extra(extra)
+                            .conflict_marker(&package.id.name, &self.conflicts),
+                    );
+                    package_queue.push_back((package, Some(extra), marker));
+                }
+            }
+        }
+
+        while let Some((package, extra, marker)) = package_queue.pop_front() {
+            let existing = package_markers
+                .entry((&package.id, extra))
+                .or_insert(MarkerTree::FALSE);
+            let marker = existing.or(marker);
+            if marker == *existing {
+                continue;
+            }
+            *existing = marker;
+            if extra.is_some() {
+                package_queue.push_back((package, None, marker));
+            }
+
+            // No inherited registry, HTTP, archive, Git, or outside-workspace edge can
+            // authorize another source. Only refreshed first-party declarations are trusted.
+            if !self.is_workspace_package(package) {
+                continue;
+            }
+            let Some(source_tree) = package.id.source.as_source_tree() else {
+                continue;
+            };
+            let Some(SourceTreeRequiresDist {
+                version, metadata, ..
+            }) = Self::source_tree_requires_dist_cached(
+                source_tree,
+                root,
+                package,
+                database,
+                source_tree_metadata,
+            )
+            .await?
+            else {
+                continue;
+            };
+            if version
+                .as_ref()
+                .zip(package.id.version.as_ref())
+                .is_some_and(|(version, locked_version)| version != locked_version)
+            {
+                continue;
+            }
+
+            let context = extra
+                .map(DependencyContext::Extra)
+                .unwrap_or(DependencyContext::Production);
+            let package_context = version
+                .as_ref()
+                .or(package.id.version.as_ref())
+                .map(|version| (&package.id.name, version));
+            let requirements =
+                FlatRequiresDist::from_requirements(metadata.requires_dist, &package.id.name)
+                    .into_iter()
+                    .collect::<Vec<_>>();
+            let mut refreshed_dependencies = FxHashMap::default();
+            for (group, requirements) in iter::once((None, requirements)).chain(
+                metadata
+                    .dependency_groups
+                    .into_iter()
+                    .filter(|_| extra.is_none())
+                    .map(|(group, requirements)| {
+                        (Some(group), <[Requirement]>::into_vec(requirements))
+                    }),
+            ) {
+                let override_context = if group.is_some() {
+                    None
+                } else {
+                    package_context
+                };
+                let requirement_context = group
+                    .as_ref()
+                    .map(DependencyContext::Group)
+                    .unwrap_or(context);
+                for requirement in dependency_overrides
+                    .apply_for_package(override_context, &requirements)
+                    .filter(|requirement| {
+                        !dependency_excludes
+                            .contains_for_package(package_context, &requirement.name)
+                    })
+                {
+                    let requirement_marker =
+                        requirement_context.requirement_marker(requirement.marker);
+                    for dependency in self.packages_for_name(&requirement.name) {
+                        if !Self::package_satisfies_requirement(dependency, &requirement, root)?
+                            || dependency.id.source.is_source_tree()
+                                && !self.is_workspace_package(dependency)
+                            || !matches!(
+                                dependency.id.source,
+                                Source::Registry(..)
+                                    | Source::Direct(..)
+                                    | Source::Directory(..)
+                                    | Source::Editable(..)
+                                    | Source::Virtual(..)
+                            )
+                        {
+                            continue;
+                        }
+                        for requested_extra in
+                            iter::once(None).chain(requirement.extras.iter().map(Some))
+                        {
+                            refreshed_dependencies
+                                .entry((&dependency.id, requested_extra.cloned(), group.clone()))
+                                .and_modify(|marker: &mut MarkerTree| {
+                                    *marker = marker.or(requirement_marker);
+                                })
+                                .or_insert(requirement_marker);
+                        }
+                    }
+                }
+            }
+
+            for dependency_context in iter::once(context).chain(
+                package
+                    .dependency_groups
+                    .keys()
+                    .filter(|_| extra.is_none())
+                    .map(DependencyContext::Group),
+            ) {
+                for dependency in dependency_context.dependencies(package) {
+                    let marker = marker
+                        .and(dependency_context.conflict_marker(&package.id.name, &self.conflicts))
+                        .and(dependency.complexified_marker.combined());
+                    let dependency_package = self.find_by_id(&dependency.package_id);
+                    for dependency_extra in
+                        iter::once(None).chain(dependency.extra.iter().map(Some))
+                    {
+                        let group = match dependency_context {
+                            DependencyContext::Group(group) => Some(group.clone()),
+                            DependencyContext::Production | DependencyContext::Extra(_) => None,
+                        };
+                        // An old lock edge is traversable only when a refreshed declaration
+                        // still selects its exact package, requested extra, and group.
+                        let Some(requirement_marker) = refreshed_dependencies.get(&(
+                            &dependency.package_id,
+                            dependency_extra.cloned(),
+                            group,
+                        )) else {
+                            continue;
+                        };
+                        let marker = marker.and(*requirement_marker);
+                        if marker.is_false() {
+                            continue;
+                        }
+                        let dependency_extra = match dependency_extra {
+                            Some(dependency_extra) => {
+                                let Some((dependency_extra, _)) = dependency_package
+                                    .optional_dependencies
+                                    .get_key_value(dependency_extra)
+                                else {
+                                    continue;
+                                };
+                                Some(dependency_extra)
+                            }
+                            None => None,
+                        };
+                        let marker = if let Some(extra) = dependency_extra {
+                            marker.and(
+                                DependencyContext::Extra(extra)
+                                    .conflict_marker(&dependency_package.id.name, &self.conflicts),
+                            )
+                        } else {
+                            marker
+                        };
+                        package_queue.push_back((dependency_package, dependency_extra, marker));
+                    }
+                }
+            }
+        }
+
+        // Resolve direct-source provenance only from reachable, refreshed workspace
+        // declarations. Matching HTTP leaves need no artifact, archive, or backend access.
+        let mut source_requirements = BTreeSet::new();
+        let mut pending_sources = Vec::<Requirement>::new();
+        let mut pending_packages = self
+            .packages
+            .iter()
+            .filter(|package| self.is_workspace_package(package))
+            .collect::<Vec<_>>();
+        let mut visited_packages = FxHashSet::default();
+
+        loop {
+            let Some(package) = pending_packages.pop() else {
+                let Some(requirement) = pending_sources.pop() else {
+                    break;
+                };
+                for package in self.packages_for_name(&requirement.name) {
+                    if package_markers.contains_key(&(&package.id, None))
+                        && package
+                            .id
+                            .source
+                            .satisfies_requirement_source(&requirement.source, root)?
+                        && (self.is_workspace_package(package)
+                            || matches!(package.id.source, Source::Direct(..))
+                                && package.all_dependencies().next().is_none())
+                    {
+                        pending_packages.push(package);
+                    }
+                }
+                continue;
+            };
+
+            if !visited_packages.insert(&package.id) || !self.is_workspace_package(package) {
+                continue;
+            }
+            let Some(source_tree) = package.id.source.as_source_tree() else {
+                continue;
+            };
+            let Some(SourceTreeRequiresDist { metadata, .. }) =
+                Self::source_tree_requires_dist_cached(
+                    source_tree,
+                    root,
+                    package,
+                    database,
+                    source_tree_metadata,
+                )
+                .await?
+            else {
+                continue;
+            };
+
+            self.add_source_requirements(
+                package,
+                metadata.requires_dist.into_vec(),
+                None,
+                &package_markers,
+                dependency_overrides,
+                dependency_excludes,
+                root,
+                &mut source_requirements,
+                &mut pending_sources,
+            )?;
+            for (group, requirements) in metadata.dependency_groups {
+                self.add_source_requirements(
+                    package,
+                    requirements.into_vec(),
+                    Some(&group),
+                    &package_markers,
+                    dependency_overrides,
+                    dependency_excludes,
+                    root,
+                    &mut source_requirements,
+                    &mut pending_sources,
+                )?;
+            }
+        }
+
+        let mut reachable_packages = FxHashMap::default();
+        let mut extra_markers: FxHashMap<PackageId, FxHashMap<ExtraName, MarkerTree>> =
+            FxHashMap::default();
+        for ((package, extra), marker) in package_markers {
+            if let Some(extra) = extra {
+                extra_markers
+                    .entry(package.clone())
+                    .or_default()
+                    .insert(extra.clone(), marker);
+            } else {
+                reachable_packages.insert(package.clone(), marker);
+            }
+        }
+
+        Ok(DependencySources {
+            requirements: Constraints::from_requirements(source_requirements.into_iter()),
+            package_markers: reachable_packages,
+            extra_markers,
+        })
     }
 
     /// Read the current metadata for a locked package, reusing the resolver's in-memory cache.
@@ -5415,7 +5946,7 @@ impl Source {
     fn satisfies_requirement_source(
         &self,
         requirement: &RequirementSource,
-        _root: &Path,
+        root: &Path,
     ) -> Result<bool, LockError> {
         let result = match (self, requirement) {
             (Self::Registry(_), RequirementSource::Registry { index: None, .. }) => true,
@@ -5433,6 +5964,22 @@ impl Source {
                 expected.remove_credentials();
                 normalize_url(actual) == normalize_url(expected)
                     && source.subdirectory == *subdirectory
+            }
+            (
+                Self::Directory(path) | Self::Editable(path) | Self::Virtual(path),
+                RequirementSource::Directory {
+                    install_path,
+                    editable,
+                    r#virtual,
+                    ..
+                },
+            ) => {
+                let actual = normalize_path(root.join(path));
+                actual.as_ref() == install_path.as_ref()
+                    && matches!(self, Self::Editable(_)) == editable.unwrap_or(false)
+                    && (matches!(self, Self::Virtual(_)) == r#virtual.unwrap_or(false)
+                        || matches!(self, Self::Virtual(_))
+                            && install_path.as_ref() == normalize_path(root).as_ref())
             }
             _ => false,
         };
