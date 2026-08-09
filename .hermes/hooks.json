@@ -1,0 +1,25 @@
+{
+  "afterFileEdit": {
+    "commands": [
+      {
+        "name": "format",
+        "command": "cargo fmt --all",
+        "description": "Format Rust code"
+      }
+    ]
+  },
+  "beforeCommit": {
+    "commands": [
+      {
+        "name": "lint",
+        "command": "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+        "description": "Check linting issues"
+      },
+      {
+        "name": "test",
+        "command": "cargo nextest run",
+        "description": "Run tests"
+      }
+    ]
+  }
+}
