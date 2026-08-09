@@ -26,7 +26,7 @@ static FIXUPS: &[(FixUp, &str)] = &[
     ),
     // Given `>=1.9.*`, rewrite to `>=1.9`.
     (
-        |input| regex!(r"(<=|>=|<|>)(\d+(\.\d+)*)\.\*").replace_all(input, r"${1}${2}"),
+        |input| regex!(r"(<=|>=|<|>)\s*(\d+(\.\d+)*)\.\*").replace_all(input, r"${1}${2}"),
         "removing star after comparison operator other than equal and not equal",
     ),
     // Given `!=3.0*`, rewrite to `!=3.0.*`.
@@ -201,6 +201,16 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
+    /// <https://github.com/astral-sh/uv/issues/21011>
+    #[test]
+    fn requirement_greater_than_star_whitespace() {
+        let actual: Requirement = LenientRequirement::from_str("torch (>= 1.9.*)")
+            .unwrap()
+            .into();
+        let expected: Requirement = Requirement::from_str("torch (>=1.9)").unwrap();
+        assert_eq!(actual, expected);
+    }
+
     #[test]
     fn requirement_missing_dot() {
         let actual: Requirement =
@@ -253,6 +263,16 @@ mod tests {
 
         let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">=1.*").unwrap().into();
         let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=1").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    /// <https://github.com/astral-sh/uv/issues/21011>
+    #[test]
+    fn specifier_greater_than_star_whitespace() {
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">= 3.5.*")
+            .unwrap()
+            .into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=3.5").unwrap();
         assert_eq!(actual, expected);
     }
 
