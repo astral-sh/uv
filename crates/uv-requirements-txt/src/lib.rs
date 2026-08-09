@@ -833,28 +833,15 @@ fn parse_entry(
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
         let expanded = expand_env_vars(given.as_ref());
-        let url = if let Some(path) = std::path::absolute(requirements_dir.join(expanded.as_ref()))
-            .ok()
-            .filter(|path| path.exists())
-        {
-            VerbatimUrl::from_absolute_path(path).map_err(|err| {
-                RequirementsTxtParserError::VerbatimUrl {
-                    source: err,
-                    url: given.to_string(),
-                    start,
-                    end: s.cursor(),
-                }
-            })?
-        } else {
-            VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
-                RequirementsTxtParserError::Url {
-                    source: err,
-                    url: given.to_string(),
-                    start,
-                    end: s.cursor(),
-                }
-            })?
-        };
+        let requirements_dir = std::path::absolute(working_dir.join(requirements_dir))
+            .map_err(RequirementsTxtParserError::Io)?;
+        let url = VerbatimUrl::from_url_or_path(expanded.as_ref(), Some(&requirements_dir))
+            .map_err(|err| RequirementsTxtParserError::Url {
+                source: err,
+                url: given.to_string(),
+                start,
+                end: s.cursor(),
+            })?;
         RequirementsTxtStatement::FindLinks(url.with_given(given))
     } else if s.eat_if("--no-binary") {
         let given = parse_value("--no-binary", content, s, |c: char| !is_terminal(c))?;

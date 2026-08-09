@@ -436,6 +436,29 @@ fn missing_find_links() -> Result<()> {
 }
 
 #[test]
+fn missing_find_links_from_requirements_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_missing_file_error();
+    let requirements_dir = context.temp_dir.child("requirements");
+    requirements_dir.create_dir_all()?;
+    requirements_dir
+        .child("requirements.txt")
+        .write_str("--find-links=./missing\nflask")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements/requirements.txt")
+        .arg("--strict"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read `--find-links` directory: [TEMP_DIR]/requirements/missing
+      Caused by: [OS ERROR 2]
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn invalid_pyproject_toml_syntax() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
