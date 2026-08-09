@@ -69,6 +69,9 @@ fn create_venv() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+
+    let lib64 = context.venv.path().join("lib64");
+    assert!(!lib64.exists() || (lib64.is_dir() && !lib64.is_symlink()));
 }
 
 #[test]
