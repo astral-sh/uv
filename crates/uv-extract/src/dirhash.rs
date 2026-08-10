@@ -217,6 +217,7 @@ fn canonical_path_to_symlink(symlink_path: &Path) -> Result<PathBuf, DirhashErro
 /// `dirhash_path` will traverse symlinks, including links that lead outside of `path`. However, if
 /// it encounters a symlink cycle, it will return an error.
 pub fn dirhash_path(path: &Path) -> Result<blake3::Hash, DirhashError> {
+    uv_configuration::initialize_rayon_once();
     let seen_symlinks = SeenSymlinks::new();
     dirhash_path_inner(path, &seen_symlinks)
 }
