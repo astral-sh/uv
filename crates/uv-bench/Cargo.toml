@@ -33,6 +33,11 @@ name = "uv_pep440"
 path = "benches/uv_pep440.rs"
 harness = false
 
+[[bench]]
+name = "uv_pypi_types"
+path = "benches/uv_pypi_types.rs"
+harness = false
+
 [dev-dependencies]
 uv = { workspace = true }
 uv-cache = { workspace = true }
@@ -65,6 +70,8 @@ flate2 = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 jiff = { workspace = true }
+rmp-serde = { workspace = true }
+serde_json = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
