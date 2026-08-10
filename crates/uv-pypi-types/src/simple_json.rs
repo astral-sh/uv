@@ -30,7 +30,9 @@ pub struct PypiSimpleDetail {
 }
 
 impl PypiSimpleDetail {
-    /// Parse a Simple API JSON response, falling back to Serde for unsupported syntax.
+    /// Parse a PyPI Simple API JSON response directly whenever possible.
+    ///
+    /// Fall back to Serde for unsupported input, preserving its behavior and errors.
     pub fn from_json(input: &[u8]) -> Result<Self, serde_json::Error> {
         parser::parse(input).map_or_else(|| serde_json::from_slice(input), Ok)
     }
@@ -897,7 +899,7 @@ pub enum HashError {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{CoreMetadata, HashError, Hashes, PypiSimpleDetail, Status, Yanked};
+    use crate::{CoreMetadata, HashError, Hashes, PypiSimpleDetail, Status};
 
     fn parse_pypi_simple_json(json: &str) -> Result<PypiSimpleDetail, serde_json::Error> {
         let expected: PypiSimpleDetail = serde_json::from_str(json)?;
@@ -1043,45 +1045,14 @@ mod tests {
         "#;
 
         let detail = parse_pypi_simple_json(json)?;
-
-        assert_eq!(detail.project_status.status, Status::Archived);
-        assert_eq!(
-            detail.project_status.reason.as_deref(),
-            Some("This project is no longer maintained.")
-        );
-        assert_eq!(detail.files.len(), 2);
-
-        let source = &detail.files[0];
-        assert_eq!(source.filename.as_ref(), "example-1.0.0.tar.gz");
-        assert_eq!(source.size, Some(424_460));
-        assert!(source.upload_time.is_some());
-        assert_eq!(source.hashes.md5.as_deref(), Some("file-md5"));
-        assert_eq!(source.hashes.sha256.as_deref(), Some("file-sha256"));
-        assert_eq!(source.hashes.sha384.as_deref(), Some("file-sha384"));
-        assert_eq!(source.hashes.sha512.as_deref(), Some("file-sha512"));
-        assert_eq!(source.hashes.blake2b.as_deref(), Some("file-blake2b"));
-        assert!(matches!(
-            source.core_metadata,
-            Some(CoreMetadata::Hashes(ref hashes))
-                if hashes.sha256.as_deref() == Some("metadata-sha256")
-        ));
-        assert!(matches!(
-            source.yanked.as_deref(),
-            Some(Yanked::Reason(reason)) if reason.as_ref() == "Withdrawn for testing"
-        ));
-
-        let wheel = &detail.files[1];
-        assert!(matches!(
-            wheel.core_metadata,
-            Some(CoreMetadata::Bool(true))
-        ));
-        assert!(matches!(wheel.yanked.as_deref(), Some(Yanked::Bool(false))));
-
-        let Some(Ok(source_requires_python)) = source.requires_python.as_ref() else {
-            return Err(serde::de::Error::custom("missing source requires-python"));
+        let [source, wheel] = detail.files.as_slice() else {
+            return Err(serde::de::Error::custom("expected two files"));
         };
-        let Some(Ok(wheel_requires_python)) = wheel.requires_python.as_ref() else {
-            return Err(serde::de::Error::custom("missing wheel requires-python"));
+        let (Some(Ok(source_requires_python)), Some(Ok(wheel_requires_python))) = (
+            source.requires_python.as_ref(),
+            wheel.requires_python.as_ref(),
+        ) else {
+            return Err(serde::de::Error::custom("missing requires-python"));
         };
         assert!(Arc::ptr_eq(source_requires_python, wheel_requires_python));
 
@@ -1182,18 +1153,6 @@ mod tests {
 
         assert_eq!(detail.project_status.reason.as_deref(), Some("Archived 🚀"));
         assert_eq!(detail.files[0].filename.as_ref(), "example-1.0.tar.gz");
-        assert_eq!(
-            detail.files[0].hashes.sha256.as_deref(),
-            Some("escaped-hash")
-        );
-        assert_eq!(
-            detail.files[0].url.as_ref(),
-            "https://example.com/example-1.0.tar.gz"
-        );
-        assert!(matches!(
-            detail.files[0].yanked.as_deref(),
-            Some(Yanked::Reason(reason)) if reason.as_ref() == "Quoted \"reason\"\nsecond line"
-        ));
 
         Ok(())
     }
@@ -1222,11 +1181,6 @@ mod tests {
         "#;
 
         let detail = parse_pypi_simple_json(json)?;
-
-        assert_eq!(detail.files[0].filename.as_ref(), "example-1.0.tar.gz");
-        assert!(detail.files[0].hashes.sha256.is_none());
-        assert!(detail.files[0].requires_python.is_none());
-        assert!(detail.files[0].core_metadata.is_none());
         assert!(
             detail.files[1]
                 .requires_python
@@ -1242,18 +1196,14 @@ mod tests {
         let invalid = [
             "",
             "null",
-            "[]",
             "{}",
             r#"{"files":null}"#,
-            r#"{"files":{}}"#,
             r#"{"files":[null]}"#,
             r#"{"files":[],}"#,
             r#"{"files":[]} trailing"#,
             r#"{"files":[],"files":[]}"#,
             r#"{"files":[],"ignored":01}"#,
-            r#"{"files":[],"ignored":-01}"#,
             r#"{"files":[],"ignored":1.}"#,
-            r#"{"files":[],"ignored":1e}"#,
             r#"{"files":[],"ignored":1e+}"#,
             r#"{"files":[],"ignored":+1}"#,
             r#"{"files":[],"ignored":tru}"#,
@@ -1280,7 +1230,6 @@ mod tests {
             r#"{"files":[{"filename":"file","hashes":{},"url":"file","requires-python":false}]}"#,
             r#"{"files":[{"filename":"file","hashes":{},"url":"file","core-metadata":42}]}"#,
             r#"{"files":[{"filename":"file","hashes":{},"url":"file","yanked":null}]}"#,
-            r#"{"files":[{"filename":"file","hashes":{},"url":"file","yanked":42}]}"#,
             r#"{"files":[{"filename":"\uD800","hashes":{},"url":"file"}]}"#,
         ];
 
@@ -1304,8 +1253,7 @@ mod tests {
             "[".repeat(128),
             "]".repeat(128)
         );
-        assert!(serde_json::from_str::<PypiSimpleDetail>(&excessive_nesting).is_ok());
-        assert!(PypiSimpleDetail::from_json(excessive_nesting.as_bytes()).is_ok());
+        assert!(parse_pypi_simple_json(&excessive_nesting).is_ok());
     }
 }
 

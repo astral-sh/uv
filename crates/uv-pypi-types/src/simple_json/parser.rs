@@ -7,7 +7,9 @@ use uv_small_str::SmallString;
 use super::{CoreMetadata, Hashes, PypiFile, PypiSimpleDetail, RequiresPythonInterner, Yanked};
 use crate::{ProjectStatus, Status};
 
-/// Returns `None` for syntax that should be handled by the general JSON parser.
+/// Parses an unescaped PyPI Simple API response without intermediate wire values.
+///
+/// Returns `None` when Serde must handle unsupported input or report a parsing error.
 pub(super) fn parse(input: &[u8]) -> Option<PypiSimpleDetail> {
     if memchr(b'\\', input).is_some() {
         return None;
@@ -20,16 +22,19 @@ pub(super) fn parse(input: &[u8]) -> Option<PypiSimpleDetail> {
     (parser.offset == input.len()).then_some(detail)
 }
 
+/// A cursor over validated UTF-8 containing no JSON escape sequences.
 struct Parser<'input> {
     input: &'input str,
     offset: usize,
 }
 
+/// Distinguishes an object key from the end of an otherwise valid object.
 enum ObjectKey<'input> {
     Key(&'input str),
     End,
 }
 
+/// Distinguishes a successfully parsed JSON `null` from a parsing failure.
 enum Nullable<T> {
     Value(T),
     Null,
@@ -45,6 +50,7 @@ impl<T> Nullable<T> {
 }
 
 impl<'input> Parser<'input> {
+    /// Parses the project object while rejecting duplicate known top-level fields.
     fn detail(&mut self) -> Option<PypiSimpleDetail> {
         self.skip_whitespace();
         self.consume(b'{')?;
@@ -55,18 +61,11 @@ impl<'input> Parser<'input> {
 
         while let ObjectKey::Key(key) = self.object_key(&mut first)? {
             match key {
-                "files" => {
-                    if files.is_some() {
-                        return None;
-                    }
-                    files = Some(self.files()?);
-                }
-                "project-status" => {
-                    if project_status.is_some() {
-                        return None;
-                    }
+                "files" if files.is_none() => files = Some(self.files()?),
+                "project-status" if project_status.is_none() => {
                     project_status = Some(self.project_status()?);
                 }
+                "files" | "project-status" => return None,
                 _ => self.skip_value(0)?,
             }
         }
@@ -77,6 +76,7 @@ impl<'input> Parser<'input> {
         })
     }
 
+    /// Parses distributions using one interner for repeated Python requirements.
     fn files(&mut self) -> Option<Vec<PypiFile>> {
         self.consume(b'[')?;
 
@@ -91,6 +91,7 @@ impl<'input> Parser<'input> {
         Some(files)
     }
 
+    /// Builds a [`PypiFile`] directly while preserving metadata-alias precedence.
     fn file(&mut self, interner: &mut RequiresPythonInterner) -> Option<PypiFile> {
         self.consume(b'{')?;
 
@@ -134,6 +135,7 @@ impl<'input> Parser<'input> {
         })
     }
 
+    /// Parses known hashes, optimizing the common SHA-256-only representation.
     fn hashes(&mut self) -> Option<Hashes> {
         if let Some(digest) = self.single_sha256_digest() {
             return Some(Hashes {
@@ -172,6 +174,7 @@ impl<'input> Parser<'input> {
         Some(hashes)
     }
 
+    /// Consumes a compact `{"sha256":"..."}` object without advancing on mismatch.
     fn single_sha256_digest(&mut self) -> Option<&'input str> {
         const PREFIX: &[u8] = b"{\"sha256\":\"";
 
@@ -212,36 +215,33 @@ impl<'input> Parser<'input> {
         }
     }
 
+    /// Parses project status with Serde-compatible defaults and duplicate detection.
     fn project_status(&mut self) -> Option<ProjectStatus> {
         self.consume(b'{')?;
 
-        let mut project_status = ProjectStatus::default();
-        let mut seen_status = false;
+        let mut status = None;
+        let mut reason = None;
         let mut seen_reason = false;
         let mut first = true;
 
         while let ObjectKey::Key(key) = self.object_key(&mut first)? {
             match key {
-                "status" => {
-                    if seen_status {
-                        return None;
-                    }
-                    seen_status = true;
-                    project_status.status = Status::new(self.string()?).unwrap_or_default();
+                "status" if status.is_none() => {
+                    status = Some(Status::new(self.string()?).unwrap_or_default());
                 }
-                "reason" => {
-                    if seen_reason {
-                        return None;
-                    }
+                "reason" if !seen_reason => {
                     seen_reason = true;
-                    project_status.reason =
-                        self.nullable_string()?.into_option().map(SmallString::from);
+                    reason = self.nullable_string()?.into_option().map(SmallString::from);
                 }
+                "status" | "reason" => return None,
                 _ => self.skip_value(0)?,
             }
         }
 
-        Some(project_status)
+        Some(ProjectStatus {
+            status: status.unwrap_or_default(),
+            reason,
+        })
     }
 
     fn object_key(&mut self, first: &mut bool) -> Option<ObjectKey<'input>> {
@@ -286,6 +286,7 @@ impl<'input> Parser<'input> {
         Some(true)
     }
 
+    /// Borrows an unescaped JSON string while rejecting raw control characters.
     fn string(&mut self) -> Option<&'input str> {
         self.consume(b'"')?;
         let start = self.offset;
@@ -310,6 +311,7 @@ impl<'input> Parser<'input> {
         }
     }
 
+    /// Parses a `u64`, rejecting leading zeros and integer overflow.
     fn unsigned_integer(&mut self) -> Option<u64> {
         let first = self.peek()?;
         if !first.is_ascii_digit() {
@@ -334,19 +336,16 @@ impl<'input> Parser<'input> {
     }
 
     fn boolean(&mut self) -> Option<bool> {
-        match self.peek()? {
-            b't' => {
-                self.literal(b"true")?;
-                Some(true)
-            }
-            b'f' => {
-                self.literal(b"false")?;
-                Some(false)
-            }
-            _ => None,
-        }
+        let (literal, value) = match self.peek()? {
+            b't' => (b"true".as_slice(), true),
+            b'f' => (b"false".as_slice(), false),
+            _ => return None,
+        };
+        self.literal(literal)?;
+        Some(value)
     }
 
+    /// Validates and skips an ignored value, leaving excessive nesting to Serde.
     fn skip_value(&mut self, depth: u8) -> Option<()> {
         if depth >= 64 {
             return None;
@@ -381,6 +380,7 @@ impl<'input> Parser<'input> {
         Some(())
     }
 
+    /// Validates an ignored JSON number without allocating or converting its value.
     fn skip_number(&mut self) -> Option<()> {
         if self.peek()? == b'-' {
             self.offset += 1;
@@ -393,17 +393,13 @@ impl<'input> Parser<'input> {
                     return None;
                 }
             }
-            b'1'..=b'9' => self.skip_digits(),
+            b'1'..=b'9' => self.skip_digits()?,
             _ => return None,
         }
 
         if self.peek() == Some(b'.') {
             self.offset += 1;
-            let start = self.offset;
-            self.skip_digits();
-            if self.offset == start {
-                return None;
-            }
+            self.skip_digits()?;
         }
 
         if matches!(self.peek(), Some(b'e' | b'E')) {
@@ -411,20 +407,19 @@ impl<'input> Parser<'input> {
             if matches!(self.peek(), Some(b'+' | b'-')) {
                 self.offset += 1;
             }
-            let start = self.offset;
-            self.skip_digits();
-            if self.offset == start {
-                return None;
-            }
+            self.skip_digits()?;
         }
 
         Some(())
     }
 
-    fn skip_digits(&mut self) {
+    /// Consumes at least one decimal digit.
+    fn skip_digits(&mut self) -> Option<()> {
+        let start = self.offset;
         while self.peek().is_some_and(|byte| byte.is_ascii_digit()) {
             self.offset += 1;
         }
+        (self.offset != start).then_some(())
     }
 
     fn skip_whitespace(&mut self) {
@@ -434,17 +429,12 @@ impl<'input> Parser<'input> {
     }
 
     fn literal(&mut self, literal: &[u8]) -> Option<()> {
-        if self
-            .input
+        self.input
             .as_bytes()
             .get(self.offset..)?
-            .starts_with(literal)
-        {
-            self.offset += literal.len();
-            Some(())
-        } else {
-            None
-        }
+            .strip_prefix(literal)?;
+        self.offset += literal.len();
+        Some(())
     }
 
     fn consume(&mut self, expected: u8) -> Option<()> {
