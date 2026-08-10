@@ -14,6 +14,8 @@ use uv_small_str::SmallString;
 use crate::lenient_requirement::LenientVersionSpecifiers;
 use crate::{ProjectStatus, VerbatimParsedUrl};
 
+mod parser;
+
 /// A collection of "files" from `PyPI`'s JSON API for a single package, as served by the
 /// `vnd.pypi.simple.v1` media type.
 #[derive(Debug, Clone, Deserialize)]
@@ -25,6 +27,13 @@ pub struct PypiSimpleDetail {
     /// The list of [`PypiFile`]s available for download.
     #[serde(deserialize_with = "deserialize_pypi_files")]
     pub files: Vec<PypiFile>,
+}
+
+impl PypiSimpleDetail {
+    /// Parse a Simple API JSON response, falling back to Serde for unsupported syntax.
+    pub fn from_json(input: &[u8]) -> Result<Self, serde_json::Error> {
+        parser::parse(input).map_or_else(|| serde_json::from_slice(input), Ok)
+    }
 }
 
 /// A single (remote) file belonging to a package, either a wheel or a source distribution, as
@@ -886,7 +895,18 @@ pub enum HashError {
 
 #[cfg(test)]
 mod tests {
-    use crate::{HashError, Hashes};
+    use std::sync::Arc;
+
+    use crate::{CoreMetadata, HashError, Hashes, PypiSimpleDetail, Status, Yanked};
+
+    fn parse_pypi_simple_json(json: &str) -> Result<PypiSimpleDetail, serde_json::Error> {
+        let expected: PypiSimpleDetail = serde_json::from_str(json)?;
+        let actual = PypiSimpleDetail::from_json(json.as_bytes())?;
+
+        assert_eq!(format!("{actual:#?}"), format!("{expected:#?}"));
+
+        Ok(actual)
+    }
 
     #[test]
     fn parse_hashes() -> Result<(), HashError> {
@@ -974,6 +994,318 @@ mod tests {
         assert!(result.is_err());
 
         Ok(())
+    }
+
+    #[test]
+    fn parse_pypi_simple_json_response() -> Result<(), serde_json::Error> {
+        let json = r#"
+        {
+            "ignored-before-files": {"nested": [true, null, 42, {"value": "ignored"}]},
+            "project-status": {
+                "reason": "This project is no longer maintained.",
+                "status": "archived",
+                "ignored": false
+            },
+            "files": [
+                {
+                    "requires-python": ">=3.8",
+                    "unknown": {"nested": [false, null, "ignored"]},
+                    "data-dist-info-metadata": null,
+                    "core-metadata": {"sha256": "metadata-sha256"},
+                    "dist-info-metadata": false,
+                    "filename": "example-1.0.0.tar.gz",
+                    "hashes": {
+                        "unknown": {"nested": [true, null]},
+                        "sha512": "file-sha512",
+                        "blake2b": "file-blake2b",
+                        "sha384": "file-sha384",
+                        "md5": "file-md5",
+                        "sha256": "file-sha256"
+                    },
+                    "upload-time": "2022-08-04T10:42:02.190074Z",
+                    "size": 424460,
+                    "url": "https://example.com/example-1.0.0.tar.gz",
+                    "yanked": "Withdrawn for testing"
+                },
+                {
+                    "hashes": {"sha256": "wheel-sha256"},
+                    "url": "https://example.com/example-1.0.0-py3-none-any.whl",
+                    "yanked": false,
+                    "requires-python": ">=3.8",
+                    "dist-info-metadata": true,
+                    "filename": "example-1.0.0-py3-none-any.whl"
+                }
+            ],
+            "meta": {"api-version": "1.4", "_last-serial": 15765070},
+            "name": "example",
+            "versions": ["1.0.0"]
+        }
+        "#;
+
+        let detail = parse_pypi_simple_json(json)?;
+
+        assert_eq!(detail.project_status.status, Status::Archived);
+        assert_eq!(
+            detail.project_status.reason.as_deref(),
+            Some("This project is no longer maintained.")
+        );
+        assert_eq!(detail.files.len(), 2);
+
+        let source = &detail.files[0];
+        assert_eq!(source.filename.as_ref(), "example-1.0.0.tar.gz");
+        assert_eq!(source.size, Some(424_460));
+        assert!(source.upload_time.is_some());
+        assert_eq!(source.hashes.md5.as_deref(), Some("file-md5"));
+        assert_eq!(source.hashes.sha256.as_deref(), Some("file-sha256"));
+        assert_eq!(source.hashes.sha384.as_deref(), Some("file-sha384"));
+        assert_eq!(source.hashes.sha512.as_deref(), Some("file-sha512"));
+        assert_eq!(source.hashes.blake2b.as_deref(), Some("file-blake2b"));
+        assert!(matches!(
+            source.core_metadata,
+            Some(CoreMetadata::Hashes(ref hashes))
+                if hashes.sha256.as_deref() == Some("metadata-sha256")
+        ));
+        assert!(matches!(
+            source.yanked.as_deref(),
+            Some(Yanked::Reason(reason)) if reason.as_ref() == "Withdrawn for testing"
+        ));
+
+        let wheel = &detail.files[1];
+        assert!(matches!(
+            wheel.core_metadata,
+            Some(CoreMetadata::Bool(true))
+        ));
+        assert!(matches!(wheel.yanked.as_deref(), Some(Yanked::Bool(false))));
+
+        let Some(Ok(source_requires_python)) = source.requires_python.as_ref() else {
+            return Err(serde::de::Error::custom("missing source requires-python"));
+        };
+        let Some(Ok(wheel_requires_python)) = wheel.requires_python.as_ref() else {
+            return Err(serde::de::Error::custom("missing wheel requires-python"));
+        };
+        assert!(Arc::ptr_eq(source_requires_python, wheel_requires_python));
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_pypi_simple_json_metadata_aliases() -> Result<(), serde_json::Error> {
+        let cases = [
+            (
+                r#""core-metadata": null, "dist-info-metadata": true, "data-dist-info-metadata": false"#,
+                Some(true),
+            ),
+            (
+                r#""data-dist-info-metadata": false, "core-metadata": "ignored""#,
+                Some(false),
+            ),
+            (
+                r#""dist-info-metadata": {"sha256": "metadata"}, "core-metadata": true"#,
+                Some(true),
+            ),
+            (r#""core-metadata": null, "dist-info-metadata": null"#, None),
+        ];
+
+        for (metadata, expected) in cases {
+            let json = format!(
+                r#"{{"files":[{{{metadata},"filename":"example-1.0.tar.gz","hashes":{{}},"url":"https://example.com/example-1.0.tar.gz"}}]}}"#
+            );
+            let detail = parse_pypi_simple_json(&json)?;
+
+            assert_eq!(
+                detail.files[0]
+                    .core_metadata
+                    .as_ref()
+                    .map(CoreMetadata::is_available),
+                expected,
+                "unexpected metadata for {metadata}"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_pypi_simple_json_project_status() -> Result<(), serde_json::Error> {
+        let cases = [
+            (r#"{"files":[]}"#, Status::Active, None),
+            (r#"{"files":[],"project-status":{}}"#, Status::Active, None),
+            (
+                r#"{"files":[],"project-status":{"status":"unknown","reason":null}}"#,
+                Status::Active,
+                None,
+            ),
+            (
+                r#"{"project-status":{"status":"quarantined","reason":"unsafe"},"files":[]}"#,
+                Status::Quarantined,
+                Some("unsafe"),
+            ),
+            (
+                r#"{"files":[],"project-status":{"status":"deprecated"}}"#,
+                Status::Deprecated,
+                None,
+            ),
+        ];
+
+        for (json, expected_status, expected_reason) in cases {
+            let detail = parse_pypi_simple_json(json)?;
+
+            assert_eq!(detail.project_status.status, expected_status);
+            assert_eq!(detail.project_status.reason.as_deref(), expected_reason);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_pypi_simple_json_escaped_strings() -> Result<(), serde_json::Error> {
+        let json = r#"
+        {
+            "igno\u0072ed": {"escaped": "\uD83D\uDE80 \"quoted\"\n"},
+            "project-status": {
+                "status": "archived",
+                "reason": "Archived \uD83D\uDE80"
+            },
+            "fi\u006ces": [
+                {
+                    "filename": "example-\u0031.0.tar.gz",
+                    "hashes": {"sha\u003256": "escaped-hash"},
+                    "requires-python": "\u003e=3.8",
+                    "url": "https:\/\/example.com\/example-1.0.tar.gz",
+                    "yanked": "Quoted \"reason\"\nsecond line"
+                }
+            ]
+        }
+        "#;
+
+        let detail = parse_pypi_simple_json(json)?;
+
+        assert_eq!(detail.project_status.reason.as_deref(), Some("Archived 🚀"));
+        assert_eq!(detail.files[0].filename.as_ref(), "example-1.0.tar.gz");
+        assert_eq!(
+            detail.files[0].hashes.sha256.as_deref(),
+            Some("escaped-hash")
+        );
+        assert_eq!(
+            detail.files[0].url.as_ref(),
+            "https://example.com/example-1.0.tar.gz"
+        );
+        assert!(matches!(
+            detail.files[0].yanked.as_deref(),
+            Some(Yanked::Reason(reason)) if reason.as_ref() == "Quoted \"reason\"\nsecond line"
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_pypi_simple_json_optional_fields() -> Result<(), serde_json::Error> {
+        let json = r#"
+        {
+            "files": [
+                {
+                    "filename": "overwritten.tar.gz",
+                    "filename": "example-1.0.tar.gz",
+                    "hashes": {"sha256": null, "unsupported": [true, null, {}]},
+                    "requires-python": null,
+                    "core-metadata": null,
+                    "url": "https://example.com/example-1.0.tar.gz"
+                },
+                {
+                    "filename": "example-2.0.tar.gz",
+                    "hashes": {},
+                    "requires-python": ">=3.8,,<4",
+                    "url": "https://example.com/example-2.0.tar.gz"
+                }
+            ]
+        }
+        "#;
+
+        let detail = parse_pypi_simple_json(json)?;
+
+        assert_eq!(detail.files[0].filename.as_ref(), "example-1.0.tar.gz");
+        assert!(detail.files[0].hashes.sha256.is_none());
+        assert!(detail.files[0].requires_python.is_none());
+        assert!(detail.files[0].core_metadata.is_none());
+        assert!(
+            detail.files[1]
+                .requires_python
+                .as_ref()
+                .is_some_and(Result::is_err)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_pypi_simple_json_rejects_invalid_input() {
+        let invalid = [
+            "",
+            "null",
+            "[]",
+            "{}",
+            r#"{"files":null}"#,
+            r#"{"files":{}}"#,
+            r#"{"files":[null]}"#,
+            r#"{"files":[],}"#,
+            r#"{"files":[]} trailing"#,
+            r#"{"files":[],"files":[]}"#,
+            r#"{"files":[],"ignored":01}"#,
+            r#"{"files":[],"ignored":-01}"#,
+            r#"{"files":[],"ignored":1.}"#,
+            r#"{"files":[],"ignored":1e}"#,
+            r#"{"files":[],"ignored":1e+}"#,
+            r#"{"files":[],"ignored":+1}"#,
+            r#"{"files":[],"ignored":tru}"#,
+            r#"{"files":[],"ignored":{"nested":[true,]}}"#,
+            "{\"files\":[],\"ignored\":\"line\nbreak\"}",
+            r#"{"files":[],"project-status":null}"#,
+            r#"{"files":[],"project-status":{"status":null}}"#,
+            r#"{"files":[],"project-status":{"reason":42}}"#,
+            r#"{"files":[],"project-status":{},"project-status":{}}"#,
+            r#"{"files":[{"hashes":{},"url":"file"}]}"#,
+            r#"{"files":[{"filename":"file","url":"file"}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{}}]}"#,
+            r#"{"files":[{"filename":null,"hashes":{},"url":"file"}]}"#,
+            r#"{"files":[{"filename":"file","hashes":null,"url":"file"}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{},"url":null}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{"sha256":42},"url":"file"}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{"sha256":"one","sha256":"two"},"url":"file"}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{},"url":"file","size":null}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{},"url":"file","size":-1}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{},"url":"file","size":1.5}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{},"url":"file","size":18446744073709551616}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{},"url":"file","upload-time":null}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{},"url":"file","upload-time":"invalid"}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{},"url":"file","requires-python":false}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{},"url":"file","core-metadata":42}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{},"url":"file","yanked":null}]}"#,
+            r#"{"files":[{"filename":"file","hashes":{},"url":"file","yanked":42}]}"#,
+            r#"{"files":[{"filename":"\uD800","hashes":{},"url":"file"}]}"#,
+        ];
+
+        for json in invalid {
+            let expected = serde_json::from_str::<PypiSimpleDetail>(json);
+            let actual = PypiSimpleDetail::from_json(json.as_bytes());
+
+            assert!(expected.is_err(), "Serde unexpectedly accepted {json}");
+            assert!(
+                actual.is_err(),
+                "the dedicated parser unexpectedly accepted {json}"
+            );
+        }
+
+        let invalid_utf8 = b"{\"files\":[{\"filename\":\"\xff\",\"hashes\":{},\"url\":\"file\"}]}";
+        assert!(serde_json::from_slice::<PypiSimpleDetail>(invalid_utf8).is_err());
+        assert!(PypiSimpleDetail::from_json(invalid_utf8).is_err());
+
+        let excessive_nesting = format!(
+            "{{\"files\":[],\"ignored\":{}null{}}}",
+            "[".repeat(128),
+            "]".repeat(128)
+        );
+        assert!(serde_json::from_str::<PypiSimpleDetail>(&excessive_nesting).is_ok());
+        assert!(PypiSimpleDetail::from_json(excessive_nesting.as_bytes()).is_ok());
     }
 }
 

@@ -685,7 +685,7 @@ impl RegistryClient {
                             )
                         })?;
 
-                        let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
+                        let data = PypiSimpleDetail::from_json(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
 
                         SimpleDetailMetadata::from_pypi_files(
