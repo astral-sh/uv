@@ -7053,7 +7053,6 @@ dependencies = [
  "petgraph",
  "regex",
  "rkyv",
- "rmp-serde",
  "rustc-hash",
  "schemars",
  "serde",
