@@ -50,7 +50,7 @@ markdown = { version = "1.0.0" }
 poloto = { version = "19.1.2", optional = true }
 pretty_assertions = { version = "1.4.1" }
 reqwest = { workspace = true, features = ["stream"] }
-resvg = { version = "0.47.0", optional = true }
+resvg = { version = "0.48.0", optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
