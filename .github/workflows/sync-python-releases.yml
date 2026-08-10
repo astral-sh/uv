@@ -45,7 +45,7 @@ jobs:
 
       - name: "Get uv token"
         id: token
-        uses: open-security-tools/ost-simple-sts@3c532a63c9ed6f457ec3e8d7357d1fd631385aa2 # v0.0.2
+        uses: open-security-tools/ost-simple-sts@bda64bffc5722085512dc618ab85f588b6c49b96 # v0.0.4
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
