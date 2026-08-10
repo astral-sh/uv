@@ -35,7 +35,7 @@ TRAINING_PROJECTS = (
         "test/ecosystem/github-wikidata-bot/pyproject.toml",
         "3.12",
     ),
-    CorpusProject("flyte", "test/requirements/flyte.in", install=False),
+    CorpusProject("flyte", "test/requirements/flyte.in", "3.11", install=False),
     CorpusProject("trio", "test/requirements/trio.in"),
     CorpusProject("uv-benchmark", "scripts/benchmark/pyproject.toml"),
 )
