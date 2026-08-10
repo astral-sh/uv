@@ -267,7 +267,14 @@ def prepare_corpus(
     root.mkdir(parents=True, exist_ok=True)
 
     # Remove artifacts produced by older generated-wheel training corpora.
-    for stale in ("ecosystem", "graphs", "installed", "project", "wheelhouse"):
+    for stale in (
+        "cache",
+        "ecosystem",
+        "graphs",
+        "installed",
+        "project",
+        "wheelhouse",
+    ):
         shutil.rmtree(root / stale, ignore_errors=True)
 
     projects: list[PreparedProject] = []
@@ -311,7 +318,7 @@ def run_workloads(
     training_environment.pop("UV_OFFLINE", None)
     training_environment.update(
         {
-            "UV_CACHE_DIR": str(corpus.root / "cache"),
+            "UV_CACHE_DIR": str(corpus.root / "cache" / "poetry"),
             "UV_NO_PROGRESS": "1",
             "UV_PYTHON_DOWNLOADS": "never",
         }
@@ -325,21 +332,22 @@ def run_workloads(
             if project.python_version is not None
             else []
         )
-        commands.append(
+        command = [
+            str(binary),
+            "pip",
+            "compile",
+            str(project.requirements),
+            *python,
+            *version,
+            "--no-build",
+            "--quiet",
+            "--output-file",
+            str(project.project / "requirements.txt"),
+        ]
+        commands.extend(
             (
-                f"resolve-{project.name}",
-                [
-                    str(binary),
-                    "pip",
-                    "compile",
-                    str(project.requirements),
-                    *python,
-                    *version,
-                    "--no-build",
-                    "--quiet",
-                    "--output-file",
-                    str(project.project / "requirements.txt"),
-                ],
+                (f"resolve-cold-{project.name}", command),
+                (f"resolve-warm-{project.name}", command),
             )
         )
 
@@ -440,9 +448,20 @@ def run_workloads(
 
     for label, command in commands:
         workload_environment = training_environment.copy()
+        for prefix in ("resolve-cold-", "resolve-warm-", "install-"):
+            if label.startswith(prefix):
+                project = label.removeprefix(prefix)
+                workload_environment["UV_CACHE_DIR"] = str(
+                    corpus.root / "cache" / project
+                )
+                break
         if profile_dir is not None:
             group = profile_group(label)
-            suffix = "%4m" if group in {"resolve", "install"} else "%m-%p"
+            suffix = (
+                "%4m"
+                if group in {"resolve-cold", "resolve-warm", "install"}
+                else "%m-%p"
+            )
             workload_environment["LLVM_PROFILE_FILE"] = str(
                 profile_dir / f"uv-{group}-{suffix}.profraw"
             )
@@ -453,8 +472,10 @@ def run_workloads(
 
 
 def profile_group(label: str) -> str:
-    if label.startswith("resolve-"):
-        return "resolve"
+    if label.startswith("resolve-cold-"):
+        return "resolve-cold"
+    if label.startswith("resolve-warm-"):
+        return "resolve-warm"
     if label.startswith("install-"):
         return "install"
     return label
