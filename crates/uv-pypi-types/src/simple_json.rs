@@ -1,9 +1,11 @@
-use std::borrow::Cow;
+use std::marker::PhantomData;
+use std::mem::size_of;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use jiff::Timestamp;
 use rustc_hash::FxHashMap;
+use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_normalize::{ExtraName, PackageName};
@@ -23,7 +25,7 @@ pub struct PypiSimpleDetail {
     #[serde(default)]
     pub project_status: ProjectStatus,
     /// The list of [`PypiFile`]s available for download.
-    #[serde(deserialize_with = "deserialize_pypi_files")]
+    #[serde(deserialize_with = "deserialize_files")]
     pub files: Vec<PypiFile>,
 }
 
@@ -82,46 +84,118 @@ impl RequiresPythonInterner {
     }
 }
 
-struct PypiFileWire<'a> {
-    core_metadata: Option<CoreMetadata>,
-    filename: SmallString,
-    hashes: Hashes,
-    requires_python: Option<Cow<'a, str>>,
-    size: Option<u64>,
-    upload_time: Option<Timestamp>,
-    url: SmallString,
-    yanked: Option<Box<Yanked>>,
+trait SimpleFile: Sized {
+    fn deserialize_with_interner<'de, D>(
+        deserializer: D,
+        interner: &mut RequiresPythonInterner,
+    ) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>;
 }
 
-impl PypiFileWire<'_> {
-    fn into_file(self, interner: &mut RequiresPythonInterner) -> PypiFile {
-        PypiFile {
-            core_metadata: self.core_metadata,
-            filename: self.filename,
-            hashes: self.hashes,
-            requires_python: self
-                .requires_python
-                .as_deref()
-                .map(|value| interner.parse(value)),
-            size: self.size,
-            upload_time: self.upload_time,
-            url: self.url,
-            yanked: self.yanked,
+struct SimpleFileSeed<'a, T> {
+    interner: &'a mut RequiresPythonInterner,
+    marker: PhantomData<T>,
+}
+
+impl<'de, T> DeserializeSeed<'de> for SimpleFileSeed<'_, T>
+where
+    T: SimpleFile,
+{
+    type Value = T;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        T::deserialize_with_interner(deserializer, self.interner)
+    }
+}
+
+struct SimpleFilesVisitor<T>(PhantomData<T>);
+
+impl<'de, T> Visitor<'de> for SimpleFilesVisitor<T>
+where
+    T: SimpleFile,
+{
+    type Value = Vec<T>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a sequence of files")
+    }
+
+    fn visit_seq<A>(self, mut access: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        // Match Serde's Vec deserializer by limiting untrusted upfront allocations to 1 MiB.
+        let capacity = access
+            .size_hint()
+            .unwrap_or_default()
+            .min(1024 * 1024 / size_of::<T>());
+        let mut files = Vec::with_capacity(capacity);
+        let mut interner = RequiresPythonInterner::default();
+
+        while let Some(file) = access.next_element_seed(SimpleFileSeed {
+            interner: &mut interner,
+            marker: PhantomData,
+        })? {
+            files.push(file);
         }
+
+        Ok(files)
     }
 }
 
 /// Deserialize files while parsing each distinct `requires-python` value only once.
-fn deserialize_pypi_files<'de, D>(deserializer: D) -> Result<Vec<PypiFile>, D::Error>
+fn deserialize_files<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
 where
     D: Deserializer<'de>,
+    T: SimpleFile,
 {
-    let files = Vec::<PypiFileWire<'de>>::deserialize(deserializer)?;
-    let mut interner = RequiresPythonInterner::default();
-    Ok(files
-        .into_iter()
-        .map(|file| file.into_file(&mut interner))
-        .collect())
+    deserializer.deserialize_seq(SimpleFilesVisitor(PhantomData))
+}
+
+struct RequiresPythonSeed<'a>(&'a mut RequiresPythonInterner);
+
+impl<'de> DeserializeSeed<'de> for RequiresPythonSeed<'_> {
+    type Value = Option<RequiresPythonResult>;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_option(self)
+    }
+}
+
+impl<'de> Visitor<'de> for RequiresPythonSeed<'_> {
+    type Value = Option<RequiresPythonResult>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("an optional Python version specifier")
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(None)
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(self)
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Some(self.0.parse(value)))
+    }
 }
 
 impl<'de> Deserialize<'de> for PypiFile {
@@ -129,25 +203,29 @@ impl<'de> Deserialize<'de> for PypiFile {
     where
         D: Deserializer<'de>,
     {
-        let file = PypiFileWire::deserialize(deserializer)?;
         let mut interner = RequiresPythonInterner::default();
-        Ok(file.into_file(&mut interner))
+        Self::deserialize_with_interner(deserializer, &mut interner)
     }
 }
 
-impl<'de> Deserialize<'de> for PypiFileWire<'de> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+impl SimpleFile for PypiFile {
+    fn deserialize_with_interner<'de, D>(
+        deserializer: D,
+        interner: &mut RequiresPythonInterner,
+    ) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_map(PypiFileWireVisitor)
+        deserializer.deserialize_map(PypiFileVisitor { interner })
     }
 }
 
-struct PypiFileWireVisitor;
+struct PypiFileVisitor<'a> {
+    interner: &'a mut RequiresPythonInterner,
+}
 
-impl<'de> serde::de::Visitor<'de> for PypiFileWireVisitor {
-    type Value = PypiFileWire<'de>;
+impl<'de> Visitor<'de> for PypiFileVisitor<'_> {
+    type Value = PypiFile;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("a map containing file metadata")
@@ -155,7 +233,7 @@ impl<'de> serde::de::Visitor<'de> for PypiFileWireVisitor {
 
     fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
     where
-        M: serde::de::MapAccess<'de>,
+        M: MapAccess<'de>,
     {
         let mut core_metadata = None;
         let mut filename = None;
@@ -174,7 +252,8 @@ impl<'de> serde::de::Visitor<'de> for PypiFileWireVisitor {
                 FileField::Filename => filename = Some(access.next_value()?),
                 FileField::Hashes => hashes = Some(access.next_value()?),
                 FileField::RequiresPython => {
-                    requires_python = access.next_value::<Option<Cow<'de, str>>>()?;
+                    requires_python =
+                        access.next_value_seed(RequiresPythonSeed(&mut *self.interner))?;
                 }
                 FileField::Size => size = Some(access.next_value()?),
                 FileField::UploadTime => upload_time = Some(access.next_value()?),
@@ -186,7 +265,7 @@ impl<'de> serde::de::Visitor<'de> for PypiFileWireVisitor {
             }
         }
 
-        Ok(PypiFileWire {
+        Ok(PypiFile {
             core_metadata,
             filename: filename.ok_or_else(|| serde::de::Error::missing_field("filename"))?,
             hashes: hashes.ok_or_else(|| serde::de::Error::missing_field("hashes"))?,
@@ -207,7 +286,7 @@ pub struct PyxSimpleDetail {
     #[serde(default)]
     pub project_status: ProjectStatus,
     /// The list of [`PyxFile`]s available for download sorted by filename.
-    #[serde(deserialize_with = "deserialize_pyx_files")]
+    #[serde(deserialize_with = "deserialize_files")]
     pub files: Vec<PyxFile>,
     /// The core metadata for the project, keyed by version.
     #[serde(default)]
@@ -229,74 +308,34 @@ pub struct PyxFile {
     pub zstd: Option<Zstd>,
 }
 
-struct PyxFileWire<'a> {
-    core_metadata: Option<CoreMetadata>,
-    filename: Option<SmallString>,
-    hashes: Hashes,
-    requires_python: Option<Cow<'a, str>>,
-    size: Option<u64>,
-    upload_time: Option<Timestamp>,
-    url: SmallString,
-    yanked: Option<Box<Yanked>>,
-    zstd: Option<Zstd>,
-}
-
-impl PyxFileWire<'_> {
-    fn into_file(self, interner: &mut RequiresPythonInterner) -> PyxFile {
-        PyxFile {
-            core_metadata: self.core_metadata,
-            filename: self.filename,
-            hashes: self.hashes,
-            requires_python: self
-                .requires_python
-                .as_deref()
-                .map(|value| interner.parse(value)),
-            size: self.size,
-            upload_time: self.upload_time,
-            url: self.url,
-            yanked: self.yanked,
-            zstd: self.zstd,
-        }
-    }
-}
-
-/// Deserialize files while parsing each distinct `requires-python` value only once.
-fn deserialize_pyx_files<'de, D>(deserializer: D) -> Result<Vec<PyxFile>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let files = Vec::<PyxFileWire<'de>>::deserialize(deserializer)?;
-    let mut interner = RequiresPythonInterner::default();
-    Ok(files
-        .into_iter()
-        .map(|file| file.into_file(&mut interner))
-        .collect())
-}
-
 impl<'de> Deserialize<'de> for PyxFile {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let file = PyxFileWire::deserialize(deserializer)?;
         let mut interner = RequiresPythonInterner::default();
-        Ok(file.into_file(&mut interner))
+        Self::deserialize_with_interner(deserializer, &mut interner)
     }
 }
 
-impl<'de> Deserialize<'de> for PyxFileWire<'de> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+impl SimpleFile for PyxFile {
+    fn deserialize_with_interner<'de, D>(
+        deserializer: D,
+        interner: &mut RequiresPythonInterner,
+    ) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_map(PyxFileWireVisitor)
+        deserializer.deserialize_map(PyxFileVisitor { interner })
     }
 }
 
-struct PyxFileWireVisitor;
+struct PyxFileVisitor<'a> {
+    interner: &'a mut RequiresPythonInterner,
+}
 
-impl<'de> serde::de::Visitor<'de> for PyxFileWireVisitor {
-    type Value = PyxFileWire<'de>;
+impl<'de> Visitor<'de> for PyxFileVisitor<'_> {
+    type Value = PyxFile;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("a map containing file metadata")
@@ -304,7 +343,7 @@ impl<'de> serde::de::Visitor<'de> for PyxFileWireVisitor {
 
     fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
     where
-        M: serde::de::MapAccess<'de>,
+        M: MapAccess<'de>,
     {
         let mut core_metadata = None;
         let mut filename = None;
@@ -324,7 +363,8 @@ impl<'de> serde::de::Visitor<'de> for PyxFileWireVisitor {
                 FileField::Filename => filename = Some(access.next_value()?),
                 FileField::Hashes => hashes = Some(access.next_value()?),
                 FileField::RequiresPython => {
-                    requires_python = access.next_value::<Option<Cow<'de, str>>>()?;
+                    requires_python =
+                        access.next_value_seed(RequiresPythonSeed(&mut *self.interner))?;
                 }
                 FileField::Size => size = access.next_value()?,
                 FileField::UploadTime => upload_time = Some(access.next_value()?),
@@ -339,7 +379,7 @@ impl<'de> serde::de::Visitor<'de> for PyxFileWireVisitor {
             }
         }
 
-        Ok(PyxFileWire {
+        Ok(PyxFile {
             core_metadata,
             filename,
             hashes: hashes.ok_or_else(|| serde::de::Error::missing_field("hashes"))?,
@@ -886,7 +926,126 @@ pub enum HashError {
 
 #[cfg(test)]
 mod tests {
-    use crate::{HashError, Hashes};
+    use std::sync::Arc;
+
+    use crate::{HashError, Hashes, PypiFile, PypiSimpleDetail, PyxFile, PyxSimpleDetail};
+
+    use super::RequiresPythonResult;
+
+    const REPEATED_REQUIRES_PYTHON_RESPONSE: &str = r#"
+    {
+        "files": [
+            {
+                "filename": "example-1.0.0.tar.gz",
+                "hashes": {},
+                "requires-python": ">=3.8",
+                "url": "https://example.org/example-1.0.0.tar.gz"
+            },
+            {
+                "filename": "example-1.0.1.tar.gz",
+                "hashes": {},
+                "requires-python": ">=\u0033.8",
+                "url": "https://example.org/example-1.0.1.tar.gz"
+            },
+            {
+                "filename": "example-1.0.2.tar.gz",
+                "hashes": {},
+                "requires-python": null,
+                "url": "https://example.org/example-1.0.2.tar.gz"
+            },
+            {
+                "filename": "example-1.0.3.tar.gz",
+                "hashes": {},
+                "url": "https://example.org/example-1.0.3.tar.gz"
+            },
+            {
+                "filename": "example-1.0.4.tar.gz",
+                "hashes": {},
+                "requires-python": ">=3.8,,",
+                "url": "https://example.org/example-1.0.4.tar.gz"
+            }
+        ]
+    }
+    "#;
+
+    fn assert_shared_requires_python(
+        first: Option<&RequiresPythonResult>,
+        second: Option<&RequiresPythonResult>,
+    ) {
+        assert!(
+            matches!(
+                (first, second),
+                (Some(Ok(first)), Some(Ok(second))) if Arc::ptr_eq(first, second)
+            ),
+            "repeated requires-python values should share parsed specifiers"
+        );
+    }
+
+    #[test]
+    fn deserialize_pypi_files_interns_requires_python() -> Result<(), serde_json::Error> {
+        let detail: PypiSimpleDetail = serde_json::from_str(REPEATED_REQUIRES_PYTHON_RESPONSE)?;
+
+        assert_shared_requires_python(
+            detail.files[0].requires_python.as_ref(),
+            detail.files[1].requires_python.as_ref(),
+        );
+        assert!(detail.files[2].requires_python.is_none());
+        assert!(detail.files[3].requires_python.is_none());
+        assert!(matches!(detail.files[4].requires_python, Some(Err(_))));
+
+        Ok(())
+    }
+
+    #[test]
+    fn deserialize_pyx_files_interns_requires_python() -> Result<(), serde_json::Error> {
+        let detail: PyxSimpleDetail = serde_json::from_str(REPEATED_REQUIRES_PYTHON_RESPONSE)?;
+
+        assert_shared_requires_python(
+            detail.files[0].requires_python.as_ref(),
+            detail.files[1].requires_python.as_ref(),
+        );
+        assert!(detail.files[2].requires_python.is_none());
+        assert!(detail.files[3].requires_python.is_none());
+        assert!(matches!(detail.files[4].requires_python, Some(Err(_))));
+
+        Ok(())
+    }
+
+    #[test]
+    fn deserialize_pyx_messagepack_files_interns_requires_python() -> anyhow::Result<()> {
+        let response: serde_json::Value = serde_json::from_str(REPEATED_REQUIRES_PYTHON_RESPONSE)?;
+        let messagepack = rmp_serde::to_vec_named(&response)?;
+        let detail: PyxSimpleDetail = rmp_serde::from_slice(&messagepack)?;
+
+        assert_shared_requires_python(
+            detail.files[0].requires_python.as_ref(),
+            detail.files[1].requires_python.as_ref(),
+        );
+        assert!(detail.files[2].requires_python.is_none());
+        assert!(detail.files[3].requires_python.is_none());
+        assert!(matches!(detail.files[4].requires_python, Some(Err(_))));
+
+        Ok(())
+    }
+
+    #[test]
+    fn deserialize_individual_files_with_requires_python() -> Result<(), serde_json::Error> {
+        let json = r#"
+        {
+            "filename": "example-1.0.0.tar.gz",
+            "hashes": {},
+            "requires-python": ">=3.8",
+            "url": "https://example.org/example-1.0.0.tar.gz"
+        }
+        "#;
+        let pypi_file: PypiFile = serde_json::from_str(json)?;
+        let pyx_file: PyxFile = serde_json::from_str(json)?;
+
+        assert!(matches!(pypi_file.requires_python, Some(Ok(_))));
+        assert!(matches!(pyx_file.requires_python, Some(Ok(_))));
+
+        Ok(())
+    }
 
     #[test]
     fn parse_hashes() -> Result<(), HashError> {
