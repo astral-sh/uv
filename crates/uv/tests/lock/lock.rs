@@ -3586,6 +3586,43 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     Ok(())
 }
 
+/// Selecting an extra always selects its package, so the conflict is impossible to satisfy.
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/20694>
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_self_conflicting_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "self-conflict"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        foo = []
+
+        [tool.uv]
+        conflicts = [[
+            { package = "self-conflict" },
+            { package = "self-conflict", extra = "foo" },
+        ]]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Package `self-conflict` cannot conflict with its own extra `foo` because selecting the extra always selects the package
+    ");
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
 /// This tests a case where workspace members conflict with each other.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -3821,205 +3858,6 @@ fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
       × No solution found when resolving dependencies for split (included: example; excluded: subexample):
       ╰─▶ Because subexample depends on sortedcontainers==2.4.0 and example depends on sortedcontainers==2.3.0, we can conclude that example and subexample are incompatible.
           And because example depends on subexample and your workspace requires example, we can conclude that your workspace's requirements are unsatisfiable.
-    ");
-
-    Ok(())
-}
-
-/// Like [`lock_conflicting_workspace_members_depends_direct`], but the root project depends on the
-/// conflicting workspace member via a direct optional dependency.
-#[cfg(feature = "test-universal")]
-#[test]
-fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "example"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["sortedcontainers==2.3.0"]
-
-        [project.optional-dependencies]
-        foo = ["subexample"]
-
-        [tool.uv.workspace]
-        members = ["subexample"]
-
-        [tool.uv]
-        conflicts = [
-            [
-                { package = "example" },
-                # TODO(zanieb): Technically, we shouldn't need to include the extra in the list of
-                # conflicts however, the resolver forking algorithm is not currently sophisticated
-                # enough to pick this up by itself
-                { package = "example", extra = "foo"},
-                { package = "subexample" },
-            ],
-        ]
-
-        [tool.uv.sources]
-        subexample = { workspace = true }
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
-        [tool.setuptools.packages.find]
-        include = ["example"]
-        "#,
-    )?;
-
-    // Create the subproject
-    let subproject_dir = context.temp_dir.child("subexample");
-    subproject_dir.create_dir_all()?;
-
-    let sub_pyproject_toml = subproject_dir.child("pyproject.toml");
-    sub_pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "subexample"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-        "#,
-    )?;
-
-    // This should succeed, because the conflict is optional
-    uv_snapshot!(context.filters(), context.lock(), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
-    Resolved 4 packages in [TIME]
-    ");
-
-    let lock = context.read("uv.lock");
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-        conflicts = [[
-            { package = "example", extra = "foo" },
-            { package = "example" },
-            { package = "subexample" },
-        ]]
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [manifest]
-        members = [
-            "example",
-            "subexample",
-        ]
-
-        [[package]]
-        name = "example"
-        version = "0.1.0"
-        source = { editable = "." }
-        dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-example-foo' or extra == 'project-7-example'" },
-        ]
-
-        [package.metadata]
-        requires-dist = [
-            { name = "sortedcontainers", specifier = "==2.3.0" },
-            { name = "subexample", marker = "extra == 'foo'", editable = "subexample" },
-        ]
-        provides-extras = ["foo"]
-
-        [[package]]
-        name = "sortedcontainers"
-        version = "2.3.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509, upload-time = "2020-11-09T00:03:52.258Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479, upload-time = "2020-11-09T00:03:50.723Z" },
-        ]
-
-        [[package]]
-        name = "sortedcontainers"
-        version = "2.4.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
-        ]
-
-        [[package]]
-        name = "subexample"
-        version = "0.1.0"
-        source = { editable = "subexample" }
-        dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample' or (extra == 'extra-7-example-foo' and extra == 'project-7-example')" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "sortedcontainers", specifier = "==2.4.0" }]
-        "#
-        );
-    });
-
-    // Install from the lockfile
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + example==0.1.0 (from file://[TEMP_DIR]/)
-     + sortedcontainers==2.3.0
-    ");
-
-    // Attempt to install with the extra selected
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("foo"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Extra `foo` and package `example` are incompatible with the declared conflicts: {`example[foo]`, example, subexample}
-    ");
-
-    // Install just the child package
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("subexample"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     - example==0.1.0 (from file://[TEMP_DIR]/)
-     - sortedcontainers==2.3.0
-     + sortedcontainers==2.4.0
-     + subexample==0.1.0 (from file://[TEMP_DIR]/subexample)
-    ");
-
-    // Install with just development dependencies
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-dev"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Uninstalled 2 packages in [TIME]
-     - sortedcontainers==2.4.0
-     - subexample==0.1.0 (from file://[TEMP_DIR]/subexample)
-    ");
-
-    let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(&lock.to_string())?;
-
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked").arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
