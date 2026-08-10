@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+# Match the ecosystem tests and avoid installing newly published packages.
+EXCLUDE_NEWER = "2026-06-30T00:00:00Z"
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,6 +321,7 @@ def run_workloads(
     training_environment.update(
         {
             "UV_CACHE_DIR": str(corpus.root / "cache" / "poetry"),
+            "UV_EXCLUDE_NEWER": EXCLUDE_NEWER,
             "UV_NO_PROGRESS": "1",
             "UV_PYTHON_DOWNLOADS": "never",
         }
