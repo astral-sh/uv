@@ -26,6 +26,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.1"
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
@@ -40,3 +44,5 @@ jobs:
       - name: "Check JSON schema"
         if: ${{ inputs.schema-changed == 'true' }}
         run: cargo dev generate-json-schema --mode check
+      - name: "Check uv-extract dirhash test vectors"
+        run: uv run --script crates/uv-extract/test_vectors/generate.py | diff -u crates/uv-extract/test_vectors/test_vectors.json -
