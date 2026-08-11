@@ -414,7 +414,7 @@ def wait_for_index(
                 "-",
             ],
             text=True,
-            input=f"{plan.configuration.project_name}",
+            input=f"{plan.configuration.project_name}=={version}",
             stdout=PIPE,
             env=plan.full_env(),
             check=False,
