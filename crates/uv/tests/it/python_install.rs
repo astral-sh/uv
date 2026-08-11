@@ -1164,7 +1164,7 @@ fn python_install_freethreaded() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&pythonw), @"[TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]"
+                read_link(&pythonw), @"[TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/pythonw"
             );
         });
     }
@@ -1198,7 +1198,7 @@ fn python_install_freethreaded() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&pythonw), @"[TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]"
+                read_link(&pythonw), @"[TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/pythonw"
             );
         });
     }
@@ -3168,7 +3168,7 @@ fn install_transparent_patch_upgrade_uv_venv() {
                 read_link(&scripts.join("python.exe")), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
             );
             insta::assert_snapshot!(
-                read_link(&scripts.join("pythonw.exe")), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
+                read_link(&scripts.join("pythonw.exe")), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/pythonw"
             );
         });
     }

@@ -303,10 +303,13 @@ pub(crate) fn create(
                 &LauncherTarget::console(executable_target.clone()),
             )
             .map_err(Error::Python)?;
-            let targetw = scripts.join(WindowsExecutable::Pythonw.exe(interpreter));
+            let windowed_executable_name = WindowsExecutable::Pythonw.exe(interpreter);
+            let targetw = scripts.join(&windowed_executable_name);
+            let windowed_executable_target =
+                executable_target.with_file_name(windowed_executable_name);
             replace_link_to_executable(
                 targetw.as_path(),
-                &LauncherTarget::windowed(executable_target.clone()),
+                &LauncherTarget::windowed(&windowed_executable_target),
             )
             .map_err(Error::Python)?;
             if interpreter.gil_disabled() {
@@ -319,7 +322,7 @@ pub(crate) fn create(
                 let targetwt = scripts.join(WindowsExecutable::PythonwMajorMinort.exe(interpreter));
                 replace_link_to_executable(
                     targetwt.as_path(),
-                    &LauncherTarget::windowed(executable_target.clone()),
+                    &LauncherTarget::windowed(&windowed_executable_target),
                 )
                 .map_err(Error::Python)?;
             }
